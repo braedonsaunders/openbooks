@@ -3,7 +3,7 @@ import { parseRoeEventRow, roeEventRow } from '@openbooks/engine/payroll/roe-eve
 import Link from 'next/link'
 import { RecordTabs } from '../../../../components/module-home/record-tabs'
 import { RoeSubsequentServiceForm } from './roe-subsequent-service'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, Button, FieldLabel, Input, Select, Skeleton } from '@openbooks/ui'
 import type { RoeSeparationFacts, RoeSeparationEmployee, RoeSeparationProposal } from '@openbooks/engine/payroll/roe-separation-facts'
@@ -12,14 +12,18 @@ import { DateField } from '../../../../components/date-field'
 
 type State = ({ status: 'loading' } | { status: 'error'; message: string }
   | { status: 'ready'; record: RoeSeparationFacts | null; proposal: RoeSeparationProposal | null; employee: RoeSeparationEmployee }) & { requestKey: string }
-type Props = { employeePartyId: string; canEdit: boolean; onSaved: (rowId: string) => void }
+type Props = {
+  employeePartyId: string; canEdit: boolean; onSaved: (rowId: string) => void
+  /** A bare employee row whose event already exists elsewhere (another tax year) resolves to that event. */
+  onEventResolved?: (rowId: string) => void
+}
 
 /** The employee's declaration stays in the shared ROE drawer, including refusal and retry. */
 export function RoeSeparationFactsForm(props: Props) {
   return <RoeSeparationFactsBody key={props.employeePartyId} {...props} />
 }
 
-function RoeSeparationFactsBody({ employeePartyId, canEdit, onSaved }: Props) {
+function RoeSeparationFactsBody({ employeePartyId, canEdit, onSaved, onEventResolved }: Props) {
   const t = useTranslations('payroll.filings.separationFacts')
   const returnText = useTranslations('payroll.filings.subsequentService')
   const [activeEvidence, setActiveEvidence] = useState<'separation' | 'return'>('separation')
@@ -39,6 +43,9 @@ function RoeSeparationFactsBody({ employeePartyId, canEdit, onSaved }: Props) {
   const [status, setStatus] = useState<'draft' | 'confirmed'>('draft')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // The host's callback is read at resolution time, never a fetch input.
+  const resolveEvent = useRef(onEventResolved)
+  useLayoutEffect(() => { resolveEvent.current = onEventResolved })
   useEffect(() => {
     let alive = true
     void (async () => {
@@ -50,6 +57,10 @@ function RoeSeparationFactsBody({ employeePartyId, canEdit, onSaved }: Props) {
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('loadFailed')))
       const body = await response.json() as { record: RoeSeparationFacts | null; proposal: RoeSeparationProposal | null; employee: RoeSeparationEmployee }
       if (!alive) return
+      if (!selection.eventId && !newEvent && body.record && resolveEvent.current) {
+        resolveEvent.current(roeEventRow(selection.employeePartyId, body.record.id))
+        return
+      }
       setState({ status: 'ready', record: body.record, proposal: body.proposal, employee: body.employee, requestKey })
       // A new event starts from the employment's own records; the employer's
       // save is the declaration, so a fully supported proposal is offered as

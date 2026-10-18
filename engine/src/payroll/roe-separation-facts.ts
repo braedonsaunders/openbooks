@@ -9,6 +9,7 @@ import { takeEmployeeConfigurationFence } from './fences.ts';
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from './scope.ts';
 import { roeCanadianEmploymentEvidenceSql, selectRoeEvent, parseRoeEventRow, assertRoeLegacySourcesBound, roeEventRow } from './canada/roe-event-source.ts';
 import { PayrollError } from './error.ts';
+import { employmentSpells } from './employment-spells.ts';
 
 export type RoeSeparationFacts = {
   id: string; employeePartyId: string; employmentId: string | null; subsidiaryId: string | null;
@@ -67,49 +68,59 @@ export async function authorizeRoeReportingEmployee(input: RoeEmployeeScope, per
 
 /**
  * Dates an operator reviews before declaring a new separation event, read from
- * the employment's own records: service start (or hire date, or the first
- * committed pay period), the recorded termination, and the last committed
- * Canadian pay period up to that termination. Nothing is stored until the
- * employer saves them; a date the records do not hold stays null.
+ * the employment's own records. The employment's effective-dated history
+ * divides it into spells: each spell starts at the service start (or a rehire)
+ * and ends at a recorded termination. The proposal is the earliest spell that
+ * ends after every separation event already recorded, so a rehired worker's
+ * second interruption is proposed once the first has its own event. The last
+ * insurable day is the last committed Canadian pay period within the spell,
+ * or the termination when it falls inside that period. Nothing is stored until
+ * the employer saves; a date the records do not hold stays null.
  */
 export type RoeSeparationProposal = {
   firstDayWorked: string | null; interruptionOn: string | null;
   lastInsurableEarningsOn: string | null; sourceReference: string;
 };
 async function proposeRoeSeparationFacts(orgId: string, employeePartyId: string, employee: RoeSeparationEmployee): Promise<RoeSeparationProposal | null> {
-  const row = (await db.execute<{ serviceStart: string | null; hiredOn: string | null; terminatedOn: string | null;
-    firstPeriodStart: string | null; lastPeriodEnd: string | null; lastPayDate: string | null }>(sql`
-    with spell as (
-      select employment.service_start, role.hired_on,
-        coalesce(role.terminated_on, (select v.effective_from from worker_employment_versions v
-          where v.org_id=employment.org_id and v.employment_id=employment.id and v.status='terminated'
-            and v.recorded_until is null order by v.effective_from desc limit 1)) as terminated_on
-      from worker_employments employment
-      left join employee_roles role on role.org_id=employment.org_id and role.party_id=employment.worker_party_id
-      where employment.org_id=${orgId} and employment.id=${employee.employmentId}
-        and employment.worker_party_id=${employeePartyId} and employment.employer_subsidiary_id=${employee.subsidiaryId}
-    ), stubs as (
-      select r.period_start, r.period_end, s.pay_date from pay_stubs s
-      join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id and r.run_status='committed'
-      join documents d on d.org_id=r.org_id and d.id=r.document_id and d.subsidiary_id=${employee.subsidiaryId}
-      cross join spell
-      where s.org_id=${orgId} and s.employee_party_id=${employeePartyId} and s.employment_id=${employee.employmentId}
-        and s.currency_code='CAD' and (spell.terminated_on is null or r.period_start<=spell.terminated_on)
-    )
-    select spell.service_start::text as "serviceStart", spell.hired_on::text as "hiredOn", spell.terminated_on::text as "terminatedOn",
-      (select min(period_start)::text from stubs) as "firstPeriodStart", (select max(period_end)::text from stubs) as "lastPeriodEnd",
-      (select max(pay_date)::text from stubs) as "lastPayDate"
-    from spell`)).rows[0];
-  if (!row) return null;
-  const firstDayWorked = row.serviceStart ?? row.hiredOn ?? row.firstPeriodStart;
-  const lastInsurableEarningsOn = row.lastPeriodEnd && row.terminatedOn && row.terminatedOn < row.lastPeriodEnd
-    ? row.terminatedOn : row.lastPeriodEnd ?? row.terminatedOn;
-  const interruptionOn = row.terminatedOn ?? lastInsurableEarningsOn;
+  const identity = (await db.execute<{ serviceStart: string | null; hiredOn: string | null; terminatedOn: string | null; latestEvent: string | null }>(sql`
+    select employment.service_start::text as "serviceStart", role.hired_on::text as "hiredOn", role.terminated_on::text as "terminatedOn",
+      (select max(e.interruption_on)::text from payroll_roe_separation_events e where e.org_id=employment.org_id
+        and e.employee_party_id=employment.worker_party_id and e.employment_id=employment.id
+        and e.status in ('draft','confirmed','issued')) as "latestEvent"
+    from worker_employments employment
+    left join employee_roles role on role.org_id=employment.org_id and role.party_id=employment.worker_party_id
+    where employment.org_id=${orgId} and employment.id=${employee.employmentId}
+      and employment.worker_party_id=${employeePartyId} and employment.employer_subsidiary_id=${employee.subsidiaryId}`)).rows[0];
+  if (!identity) return null;
+  const versions = (await db.execute<{ status: string; effectiveFrom: string }>(sql`
+    select status, effective_from::text as "effectiveFrom" from worker_employment_versions
+    where org_id=${orgId} and employment_id=${employee.employmentId} and recorded_until is null
+    order by effective_from, version_no`)).rows;
+  const spells = employmentSpells(identity.serviceStart ?? identity.hiredOn, identity.terminatedOn, versions);
+  // With no event yet, the first spell; otherwise the first spell begun after
+  // the latest recorded interruption (a rehire).
+  const spell = identity.latestEvent
+    ? spells.find((candidate) => candidate.start !== null && candidate.start > identity.latestEvent!)
+    : spells[0];
+  if (!spell) return null;
+  const stubs = (await db.execute<{ firstPeriodStart: string | null; lastPeriodEnd: string | null; lastPayDate: string | null }>(sql`
+    select min(r.period_start)::text as "firstPeriodStart", max(r.period_end)::text as "lastPeriodEnd", max(s.pay_date)::text as "lastPayDate"
+    from pay_stubs s
+    join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id and r.run_status='committed'
+    join documents d on d.org_id=r.org_id and d.id=r.document_id and d.subsidiary_id=${employee.subsidiaryId}
+    where s.org_id=${orgId} and s.employee_party_id=${employeePartyId} and s.employment_id=${employee.employmentId}
+      and s.currency_code='CAD'
+      ${spell.start ? sql`and r.period_end>=${spell.start}::date` : sql``}
+      ${spell.terminatedOn ? sql`and r.period_start<=${spell.terminatedOn}::date` : sql``}`)).rows[0];
+  const firstDayWorked = spell.start ?? stubs?.firstPeriodStart ?? null;
+  const lastPeriodEnd = stubs?.lastPeriodEnd ?? null;
+  const lastInsurableEarningsOn = lastPeriodEnd && spell.terminatedOn && spell.terminatedOn < lastPeriodEnd
+    ? spell.terminatedOn : lastPeriodEnd ?? spell.terminatedOn;
+  const interruptionOn = spell.terminatedOn ?? lastInsurableEarningsOn;
   const sources = [
-    row.serviceStart ? `service start ${row.serviceStart}` : row.hiredOn ? `hire date ${row.hiredOn}`
-      : row.firstPeriodStart ? `first committed pay period starting ${row.firstPeriodStart}` : null,
-    row.terminatedOn ? `termination ${row.terminatedOn}` : null,
-    row.lastPeriodEnd ? `committed pay stubs through the period ending ${row.lastPeriodEnd} (paid ${row.lastPayDate})` : null,
+    spell.start ? `employment spell starting ${spell.start}` : stubs?.firstPeriodStart ? `first committed pay period starting ${stubs.firstPeriodStart}` : null,
+    spell.terminatedOn ? `termination ${spell.terminatedOn}` : null,
+    lastPeriodEnd ? `committed pay stubs through the period ending ${lastPeriodEnd} (paid ${stubs!.lastPayDate})` : null,
   ].filter(Boolean);
   if (!sources.length) return null;
   return { firstDayWorked, interruptionOn, lastInsurableEarningsOn, sourceReference: `Employment and payroll records: ${sources.join('; ')}` };
@@ -130,7 +141,7 @@ export async function readRoeSeparationFactsContext(input: RoeEmployeeScope): Pr
       return {employee,record:record?await withSource(record):null,proposal:null};
     }
     const employee=await authorizeRoeReportingEmployee(input,'payroll.read');
-    if(input.newEvent) return {employee,record:null,proposal:null};
+    if(input.newEvent) return {employee,record:null,proposal:await proposeRoeSeparationFacts(input.orgId,input.employeePartyId,employee)};
     const records=(await db.execute<StoredFacts>(sql`select ${COLUMNS} from payroll_roe_separation_events
       where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} and status in ('draft','confirmed','issued')
       order by interruption_on,id limit 2`)).rows;

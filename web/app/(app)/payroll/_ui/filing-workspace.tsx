@@ -739,6 +739,7 @@ export function SlipDrawer({
       <div className="space-y-5">
         {isRoe && <RoeSeparationFactsForm
           key={`${rowId}:${issuedRevision}`} employeePartyId={rowId} canEdit={canFile}
+          onEventResolved={onRowReplaced ? (eventRowId) => onRowReplaced({ ...row, [section.data.rowKey]: eventRowId }) : undefined}
           onSaved={(savedRowId) => {
             if (savedRowId !== rowId) {
               if (onRowReplaced) onRowReplaced({ ...row, [section.data.rowKey]: savedRowId })
