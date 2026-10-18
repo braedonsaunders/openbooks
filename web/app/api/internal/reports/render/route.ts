@@ -1,4 +1,5 @@
-import { closePackageReportAuthz, scheduledReportAuthz, withReportAuthz, expenseRowsWithin, type ReportAuthorization } from '../../../../../lib/report-execution-context'
+import { closePackageReportAuthz, scheduledReportAuthz, withReportAuthz, expenseReadRevoked, EXPENSE_READ_REVOKED_REMEDY, type ReportAuthorization, type ReportRenderEvidence } from '../../../../../lib/report-execution-context'
+import { createHash } from 'node:crypto'
 import { can } from '../../../../../lib/authz'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -122,21 +123,32 @@ export async function GET(req: Request) {
     if (!contentPermissions.every((permission) => can(authz, permission))) {
       throw new Error('Report execution permission was revoked')
     }
-    // Expense report rows the run's evidence does not cover (the principal
-    // gained org-wide expense read after authorizing the schedule) would let a
-    // download reach rows the recorded authorization never vouched for.
-    if (!expenseRowsWithin(data.expenseRows, authorization_snapshot.expenseRows)) {
-      throw new Error('Report expense access changed since the schedule was authorized; create a new schedule for this report to authorize its current expense access')
+    // The render reads with the principal's expense authority as it stands
+    // now: narrower access narrows the output, wider access widens it. Losing
+    // expense read entirely on a schedule set up to deliver expense reports
+    // refuses instead of delivering a report stripped of them.
+    if (expenseReadRevoked(authorization_snapshot.expenseRows, data.expenseRows)) {
+      throw new Error(EXPENSE_READ_REVOKED_REMEDY)
     }
-    // The stamp is the single write-once transition the run evidence
-    // trigger admits (0340): recording the content-derived key on a run
-    // whose snapshot predates recording. Close-package runs stamp the
-    // same way — their emailed artifacts carry the same evidence.
-    await db.execute(sql`
-      update report_runs
-         set authorization_snapshot = coalesce(authorization_snapshot, '{}'::jsonb) || ${JSON.stringify({ requiredPermissions: contentPermissions })}::jsonb
-       where id = ${runId} and org_id = ${orgId}
-    `)
+    // Each render appends its own evidence (0750): the authority it rendered
+    // under and the hash of the bytes it produced, beside the write-once
+    // content permissions. Earlier renders' evidence never changes.
+    const recordRender = async (bytes: Uint8Array) => {
+      const render: ReportRenderEvidence = {
+        renderedAt: new Date().toISOString(),
+        expenseRows: data.expenseRows ?? null,
+        contentHash: createHash('sha256').update(bytes).digest('hex'),
+      }
+      const recorded = await db.execute<{ id: string }>(sql`
+        update report_runs
+           set authorization_snapshot = coalesce(authorization_snapshot, '{}'::jsonb)
+                 || ${JSON.stringify({ requiredPermissions: contentPermissions })}::jsonb
+                 || jsonb_build_object('renders', coalesce(authorization_snapshot->'renders', '[]'::jsonb) || jsonb_build_array(${JSON.stringify(render)}::jsonb))
+         where id = ${runId} and org_id = ${orgId}
+         returning id
+      `)
+      if (recorded.rows.length !== 1) throw new Error('report run render evidence was not recorded')
+    }
     const stamp = await businessToday(orgId)
     if (p.get('format') === 'xlsx') {
       const xlsx = await exportDataToXlsx(data, {
@@ -144,6 +156,7 @@ export async function GET(req: Request) {
         dateRangeLabel: data.dateRangeLabel,
         generatedAt: new Date(`${stamp}T00:00:00Z`),
       })
+      await recordRender(new Uint8Array(xlsx))
       return new NextResponse(new Uint8Array(xlsx), {
         status: 200,
         headers: {
@@ -158,6 +171,7 @@ export async function GET(req: Request) {
       showSummary,
       generatedAt: new Date(`${stamp}T00:00:00Z`),
     })
+    await recordRender(new Uint8Array(pdf))
     return new NextResponse(new Uint8Array(pdf), {
       status: 200,
       headers: { 'content-type': 'application/pdf', 'cache-control': 'no-store' },

@@ -37,6 +37,12 @@ export type ReportAuthorization = {
    * org-wide expense reader, or that same user. Absent on such an artifact
    * (rendered before recording), it is treated as including every report. */
   expenseRows?: ReportArtifactExpenseRows
+  /** Append-only evidence of each background render of this run: when it
+   * rendered, the expense report rows its content holds (null when the
+   * content reads no entity holding them) and the rendered content's hash.
+   * A render reads with its principal's authority at render time, so this,
+   * not the authorization above, says what a rendered artifact holds. */
+  renders?: ReportRenderEvidence[]
   definition: {
     report_type: 'query' | 'statement'
     query: unknown
@@ -48,6 +54,8 @@ export type ReportAuthorization = {
 }
 
 export type ReportArtifactExpenseRows = { scope: 'all' } | { scope: 'own'; userId: string } | { scope: 'none' }
+
+export type ReportRenderEvidence = { renderedAt: string; expenseRows: ReportArtifactExpenseRows | null; contentHash?: string }
 
 /** True when a query definition reads an entity whose rows include expense reports. */
 function queryIncludesExpenseRows(query: unknown): boolean {
@@ -62,12 +70,36 @@ export function artifactExpenseRows(authz: Authz, query: unknown): ReportArtifac
   return scope === 'all' ? { scope: 'all' } : scope === 'own' ? { scope: 'own', userId: authz.user.id } : { scope: 'none' }
 }
 
-/** True when content with `content` expense reach stays within the `recorded` evidence (absent evidence covers every report). */
-export function expenseRowsWithin(content: ReportArtifactExpenseRows | undefined, recorded: ReportArtifactExpenseRows | undefined): boolean {
-  if (!content || content.scope === 'none') return true
-  const evidence = recorded ?? { scope: 'all' }
-  if (evidence.scope === 'all') return true
-  return content.scope === 'own' && evidence.scope === 'own' && content.userId === evidence.userId
+/**
+ * A schedule authorized to deliver expense reports whose principal now holds
+ * no expense read at all. Narrower or wider access renders with the
+ * principal's current authority; losing it entirely is refused, so the
+ * schedule does not quietly deliver a report stripped of what it was set up
+ * to show.
+ */
+export function expenseReadRevoked(authorized: ReportArtifactExpenseRows | undefined, rendered: ReportArtifactExpenseRows | undefined): boolean {
+  return authorized !== undefined && authorized.scope !== 'none' && rendered?.scope === 'none'
+}
+
+export const EXPENSE_READ_REVOKED_REMEDY =
+  'The schedule owner no longer holds expense read (expenses.read, or expenses.self for their own reports) and this schedule delivers expense reports: restore the owner\'s expense access, or create the schedule again under a user who holds it.'
+
+/**
+ * The expense report rows stored output holds. Rendered output answers from
+ * its render evidence: the render whose content hash matches, or every render
+ * of the run when the bytes are not identified. Output with no render
+ * evidence answers from its authorization (absent: every report).
+ */
+function storedExpenseReaches(snapshot: ReportAuthorization, contentHash: string | undefined): ReportArtifactExpenseRows[] {
+  const renders = Array.isArray(snapshot.renders) ? snapshot.renders : []
+  if (renders.length > 0) {
+    const matching = contentHash ? renders.filter((render) => render?.contentHash === contentHash) : []
+    return (matching.length > 0 ? matching : renders).map((render) => render?.expenseRows ?? { scope: 'none' })
+  }
+  if (snapshot.definition.report_type === 'query' && queryIncludesExpenseRows(snapshot.definition.query)) {
+    return [snapshot.expenseRows ?? { scope: 'all' }]
+  }
+  return []
 }
 
 export function snapshotReportAuthorization(authz: Authz, definition: ReportAuthorization['definition']): ReportAuthorization {
@@ -96,9 +128,11 @@ export type ReportArtifactAccess = { ok: true; missingPermissions: [] } | { ok: 
 /**
  * `expenseReach: false` is for re-authorizing the principal of a background
  * render: that render's expense rows are clamped by the principal's current
- * expense read, so only readers of the stored output need the recorded reach.
+ * expense read, so only readers of the stored output need its reach.
+ * `contentHash` identifies the stored bytes, so the render that produced them
+ * answers for them.
  */
-export async function reportArtifactAccessDetail(authz: Authz, raw: unknown, options: { expenseReach?: boolean } = {}): Promise<ReportArtifactAccess> {
+export async function reportArtifactAccessDetail(authz: Authz, raw: unknown, options: { expenseReach?: boolean; contentHash?: string } = {}): Promise<ReportArtifactAccess> {
   if (!raw || typeof raw !== 'object') return { ok: false, missingPermissions: [] }
   const snapshot = raw as ReportAuthorization
   if (snapshot.version !== 1 || !snapshot.definition ||
@@ -107,12 +141,11 @@ export async function reportArtifactAccessDetail(authz: Authz, raw: unknown, opt
       !snapshot.allowedSubsidiaryIds.every((id) => authz.allowedSubsidiaryIds!.has(id)))) return { ok: false, missingPermissions: [] }
   if (!(await canAccessReportDefinition(authz, snapshot.definition))) return { ok: false, missingPermissions: [] }
   // Stored expense report rows reach only a reader with the same expense reach.
-  if (options.expenseReach !== false && snapshot.definition.report_type === 'query' && queryIncludesExpenseRows(snapshot.definition.query)) {
-    const contained: ReportArtifactExpenseRows = snapshot.expenseRows ?? { scope: 'all' }
+  if (options.expenseReach !== false) {
     const reach = expenseScope(authz, 'read')
-    const readable = contained.scope === 'none' || reach === 'all'
+    const readable = (contained: ReportArtifactExpenseRows) => contained.scope === 'none' || reach === 'all'
       || (contained.scope === 'own' && reach === 'own' && contained.userId === authz.user.id)
-    if (!readable) return { ok: false, missingPermissions: ['expenses.read'] }
+    if (!storedExpenseReaches(snapshot, options.contentHash).every(readable)) return { ok: false, missingPermissions: ['expenses.read'] }
   }
   // Render-time content permissions: a malformed record fails closed with no
   // names to give; an absent one predates recording (definition gate only).

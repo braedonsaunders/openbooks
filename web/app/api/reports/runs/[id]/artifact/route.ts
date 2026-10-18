@@ -28,7 +28,8 @@ export const GET = defineRoute({
       `))
     const row = result.rows[0]
     if (!row) return notFound("record")
-    const access = await reportArtifactAccessDetail(gate, row.authorization_snapshot)
+    // The render that produced these bytes answers for what they hold.
+    const access = await reportArtifactAccessDetail(gate, row.authorization_snapshot, { contentHash: row.content_hash })
     if (!access.ok) {
         return NextResponse.json({ error: access.missingPermissions.length > 0
           ? `report artifact requires ${access.missingPermissions.join(', ')}`

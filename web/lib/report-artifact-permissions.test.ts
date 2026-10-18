@@ -164,12 +164,28 @@ test('an expense-bearing artifact with no recorded reach is treated as holding e
   assert.deepEqual(await reportArtifactAccessDetail(reportsOnly(), documentsSnapshot(), { expenseReach: false }), { ok: true, missingPermissions: [] })
 })
 
-test('a render whose expense reach exceeds its recorded authorization is not delivered', async () => {
-  const { expenseRowsWithin } = await import('./report-execution-context.ts')
-  assert.equal(expenseRowsWithin(undefined, { scope: 'none' }), true, 'content without expense rows')
-  assert.equal(expenseRowsWithin({ scope: 'none' }, { scope: 'own', userId: 'user-7' }), true)
-  assert.equal(expenseRowsWithin({ scope: 'own', userId: 'user-7' }, { scope: 'own', userId: 'user-7' }), true)
-  assert.equal(expenseRowsWithin({ scope: 'all' }, { scope: 'own', userId: 'user-7' }), false)
-  assert.equal(expenseRowsWithin({ scope: 'own', userId: 'user-7' }, { scope: 'none' }), false)
-  assert.equal(expenseRowsWithin({ scope: 'all' }, undefined), true, 'evidence that predates recording covers every report')
+test('rendered output answers from the render that produced it', async () => {
+  const { expenseReadRevoked } = await import('./report-execution-context.ts')
+  // Authorized for the owner's own reports; a later render ran with org-wide read.
+  const run = documentsSnapshot({
+    expenseRows: { scope: 'own', userId: 'user-7' },
+    renders: [
+      { renderedAt: '2026-10-01T07:00:00.000Z', expenseRows: { scope: 'own', userId: 'user-7' }, contentHash: 'narrow' },
+      { renderedAt: '2026-10-02T07:00:00.000Z', expenseRows: { scope: 'all' }, contentHash: 'wide' },
+    ],
+  })
+  assert.equal(await canAccessReportArtifact(selfService('user-7'), run), false, 'unidentified bytes need every render\'s reach')
+  assert.equal((await reportArtifactAccessDetail(selfService('user-7'), run, { contentHash: 'narrow' })).ok, true)
+  assert.deepEqual(await reportArtifactAccessDetail(selfService('user-7'), run, { contentHash: 'wide' }), { ok: false, missingPermissions: ['expenses.read'] })
+  assert.equal((await reportArtifactAccessDetail(reader(['reports.read', 'expenses.read']), run, { contentHash: 'wide' })).ok, true)
+  // A render whose content holds no expense report row is open to report readers.
+  const statementRun = { ...glSnapshot(), renders: [{ renderedAt: '2026-10-02T07:00:00.000Z', expenseRows: null, contentHash: 'gl' }] }
+  assert.equal((await reportArtifactAccessDetail(glReader(), statementRun, { contentHash: 'gl' })).ok, true)
+
+  assert.equal(expenseReadRevoked({ scope: 'all' }, { scope: 'none' }), true, 'losing expense read entirely refuses')
+  assert.equal(expenseReadRevoked({ scope: 'own', userId: 'user-7' }, { scope: 'none' }), true)
+  assert.equal(expenseReadRevoked({ scope: 'all' }, { scope: 'own', userId: 'user-7' }), false, 'narrowing renders narrower')
+  assert.equal(expenseReadRevoked({ scope: 'own', userId: 'user-7' }, { scope: 'all' }), false, 'widening renders wider')
+  assert.equal(expenseReadRevoked({ scope: 'none' }, { scope: 'none' }), false)
+  assert.equal(expenseReadRevoked(undefined, { scope: 'none' }), false, 'a schedule that predates recording narrows rather than refuses')
 })
