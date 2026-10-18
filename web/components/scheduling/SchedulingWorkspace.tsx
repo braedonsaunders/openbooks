@@ -25,6 +25,8 @@ import { PeopleGrid } from './PeopleGrid'
 import { TargetsView } from './TargetsView'
 import { TaskBoard, type TaskBoardProject } from './TaskBoard'
 import { TimelineView, TIMELINE_ZOOMS } from './TimelineView'
+import { DispatchView } from './DispatchView'
+import { ServiceVisitDrawer } from '../service/VisitDrawer'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { boardLegend } from './legend'
 import { publish, SchedulingRequestError } from './api'
@@ -64,6 +66,8 @@ export interface SchedulingWorkspaceProps {
   readonly tasksEnabled: boolean
   readonly resourcesEnabled: boolean
   readonly equipmentEnabled: boolean
+  /** Service dispatch is on: dispatch boards may be created and opened. */
+  readonly serviceEnabled?: boolean
   /** Roster tools the organization's features and the actor's permissions allow, for boards whose type declares them. */
   readonly roster: RosterAccess & { readonly closing: boolean }
 }
@@ -83,7 +87,7 @@ export function SchedulingWorkspace(props: SchedulingWorkspaceProps) {
         {props.refusal?.remedy ? <p className="mt-1 max-w-md text-xs text-slate-400">{props.refusal.remedy}</p> : null}
         {props.refusal ? null : props.canConfigure ? <Button className="mt-5" onClick={() => setNewBoard(true)}><Plus className="mr-1.5 h-4 w-4" />{t('empty.create')}</Button> : <p className="mt-4 text-xs text-slate-400">{t('empty.askAdmin')}</p>}
         {props.canConfigure ? <Button asChild variant="ghost" className="mt-2"><Link href="/scheduling/boards">{t('toolbar.manageBoards')}</Link></Button> : null}
-        <NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} contextProjectId={props.contextProjectId} returnBasePath={props.hostPath} />
+        <NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} serviceEnabled={props.serviceEnabled} contextProjectId={props.contextProjectId} returnBasePath={props.hostPath} />
       </div>
     )
   }
@@ -95,7 +99,7 @@ export function SchedulingWorkspace(props: SchedulingWorkspaceProps) {
       board={props.board}
       onSwitchBoard={(code) => router.push(`${props.hostPath??'/scheduling'}?board=${encodeURIComponent(code)}`)}
       onNewBoard={() => setNewBoard(true)}
-      newBoard={<NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} contextProjectId={props.contextProjectId} returnBasePath={props.hostPath} />}
+      newBoard={<NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} serviceEnabled={props.serviceEnabled} contextProjectId={props.contextProjectId} returnBasePath={props.hostPath} />}
     />
   )
 }
@@ -124,9 +128,12 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   const [moreOpen, setMoreOpen] = useState(false)
   const [displayOpen,setDisplayOpen]=useState(false)
   const [rosterOpen, setRosterOpen] = useState(false)
+  const [openVisitId, setOpenVisitId] = useState<string | null>(null)
   const range = useMemo(() => viewRange(view, anchor, rangeDays, board.weekStartsOn), [anchor, board.weekStartsOn, rangeDays, view])
   const people = board.rowKind !== 'tasks'
-  const controller = useBoard(board.id, people ? props.initialWindow : null, range, people)
+  // The dispatch view reads its own day (technicians, queue, live status); the generic window is not needed there.
+  const dispatchView = view === 'dispatch'
+  const controller = useBoard(board.id, people ? props.initialWindow : null, range, people && !dispatchView)
   const window = controller.window
 
   // Keep the address shareable without a server round trip.
@@ -148,12 +155,13 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
         date.setUTCMonth(date.getUTCMonth() + direction)
         return date.toISOString().slice(0, 10)
       }
-      return addDays(current, direction * rangeDays)
+      return addDays(current, direction * (dispatchView ? 1 : rangeDays))
     })
-  }, [rangeDays, step])
+  }, [dispatchView, rangeDays, step])
 
   const label = useMemo(() => {
     if (view === 'calendar') return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${anchor.slice(0, 7)}-01T00:00:00Z`))
+    if (view === 'dispatch') return new Intl.DateTimeFormat(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${anchor}T00:00:00Z`))
     const format = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' })
     const year = new Intl.DateTimeFormat(locale, { year: 'numeric', timeZone: 'UTC' })
     return `${format.format(new Date(`${range.from}T00:00:00Z`))} – ${format.format(new Date(`${range.through}T00:00:00Z`))}, ${year.format(new Date(`${range.through}T00:00:00Z`))}`
@@ -240,7 +248,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
           <option value="">{t('calendar.everyone')}</option>{window?.rows.map(row=><option key={row.subjectId} value={row.subjectId}>{row.name}</option>)}
         </Select> : null}
         <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-1">
-          {people ? <Input value={search} onChange={event=>setSearch(event.target.value)} placeholder={t('toolbar.search')} className="h-8 w-32 shrink-0 text-xs sm:w-44" aria-label={t('toolbar.search')} /> : null}
+          {people && !dispatchView ? <Input value={search} onChange={event=>setSearch(event.target.value)} placeholder={t('toolbar.search')} className="h-8 w-32 shrink-0 text-xs sm:w-44" aria-label={t('toolbar.search')} /> : null}
           {settingsHref ? <Button variant="ghost" size="sm" className="h-8 px-2" asChild title={t('toolbar.settings')}>
             <Link href={settingsHref} aria-label={t('toolbar.settings')}><Settings2 className="h-4 w-4" /></Link>
           </Button> : null}
@@ -254,8 +262,8 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
               <Button variant="ghost" size="sm" onClick={()=>setCompact(v=>!v)} aria-label={t('toolbar.density')}>{compact?<Rows4 className="h-4 w-4" />:<Rows3 className="h-4 w-4" />}{t('toolbar.density')}</Button>
             </div>
           </Popover> : null}
-          {people ? <Button variant="ghost" size="sm" className="h-8 px-2" disabled={!controller.canUndo} onClick={()=>void controller.undo()} aria-label={t('toolbar.undo')}><Undo2 className="h-4 w-4" /></Button> : null}
-          {people ? <Button variant="ghost" size="sm" className="h-8 px-2" disabled={!controller.canRedo} onClick={()=>void controller.redo()} aria-label={t('toolbar.redo')}><Redo2 className="h-4 w-4" /></Button> : null}
+          {people && !dispatchView ? <Button variant="ghost" size="sm" className="h-8 px-2" disabled={!controller.canUndo} onClick={()=>void controller.undo()} aria-label={t('toolbar.undo')}><Undo2 className="h-4 w-4" /></Button> : null}
+          {people && !dispatchView ? <Button variant="ghost" size="sm" className="h-8 px-2" disabled={!controller.canRedo} onClick={()=>void controller.redo()} aria-label={t('toolbar.redo')}><Redo2 className="h-4 w-4" /></Button> : null}
           {people ? <Popover open={moreOpen} onOpenChange={setMoreOpen} align="end" className="w-72 max-w-[calc(100vw-2rem)]" trigger={<Button variant="outline" size="sm" className="h-8 px-2" onClick={() => setMoreOpen((value) => !value)} aria-label={t('toolbar.more')} aria-expanded={moreOpen}><MoreHorizontal className="h-4 w-4" /></Button>}>
             <div className="grid grid-cols-2 gap-2 p-3" data-schedule-window-menu>
               <DateField value={anchor} onChange={value=>{if(value)setAnchor(value)}} className="h-8 min-w-0 w-full text-xs" aria-label={t('toolbar.date')} />
@@ -305,7 +313,9 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
 
       {/* Body: one view at a time */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {!people ? (
+        {dispatchView ? (
+          <DispatchView boardId={board.id} date={anchor} onOpenVisit={setOpenVisitId} />
+        ) : !people ? (
           <TaskBoard
             boardId={board.id}
             view={view === 'progress' ? 'progress' : 'gantt'}
@@ -341,6 +351,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
       {downloadOpen && window ? <DownloadScheduleDrawer window={window} onClose={()=>setDownloadOpen(false)} /> : null}
       {emailOpen && window ? <EmailScheduleDrawer window={window} onClose={()=>setEmailOpen(false)} /> : null}
       {props.newBoard}
+      {openVisitId ? <ServiceVisitDrawer visitId={openVisitId} onClose={() => setOpenVisitId(null)} /> : null}
 
       {/* Notices */}
       <div className="pointer-events-none fixed bottom-5 right-5 z-[70] flex w-96 max-w-[calc(100vw-2.5rem)] flex-col gap-2">

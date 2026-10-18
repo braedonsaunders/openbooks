@@ -63,7 +63,11 @@
     "collection_attempt": "Einzugsversuch",
     "tax_provider_transaction": "Steueranbieter-Übermittlung",
     "psp_settlement_line_unmatched": "Nicht zugeordnete Auszahlungszeile",
-    "internal_billing": "Interne Verrechnung"
+    "internal_billing": "Interne Verrechnung",
+    "service_request": "Serviceanfrage",
+    "service_job": "Serviceauftrag",
+    "service_visit": "Serviceeinsatz",
+    "service_agreement": "Servicevertrag"
   },
   "resourcing": {
     "fields": {

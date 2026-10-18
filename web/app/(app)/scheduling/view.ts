@@ -9,6 +9,7 @@ import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { enabledBoardKinds, getBoard, listBoards, boardAuthority, type ScheduleBoard } from '@openbooks/engine/schedule-boards/boards'
 import { ScheduleError, scheduleDatabaseRefusal } from '@openbooks/engine/schedule-boards/errors'
+import { boardHasCapability } from '@openbooks/engine/schedule-boards/board-types'
 import { loadBoardWindow, type BoardWindow } from '@openbooks/engine/schedule-boards/window'
 import { can, getAuthz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
@@ -39,7 +40,11 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
   if (!kinds.people && !kinds.tasks) notFound()
   const canPeople = kinds.people && can(authz, 'hrm.shifts.read')
   const canTasks = kinds.tasks && can(authz, 'projects.read')
-  if (!canPeople && !canTasks) return redirect(accessDeniedHref({ permission: kinds.people ? 'hrm.shifts.read' : 'projects.read' }))
+  // Dispatch boards are read with the service grants: a dispatcher works the
+  // board without reading every other people board.
+  const serviceEnabled = kinds.people && await isFeatureEnabled(orgId, 'serviceDispatch')
+  const canDispatchBoards = serviceEnabled && ['service.read', 'service.manage', 'service.dispatch'].some((permission) => can(authz, permission))
+  if (!canPeople && !canTasks && !canDispatchBoards) return redirect(accessDeniedHref({ permission: kinds.people ? 'hrm.shifts.read' : 'projects.read' }))
 
   if(contextProjectId) {
     if(!kinds.tasks||!can(authz,'projects.read'))notFound()
@@ -58,7 +63,9 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
     upgrade = { message: refusal.message, remedy: refusal.remedy ?? null }
   }
   const resourceVisibility = await Promise.all(boards.map(async (board) => board.rowKind !== 'resources' || await boardAuthority(actor, board, 'read').then(() => true, () => false)))
-  const usable = boards.filter((board, index) => (board.rowKind === 'people' ? canPeople : board.rowKind === 'resources' ? resourceVisibility[index] : canTasks))
+  const usable = boards.filter((board, index) => (board.rowKind === 'people'
+    ? (boardHasCapability(board, 'dispatch') ? canDispatchBoards : canPeople)
+    : board.rowKind === 'resources' ? resourceVisibility[index] : canTasks))
   const requested = pickString(searchParams.board)
   const requestedProjectId = pickString(searchParams.project)
   if(!contextProjectId&&(requested||requestedProjectId)) {
@@ -100,6 +107,7 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
     tasksEnabled: false,
     resourcesEnabled: kinds.resources,
     equipmentEnabled: kinds.resources && can(authz, 'assets.read') && await isFeatureEnabled(orgId, 'equipment'),
+    serviceEnabled,
     roster: await rosterAccess(orgId, authz),
   }
   if (!board) {
@@ -184,6 +192,7 @@ export function schedulingSpec(data: SchedulingPageData): PageSpec {
         tasksEnabled: data.tasksEnabled,
         resourcesEnabled: data.resourcesEnabled,
         equipmentEnabled: data.equipmentEnabled,
+        serviceEnabled: data.serviceEnabled,
         roster: data.roster,
       }),
     ],

@@ -7,7 +7,8 @@
     "timeline": "Chronologie",
     "calendar": "Mois",
     "gantt": "Diagramme de Gantt",
-    "progress": "Avancement"
+    "progress": "Avancement",
+    "dispatch": "Répartition"
   },
   "kinds": {
     "customer": "Client",
@@ -254,6 +255,10 @@
       "roster": {
         "title": "Planning de quarts géré",
         "description": "Modèles de quarts récurrents, demandes de quarts des employés, approbation facultative de la publication et présence par pointeuse avec repères de retard, de départ anticipé et d’absence."
+      },
+      "service": {
+        "title": "Répartition des services",
+        "description": "Colonnes par technicien sur un axe horaire avec la file des visites à planifier ; les affectations sont publiées immédiatement."
       }
     },
     "name": "Nom",

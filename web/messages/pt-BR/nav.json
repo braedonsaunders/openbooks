@@ -178,7 +178,11 @@
     "asset-maintenance": "Manutenção de Ativos",
     "asset-insurance": "Seguro de Ativos",
     "service": "Serviços",
-    "my-visits": "Minhas visitas"
+    "my-visits": "Minhas visitas",
+    "service-requests": "Solicitações de serviço",
+    "service-jobs": "Ordens de serviço",
+    "service-visits": "Visitas de serviço",
+    "service-agreements": "Contratos de serviço"
   },
   "groups": {
     "manufacturing": "Manufatura",
@@ -235,7 +239,8 @@
     "crm-sales": "Vendas",
     "hrm-compensation": "Remuneração",
     "scheduling": "Programação",
-    "intercompany": "Entre empresas"
+    "intercompany": "Entre empresas",
+    "service": "Serviço"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gerenciar avaliações",
@@ -277,7 +282,8 @@
     "setup-overhead": "Custos indiretos",
     "crm-sales": "Vendas",
     "hrm-compensation": "Remuneração",
-    "intercompany": "Entre empresas"
+    "intercompany": "Entre empresas",
+    "service": "Serviço"
   },
   "moduleKeywords": {
     "receipts": "recibo, recibos, receber pagamento, pagamento, recebimento, pagamento de cliente",

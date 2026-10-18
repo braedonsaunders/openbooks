@@ -30,7 +30,8 @@
     "subscriptions": "订阅",
     "orders": "订单",
     "returns": "退货",
-    "giftCards": "礼品卡"
+    "giftCards": "礼品卡",
+    "serviceRequests": "服务请求"
   },
   "invoices": {
     "title": "发票",

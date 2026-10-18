@@ -4043,7 +4043,12 @@
         "description": "有効日付きの更新条件、担当者、および期限前のリマインダー。"
       },
       "project-loss-policies": {"title": "損失プロジェクト方針", "description": "損失が見込まれるプロジェクトを決算時に警告するか、また損失評価まで決算を保留するかを定めます。"},
-      "expense-fx-policies": {"title": "経費の為替方針", "description": "外貨建ての経費明細を、日付の為替レートではなく理由付きの指定レートで換算できるかどうか。"}
+      "expense-fx-policies": {"title": "経費の為替方針", "description": "外貨建ての経費明細を、日付の為替レートではなく理由付きの指定レートで換算できるかどうか。"},
+      "service-dispatch-policies": {
+        "title": "サービス配員ポリシー",
+        "singularTitle": "サービス配員ポリシーのバージョン",
+        "description": "顧客通知、優先度別の対応目標、契約が訪問を生成する期間。指定日から有効です。"
+      }
     },
     "fields": {
       "boardType": "ボードの種類",
@@ -5033,7 +5038,8 @@
     "options": {
       "scheduleBoardType": {
         "people": "人員ボード",
-        "shift_roster": "管理型シフト表"
+        "shift_roster": "管理型シフト表",
+        "dispatch": "サービス配員ボード"
       },
       "schedulePatternTarget": {
         "customer": "顧客",
@@ -5764,7 +5770,8 @@
         "timeline": "タイムライン",
         "calendar": "月",
         "gantt": "ガントチャート",
-        "progress": "進捗"
+        "progress": "進捗",
+        "dispatch": "配員"
       },
       "schedulePublishPolicy": {
         "governed": "統制公開",
@@ -6888,7 +6895,12 @@
       "scheduleBoardAutomation": "自動化",
       "scheduleBoardAutomationHelp": "このボードで割り当てが公開された後の処理。",
       "intercompanyControlAccounts": "法人間債権・債務勘定",
-      "periodEndDimensions": "締め仕訳の明細に保持するディメンション"
+      "periodEndDimensions": "締め仕訳の明細に保持するディメンション",
+      "serviceDispatchNotices": "顧客通知",
+      "serviceDispatchNoticesHelp": "通知はオプトインで、組織のメール配信で送信されます。",
+      "serviceDispatchResponse": "対応目標",
+      "serviceDispatchResponseHelp": "目標は有効日以降に依頼された作業に適用されます。",
+      "serviceDispatchPlanning": "計画"
     },
     "segmentValues": {
       "builtinLink": "{name}を開く",
@@ -7271,7 +7283,9 @@
       "offerLabel": "表示文言",
       "offerKind": "種類",
       "promotionCode": "プロモコード",
-      "note": "メモ"
+      "note": "メモ",
+      "sectionsServiceRequests": "サービス依頼",
+      "sectionsServiceRequestsHelp": "顧客がサービスを依頼し、進捗を確認できます。サービス配員が有効な間のみ表示されます。"
     },
     "customerPortalSections": {
       "branding": "名称と適用日",
@@ -7896,6 +7910,21 @@
         "line": "行",
         "problem": "問題"
       }
+    },
+    "serviceDispatchFields": {
+      "notifyArrivalWindow": "到着時間帯の通知",
+      "notifyArrivalWindowHelp": "訪問が割り当てられたときに到着時間帯を顧客にメールで通知します。メールアドレスのない顧客はスキップされます。",
+      "notifyEnRoute": "「移動中」通知",
+      "notifyEnRouteHelp": "技術者が訪問を移動中にしたときに顧客へメールで通知します。",
+      "arrivalWindowMinutes": "到着時間帯（分）",
+      "urgentResponseHours": "緊急の対応目標（時間）",
+      "highResponseHours": "高の対応目標（時間）",
+      "normalResponseHours": "通常の対応目標（時間）",
+      "lowResponseHours": "低の対応目標（時間）",
+      "responseHoursHelp": "依頼から初回訪問までの時間。目標がない場合は空欄にします。",
+      "defaultVisitMinutes": "既定の訪問時間（分）",
+      "agreementHorizonDays": "契約の生成期間（日）",
+      "agreementHorizonDaysHelp": "定期契約が訪問を何日先まで生成するか。"
     }
   },
   "flows": {

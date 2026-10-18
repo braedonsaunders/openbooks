@@ -7,7 +7,8 @@
     "timeline": "Timeline",
     "calendar": "Month",
     "gantt": "Gantt",
-    "progress": "Progress"
+    "progress": "Progress",
+    "dispatch": "Dispatch"
   },
   "kinds": {
     "customer": "Customer",
@@ -254,6 +255,10 @@
       "roster": {
         "title": "Managed shift roster",
         "description": "Recurring shift patterns, employee shift requests, optional approval of publishing and time-clock attendance with late, early and absent badges."
+      },
+      "service": {
+        "title": "Service dispatch",
+        "description": "Technician columns on a time axis with the queue of visits to schedule; assignments go live at once."
       }
     },
     "name": "Name",

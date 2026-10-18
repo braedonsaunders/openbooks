@@ -30,7 +30,8 @@
     "subscriptions": "サブスク",
     "orders": "注文",
     "returns": "返品",
-    "giftCards": "ギフトカード"
+    "giftCards": "ギフトカード",
+    "serviceRequests": "サービス依頼"
   },
   "invoices": {
     "title": "請求書",

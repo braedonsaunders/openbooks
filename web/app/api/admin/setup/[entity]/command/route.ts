@@ -86,6 +86,7 @@ const portalSettingsBody = z.strictObject({
   sectionsOrders: z.boolean().optional(),
   sectionsReturns: z.boolean().optional(),
   sectionsGiftCards: z.boolean().optional(),
+  sectionsServiceRequests: z.boolean().optional(),
   returnWindowDays: z.number().int().min(0).max(365).optional(),
   // Required only while sectionsReturns is on; the engine enforces that rule
   // against the effective settings. Null means the field was hidden.
@@ -232,6 +233,7 @@ async function runCommandBody(
         ...(data.sectionsOrders !== undefined ? { orders: data.sectionsOrders } : {}),
         ...(data.sectionsReturns !== undefined ? { returns: data.sectionsReturns } : {}),
         ...(data.sectionsGiftCards !== undefined ? { giftCards: data.sectionsGiftCards } : {}),
+        ...(data.sectionsServiceRequests !== undefined ? { serviceRequests: data.sectionsServiceRequests } : {}),
       };
       return savePortalSettings(orgId, actorId, {
         ...(data.portalName !== undefined ? { portalName: data.portalName } : {}),

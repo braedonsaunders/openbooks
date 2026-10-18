@@ -30,7 +30,8 @@
     "subscriptions": "Suscripciones",
     "orders": "Pedidos",
     "returns": "Devoluciones",
-    "giftCards": "Tarjetas regalo"
+    "giftCards": "Tarjetas regalo",
+    "serviceRequests": "Solicitudes de servicio"
   },
   "invoices": {
     "title": "Facturas",

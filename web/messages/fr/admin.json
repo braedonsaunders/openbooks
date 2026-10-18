@@ -3881,7 +3881,12 @@
         "description": "Conditions de renouvellement datées, responsable et rappels avant l’expiration."
       },
       "project-loss-policies": {"title": "Politiques des projets déficitaires", "description": "Si les projets prévoyant une perte sont signalés à la clôture et si la clôture attend leur évaluation de perte."},
-      "expense-fx-policies": {"title": "Politiques de change des frais", "description": "Indique si une ligne de frais en devise peut être convertie à un taux de change explicite motivé plutôt qu’au taux daté."}
+      "expense-fx-policies": {"title": "Politiques de change des frais", "description": "Indique si une ligne de frais en devise peut être convertie à un taux de change explicite motivé plutôt qu’au taux daté."},
+      "service-dispatch-policies": {
+        "title": "Politique de répartition des services",
+        "singularTitle": "Version de la politique de répartition",
+        "description": "Avis aux clients, délais de réponse par priorité et horizon de génération des visites des contrats, en vigueur à partir d'une date."
+      }
     },
     "fields": {
       "boardType": "Type de tableau",
@@ -4871,7 +4876,8 @@
     "options": {
       "scheduleBoardType": {
         "people": "Tableau de personnes",
-        "shift_roster": "Planning de quarts géré"
+        "shift_roster": "Planning de quarts géré",
+        "dispatch": "Tableau de répartition des services"
       },
       "schedulePatternTarget": {
         "customer": "Client",
@@ -5602,7 +5608,8 @@
         "timeline": "Chronologie",
         "calendar": "Mois",
         "gantt": "Diagramme de Gantt",
-        "progress": "Avancement"
+        "progress": "Avancement",
+        "dispatch": "Répartition"
       },
       "schedulePublishPolicy": {
         "governed": "Publication encadrée",
@@ -6888,7 +6895,12 @@
       "scheduleBoardAutomation": "Automatisation",
       "scheduleBoardAutomationHelp": "Ce qui se passe après la publication d’une affectation sur ce tableau.",
       "intercompanyControlAccounts": "Comptes de créances et dettes intercompagnies",
-      "periodEndDimensions": "Axes conservés sur les lignes de clôture"
+      "periodEndDimensions": "Axes conservés sur les lignes de clôture",
+      "serviceDispatchNotices": "Avis aux clients",
+      "serviceDispatchNoticesHelp": "Les avis sont facultatifs et envoyés par la messagerie de l'organisation.",
+      "serviceDispatchResponse": "Délais de réponse",
+      "serviceDispatchResponseHelp": "Les délais s'appliquent aux travaux demandés à partir de la date d'effet.",
+      "serviceDispatchPlanning": "Planification"
     },
     "segmentValues": {
       "builtinLink": "Ouvrir {name}",
@@ -7271,7 +7283,9 @@
       "offerLabel": "Libellé",
       "offerKind": "Type d’offre",
       "promotionCode": "Code promo",
-      "note": "Note"
+      "note": "Note",
+      "sectionsServiceRequests": "Demandes de service",
+      "sectionsServiceRequestsHelp": "Les clients demandent un service et suivent leurs demandes. Affiché lorsque la répartition des services est activée."
     },
     "customerPortalSections": {
       "branding": "Nom et vigueur",
@@ -7896,6 +7910,21 @@
         "line": "Ligne",
         "problem": "Problème"
       }
+    },
+    "serviceDispatchFields": {
+      "notifyArrivalWindow": "Avis de plage d'arrivée",
+      "notifyArrivalWindowHelp": "Envoyer au client la plage d'arrivée lorsqu'une visite est affectée. Les clients sans adresse e-mail sont ignorés.",
+      "notifyEnRoute": "Avis « en route »",
+      "notifyEnRouteHelp": "Envoyer un e-mail au client lorsque le technicien indique être en route.",
+      "arrivalWindowMinutes": "Plage d'arrivée (minutes)",
+      "urgentResponseHours": "Délai de réponse urgent (heures)",
+      "highResponseHours": "Délai de réponse élevé (heures)",
+      "normalResponseHours": "Délai de réponse normal (heures)",
+      "lowResponseHours": "Délai de réponse faible (heures)",
+      "responseHoursHelp": "Heures entre la demande et la première visite. Laisser vide pour aucun objectif.",
+      "defaultVisitMinutes": "Durée de visite par défaut (minutes)",
+      "agreementHorizonDays": "Horizon des contrats (jours)",
+      "agreementHorizonDaysHelp": "Jusqu'où les contrats récurrents génèrent leurs visites à l'avance."
     }
   },
   "flows": {

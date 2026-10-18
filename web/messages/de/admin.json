@@ -4043,7 +4043,12 @@
         "description": "Zeitlich gültige Verlängerungsbedingungen, Verantwortliche und Erinnerungen vor Ablauf."
       },
       "project-loss-policies": {"title": "Richtlinien für Verlustprojekte", "description": "Ob Projekte mit erwartetem Verlust beim Abschluss gemeldet werden und ob der Abschluss auf ihre Verlustbewertung wartet."},
-      "expense-fx-policies": {"title": "Währungsrichtlinien für Spesen", "description": "Ob eine Spesenposition in Fremdwährung statt zum datierten Kurs zu einem expliziten, begründeten Wechselkurs umgerechnet werden darf."}
+      "expense-fx-policies": {"title": "Währungsrichtlinien für Spesen", "description": "Ob eine Spesenposition in Fremdwährung statt zum datierten Kurs zu einem expliziten, begründeten Wechselkurs umgerechnet werden darf."},
+      "service-dispatch-policies": {
+        "title": "Service-Dispositionsrichtlinie",
+        "singularTitle": "Version der Dispositionsrichtlinie",
+        "description": "Kundenbenachrichtigungen, Reaktionsziele je Priorität und wie weit im Voraus Verträge Einsätze erzeugen, gültig ab einem Datum."
+      }
     },
     "fields": {
       "boardType": "Art der Plantafel",
@@ -5033,7 +5038,8 @@
     "options": {
       "scheduleBoardType": {
         "people": "Personen-Plantafel",
-        "shift_roster": "Verwalteter Schichtplan"
+        "shift_roster": "Verwalteter Schichtplan",
+        "dispatch": "Service-Dispositionstafel"
       },
       "schedulePatternTarget": {
         "customer": "Kunde",
@@ -5764,7 +5770,8 @@
         "timeline": "Zeitachse",
         "calendar": "Monat",
         "gantt": "Gantt-Diagramm",
-        "progress": "Fortschritt"
+        "progress": "Fortschritt",
+        "dispatch": "Disposition"
       },
       "schedulePublishPolicy": {
         "governed": "Gesteuerte Veröffentlichung",
@@ -6888,7 +6895,12 @@
       "scheduleBoardAutomation": "Automatisierung",
       "scheduleBoardAutomationHelp": "Was geschieht, nachdem eine Einplanung auf dieser Plantafel veröffentlicht wurde.",
       "intercompanyControlAccounts": "Konten für konzerninterne Forderungen und Verbindlichkeiten",
-      "periodEndDimensions": "Auf Abschlusszeilen beibehaltene Dimensionen"
+      "periodEndDimensions": "Auf Abschlusszeilen beibehaltene Dimensionen",
+      "serviceDispatchNotices": "Kundenbenachrichtigungen",
+      "serviceDispatchNoticesHelp": "Benachrichtigungen sind optional und werden über den E-Mail-Versand der Organisation gesendet.",
+      "serviceDispatchResponse": "Reaktionsziele",
+      "serviceDispatchResponseHelp": "Die Ziele gelten für Arbeiten, die ab dem Gültigkeitsdatum angefordert werden.",
+      "serviceDispatchPlanning": "Planung"
     },
     "segmentValues": {
       "builtinLink": "{name} öffnen",
@@ -7271,7 +7283,9 @@
       "offerLabel": "Angebotstext",
       "offerKind": "Angebotsart",
       "promotionCode": "Aktionscode",
-      "note": "Notiz"
+      "note": "Notiz",
+      "sectionsServiceRequests": "Serviceanfragen",
+      "sectionsServiceRequestsHelp": "Kunden fordern Service an und verfolgen ihre Anfragen. Wird angezeigt, solange die Service-Disposition aktiviert ist."
     },
     "customerPortalSections": {
       "branding": "Name und Gültigkeit",
@@ -7896,6 +7910,21 @@
         "line": "Zeile",
         "problem": "Abweichung"
       }
+    },
+    "serviceDispatchFields": {
+      "notifyArrivalWindow": "Benachrichtigung zum Ankunftsfenster",
+      "notifyArrivalWindowHelp": "Dem Kunden das Ankunftsfenster per E-Mail senden, wenn ein Einsatz zugewiesen wird. Kunden ohne E-Mail-Adresse werden übersprungen.",
+      "notifyEnRoute": "Benachrichtigung „Unterwegs“",
+      "notifyEnRouteHelp": "Den Kunden per E-Mail informieren, wenn der Techniker den Einsatz als unterwegs markiert.",
+      "arrivalWindowMinutes": "Ankunftsfenster (Minuten)",
+      "urgentResponseHours": "Reaktionsziel dringend (Stunden)",
+      "highResponseHours": "Reaktionsziel hoch (Stunden)",
+      "normalResponseHours": "Reaktionsziel normal (Stunden)",
+      "lowResponseHours": "Reaktionsziel niedrig (Stunden)",
+      "responseHoursHelp": "Stunden von der Anfrage bis zum ersten Einsatz. Leer lassen, wenn kein Ziel gilt.",
+      "defaultVisitMinutes": "Standarddauer eines Einsatzes (Minuten)",
+      "agreementHorizonDays": "Vertragshorizont (Tage)",
+      "agreementHorizonDaysHelp": "Wie weit im Voraus wiederkehrende Verträge ihre Einsätze erzeugen."
     }
   },
   "flows": {

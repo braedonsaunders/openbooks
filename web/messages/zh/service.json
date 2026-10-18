@@ -1,0 +1,685 @@
+{
+  "loadFailed": "无法加载服务记录。",
+  "create": {
+    "request": "新建服务请求",
+    "job": "新建服务工单",
+    "agreement": "新建服务协议"
+  },
+  "titles": {
+    "request": "服务请求",
+    "job": "服务工单",
+    "visit": "上门服务",
+    "agreement": "服务协议"
+  },
+  "tabs": {
+    "overview": "概览",
+    "requests": "请求",
+    "jobs": "工单",
+    "visits": "上门",
+    "agreements": "协议"
+  },
+  "visitStatus": {
+    "unscheduled": "未排程",
+    "scheduled": "已排程",
+    "dispatched": "已派工",
+    "en_route": "在途",
+    "on_site": "已到场",
+    "completed": "已完成",
+    "unable_to_complete": "无法完成",
+    "cancelled": "已取消"
+  },
+  "visitKind": {
+    "assessment": "现场评估",
+    "service": "上门服务"
+  },
+  "priority": {
+    "urgent": "紧急",
+    "high": "高",
+    "normal": "普通",
+    "low": "低"
+  },
+  "billingMode": {
+    "per_job": "按工单开票",
+    "per_visit": "按上门开票",
+    "not_billable": "不计费"
+  },
+  "requestStatus": {
+    "new": "新建",
+    "assessment_scheduled": "已安排评估",
+    "assessed": "已评估",
+    "quoted": "已报价",
+    "converted": "已转换",
+    "declined": "已拒绝",
+    "cancelled": "已取消"
+  },
+  "jobStatus": {
+    "open": "进行中",
+    "completed": "已完成",
+    "cancelled": "已取消"
+  },
+  "agreementStatus": {
+    "active": "生效中",
+    "ended": "已终止",
+    "cancelled": "已取消"
+  },
+  "quoteStatus": {
+    "draft": "草稿",
+    "sent": "已发送",
+    "accepted": "已接受",
+    "declined": "已拒绝"
+  },
+  "requestSource": {
+    "staff": "员工",
+    "portal": "客户门户"
+  },
+  "jobStage": {
+    "open": "进行中",
+    "unscheduled": "未排程",
+    "scheduled": "已排程",
+    "in_progress": "处理中",
+    "to_invoice": "待开票",
+    "completed": "已完成",
+    "cancelled": "已取消"
+  },
+  "reviewStatus": {
+    "not_required": "无需审核",
+    "pending": "待审核",
+    "approved": "已批准",
+    "rejected": "已驳回"
+  },
+  "format": {
+    "minutes": "{hours} 小时 {minutes} 分钟"
+  },
+  "pages": {
+    "home": {
+      "title": "服务",
+      "description": "服务请求、工单、上门服务和周期性协议，在排程板上进行派工。"
+    },
+    "requests": {
+      "title": "服务请求",
+      "description": "客户通过员工或客户门户提出的工作需求，经评估和报价后转为工单。",
+      "new": "新建请求"
+    },
+    "jobs": {
+      "title": "服务工单",
+      "description": "已确定范围和价格的服务工作，及其上门服务、定金和发票。",
+      "new": "新建工单"
+    },
+    "visits": {
+      "title": "上门服务",
+      "description": "所有工单、请求和协议下的上门服务，及其技术员和状态。",
+      "new": "新建上门服务"
+    },
+    "agreements": {
+      "title": "服务协议",
+      "description": "按生效日期条款生成上门服务的周期性维保协议。",
+      "new": "新建协议"
+    },
+    "myVisits": {
+      "title": "我的上门服务",
+      "description": "分配给您的上门服务，按路线顺序排列。"
+    }
+  },
+  "reports": {
+    "service_jobs_by_status": "服务工单（按状态和账龄）",
+    "service_technician_utilization": "技术员利用率",
+    "service_first_time_fix": "首次修复率",
+    "service_quote_win_rate": "报价成交率",
+    "service_revenue_per_job": "单个服务工单收入"
+  },
+  "list": {
+    "number": "编号",
+    "title": "标题",
+    "location": "地点",
+    "priority": "优先级",
+    "preferredOn": "期望日期",
+    "source": "来源",
+    "received": "接收时间",
+    "stage": "阶段",
+    "billingMode": "计费",
+    "responseDue": "响应截止",
+    "created": "创建时间",
+    "kind": "类型",
+    "scheduledAt": "排程时间",
+    "technicians": "技术员",
+    "review": "审核",
+    "startsOn": "开始",
+    "endsOn": "结束",
+    "generatedThrough": "上门服务已生成至"
+  },
+  "home": {
+    "tiles": {
+      "openRequests": "未结请求",
+      "unscheduledVisits": "待排程上门",
+      "todayVisits": "今日上门",
+      "inProgressVisits": "处理中",
+      "responseBreaches": "超过响应目标",
+      "awaitingReview": "待审核",
+      "readyToInvoice": "可开票",
+      "quotesAwaitingAnswer": "待答复报价",
+      "activeAgreements": "生效中的协议"
+    },
+    "policyMissing": "当前没有生效的派工策略。",
+    "policyMissingRemedy": "响应目标、到达时间窗和协议生成均使用派工策略。请在“设置 → 服务派工策略”中添加一个版本。",
+    "openPolicy": "打开派工策略",
+    "boards": "派工板",
+    "noBoards": "暂无派工板。",
+    "createBoard": "创建派工板",
+    "reports": "服务报表"
+  },
+  "dispatch": {
+    "board": "派工板",
+    "column": "{name} 的预约",
+    "retry": "重试",
+    "refresh": "刷新",
+    "freshness": "更新于 {time}",
+    "saving": "正在保存…",
+    "undo": "撤销",
+    "dismiss": "关闭",
+    "minutes": "{count, plural, one {# 分钟} other {# 分钟}}",
+    "dueBy": "截止 {time}",
+    "noWorkingDay": "该日在派工板上没有单一的工作时段（例如遇到时钟调整）。",
+    "noWorkingDayRemedy": "派工板显示 06:00–20:00；请在派工板设置中检查其工作日。",
+    "readOnly": "您可以查看此派工板，但不能分配上门服务。",
+    "noTechnicians": "此派工板的范围内没有技术员。",
+    "onLeave": "休假：{type}",
+    "dayOff": "休息日",
+    "scheduledHours": "已排程 {hours} 小时",
+    "send": "派工",
+    "unassign": "退回队列",
+    "errors": {
+      "load": "无法加载派工板。",
+      "save": "更改未保存。"
+    },
+    "notices": {
+      "assigned": "上门服务已分配。",
+      "moved": "预约已移动。",
+      "unassigned": "上门服务已退回队列。",
+      "dispatched": "已派工。",
+      "undone": "更改已撤销。",
+      "noticeFailed": "无法发送客户通知。"
+    },
+    "override": {
+      "title": "忽略这些警告并分配？",
+      "reason": "例外原因",
+      "confirm": "分配"
+    },
+    "conflicts": {
+      "overlap": "该时间已有预约",
+      "leave": "当天休假",
+      "qualification": "缺少必需的资质",
+      "non_working_day": "工作日程中的休息日",
+      "outside_working_hours": "超出工作时间",
+      "over_capacity": "超过排程工时",
+      "outside_arrival_window": "超出客户的到达时间窗",
+      "after_response_target": "晚于响应目标"
+    },
+    "history": {
+      "assign": "分配上门服务",
+      "move": "移动预约",
+      "unassign": "将上门服务退回队列",
+      "undoReason": "已在派工板上撤销"
+    },
+    "queue": {
+      "title": "待排程",
+      "search": "搜索上门服务",
+      "priority": "优先级",
+      "anyPriority": "任意优先级",
+      "sla": "响应目标",
+      "slaOptions": {
+        "any": "任意目标",
+        "breached": "已超目标",
+        "due_today": "24 小时内到期",
+        "due_soon": "3 天内到期"
+      },
+      "skill": "资质",
+      "anySkill": "任意资质",
+      "area": "区域",
+      "anyArea": "任意区域",
+      "empty": "没有等待排程的上门服务。"
+    }
+  },
+  "form": {
+    "loadFailed": "无法加载选项。",
+    "choose": "选择…",
+    "search": "搜索…",
+    "saveFailed": "记录未保存。",
+    "missingRequired": "请选择客户，并输入标题和开始日期。",
+    "customer": "客户",
+    "address": "服务地点",
+    "noAddress": "无地点",
+    "contact": "联系人",
+    "noContact": "无联系人",
+    "title": "标题",
+    "description": "描述",
+    "priority": "优先级",
+    "priorities": {
+      "urgent": "紧急",
+      "high": "高",
+      "normal": "普通",
+      "low": "低"
+    },
+    "inheritPriority": "与工单相同",
+    "preferredOn": "期望日期",
+    "preferredTime": "期望时段",
+    "times": {
+      "any": "任意时间",
+      "morning": "上午",
+      "afternoon": "下午",
+      "evening": "晚上"
+    },
+    "estimatedMinutes": "预计时长（分钟）",
+    "billingMode": "计费",
+    "billingModes": {
+      "per_job": "按工单开票",
+      "per_visit": "按上门开票",
+      "not_billable": "不计费"
+    },
+    "laborItem": "人工物料",
+    "laborRate": "每小时人工费率",
+    "laborRateHint": "留空则按物料价格计收人工",
+    "depositRequired": "需付定金",
+    "qualifications": "必需资质",
+    "noQualifications": "尚未设置资质类型。",
+    "scopeLines": "工作范围行",
+    "item": "物料",
+    "quantity": "数量",
+    "unitPrice": "单价",
+    "removeLine": "删除行",
+    "addLine": "添加行",
+    "instructions": "给技术员的说明",
+    "windowStart": "到达时间窗起",
+    "windowEnd": "到达时间窗止",
+    "addVisit": "添加上门服务",
+    "discard": "放弃",
+    "repeat": "重复",
+    "repeats": {
+      "daily": "每天",
+      "weekly": "每周",
+      "monthly": "每月",
+      "yearly": "每年"
+    },
+    "interval": "间隔（单位数）",
+    "weekdays": "于",
+    "weekday": {
+      "0": "周日",
+      "1": "周一",
+      "2": "周二",
+      "3": "周三",
+      "4": "周四",
+      "5": "周五",
+      "6": "周六"
+    },
+    "monthlyBy": "每月按",
+    "monthlyByDay": "每月同一日期",
+    "monthlyByWeekday": "每月同一星期几",
+    "windowStarts": "到达时间窗开始",
+    "windowEnds": "到达时间窗结束",
+    "visitLines": "每次上门计费的行",
+    "effectiveFrom": "生效日期",
+    "reason": "原因",
+    "reasonPlaceholder": "适用这些条款的原因",
+    "saveVersion": "保存版本",
+    "startsOn": "开始日期",
+    "endsOn": "结束日期",
+    "createAgreement": "创建协议",
+    "createRequest": "创建请求",
+    "createJob": "创建工单"
+  },
+  "request": {
+    "actionFailed": "无法更新请求。",
+    "convert": "转为工单",
+    "quote": "开始报价",
+    "declined": {
+      "title": "拒绝此请求",
+      "reason": "原因",
+      "confirm": "拒绝",
+      "action": "拒绝"
+    },
+    "cancelled": {
+      "title": "取消此请求",
+      "reason": "原因",
+      "confirm": "取消请求",
+      "action": "取消"
+    },
+    "source": {
+      "staff": "由员工录入",
+      "portal": "来自客户门户"
+    },
+    "customer": "客户",
+    "address": "服务地点",
+    "contact": "联系人",
+    "preferred": "期望时间",
+    "time": {
+      "any": "任意时间",
+      "morning": "上午",
+      "afternoon": "下午",
+      "evening": "晚上"
+    },
+    "received": "接收时间",
+    "job": "工单",
+    "closeReason": "关闭原因",
+    "assessments": "评估上门",
+    "addAssessment": "添加评估",
+    "quotes": "报价单",
+    "noQuotes": "暂无报价单。开始报价，即可在原生报价单中为工作定价。"
+  },
+  "quote": {
+    "loadFailed": "无法加载报价单。",
+    "actionFailed": "无法更新报价单。",
+    "terms": "附加项与定金",
+    "convert": "转为工单",
+    "openJob": "打开工单",
+    "issueFirst": "请先在报价单中编辑行并发出，然后再发送给客户确认。",
+    "decided": "由 {name} 于 {when} 答复",
+    "sentAt": "已于 {when} 发送；链接将于 {expires} 过期",
+    "depositDue": "应付定金 {amount}",
+    "optionalHelp": "勾选客户可作为可选附加项的行；其余行为必选。",
+    "deposit": "定金",
+    "depositBasis": {
+      "none": "无定金",
+      "percent": "百分比",
+      "amount": "固定金额"
+    },
+    "depositPercent": "定金（%）",
+    "depositAmount": "定金金额",
+    "saveTerms": "保存条款",
+    "discard": "放弃",
+    "send": {
+      "action": "发送确认",
+      "title": "发送报价单供客户确认",
+      "signerName": "签署人姓名",
+      "signerEmail": "签署人邮箱",
+      "emailed": "确认链接已通过邮件发送。",
+      "notEmailed": "未通过邮件发送：{reason}",
+      "link": "打开确认链接"
+    }
+  },
+  "job": {
+    "actionFailed": "无法更新工单。",
+    "complete": {
+      "action": "完成工单"
+    },
+    "reopen": {
+      "title": "重新打开此工单",
+      "reason": "原因",
+      "confirm": "重新打开",
+      "action": "重新打开"
+    },
+    "cancel": {
+      "title": "取消此工单",
+      "reason": "原因",
+      "confirm": "取消工单",
+      "action": "取消"
+    },
+    "tabs": {
+      "label": "工单分区",
+      "overview": "概览",
+      "visits": "上门",
+      "billing": "计费"
+    },
+    "customer": "客户",
+    "address": "服务地点",
+    "contact": "联系人",
+    "duration": "预计时长",
+    "responseDue": "响应截止",
+    "source": "来源",
+    "direct": "直接创建",
+    "labor": "人工",
+    "closeReason": "关闭原因",
+    "scope": "工作范围",
+    "noScope": "无工作范围行。",
+    "item": "物料",
+    "quantity": "数量",
+    "unitPrice": "单价",
+    "addVisit": "添加上门服务",
+    "billingMode": "计费",
+    "billingModes": {
+      "per_job": "按工单开票",
+      "per_visit": "按上门开票",
+      "not_billable": "不计费"
+    },
+    "depositRequired": "需付定金",
+    "depositsReceived": "已收定金",
+    "invoices": "发票",
+    "invoiceJob": "为工单开票",
+    "invoiceVisit": "为上门开票",
+    "visitNumber": "第 {sequence} 次上门",
+    "preview": "发票预览",
+    "subtotal": "税前小计",
+    "previewHelp": "将创建一张草稿发票；请在发票抽屉中审核、批准并过账，然后在此处核销定金。",
+    "createInvoice": "创建草稿发票",
+    "discard": "放弃",
+    "invoiceStatus": {
+      "draft": "草稿",
+      "pending_approval": "待批准",
+      "approved": "已批准",
+      "posted": "已过账",
+      "voided": "已作废"
+    },
+    "visitInvoice": "上门发票",
+    "applyDeposits": "核销定金",
+    "noInvoices": "暂无发票。",
+    "deposits": "定金",
+    "recordDeposit": "记录定金",
+    "noDeposits": "未记录定金。",
+    "noCandidates": "该客户没有已过账且挂账未核销的付款。",
+    "payment": "付款",
+    "linkDeposit": "记录为定金",
+    "depositHelp": "请先在“付款”中将定金作为挂账未核销的客户付款收取，然后在此处记录；发票过账后，定金将核销至工单发票。"
+  },
+  "visit": {
+    "title": "上门服务",
+    "sequence": "第 {sequence} 次上门",
+    "none": "无上门服务。",
+    "loadFailed": "无法加载上门服务。",
+    "actionFailed": "无法更新上门服务。",
+    "loading": "正在加载…",
+    "move": {
+      "dispatched": "派工",
+      "en_route": "出发",
+      "on_site": "已到达",
+      "unable_to_complete": "无法完成"
+    },
+    "unable": {
+      "title": "无法完成上门服务",
+      "reason": "阻碍工作的原因",
+      "confirm": "记录"
+    },
+    "cancel": {
+      "title": "取消此上门服务",
+      "reason": "原因",
+      "confirm": "取消上门服务",
+      "action": "取消上门服务"
+    },
+    "review": {
+      "pending": "完工待审核",
+      "approved": "完工已批准",
+      "rejected": "完工已驳回",
+      "pendingRemedy": "审核人将在“审批”中作出决定，之后才能为该上门服务开票。"
+    },
+    "customer": "客户",
+    "job": "工单",
+    "request": "请求",
+    "address": "地址",
+    "contact": "联系人",
+    "arrivalWindow": "到达时间窗",
+    "duration": "预计时长",
+    "responseDue": "响应截止",
+    "technicians": "技术员",
+    "unassigned": "尚未分配",
+    "instructions": "说明",
+    "workNotes": "工作记录",
+    "outcome": "结果",
+    "labor": "人工",
+    "hours": "{hours} 小时",
+    "laborStatus": {
+      "draft": "草稿",
+      "submitted": "已提交",
+      "approved": "已批准",
+      "rejected": "已驳回"
+    },
+    "invoice": "发票",
+    "notices": "客户通知",
+    "noticeKind": {
+      "arrival_window": "到达时间窗",
+      "en_route": "已出发"
+    },
+    "noticeStatus": {
+      "queued": "已排队",
+      "sent": "已发送",
+      "failed": "失败",
+      "suppressed": "已抑制",
+      "not_enabled": "未启用"
+    },
+    "history": "历史记录",
+    "parts": "配件",
+    "addPart": "添加配件",
+    "noParts": "未记录配件。",
+    "notBilled": "不计费",
+    "issued": "已出库",
+    "removePart": "移除配件",
+    "part": "配件",
+    "stockLocation": "取自",
+    "quantity": "数量",
+    "billable": "向客户收取此配件费用",
+    "savePart": "记录配件",
+    "discard": "放弃",
+    "complete": {
+      "title": "完成上门服务",
+      "notesPlaceholder": "发现的问题及所做的工作",
+      "labor": "人工工时",
+      "myLabor": "我的工时",
+      "hoursFor": "{name} 的工时",
+      "hoursUnit": "小时",
+      "laborHelp": "人工工时将进入工时表待批准；完成时配件将从库存出库。",
+      "action": "完成上门服务"
+    },
+    "photos": "照片和文档",
+    "uploading": "正在上传…",
+    "addPhoto": "添加照片",
+    "noPhotos": "暂无照片。",
+    "signature": {
+      "title": "客户签收",
+      "image": "{name} 的签名",
+      "inPerson": "在此设备上签名",
+      "email": "通过邮件发送签名链接",
+      "emailTitle": "通过邮件发送签名链接",
+      "recipient": "客户邮箱",
+      "send": "发送",
+      "emailed": "签名链接已通过邮件发送。",
+      "notEmailed": "未通过邮件发送：{detail}",
+      "openLink": "打开签名链接",
+      "open": "签名链接有效期至 {expires}。"
+    }
+  },
+  "agreement": {
+    "actionFailed": "无法更新协议。",
+    "generate": "立即生成上门服务",
+    "generated": "{count, plural, =0 {无需新增上门服务。} one {已生成 # 次上门服务。} other {已生成 # 次上门服务。}}",
+    "newVersion": "新版本",
+    "ended": {
+      "title": "终止此协议",
+      "reason": "原因",
+      "confirm": "终止协议",
+      "action": "终止"
+    },
+    "cancelled": {
+      "title": "取消此协议",
+      "reason": "原因",
+      "confirm": "取消协议",
+      "action": "取消"
+    },
+    "customer": "客户",
+    "address": "服务地点",
+    "term": "期限",
+    "openEnded": "无固定期限",
+    "generatedThrough": "上门服务已生成至",
+    "job": "工单",
+    "closeReason": "关闭原因",
+    "versions": "条款",
+    "effectiveFrom": "自 {date} 起生效",
+    "repeat": {
+      "daily": "{interval, plural, one {每天} other {每 # 天}}",
+      "weekly": "{interval, plural, one {每周} other {每 # 周}}",
+      "monthly": "{interval, plural, one {每月} other {每 # 个月}}",
+      "yearly": "{interval, plural, one {每年} other {每 # 年}}"
+    },
+    "visits": "上门"
+  },
+  "myVisits": {
+    "loadFailed": "无法加载您的上门服务。",
+    "previous": "前一天",
+    "today": "今天",
+    "next": "后一天",
+    "loading": "正在加载…",
+    "emptyTitle": "没有预约的上门服务",
+    "emptyDescription": "调度员为您预约的上门服务将显示在这里。",
+    "directions": "导航"
+  },
+  "portal": {
+    "title": "服务请求",
+    "back": "返回",
+    "newTitle": "申请服务",
+    "listTitle": "您的请求",
+    "empty": "您还没有服务请求。",
+    "nextVisit": "下次上门 {when}",
+    "submit": "提交请求",
+    "submitting": "正在提交…",
+    "submitted": "已收到请求 {number}。我们将与您联系以安排时间。",
+    "fields": {
+      "title": "您需要什么服务？",
+      "titlePlaceholder": "例如：暖气炉不制热",
+      "description": "详细信息",
+      "address": "地点",
+      "preferredOn": "期望日期",
+      "preferredTime": "期望时段",
+      "urgent": "此事紧急"
+    },
+    "time": {
+      "any": "任意时间",
+      "morning": "上午",
+      "afternoon": "下午",
+      "evening": "晚上"
+    },
+    "status": {
+      "new": "已收到",
+      "assessment_scheduled": "已安排评估",
+      "assessed": "已评估",
+      "quoted": "已发送报价",
+      "converted": "已安排施工",
+      "declined": "已拒绝",
+      "cancelled": "已取消",
+      "completed": "已完成"
+    }
+  },
+  "sign": {
+    "quoteTitle": "服务报价单",
+    "quoteNote": "您的确认将连同您的姓名、时间以及所示报价单的原样内容一并记录。",
+    "linkInvalid": "此链接无效或已过期。",
+    "answerFailed": "无法记录您的答复。",
+    "loading": "正在加载…",
+    "acceptedThanks": "谢谢 — 报价已接受。我们将与您联系以安排工作。",
+    "declinedThanks": "谢谢 — 我们已记录您拒绝了该报价。",
+    "quoteHeading": "报价单 {number}",
+    "preparedFor": "致 {name}",
+    "addOns": "可选附加项",
+    "total": "合计",
+    "depositDue": "接受报价时需支付定金 {amount}。",
+    "yourName": "您的姓名",
+    "clear": "清除",
+    "accept": "接受报价",
+    "decline": "拒绝",
+    "expires": "此链接将于 {date} 过期。",
+    "technicians": "技术员：{names}",
+    "workDone": "已完成的工作",
+    "parts": "使用的配件",
+    "quantity": "数量",
+    "signPrompt": "请签名以确认工作已完成",
+    "comment": "备注（可选）",
+    "sign": "签收",
+    "signing": "正在签名…",
+    "signFailed": "无法记录签名。",
+    "signedThanks": "谢谢 — 本次上门服务已签收。"
+  }
+}

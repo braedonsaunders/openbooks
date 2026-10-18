@@ -3956,7 +3956,12 @@
         "description": "Condições de renovação com vigência, responsável e lembretes antes do vencimento."
       },
       "project-loss-policies": {"title": "Políticas de projetos deficitários", "description": "Se projetos que preveem perda são sinalizados no fechamento e se o fechamento aguarda a avaliação de perda."},
-      "expense-fx-policies": {"title": "Políticas de câmbio de despesas", "description": "Se uma linha de despesa em moeda estrangeira pode ser convertida por uma taxa de câmbio explícita com justificativa em vez da taxa datada."}
+      "expense-fx-policies": {"title": "Políticas de câmbio de despesas", "description": "Se uma linha de despesa em moeda estrangeira pode ser convertida por uma taxa de câmbio explícita com justificativa em vez da taxa datada."},
+      "service-dispatch-policies": {
+        "title": "Política de despacho de serviço",
+        "singularTitle": "Versão da política de despacho",
+        "description": "Avisos ao cliente, metas de resposta por prioridade e horizonte de geração de visitas dos contratos, vigente a partir de uma data."
+      }
     },
     "fields": {
       "boardType": "Tipo de quadro",
@@ -4946,7 +4951,8 @@
     "options": {
       "scheduleBoardType": {
         "people": "Quadro de pessoas",
-        "shift_roster": "Escala de turnos gerenciada"
+        "shift_roster": "Escala de turnos gerenciada",
+        "dispatch": "Quadro de despacho de serviço"
       },
       "schedulePatternTarget": {
         "customer": "Cliente",
@@ -5677,7 +5683,8 @@
         "timeline": "Linha do tempo",
         "calendar": "Mês",
         "gantt": "Gráfico de Gantt",
-        "progress": "Andamento"
+        "progress": "Andamento",
+        "dispatch": "Despacho"
       },
       "schedulePublishPolicy": {
         "governed": "Publicação controlada",
@@ -6816,7 +6823,12 @@
       "scheduleBoardAutomation": "Automação",
       "scheduleBoardAutomationHelp": "O que acontece depois que uma alocação é publicada neste quadro.",
       "intercompanyControlAccounts": "Contas a receber e a pagar entre empresas",
-      "periodEndDimensions": "Dimensões mantidas nas linhas de encerramento"
+      "periodEndDimensions": "Dimensões mantidas nas linhas de encerramento",
+      "serviceDispatchNotices": "Avisos ao cliente",
+      "serviceDispatchNoticesHelp": "Os avisos são opcionais e enviados pelo e-mail da organização.",
+      "serviceDispatchResponse": "Metas de resposta",
+      "serviceDispatchResponseHelp": "As metas valem para serviços solicitados a partir da data de vigência.",
+      "serviceDispatchPlanning": "Planejamento"
     },
     "constructionRateEditor": {
       "tab": "Escopo e tarifas"
@@ -7271,7 +7283,9 @@
       "offerLabel": "Texto da oferta",
       "offerKind": "Tipo de oferta",
       "promotionCode": "Código promocional",
-      "note": "Nota"
+      "note": "Nota",
+      "sectionsServiceRequests": "Solicitações de serviço",
+      "sectionsServiceRequestsHelp": "Os clientes solicitam serviço e acompanham suas solicitações. Exibido enquanto o despacho de serviço estiver ativado."
     },
     "customerPortalSections": {
       "branding": "Nome e vigência",
@@ -7896,6 +7910,21 @@
         "line": "Linha",
         "problem": "Problema"
       }
+    },
+    "serviceDispatchFields": {
+      "notifyArrivalWindow": "Avisos de janela de chegada",
+      "notifyArrivalWindowHelp": "Enviar ao cliente a janela de chegada quando uma visita é atribuída. Clientes sem e-mail são ignorados.",
+      "notifyEnRoute": "Avisos de \"a caminho\"",
+      "notifyEnRouteHelp": "Enviar e-mail ao cliente quando o técnico marcar a visita como a caminho.",
+      "arrivalWindowMinutes": "Janela de chegada (minutos)",
+      "urgentResponseHours": "Meta de resposta urgente (horas)",
+      "highResponseHours": "Meta de resposta alta (horas)",
+      "normalResponseHours": "Meta de resposta normal (horas)",
+      "lowResponseHours": "Meta de resposta baixa (horas)",
+      "responseHoursHelp": "Horas entre a solicitação e a primeira visita. Deixe em branco para nenhuma meta.",
+      "defaultVisitMinutes": "Duração padrão da visita (minutos)",
+      "agreementHorizonDays": "Horizonte dos contratos (dias)",
+      "agreementHorizonDaysHelp": "Com quanta antecedência os contratos recorrentes geram suas visitas."
     }
   },
   "flows": {

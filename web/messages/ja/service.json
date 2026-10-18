@@ -1,0 +1,685 @@
+{
+  "loadFailed": "サービスレコードを読み込めませんでした。",
+  "create": {
+    "request": "新規サービス依頼",
+    "job": "新規サービス作業",
+    "agreement": "新規サービス契約"
+  },
+  "titles": {
+    "request": "サービス依頼",
+    "job": "サービス作業",
+    "visit": "サービス訪問",
+    "agreement": "サービス契約"
+  },
+  "tabs": {
+    "overview": "概要",
+    "requests": "依頼",
+    "jobs": "作業",
+    "visits": "訪問",
+    "agreements": "契約"
+  },
+  "visitStatus": {
+    "unscheduled": "未スケジュール",
+    "scheduled": "スケジュール済み",
+    "dispatched": "手配済み",
+    "en_route": "移動中",
+    "on_site": "現地対応中",
+    "completed": "完了",
+    "unable_to_complete": "完了不可",
+    "cancelled": "取消済み"
+  },
+  "visitKind": {
+    "assessment": "現地調査",
+    "service": "サービス訪問"
+  },
+  "priority": {
+    "urgent": "緊急",
+    "high": "高",
+    "normal": "通常",
+    "low": "低"
+  },
+  "billingMode": {
+    "per_job": "作業ごとに請求",
+    "per_visit": "訪問ごとに請求",
+    "not_billable": "請求対象外"
+  },
+  "requestStatus": {
+    "new": "新規",
+    "assessment_scheduled": "現地調査予定",
+    "assessed": "調査済み",
+    "quoted": "見積済み",
+    "converted": "変換済み",
+    "declined": "辞退",
+    "cancelled": "取消済み"
+  },
+  "jobStatus": {
+    "open": "未完了",
+    "completed": "完了",
+    "cancelled": "取消済み"
+  },
+  "agreementStatus": {
+    "active": "有効",
+    "ended": "終了",
+    "cancelled": "取消済み"
+  },
+  "quoteStatus": {
+    "draft": "下書き",
+    "sent": "送付済み",
+    "accepted": "承諾済み",
+    "declined": "辞退"
+  },
+  "requestSource": {
+    "staff": "スタッフ",
+    "portal": "顧客ポータル"
+  },
+  "jobStage": {
+    "open": "未完了",
+    "unscheduled": "未スケジュール",
+    "scheduled": "スケジュール済み",
+    "in_progress": "対応中",
+    "to_invoice": "請求待ち",
+    "completed": "完了",
+    "cancelled": "取消済み"
+  },
+  "reviewStatus": {
+    "not_required": "レビュー不要",
+    "pending": "レビュー待ち",
+    "approved": "承認済み",
+    "rejected": "却下"
+  },
+  "format": {
+    "minutes": "{hours}時間{minutes}分"
+  },
+  "pages": {
+    "home": {
+      "title": "サービス",
+      "description": "サービス依頼、作業、訪問、定期契約を、スケジュール管理のボードで手配します。"
+    },
+    "requests": {
+      "title": "サービス依頼",
+      "description": "スタッフまたは顧客ポータル経由で顧客から寄せられた作業依頼を、現地調査と見積を経て作業へ進めます。",
+      "new": "新規依頼"
+    },
+    "jobs": {
+      "title": "サービス作業",
+      "description": "範囲と価格が確定したサービス作業と、その訪問、前受金、請求書。",
+      "new": "新規作業"
+    },
+    "visits": {
+      "title": "サービス訪問",
+      "description": "作業、依頼、契約にまたがるすべての訪問と、その担当技術者およびステータス。",
+      "new": "新規訪問"
+    },
+    "agreements": {
+      "title": "サービス契約",
+      "description": "発効日付きの条件から訪問を生成する定期保守契約。",
+      "new": "新規契約"
+    },
+    "myVisits": {
+      "title": "自分の訪問",
+      "description": "自分に割り当てられたサービス訪問を、ルート順に表示します。"
+    }
+  },
+  "reports": {
+    "service_jobs_by_status": "ステータス・経過日数別サービス作業",
+    "service_technician_utilization": "技術者稼働率",
+    "service_first_time_fix": "初回解決率",
+    "service_quote_win_rate": "見積成約率",
+    "service_revenue_per_job": "サービス作業あたり売上"
+  },
+  "list": {
+    "number": "番号",
+    "title": "件名",
+    "location": "場所",
+    "priority": "優先度",
+    "preferredOn": "希望日",
+    "source": "受付経路",
+    "received": "受付日時",
+    "stage": "段階",
+    "billingMode": "請求方法",
+    "responseDue": "対応期限",
+    "created": "作成日",
+    "kind": "種類",
+    "scheduledAt": "予定日時",
+    "technicians": "技術者",
+    "review": "レビュー",
+    "startsOn": "開始",
+    "endsOn": "終了",
+    "generatedThrough": "訪問生成済みの期限"
+  },
+  "home": {
+    "tiles": {
+      "openRequests": "未完了の依頼",
+      "unscheduledVisits": "スケジュール待ちの訪問",
+      "todayVisits": "本日の訪問",
+      "inProgressVisits": "対応中",
+      "responseBreaches": "対応目標超過",
+      "awaitingReview": "レビュー待ち",
+      "readyToInvoice": "請求可能",
+      "quotesAwaitingAnswer": "回答待ちの見積",
+      "activeAgreements": "有効な契約"
+    },
+    "policyMissing": "有効な手配ポリシーがありません。",
+    "policyMissingRemedy": "対応目標、到着時間帯、契約からの訪問生成には手配ポリシーを使用します。設定 → サービス手配ポリシーでバージョンを追加してください。",
+    "openPolicy": "手配ポリシーを開く",
+    "boards": "手配ボード",
+    "noBoards": "手配ボードはまだありません。",
+    "createBoard": "手配ボードを作成",
+    "reports": "サービスレポート"
+  },
+  "dispatch": {
+    "board": "手配ボード",
+    "column": "{name}の予約",
+    "retry": "再試行",
+    "refresh": "更新",
+    "freshness": "{time}に更新",
+    "saving": "保存中…",
+    "undo": "元に戻す",
+    "dismiss": "閉じる",
+    "minutes": "{count, plural, one {#分} other {#分}}",
+    "dueBy": "期限 {time}",
+    "noWorkingDay": "この日はボード上で単一の勤務時間帯がありません（夏時間の切り替えなど）。",
+    "noWorkingDayRemedy": "ボードには06:00–20:00が表示されます。ボードの設定で勤務日を確認してください。",
+    "readOnly": "このボードは閲覧できますが、訪問を割り当てることはできません。",
+    "noTechnicians": "このボードの対象範囲に技術者がいません。",
+    "onLeave": "休暇中: {type}",
+    "dayOff": "休日",
+    "scheduledHours": "{hours}時間予定",
+    "send": "手配",
+    "unassign": "キューに戻す",
+    "errors": {
+      "load": "手配ボードを読み込めませんでした。",
+      "save": "変更は保存されませんでした。"
+    },
+    "notices": {
+      "assigned": "訪問を割り当てました。",
+      "moved": "予約を移動しました。",
+      "unassigned": "訪問をキューに戻しました。",
+      "dispatched": "訪問を手配しました。",
+      "undone": "変更を元に戻しました。",
+      "noticeFailed": "顧客への通知を送信できませんでした。"
+    },
+    "override": {
+      "title": "これらの警告を無視して割り当てますか？",
+      "reason": "例外の理由",
+      "confirm": "割り当て"
+    },
+    "conflicts": {
+      "overlap": "その時間はすでに予約済み",
+      "leave": "その日は休暇中",
+      "qualification": "必要な資格が不足",
+      "non_working_day": "勤務スケジュール上の休日",
+      "outside_working_hours": "勤務時間外",
+      "over_capacity": "予定時間を超過",
+      "outside_arrival_window": "顧客の到着時間帯外",
+      "after_response_target": "対応目標より後"
+    },
+    "history": {
+      "assign": "訪問を割り当て",
+      "move": "予約を移動",
+      "unassign": "訪問をキューに戻す",
+      "undoReason": "手配ボードで元に戻しました"
+    },
+    "queue": {
+      "title": "スケジュール待ち",
+      "search": "訪問を検索",
+      "priority": "優先度",
+      "anyPriority": "すべての優先度",
+      "sla": "対応目標",
+      "slaOptions": {
+        "any": "すべての目標",
+        "breached": "目標超過",
+        "due_today": "24時間以内に期限",
+        "due_soon": "3日以内に期限"
+      },
+      "skill": "資格",
+      "anySkill": "すべての資格",
+      "area": "エリア",
+      "anyArea": "すべてのエリア",
+      "empty": "スケジュール待ちの訪問はありません。"
+    }
+  },
+  "form": {
+    "loadFailed": "選択肢を読み込めませんでした。",
+    "choose": "選択…",
+    "search": "検索…",
+    "saveFailed": "レコードは保存されませんでした。",
+    "missingRequired": "顧客を選択し、件名と開始日を入力してください。",
+    "customer": "顧客",
+    "address": "サービス場所",
+    "noAddress": "場所なし",
+    "contact": "連絡先",
+    "noContact": "連絡先なし",
+    "title": "件名",
+    "description": "説明",
+    "priority": "優先度",
+    "priorities": {
+      "urgent": "緊急",
+      "high": "高",
+      "normal": "通常",
+      "low": "低"
+    },
+    "inheritPriority": "作業と同じ",
+    "preferredOn": "希望日",
+    "preferredTime": "希望時間帯",
+    "times": {
+      "any": "指定なし",
+      "morning": "午前",
+      "afternoon": "午後",
+      "evening": "夕方"
+    },
+    "estimatedMinutes": "所要時間の見込み（分）",
+    "billingMode": "請求方法",
+    "billingModes": {
+      "per_job": "作業ごとに請求",
+      "per_visit": "訪問ごとに請求",
+      "not_billable": "請求対象外"
+    },
+    "laborItem": "作業費品目",
+    "laborRate": "時間あたり作業費単価",
+    "laborRateHint": "空欄の場合、作業費は品目の価格で請求されます",
+    "depositRequired": "前受金が必要",
+    "qualifications": "必要な資格",
+    "noQualifications": "資格タイプが設定されていません。",
+    "scopeLines": "作業範囲明細",
+    "item": "品目",
+    "quantity": "数量",
+    "unitPrice": "単価",
+    "removeLine": "明細を削除",
+    "addLine": "明細を追加",
+    "instructions": "技術者への指示",
+    "windowStart": "到着時間帯（開始）",
+    "windowEnd": "到着時間帯（終了）",
+    "addVisit": "訪問を追加",
+    "discard": "破棄",
+    "repeat": "繰り返し",
+    "repeats": {
+      "daily": "毎日",
+      "weekly": "毎週",
+      "monthly": "毎月",
+      "yearly": "毎年"
+    },
+    "interval": "間隔（単位数）",
+    "weekdays": "曜日",
+    "weekday": {
+      "0": "日",
+      "1": "月",
+      "2": "火",
+      "3": "水",
+      "4": "木",
+      "5": "金",
+      "6": "土"
+    },
+    "monthlyBy": "毎月の指定方法",
+    "monthlyByDay": "毎月同じ日",
+    "monthlyByWeekday": "毎月同じ週の同じ曜日",
+    "windowStarts": "到着時間帯の開始",
+    "windowEnds": "到着時間帯の終了",
+    "visitLines": "訪問ごとに請求する明細",
+    "effectiveFrom": "発効日",
+    "reason": "理由",
+    "reasonPlaceholder": "この条件を適用する理由",
+    "saveVersion": "バージョンを保存",
+    "startsOn": "開始日",
+    "endsOn": "終了日",
+    "createAgreement": "契約を作成",
+    "createRequest": "依頼を作成",
+    "createJob": "作業を作成"
+  },
+  "request": {
+    "actionFailed": "依頼を更新できませんでした。",
+    "convert": "作業に変換",
+    "quote": "見積を開始",
+    "declined": {
+      "title": "この依頼を辞退",
+      "reason": "理由",
+      "confirm": "辞退",
+      "action": "辞退"
+    },
+    "cancelled": {
+      "title": "この依頼を取り消す",
+      "reason": "理由",
+      "confirm": "依頼を取り消す",
+      "action": "取消"
+    },
+    "source": {
+      "staff": "スタッフが受付",
+      "portal": "顧客ポータルから"
+    },
+    "customer": "顧客",
+    "address": "サービス場所",
+    "contact": "連絡先",
+    "preferred": "希望",
+    "time": {
+      "any": "指定なし",
+      "morning": "午前",
+      "afternoon": "午後",
+      "evening": "夕方"
+    },
+    "received": "受付日時",
+    "job": "作業",
+    "closeReason": "終了理由",
+    "assessments": "現地調査訪問",
+    "addAssessment": "現地調査を追加",
+    "quotes": "見積",
+    "noQuotes": "見積はまだありません。見積を開始すると、標準の見積で作業の価格を設定できます。"
+  },
+  "quote": {
+    "loadFailed": "見積を読み込めませんでした。",
+    "actionFailed": "見積を更新できませんでした。",
+    "terms": "オプションと前受金",
+    "convert": "作業に変換",
+    "openJob": "作業を開く",
+    "issueFirst": "承諾依頼を送付する前に、見積の明細を編集して発行してください。",
+    "decided": "{name}が{when}に回答",
+    "sentAt": "{when}に送付済み。リンクの有効期限は{expires}です",
+    "depositDue": "前受金 {amount}",
+    "optionalHelp": "顧客が任意のオプションとして選択できる明細にチェックを入れてください。それ以外は必須です。",
+    "deposit": "前受金",
+    "depositBasis": {
+      "none": "前受金なし",
+      "percent": "割合",
+      "amount": "固定額"
+    },
+    "depositPercent": "前受金（%）",
+    "depositAmount": "前受金額",
+    "saveTerms": "条件を保存",
+    "discard": "破棄",
+    "send": {
+      "action": "承諾依頼を送付",
+      "title": "見積の承諾依頼を送付",
+      "signerName": "署名者名",
+      "signerEmail": "署名者のメールアドレス",
+      "emailed": "承諾リンクをメールで送信しました。",
+      "notEmailed": "メール未送信: {reason}",
+      "link": "承諾リンクを開く"
+    }
+  },
+  "job": {
+    "actionFailed": "作業を更新できませんでした。",
+    "complete": {
+      "action": "作業を完了"
+    },
+    "reopen": {
+      "title": "この作業を再開",
+      "reason": "理由",
+      "confirm": "再開",
+      "action": "再開"
+    },
+    "cancel": {
+      "title": "この作業を取り消す",
+      "reason": "理由",
+      "confirm": "作業を取り消す",
+      "action": "取消"
+    },
+    "tabs": {
+      "label": "作業のセクション",
+      "overview": "概要",
+      "visits": "訪問",
+      "billing": "請求"
+    },
+    "customer": "顧客",
+    "address": "サービス場所",
+    "contact": "連絡先",
+    "duration": "所要時間の見込み",
+    "responseDue": "対応期限",
+    "source": "受付経路",
+    "direct": "直接作成",
+    "labor": "作業費",
+    "closeReason": "終了理由",
+    "scope": "作業範囲",
+    "noScope": "作業範囲明細はありません。",
+    "item": "品目",
+    "quantity": "数量",
+    "unitPrice": "単価",
+    "addVisit": "訪問を追加",
+    "billingMode": "請求方法",
+    "billingModes": {
+      "per_job": "作業ごとに請求",
+      "per_visit": "訪問ごとに請求",
+      "not_billable": "請求対象外"
+    },
+    "depositRequired": "前受金が必要",
+    "depositsReceived": "受領済み前受金",
+    "invoices": "請求書",
+    "invoiceJob": "作業を請求",
+    "invoiceVisit": "訪問を請求",
+    "visitNumber": "訪問 {sequence}",
+    "preview": "請求書プレビュー",
+    "subtotal": "税抜小計",
+    "previewHelp": "下書きの請求書が作成されます。請求書のドロワーで確認・承認・記帳してから、ここで前受金を充当してください。",
+    "createInvoice": "下書き請求書を作成",
+    "discard": "破棄",
+    "invoiceStatus": {
+      "draft": "下書き",
+      "pending_approval": "承認待ち",
+      "approved": "承認済み",
+      "posted": "記帳済み",
+      "voided": "無効"
+    },
+    "visitInvoice": "訪問請求書",
+    "applyDeposits": "前受金を充当",
+    "noInvoices": "請求書はまだありません。",
+    "deposits": "前受金",
+    "recordDeposit": "前受金を記録",
+    "noDeposits": "記録された前受金はありません。",
+    "noCandidates": "この顧客には、記帳済みで未充当の入金がありません。",
+    "payment": "入金",
+    "linkDeposit": "前受金として記録",
+    "depositHelp": "前受金を「入金」で未充当の顧客入金として受領してから、ここで記録してください。請求書の記帳後、作業の請求書に充当されます。"
+  },
+  "visit": {
+    "title": "サービス訪問",
+    "sequence": "訪問 {sequence}",
+    "none": "訪問はありません。",
+    "loadFailed": "訪問を読み込めませんでした。",
+    "actionFailed": "訪問を更新できませんでした。",
+    "loading": "読み込み中…",
+    "move": {
+      "dispatched": "手配",
+      "en_route": "移動開始",
+      "on_site": "到着",
+      "unable_to_complete": "完了不可"
+    },
+    "unable": {
+      "title": "訪問を完了できません",
+      "reason": "作業を妨げた理由",
+      "confirm": "記録"
+    },
+    "cancel": {
+      "title": "この訪問を取り消す",
+      "reason": "理由",
+      "confirm": "訪問を取り消す",
+      "action": "訪問を取り消す"
+    },
+    "review": {
+      "pending": "完了報告のレビュー待ち",
+      "approved": "完了報告承認済み",
+      "rejected": "完了報告却下",
+      "pendingRemedy": "訪問の請求前に、レビュー担当者が承認で判断します。"
+    },
+    "customer": "顧客",
+    "job": "作業",
+    "request": "依頼",
+    "address": "住所",
+    "contact": "連絡先",
+    "arrivalWindow": "到着時間帯",
+    "duration": "所要時間の見込み",
+    "responseDue": "対応期限",
+    "technicians": "技術者",
+    "unassigned": "未割当",
+    "instructions": "指示",
+    "workNotes": "作業メモ",
+    "outcome": "結果",
+    "labor": "作業費",
+    "hours": "{hours}時間",
+    "laborStatus": {
+      "draft": "下書き",
+      "submitted": "提出済み",
+      "approved": "承認済み",
+      "rejected": "却下"
+    },
+    "invoice": "請求書",
+    "notices": "顧客への通知",
+    "noticeKind": {
+      "arrival_window": "到着時間帯",
+      "en_route": "移動開始"
+    },
+    "noticeStatus": {
+      "queued": "送信待ち",
+      "sent": "送信済み",
+      "failed": "失敗",
+      "suppressed": "抑止",
+      "not_enabled": "無効"
+    },
+    "history": "履歴",
+    "parts": "部品",
+    "addPart": "部品を追加",
+    "noParts": "記録された部品はありません。",
+    "notBilled": "請求なし",
+    "issued": "出庫済み",
+    "removePart": "部品を削除",
+    "part": "部品",
+    "stockLocation": "出庫元",
+    "quantity": "数量",
+    "billable": "この部品を顧客に請求",
+    "savePart": "部品を記録",
+    "discard": "破棄",
+    "complete": {
+      "title": "訪問を完了",
+      "notesPlaceholder": "確認した内容と実施した作業",
+      "labor": "作業時間",
+      "myLabor": "自分の作業時間",
+      "hoursFor": "{name}の作業時間",
+      "hoursUnit": "時間",
+      "laborHelp": "作業時間は承認のためタイムシートに送られます。部品は完了時に在庫から出庫されます。",
+      "action": "訪問を完了"
+    },
+    "photos": "写真とドキュメント",
+    "uploading": "アップロード中…",
+    "addPhoto": "写真を追加",
+    "noPhotos": "写真はまだありません。",
+    "signature": {
+      "title": "顧客の完了確認",
+      "image": "{name}の署名",
+      "inPerson": "この端末で署名",
+      "email": "署名リンクをメールで送信",
+      "emailTitle": "署名リンクをメールで送信",
+      "recipient": "顧客のメールアドレス",
+      "send": "送信",
+      "emailed": "署名リンクをメールで送信しました。",
+      "notEmailed": "メール未送信: {detail}",
+      "openLink": "署名リンクを開く",
+      "open": "署名リンクは{expires}まで有効です。"
+    }
+  },
+  "agreement": {
+    "actionFailed": "契約を更新できませんでした。",
+    "generate": "今すぐ訪問を生成",
+    "generated": "{count, plural, =0 {新しい訪問は必要ありませんでした。} one {#件の訪問を生成しました。} other {#件の訪問を生成しました。}}",
+    "newVersion": "新しいバージョン",
+    "ended": {
+      "title": "この契約を終了",
+      "reason": "理由",
+      "confirm": "契約を終了",
+      "action": "終了"
+    },
+    "cancelled": {
+      "title": "この契約を取り消す",
+      "reason": "理由",
+      "confirm": "契約を取り消す",
+      "action": "取消"
+    },
+    "customer": "顧客",
+    "address": "サービス場所",
+    "term": "契約期間",
+    "openEnded": "期間の定めなし",
+    "generatedThrough": "訪問生成済みの期限",
+    "job": "作業",
+    "closeReason": "終了理由",
+    "versions": "条件",
+    "effectiveFrom": "{date}から発効",
+    "repeat": {
+      "daily": "{interval, plural, one {毎日} other {#日ごと}}",
+      "weekly": "{interval, plural, one {毎週} other {#週ごと}}",
+      "monthly": "{interval, plural, one {毎月} other {#か月ごと}}",
+      "yearly": "{interval, plural, one {毎年} other {#年ごと}}"
+    },
+    "visits": "訪問"
+  },
+  "myVisits": {
+    "loadFailed": "訪問を読み込めませんでした。",
+    "previous": "前日",
+    "today": "今日",
+    "next": "翌日",
+    "loading": "読み込み中…",
+    "emptyTitle": "予約された訪問はありません",
+    "emptyDescription": "手配担当者があなたに予約した訪問がここに表示されます。",
+    "directions": "経路案内"
+  },
+  "portal": {
+    "title": "サービス依頼",
+    "back": "戻る",
+    "newTitle": "サービスを依頼",
+    "listTitle": "ご依頼一覧",
+    "empty": "サービスのご依頼はまだありません。",
+    "nextVisit": "次回訪問 {when}",
+    "submit": "依頼を送信",
+    "submitting": "送信中…",
+    "submitted": "ご依頼 {number} を受け付けました。日程調整のためご連絡いたします。",
+    "fields": {
+      "title": "ご用件をお知らせください",
+      "titlePlaceholder": "例: 暖房が効かない",
+      "description": "詳細",
+      "address": "場所",
+      "preferredOn": "希望日",
+      "preferredTime": "希望時間帯",
+      "urgent": "緊急です"
+    },
+    "time": {
+      "any": "指定なし",
+      "morning": "午前",
+      "afternoon": "午後",
+      "evening": "夕方"
+    },
+    "status": {
+      "new": "受付済み",
+      "assessment_scheduled": "現地調査予定",
+      "assessed": "調査済み",
+      "quoted": "見積送付済み",
+      "converted": "作業予定",
+      "declined": "辞退",
+      "cancelled": "取消済み",
+      "completed": "完了"
+    }
+  },
+  "sign": {
+    "quoteTitle": "サービス見積",
+    "quoteNote": "ご承諾は、お名前、日時、表示されているとおりの見積内容とともに記録されます。",
+    "linkInvalid": "このリンクは無効か、有効期限が切れています。",
+    "answerFailed": "ご回答を記録できませんでした。",
+    "loading": "読み込み中…",
+    "acceptedThanks": "ありがとうございます — 見積は承諾されました。作業の日程調整のためご連絡いたします。",
+    "declinedThanks": "ありがとうございます — 見積を辞退されたことを記録しました。",
+    "quoteHeading": "見積 {number}",
+    "preparedFor": "{name}様向け",
+    "addOns": "任意のオプション",
+    "total": "合計",
+    "depositDue": "ご承諾時に前受金 {amount} のお支払いが必要です。",
+    "yourName": "お名前",
+    "clear": "クリア",
+    "accept": "見積を承諾",
+    "decline": "辞退",
+    "expires": "このリンクの有効期限は{date}です。",
+    "technicians": "技術者: {names}",
+    "workDone": "実施作業",
+    "parts": "使用部品",
+    "quantity": "数量",
+    "signPrompt": "作業の完了を確認のうえ署名してください",
+    "comment": "コメント（任意）",
+    "sign": "完了確認",
+    "signing": "署名中…",
+    "signFailed": "署名を記録できませんでした。",
+    "signedThanks": "ありがとうございます — 訪問の完了確認が完了しました。"
+  }
+}

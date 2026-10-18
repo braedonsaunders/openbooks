@@ -14,6 +14,7 @@ export const PORTAL_SECTIONS = [
   "orders",
   "returns",
   "giftCards",
+  "serviceRequests",
 ] as const;
 
 export type PortalSection = (typeof PORTAL_SECTIONS)[number];
@@ -46,6 +47,8 @@ export const DEFAULT_PORTAL_SETTINGS: PortalSettings = {
     orders: true,
     returns: true,
     giftCards: true,
+    // Shown only while Service dispatch is on for the organization.
+    serviceRequests: true,
   },
   returnWindowDays: 30,
   returnReasons: ["damaged", "wrong_item", "not_as_described", "changed_mind", "late_delivery"],

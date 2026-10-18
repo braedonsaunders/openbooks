@@ -3881,7 +3881,12 @@
         "description": "Condiciones de renovación con fecha de vigencia, responsable y recordatorios antes del vencimiento."
       },
       "project-loss-policies": {"title": "Políticas de proyectos con pérdida", "description": "Si los proyectos que prevén pérdidas se señalan en el cierre y si el cierre espera su evaluación de pérdida."},
-      "expense-fx-policies": {"title": "Políticas de cambio de gastos", "description": "Si una línea de gasto en moneda extranjera puede convertirse a un tipo de cambio explícito con un motivo en lugar del tipo fechado."}
+      "expense-fx-policies": {"title": "Políticas de cambio de gastos", "description": "Si una línea de gasto en moneda extranjera puede convertirse a un tipo de cambio explícito con un motivo en lugar del tipo fechado."},
+      "service-dispatch-policies": {
+        "title": "Política de despacho de servicio",
+        "singularTitle": "Versión de la política de despacho",
+        "description": "Avisos a clientes, objetivos de respuesta por prioridad y horizonte de generación de visitas de los contratos, vigente desde una fecha."
+      }
     },
     "fields": {
       "boardType": "Tipo de tablero",
@@ -4871,7 +4876,8 @@
     "options": {
       "scheduleBoardType": {
         "people": "Tablero de personas",
-        "shift_roster": "Cuadrante de turnos gestionado"
+        "shift_roster": "Cuadrante de turnos gestionado",
+        "dispatch": "Tablero de despacho de servicio"
       },
       "schedulePatternTarget": {
         "customer": "Cliente",
@@ -5602,7 +5608,8 @@
         "timeline": "Línea de tiempo",
         "calendar": "Mes",
         "gantt": "Diagrama de Gantt",
-        "progress": "Avance"
+        "progress": "Avance",
+        "dispatch": "Despacho"
       },
       "schedulePublishPolicy": {
         "governed": "Publicación gobernada",
@@ -6888,7 +6895,12 @@
       "scheduleBoardAutomation": "Automatización",
       "scheduleBoardAutomationHelp": "Lo que ocurre después de publicar una asignación en este tablero.",
       "intercompanyControlAccounts": "Cuentas por cobrar y por pagar intercompañía",
-      "periodEndDimensions": "Dimensiones conservadas en las líneas de cierre"
+      "periodEndDimensions": "Dimensiones conservadas en las líneas de cierre",
+      "serviceDispatchNotices": "Avisos a clientes",
+      "serviceDispatchNoticesHelp": "Los avisos son opcionales y se envían mediante el correo de la organización.",
+      "serviceDispatchResponse": "Objetivos de respuesta",
+      "serviceDispatchResponseHelp": "Los objetivos se aplican al trabajo solicitado a partir de la fecha de vigencia.",
+      "serviceDispatchPlanning": "Planificación"
     },
     "segmentValues": {
       "builtinLink": "Abrir {name}",
@@ -7271,7 +7283,9 @@
       "offerLabel": "Texto de la oferta",
       "offerKind": "Tipo de oferta",
       "promotionCode": "Código promocional",
-      "note": "Nota"
+      "note": "Nota",
+      "sectionsServiceRequests": "Solicitudes de servicio",
+      "sectionsServiceRequestsHelp": "Los clientes solicitan servicio y siguen sus solicitudes. Se muestra mientras el despacho de servicio está activado."
     },
     "customerPortalSections": {
       "branding": "Nombre y vigencia",
@@ -7896,6 +7910,21 @@
         "line": "Línea",
         "problem": "Problema"
       }
+    },
+    "serviceDispatchFields": {
+      "notifyArrivalWindow": "Avisos de franja de llegada",
+      "notifyArrivalWindowHelp": "Enviar al cliente la franja de llegada cuando se asigna una visita. Se omiten los clientes sin correo electrónico.",
+      "notifyEnRoute": "Avisos de «en camino»",
+      "notifyEnRouteHelp": "Enviar un correo al cliente cuando el técnico marca la visita en camino.",
+      "arrivalWindowMinutes": "Franja de llegada (minutos)",
+      "urgentResponseHours": "Objetivo de respuesta urgente (horas)",
+      "highResponseHours": "Objetivo de respuesta alta (horas)",
+      "normalResponseHours": "Objetivo de respuesta normal (horas)",
+      "lowResponseHours": "Objetivo de respuesta baja (horas)",
+      "responseHoursHelp": "Horas desde la solicitud hasta la primera visita. Déjelo en blanco si no hay objetivo.",
+      "defaultVisitMinutes": "Duración predeterminada de la visita (minutos)",
+      "agreementHorizonDays": "Horizonte de contratos (días)",
+      "agreementHorizonDaysHelp": "Con cuánta antelación los contratos recurrentes generan sus visitas."
     }
   },
   "flows": {

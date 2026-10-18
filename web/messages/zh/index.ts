@@ -78,6 +78,7 @@ import returns from './returns.json'
 import revenue from './revenue.json'
 import salesOrders from './salesOrders.json'
 import scheduling from './scheduling.json'
+import service from './service.json'
 import shell from './shell.json'
 import storedValue from './storedValue.json'
 import subcontracts from './subcontracts.json'
@@ -164,6 +165,7 @@ export default {
   revenue,
   salesOrders,
   scheduling,
+  service,
   shell,
   storedValue,
   subcontracts,

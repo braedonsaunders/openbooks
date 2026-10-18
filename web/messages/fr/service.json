@@ -1,0 +1,685 @@
+{
+  "loadFailed": "Impossible de charger la fiche de service.",
+  "create": {
+    "request": "Nouvelle demande de service",
+    "job": "Nouveau bon de travail",
+    "agreement": "Nouveau contrat de service"
+  },
+  "titles": {
+    "request": "Demande de service",
+    "job": "Bon de travail",
+    "visit": "Intervention",
+    "agreement": "Contrat de service"
+  },
+  "tabs": {
+    "overview": "Aperçu",
+    "requests": "Demandes",
+    "jobs": "Bons de travail",
+    "visits": "Interventions",
+    "agreements": "Contrats"
+  },
+  "visitStatus": {
+    "unscheduled": "Non planifiée",
+    "scheduled": "Planifiée",
+    "dispatched": "Répartie",
+    "en_route": "En route",
+    "on_site": "Sur place",
+    "completed": "Terminée",
+    "unable_to_complete": "Impossible à terminer",
+    "cancelled": "Annulée"
+  },
+  "visitKind": {
+    "assessment": "Évaluation",
+    "service": "Intervention de service"
+  },
+  "priority": {
+    "urgent": "Urgente",
+    "high": "Haute",
+    "normal": "Normale",
+    "low": "Basse"
+  },
+  "billingMode": {
+    "per_job": "Facturer par bon de travail",
+    "per_visit": "Facturer par intervention",
+    "not_billable": "Non facturable"
+  },
+  "requestStatus": {
+    "new": "Nouvelle",
+    "assessment_scheduled": "Évaluation planifiée",
+    "assessed": "Évaluée",
+    "quoted": "Soumission envoyée",
+    "converted": "Convertie",
+    "declined": "Refusée",
+    "cancelled": "Annulée"
+  },
+  "jobStatus": {
+    "open": "Ouvert",
+    "completed": "Terminé",
+    "cancelled": "Annulé"
+  },
+  "agreementStatus": {
+    "active": "Actif",
+    "ended": "Terminé",
+    "cancelled": "Annulé"
+  },
+  "quoteStatus": {
+    "draft": "Brouillon",
+    "sent": "Envoyée",
+    "accepted": "Acceptée",
+    "declined": "Refusée"
+  },
+  "requestSource": {
+    "staff": "Personnel",
+    "portal": "Portail client"
+  },
+  "jobStage": {
+    "open": "Ouvert",
+    "unscheduled": "Non planifié",
+    "scheduled": "Planifié",
+    "in_progress": "En cours",
+    "to_invoice": "À facturer",
+    "completed": "Terminé",
+    "cancelled": "Annulé"
+  },
+  "reviewStatus": {
+    "not_required": "Aucune revue",
+    "pending": "En attente de revue",
+    "approved": "Approuvée",
+    "rejected": "Rejetée"
+  },
+  "format": {
+    "minutes": "{hours} h {minutes} min"
+  },
+  "pages": {
+    "home": {
+      "title": "Service",
+      "description": "Demandes de service, bons de travail, interventions et contrats récurrents, répartis sur les tableaux de planification."
+    },
+    "requests": {
+      "title": "Demandes de service",
+      "description": "Les travaux demandés par les clients, par le personnel ou le portail client, de l’évaluation et la soumission jusqu’au bon de travail.",
+      "new": "Nouvelle demande"
+    },
+    "jobs": {
+      "title": "Bons de travail",
+      "description": "Travaux de service définis et chiffrés, avec leurs interventions, acomptes et factures.",
+      "new": "Nouveau bon de travail"
+    },
+    "visits": {
+      "title": "Interventions",
+      "description": "Toutes les interventions des bons de travail, demandes et contrats, avec leurs techniciens et leur statut.",
+      "new": "Nouvelle intervention"
+    },
+    "agreements": {
+      "title": "Contrats de service",
+      "description": "Contrats d’entretien récurrents qui génèrent des interventions à partir de conditions datées en vigueur.",
+      "new": "Nouveau contrat"
+    },
+    "myVisits": {
+      "title": "Mes interventions",
+      "description": "Les interventions de service qui vous sont attribuées, dans l’ordre du trajet."
+    }
+  },
+  "reports": {
+    "service_jobs_by_status": "Bons de travail par statut et ancienneté",
+    "service_technician_utilization": "Taux d’utilisation des techniciens",
+    "service_first_time_fix": "Taux de résolution au premier passage",
+    "service_quote_win_rate": "Taux d’acceptation des soumissions",
+    "service_revenue_per_job": "Revenu par bon de travail"
+  },
+  "list": {
+    "number": "Numéro",
+    "title": "Titre",
+    "location": "Emplacement",
+    "priority": "Priorité",
+    "preferredOn": "Date souhaitée",
+    "source": "Origine",
+    "received": "Reçue",
+    "stage": "Étape",
+    "billingMode": "Facturation",
+    "responseDue": "Réponse attendue",
+    "created": "Créé",
+    "kind": "Type",
+    "scheduledAt": "Planifiée",
+    "technicians": "Techniciens",
+    "review": "Revue",
+    "startsOn": "Début",
+    "endsOn": "Fin",
+    "generatedThrough": "Interventions générées jusqu’au"
+  },
+  "home": {
+    "tiles": {
+      "openRequests": "Demandes ouvertes",
+      "unscheduledVisits": "Interventions à planifier",
+      "todayVisits": "Interventions du jour",
+      "inProgressVisits": "En cours",
+      "responseBreaches": "Délai de réponse dépassé",
+      "awaitingReview": "En attente de revue",
+      "readyToInvoice": "Prêts à facturer",
+      "quotesAwaitingAnswer": "Soumissions en attente de réponse",
+      "activeAgreements": "Contrats actifs"
+    },
+    "policyMissing": "Aucune politique de répartition n’est en vigueur.",
+    "policyMissingRemedy": "Les délais de réponse, les plages d’arrivée et la génération des contrats utilisent la politique de répartition. Ajoutez une version dans Paramétrage → Politique de répartition du service.",
+    "openPolicy": "Ouvrir la politique de répartition",
+    "boards": "Tableaux de répartition",
+    "noBoards": "Aucun tableau de répartition pour l’instant.",
+    "createBoard": "Créer un tableau de répartition",
+    "reports": "Rapports de service"
+  },
+  "dispatch": {
+    "board": "Tableau de répartition",
+    "column": "Réservations de {name}",
+    "retry": "Réessayer",
+    "refresh": "Actualiser",
+    "freshness": "Mis à jour {time}",
+    "saving": "Enregistrement…",
+    "undo": "Annuler",
+    "dismiss": "Fermer",
+    "minutes": "{count, plural, one {# minute} other {# minutes}}",
+    "dueBy": "échéance {time}",
+    "noWorkingDay": "Ce jour n’a pas de plage de travail unique sur le tableau (par exemple lors d’un changement d’heure).",
+    "noWorkingDayRemedy": "Le tableau affiche 06:00–20:00 ; vérifiez la journée de travail du tableau dans ses paramètres.",
+    "readOnly": "Vous pouvez consulter ce tableau, mais pas y attribuer des interventions.",
+    "noTechnicians": "Aucun technicien n’est inclus dans la portée de ce tableau.",
+    "onLeave": "En congé : {type}",
+    "dayOff": "Jour de repos",
+    "scheduledHours": "{hours} h planifiées",
+    "send": "Répartir",
+    "unassign": "Renvoyer dans la file",
+    "errors": {
+      "load": "Impossible de charger le tableau de répartition.",
+      "save": "La modification n’a pas été enregistrée."
+    },
+    "notices": {
+      "assigned": "Intervention attribuée.",
+      "moved": "Réservation déplacée.",
+      "unassigned": "Intervention renvoyée dans la file.",
+      "dispatched": "Intervention répartie.",
+      "undone": "Modification annulée.",
+      "noticeFailed": "L’avis au client n’a pas pu être envoyé."
+    },
+    "override": {
+      "title": "Attribuer malgré ces avertissements ?",
+      "reason": "Motif de la dérogation",
+      "confirm": "Attribuer"
+    },
+    "conflicts": {
+      "overlap": "Déjà réservé à cette heure",
+      "leave": "En congé ce jour-là",
+      "qualification": "Qualification requise manquante",
+      "non_working_day": "Jour de repos selon l’horaire de travail",
+      "outside_working_hours": "En dehors des heures de travail",
+      "over_capacity": "Plus d’heures que prévu à l’horaire",
+      "outside_arrival_window": "En dehors de la plage d’arrivée du client",
+      "after_response_target": "Après le délai de réponse"
+    },
+    "history": {
+      "assign": "Attribuer l’intervention",
+      "move": "Déplacer la réservation",
+      "unassign": "Renvoyer l’intervention dans la file",
+      "undoReason": "Annulé depuis le tableau de répartition"
+    },
+    "queue": {
+      "title": "À planifier",
+      "search": "Rechercher des interventions",
+      "priority": "Priorité",
+      "anyPriority": "Toute priorité",
+      "sla": "Délai de réponse",
+      "slaOptions": {
+        "any": "Tout délai",
+        "breached": "Délai dépassé",
+        "due_today": "Échéance dans les 24 h",
+        "due_soon": "Échéance dans les 3 jours"
+      },
+      "skill": "Qualification",
+      "anySkill": "Toute qualification",
+      "area": "Secteur",
+      "anyArea": "Tout secteur",
+      "empty": "Aucune intervention en attente de planification."
+    }
+  },
+  "form": {
+    "loadFailed": "Impossible de charger les options.",
+    "choose": "Choisir…",
+    "search": "Rechercher…",
+    "saveFailed": "La fiche n’a pas été enregistrée.",
+    "missingRequired": "Choisissez le client, saisissez un titre et une date de début.",
+    "customer": "Client",
+    "address": "Lieu d’intervention",
+    "noAddress": "Aucun lieu",
+    "contact": "Contact",
+    "noContact": "Aucun contact",
+    "title": "Titre",
+    "description": "Description",
+    "priority": "Priorité",
+    "priorities": {
+      "urgent": "Urgente",
+      "high": "Haute",
+      "normal": "Normale",
+      "low": "Basse"
+    },
+    "inheritPriority": "Identique au bon de travail",
+    "preferredOn": "Date souhaitée",
+    "preferredTime": "Moment souhaité",
+    "times": {
+      "any": "N’importe quand",
+      "morning": "Matin",
+      "afternoon": "Après-midi",
+      "evening": "Soir"
+    },
+    "estimatedMinutes": "Durée estimée (minutes)",
+    "billingMode": "Facturation",
+    "billingModes": {
+      "per_job": "Facturer par bon de travail",
+      "per_visit": "Facturer par intervention",
+      "not_billable": "Non facturable"
+    },
+    "laborItem": "Article de main-d’œuvre",
+    "laborRate": "Taux horaire de main-d’œuvre",
+    "laborRateHint": "Laissez vide pour facturer la main-d’œuvre au prix de l’article",
+    "depositRequired": "Acompte exigé",
+    "qualifications": "Qualifications requises",
+    "noQualifications": "Aucun type de qualification n’est configuré.",
+    "scopeLines": "Lignes de portée des travaux",
+    "item": "Article",
+    "quantity": "Quantité",
+    "unitPrice": "Prix unitaire",
+    "removeLine": "Supprimer la ligne",
+    "addLine": "Ajouter une ligne",
+    "instructions": "Instructions pour le technicien",
+    "windowStart": "Plage d’arrivée à partir de",
+    "windowEnd": "Plage d’arrivée jusqu’à",
+    "addVisit": "Ajouter une intervention",
+    "discard": "Abandonner",
+    "repeat": "Récurrence",
+    "repeats": {
+      "daily": "Quotidienne",
+      "weekly": "Hebdomadaire",
+      "monthly": "Mensuelle",
+      "yearly": "Annuelle"
+    },
+    "interval": "Tous les (unités)",
+    "weekdays": "Le",
+    "weekday": {
+      "0": "Dim",
+      "1": "Lun",
+      "2": "Mar",
+      "3": "Mer",
+      "4": "Jeu",
+      "5": "Ven",
+      "6": "Sam"
+    },
+    "monthlyBy": "Chaque mois le",
+    "monthlyByDay": "Même jour du mois",
+    "monthlyByWeekday": "Même jour de la semaine du mois",
+    "windowStarts": "Début de la plage d’arrivée",
+    "windowEnds": "Fin de la plage d’arrivée",
+    "visitLines": "Lignes facturées à chaque intervention",
+    "effectiveFrom": "En vigueur à partir du",
+    "reason": "Motif",
+    "reasonPlaceholder": "Pourquoi ces conditions s’appliquent",
+    "saveVersion": "Enregistrer la version",
+    "startsOn": "Débute le",
+    "endsOn": "Se termine le",
+    "createAgreement": "Créer le contrat",
+    "createRequest": "Créer la demande",
+    "createJob": "Créer le bon de travail"
+  },
+  "request": {
+    "actionFailed": "Impossible de mettre à jour la demande.",
+    "convert": "Convertir en bon de travail",
+    "quote": "Commencer une soumission",
+    "declined": {
+      "title": "Refuser cette demande",
+      "reason": "Motif",
+      "confirm": "Refuser",
+      "action": "Refuser"
+    },
+    "cancelled": {
+      "title": "Annuler cette demande",
+      "reason": "Motif",
+      "confirm": "Annuler la demande",
+      "action": "Annuler"
+    },
+    "source": {
+      "staff": "Saisie par le personnel",
+      "portal": "Depuis le portail client"
+    },
+    "customer": "Client",
+    "address": "Lieu d’intervention",
+    "contact": "Contact",
+    "preferred": "Souhaité",
+    "time": {
+      "any": "N’importe quand",
+      "morning": "Matin",
+      "afternoon": "Après-midi",
+      "evening": "Soir"
+    },
+    "received": "Reçue",
+    "job": "Bon de travail",
+    "closeReason": "Motif de clôture",
+    "assessments": "Interventions d’évaluation",
+    "addAssessment": "Ajouter une évaluation",
+    "quotes": "Soumissions",
+    "noQuotes": "Aucune soumission pour l’instant. Commencez une soumission pour chiffrer les travaux dans une soumission native."
+  },
+  "quote": {
+    "loadFailed": "Impossible de charger la soumission.",
+    "actionFailed": "Impossible de mettre à jour la soumission.",
+    "terms": "Options et acompte",
+    "convert": "Convertir en bon de travail",
+    "openJob": "Ouvrir le bon de travail",
+    "issueFirst": "Modifiez les lignes de la soumission et émettez-la avant de l’envoyer pour acceptation.",
+    "decided": "Réponse de {name} le {when}",
+    "sentAt": "Envoyée {when} ; le lien expire {expires}",
+    "depositDue": "Acompte exigible {amount}",
+    "optionalHelp": "Cochez les lignes que le client peut choisir comme options facultatives ; les autres sont obligatoires.",
+    "deposit": "Acompte",
+    "depositBasis": {
+      "none": "Aucun acompte",
+      "percent": "Pourcentage",
+      "amount": "Montant fixe"
+    },
+    "depositPercent": "Acompte (%)",
+    "depositAmount": "Montant de l’acompte",
+    "saveTerms": "Enregistrer les conditions",
+    "discard": "Abandonner",
+    "send": {
+      "action": "Envoyer pour acceptation",
+      "title": "Envoyer la soumission pour acceptation",
+      "signerName": "Nom du signataire",
+      "signerEmail": "Courriel du signataire",
+      "emailed": "Le lien d’acceptation a été envoyé par courriel.",
+      "notEmailed": "Non envoyé par courriel : {reason}",
+      "link": "Ouvrir le lien d’acceptation"
+    }
+  },
+  "job": {
+    "actionFailed": "Impossible de mettre à jour le bon de travail.",
+    "complete": {
+      "action": "Terminer le bon de travail"
+    },
+    "reopen": {
+      "title": "Rouvrir ce bon de travail",
+      "reason": "Motif",
+      "confirm": "Rouvrir",
+      "action": "Rouvrir"
+    },
+    "cancel": {
+      "title": "Annuler ce bon de travail",
+      "reason": "Motif",
+      "confirm": "Annuler le bon de travail",
+      "action": "Annuler"
+    },
+    "tabs": {
+      "label": "Sections du bon de travail",
+      "overview": "Aperçu",
+      "visits": "Interventions",
+      "billing": "Facturation"
+    },
+    "customer": "Client",
+    "address": "Lieu d’intervention",
+    "contact": "Contact",
+    "duration": "Durée estimée",
+    "responseDue": "Réponse attendue",
+    "source": "Origine",
+    "direct": "Créé directement",
+    "labor": "Main-d’œuvre",
+    "closeReason": "Motif de clôture",
+    "scope": "Portée des travaux",
+    "noScope": "Aucune ligne de portée.",
+    "item": "Article",
+    "quantity": "Quantité",
+    "unitPrice": "Prix unitaire",
+    "addVisit": "Ajouter une intervention",
+    "billingMode": "Facturation",
+    "billingModes": {
+      "per_job": "Facturer par bon de travail",
+      "per_visit": "Facturer par intervention",
+      "not_billable": "Non facturable"
+    },
+    "depositRequired": "Acompte exigé",
+    "depositsReceived": "Acomptes reçus",
+    "invoices": "Factures",
+    "invoiceJob": "Facturer le bon de travail",
+    "invoiceVisit": "Facturer l’intervention",
+    "visitNumber": "Intervention {sequence}",
+    "preview": "Aperçu de la facture",
+    "subtotal": "Sous-total avant taxes",
+    "previewHelp": "Une facture brouillon est créée ; vérifiez-la, approuvez-la et comptabilisez-la depuis le volet de la facture, puis imputez ici tout acompte.",
+    "createInvoice": "Créer la facture brouillon",
+    "discard": "Abandonner",
+    "invoiceStatus": {
+      "draft": "Brouillon",
+      "pending_approval": "En attente d’approbation",
+      "approved": "Approuvée",
+      "posted": "Comptabilisée",
+      "voided": "Annulée"
+    },
+    "visitInvoice": "facture d’intervention",
+    "applyDeposits": "Imputer les acomptes",
+    "noInvoices": "Aucune facture pour l’instant.",
+    "deposits": "Acomptes",
+    "recordDeposit": "Enregistrer un acompte",
+    "noDeposits": "Aucun acompte enregistré.",
+    "noCandidates": "Le client n’a aucun paiement comptabilisé laissé en compte.",
+    "payment": "Paiement",
+    "linkDeposit": "Enregistrer comme acompte",
+    "depositHelp": "Recevez l’acompte comme paiement client laissé en compte dans Paiements, puis enregistrez-le ici ; il est imputé à la facture du bon de travail une fois celle-ci comptabilisée."
+  },
+  "visit": {
+    "title": "Intervention",
+    "sequence": "Intervention {sequence}",
+    "none": "Aucune intervention.",
+    "loadFailed": "Impossible de charger l’intervention.",
+    "actionFailed": "Impossible de mettre à jour l’intervention.",
+    "loading": "Chargement…",
+    "move": {
+      "dispatched": "Répartir",
+      "en_route": "En route",
+      "on_site": "Arrivé sur place",
+      "unable_to_complete": "Impossible à terminer"
+    },
+    "unable": {
+      "title": "Impossible de terminer l’intervention",
+      "reason": "Ce qui a empêché les travaux",
+      "confirm": "Enregistrer"
+    },
+    "cancel": {
+      "title": "Annuler cette intervention",
+      "reason": "Motif",
+      "confirm": "Annuler l’intervention",
+      "action": "Annuler l’intervention"
+    },
+    "review": {
+      "pending": "Achèvement en attente de revue",
+      "approved": "Achèvement approuvé",
+      "rejected": "Achèvement rejeté",
+      "pendingRemedy": "Un réviseur statue dans Approbations avant la facturation de l’intervention."
+    },
+    "customer": "Client",
+    "job": "Bon de travail",
+    "request": "Demande",
+    "address": "Adresse",
+    "contact": "Contact",
+    "arrivalWindow": "Plage d’arrivée",
+    "duration": "Durée estimée",
+    "responseDue": "Réponse attendue",
+    "technicians": "Techniciens",
+    "unassigned": "Pas encore attribuée",
+    "instructions": "Instructions",
+    "workNotes": "Notes de travail",
+    "outcome": "Résultat",
+    "labor": "Main-d’œuvre",
+    "hours": "{hours} h",
+    "laborStatus": {
+      "draft": "Brouillon",
+      "submitted": "Soumis",
+      "approved": "Approuvé",
+      "rejected": "Rejeté"
+    },
+    "invoice": "Facture",
+    "notices": "Avis au client",
+    "noticeKind": {
+      "arrival_window": "Plage d’arrivée",
+      "en_route": "En route"
+    },
+    "noticeStatus": {
+      "queued": "En file d’attente",
+      "sent": "Envoyé",
+      "failed": "Échec",
+      "suppressed": "Supprimé",
+      "not_enabled": "Non activé"
+    },
+    "history": "Historique",
+    "parts": "Pièces",
+    "addPart": "Ajouter une pièce",
+    "noParts": "Aucune pièce enregistrée.",
+    "notBilled": "non facturée",
+    "issued": "sortie du stock",
+    "removePart": "Retirer la pièce",
+    "part": "Pièce",
+    "stockLocation": "Prélevée de",
+    "quantity": "Quantité",
+    "billable": "Facturer cette pièce au client",
+    "savePart": "Enregistrer la pièce",
+    "discard": "Abandonner",
+    "complete": {
+      "title": "Terminer l’intervention",
+      "notesPlaceholder": "Ce qui a été constaté et fait",
+      "labor": "Heures de main-d’œuvre",
+      "myLabor": "Mes heures",
+      "hoursFor": "Heures de {name}",
+      "hoursUnit": "heures",
+      "laborHelp": "La main-d’œuvre est transmise aux feuilles de temps pour approbation ; les pièces sortent du stock lorsque vous terminez.",
+      "action": "Terminer l’intervention"
+    },
+    "photos": "Photos et documents",
+    "uploading": "Téléversement…",
+    "addPhoto": "Ajouter une photo",
+    "noPhotos": "Aucune photo pour l’instant.",
+    "signature": {
+      "title": "Approbation du client",
+      "image": "Signature de {name}",
+      "inPerson": "Signer sur cet appareil",
+      "email": "Envoyer le lien de signature par courriel",
+      "emailTitle": "Envoyer le lien de signature par courriel",
+      "recipient": "Courriel du client",
+      "send": "Envoyer",
+      "emailed": "Le lien de signature a été envoyé par courriel.",
+      "notEmailed": "Non envoyé par courriel : {detail}",
+      "openLink": "Ouvrir le lien de signature",
+      "open": "Un lien de signature est ouvert jusqu’au {expires}."
+    }
+  },
+  "agreement": {
+    "actionFailed": "Impossible de mettre à jour le contrat.",
+    "generate": "Générer les interventions maintenant",
+    "generated": "{count, plural, =0 {Aucune nouvelle intervention n’était nécessaire.} one {# intervention générée.} other {# interventions générées.}}",
+    "newVersion": "Nouvelle version",
+    "ended": {
+      "title": "Mettre fin à ce contrat",
+      "reason": "Motif",
+      "confirm": "Mettre fin au contrat",
+      "action": "Mettre fin"
+    },
+    "cancelled": {
+      "title": "Annuler ce contrat",
+      "reason": "Motif",
+      "confirm": "Annuler le contrat",
+      "action": "Annuler"
+    },
+    "customer": "Client",
+    "address": "Lieu d’intervention",
+    "term": "Durée",
+    "openEnded": "durée indéterminée",
+    "generatedThrough": "Interventions générées jusqu’au",
+    "job": "Bon de travail",
+    "closeReason": "Motif de clôture",
+    "versions": "Conditions",
+    "effectiveFrom": "En vigueur à partir du {date}",
+    "repeat": {
+      "daily": "{interval, plural, one {Quotidienne} other {Tous les # jours}}",
+      "weekly": "{interval, plural, one {Hebdomadaire} other {Toutes les # semaines}}",
+      "monthly": "{interval, plural, one {Mensuelle} other {Tous les # mois}}",
+      "yearly": "{interval, plural, one {Annuelle} other {Tous les # ans}}"
+    },
+    "visits": "Interventions"
+  },
+  "myVisits": {
+    "loadFailed": "Impossible de charger vos interventions.",
+    "previous": "Jour précédent",
+    "today": "Aujourd’hui",
+    "next": "Jour suivant",
+    "loading": "Chargement…",
+    "emptyTitle": "Aucune intervention réservée",
+    "emptyDescription": "Les interventions que votre répartiteur vous attribue apparaissent ici.",
+    "directions": "Itinéraire"
+  },
+  "portal": {
+    "title": "Demandes de service",
+    "back": "Retour",
+    "newTitle": "Demander un service",
+    "listTitle": "Vos demandes",
+    "empty": "Vous n’avez encore aucune demande de service.",
+    "nextVisit": "prochaine intervention {when}",
+    "submit": "Envoyer la demande",
+    "submitting": "Envoi…",
+    "submitted": "Demande {number} reçue. Nous vous contacterons pour la planifier.",
+    "fields": {
+      "title": "De quoi avez-vous besoin ?",
+      "titlePlaceholder": "Par exemple : la fournaise ne chauffe pas",
+      "description": "Détails",
+      "address": "Lieu",
+      "preferredOn": "Date souhaitée",
+      "preferredTime": "Moment souhaité",
+      "urgent": "C’est urgent"
+    },
+    "time": {
+      "any": "N’importe quand",
+      "morning": "Matin",
+      "afternoon": "Après-midi",
+      "evening": "Soir"
+    },
+    "status": {
+      "new": "Reçue",
+      "assessment_scheduled": "Évaluation planifiée",
+      "assessed": "Évaluée",
+      "quoted": "Soumission envoyée",
+      "converted": "Travaux planifiés",
+      "declined": "Refusée",
+      "cancelled": "Annulée",
+      "completed": "Terminée"
+    }
+  },
+  "sign": {
+    "quoteTitle": "Soumission de service",
+    "quoteNote": "Votre acceptation est enregistrée avec votre nom, l’heure et la soumission exactement telle qu’affichée.",
+    "linkInvalid": "Ce lien n’est pas valide ou a expiré.",
+    "answerFailed": "Votre réponse n’a pas pu être enregistrée.",
+    "loading": "Chargement…",
+    "acceptedThanks": "Merci — la soumission est acceptée. Nous vous contacterons pour planifier les travaux.",
+    "declinedThanks": "Merci — nous avons enregistré votre refus de la soumission.",
+    "quoteHeading": "Soumission {number}",
+    "preparedFor": "Préparée pour {name}",
+    "addOns": "Options facultatives",
+    "total": "Total",
+    "depositDue": "Un acompte de {amount} est exigible à l’acceptation.",
+    "yourName": "Votre nom",
+    "clear": "Effacer",
+    "accept": "Accepter la soumission",
+    "decline": "Refuser",
+    "expires": "Ce lien expire le {date}.",
+    "technicians": "Techniciens : {names}",
+    "workDone": "Travaux effectués",
+    "parts": "Pièces utilisées",
+    "quantity": "Quantité",
+    "signPrompt": "Signez pour confirmer que les travaux ont été effectués",
+    "comment": "Commentaire (facultatif)",
+    "sign": "Approuver",
+    "signing": "Signature…",
+    "signFailed": "La signature n’a pas pu être enregistrée.",
+    "signedThanks": "Merci — l’intervention est approuvée."
+  }
+}

@@ -1,0 +1,685 @@
+{
+  "loadFailed": "The service record could not be loaded.",
+  "create": {
+    "request": "New service request",
+    "job": "New service job",
+    "agreement": "New service agreement"
+  },
+  "titles": {
+    "request": "Service request",
+    "job": "Service job",
+    "visit": "Service visit",
+    "agreement": "Service agreement"
+  },
+  "tabs": {
+    "overview": "Overview",
+    "requests": "Requests",
+    "jobs": "Jobs",
+    "visits": "Visits",
+    "agreements": "Agreements"
+  },
+  "visitStatus": {
+    "unscheduled": "Unscheduled",
+    "scheduled": "Scheduled",
+    "dispatched": "Dispatched",
+    "en_route": "En route",
+    "on_site": "On site",
+    "completed": "Completed",
+    "unable_to_complete": "Unable to complete",
+    "cancelled": "Cancelled"
+  },
+  "visitKind": {
+    "assessment": "Assessment",
+    "service": "Service visit"
+  },
+  "priority": {
+    "urgent": "Urgent",
+    "high": "High",
+    "normal": "Normal",
+    "low": "Low"
+  },
+  "billingMode": {
+    "per_job": "Invoice per job",
+    "per_visit": "Invoice per visit",
+    "not_billable": "Not billable"
+  },
+  "requestStatus": {
+    "new": "New",
+    "assessment_scheduled": "Assessment scheduled",
+    "assessed": "Assessed",
+    "quoted": "Quoted",
+    "converted": "Converted",
+    "declined": "Declined",
+    "cancelled": "Cancelled"
+  },
+  "jobStatus": {
+    "open": "Open",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },
+  "agreementStatus": {
+    "active": "Active",
+    "ended": "Ended",
+    "cancelled": "Cancelled"
+  },
+  "quoteStatus": {
+    "draft": "Draft",
+    "sent": "Sent",
+    "accepted": "Accepted",
+    "declined": "Declined"
+  },
+  "requestSource": {
+    "staff": "Staff",
+    "portal": "Customer portal"
+  },
+  "jobStage": {
+    "open": "Open",
+    "unscheduled": "Unscheduled",
+    "scheduled": "Scheduled",
+    "in_progress": "In progress",
+    "to_invoice": "To invoice",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },
+  "reviewStatus": {
+    "not_required": "No review",
+    "pending": "Awaiting review",
+    "approved": "Approved",
+    "rejected": "Rejected"
+  },
+  "format": {
+    "minutes": "{hours} h {minutes} min"
+  },
+  "pages": {
+    "home": {
+      "title": "Service",
+      "description": "Service requests, jobs, visits and recurring agreements, dispatched on Scheduling boards."
+    },
+    "requests": {
+      "title": "Service requests",
+      "description": "Work customers ask for, from staff or the customer portal, through assessment and quote to a job.",
+      "new": "New request"
+    },
+    "jobs": {
+      "title": "Service jobs",
+      "description": "Scoped, priced service work with its visits, deposits and invoices.",
+      "new": "New job"
+    },
+    "visits": {
+      "title": "Service visits",
+      "description": "Every visit across jobs, requests and agreements, with its technicians and status.",
+      "new": "New visit"
+    },
+    "agreements": {
+      "title": "Service agreements",
+      "description": "Recurring maintenance agreements that generate visits from effective-dated terms.",
+      "new": "New agreement"
+    },
+    "myVisits": {
+      "title": "My visits",
+      "description": "The service visits booked on you, in route order."
+    }
+  },
+  "reports": {
+    "service_jobs_by_status": "Service jobs by status and age",
+    "service_technician_utilization": "Technician utilization",
+    "service_first_time_fix": "First-time fix rate",
+    "service_quote_win_rate": "Quote win rate",
+    "service_revenue_per_job": "Revenue per service job"
+  },
+  "list": {
+    "number": "Number",
+    "title": "Title",
+    "location": "Location",
+    "priority": "Priority",
+    "preferredOn": "Preferred date",
+    "source": "Source",
+    "received": "Received",
+    "stage": "Stage",
+    "billingMode": "Billing",
+    "responseDue": "Response due",
+    "created": "Created",
+    "kind": "Kind",
+    "scheduledAt": "Scheduled",
+    "technicians": "Technicians",
+    "review": "Review",
+    "startsOn": "Starts",
+    "endsOn": "Ends",
+    "generatedThrough": "Visits generated through"
+  },
+  "home": {
+    "tiles": {
+      "openRequests": "Open requests",
+      "unscheduledVisits": "Visits to schedule",
+      "todayVisits": "Visits today",
+      "inProgressVisits": "In progress",
+      "responseBreaches": "Past response target",
+      "awaitingReview": "Awaiting review",
+      "readyToInvoice": "Ready to invoice",
+      "quotesAwaitingAnswer": "Quotes awaiting answer",
+      "activeAgreements": "Active agreements"
+    },
+    "policyMissing": "No dispatch policy is in force.",
+    "policyMissingRemedy": "Response targets, arrival windows and agreement generation use the dispatch policy. Add a version in Setup → Service dispatch policy.",
+    "openPolicy": "Open dispatch policy",
+    "boards": "Dispatch boards",
+    "noBoards": "No dispatch board yet.",
+    "createBoard": "Create a dispatch board",
+    "reports": "Service reports"
+  },
+  "dispatch": {
+    "board": "Dispatch board",
+    "column": "Bookings for {name}",
+    "retry": "Retry",
+    "refresh": "Refresh",
+    "freshness": "Updated {time}",
+    "saving": "Saving…",
+    "undo": "Undo",
+    "dismiss": "Dismiss",
+    "minutes": "{count, plural, one {# minute} other {# minutes}}",
+    "dueBy": "due {time}",
+    "noWorkingDay": "This day has no single working window on the board (for example a clock change).",
+    "noWorkingDayRemedy": "The board shows 06:00–20:00; check the board's working day in its settings.",
+    "readOnly": "You can see this board but not assign visits.",
+    "noTechnicians": "No technicians are in this board's scope.",
+    "onLeave": "On leave: {type}",
+    "dayOff": "Day off",
+    "scheduledHours": "{hours} h scheduled",
+    "send": "Dispatch",
+    "unassign": "Return to queue",
+    "errors": {
+      "load": "The dispatch board could not be loaded.",
+      "save": "The change was not saved."
+    },
+    "notices": {
+      "assigned": "Visit assigned.",
+      "moved": "Booking moved.",
+      "unassigned": "Visit returned to the queue.",
+      "dispatched": "Visit dispatched.",
+      "undone": "Change undone.",
+      "noticeFailed": "The customer notice could not be sent."
+    },
+    "override": {
+      "title": "Assign despite these warnings?",
+      "reason": "Reason for the override",
+      "confirm": "Assign"
+    },
+    "conflicts": {
+      "overlap": "Already booked at that time",
+      "leave": "On leave that day",
+      "qualification": "Missing a required qualification",
+      "non_working_day": "Day off in the work schedule",
+      "outside_working_hours": "Outside working hours",
+      "over_capacity": "More hours than scheduled",
+      "outside_arrival_window": "Outside the customer's arrival window",
+      "after_response_target": "After the response target"
+    },
+    "history": {
+      "assign": "Assign visit",
+      "move": "Move booking",
+      "unassign": "Return visit to queue",
+      "undoReason": "Undone from the dispatch board"
+    },
+    "queue": {
+      "title": "To schedule",
+      "search": "Search visits",
+      "priority": "Priority",
+      "anyPriority": "Any priority",
+      "sla": "Response target",
+      "slaOptions": {
+        "any": "Any target",
+        "breached": "Past target",
+        "due_today": "Due within 24 h",
+        "due_soon": "Due within 3 days"
+      },
+      "skill": "Qualification",
+      "anySkill": "Any qualification",
+      "area": "Area",
+      "anyArea": "Any area",
+      "empty": "No visits waiting to be scheduled."
+    }
+  },
+  "form": {
+    "loadFailed": "The options could not be loaded.",
+    "choose": "Choose…",
+    "search": "Search…",
+    "saveFailed": "The record was not saved.",
+    "missingRequired": "Choose the customer, enter a title and a start date.",
+    "customer": "Customer",
+    "address": "Service location",
+    "noAddress": "No location",
+    "contact": "Contact",
+    "noContact": "No contact",
+    "title": "Title",
+    "description": "Description",
+    "priority": "Priority",
+    "priorities": {
+      "urgent": "Urgent",
+      "high": "High",
+      "normal": "Normal",
+      "low": "Low"
+    },
+    "inheritPriority": "Same as the job",
+    "preferredOn": "Preferred date",
+    "preferredTime": "Preferred time",
+    "times": {
+      "any": "Any time",
+      "morning": "Morning",
+      "afternoon": "Afternoon",
+      "evening": "Evening"
+    },
+    "estimatedMinutes": "Duration estimate (minutes)",
+    "billingMode": "Billing",
+    "billingModes": {
+      "per_job": "Invoice per job",
+      "per_visit": "Invoice per visit",
+      "not_billable": "Not billable"
+    },
+    "laborItem": "Labor item",
+    "laborRate": "Labor rate per hour",
+    "laborRateHint": "Leave blank to bill labor at the item's price",
+    "depositRequired": "Deposit required",
+    "qualifications": "Required qualifications",
+    "noQualifications": "No qualification types are set up.",
+    "scopeLines": "Scope lines",
+    "item": "Item",
+    "quantity": "Quantity",
+    "unitPrice": "Unit price",
+    "removeLine": "Remove line",
+    "addLine": "Add line",
+    "instructions": "Instructions for the technician",
+    "windowStart": "Arrival window from",
+    "windowEnd": "Arrival window to",
+    "addVisit": "Add visit",
+    "discard": "Discard",
+    "repeat": "Repeats",
+    "repeats": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "interval": "Every (units)",
+    "weekdays": "On",
+    "weekday": {
+      "0": "Sun",
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat"
+    },
+    "monthlyBy": "Monthly on",
+    "monthlyByDay": "The same day of the month",
+    "monthlyByWeekday": "The same weekday of the month",
+    "windowStarts": "Arrival window starts",
+    "windowEnds": "Arrival window ends",
+    "visitLines": "Lines billed each visit",
+    "effectiveFrom": "Effective from",
+    "reason": "Reason",
+    "reasonPlaceholder": "Why these terms apply",
+    "saveVersion": "Save version",
+    "startsOn": "Starts on",
+    "endsOn": "Ends on",
+    "createAgreement": "Create agreement",
+    "createRequest": "Create request",
+    "createJob": "Create job"
+  },
+  "request": {
+    "actionFailed": "The request could not be updated.",
+    "convert": "Convert to job",
+    "quote": "Start quote",
+    "declined": {
+      "title": "Decline this request",
+      "reason": "Reason",
+      "confirm": "Decline",
+      "action": "Decline"
+    },
+    "cancelled": {
+      "title": "Cancel this request",
+      "reason": "Reason",
+      "confirm": "Cancel request",
+      "action": "Cancel"
+    },
+    "source": {
+      "staff": "Taken by staff",
+      "portal": "From the customer portal"
+    },
+    "customer": "Customer",
+    "address": "Service location",
+    "contact": "Contact",
+    "preferred": "Preferred",
+    "time": {
+      "any": "Any time",
+      "morning": "Morning",
+      "afternoon": "Afternoon",
+      "evening": "Evening"
+    },
+    "received": "Received",
+    "job": "Job",
+    "closeReason": "Closing reason",
+    "assessments": "Assessment visits",
+    "addAssessment": "Add assessment",
+    "quotes": "Quotes",
+    "noQuotes": "No quotes yet. Start a quote to price the work on a native estimate."
+  },
+  "quote": {
+    "loadFailed": "The estimate could not be loaded.",
+    "actionFailed": "The quote could not be updated.",
+    "terms": "Add-ons and deposit",
+    "convert": "Convert to job",
+    "openJob": "Open job",
+    "issueFirst": "Edit the lines in the estimate and issue it before sending it for acceptance.",
+    "decided": "Answered by {name} on {when}",
+    "sentAt": "Sent {when}; the link expires {expires}",
+    "depositDue": "Deposit due {amount}",
+    "optionalHelp": "Tick the lines the customer may choose as optional add-ons; the rest are required.",
+    "deposit": "Deposit",
+    "depositBasis": {
+      "none": "No deposit",
+      "percent": "Percentage",
+      "amount": "Fixed amount"
+    },
+    "depositPercent": "Deposit (%)",
+    "depositAmount": "Deposit amount",
+    "saveTerms": "Save terms",
+    "discard": "Discard",
+    "send": {
+      "action": "Send for acceptance",
+      "title": "Send quote for acceptance",
+      "signerName": "Signer name",
+      "signerEmail": "Signer email",
+      "emailed": "The acceptance link was emailed.",
+      "notEmailed": "Not emailed: {reason}",
+      "link": "Open the acceptance link"
+    }
+  },
+  "job": {
+    "actionFailed": "The job could not be updated.",
+    "complete": {
+      "action": "Complete job"
+    },
+    "reopen": {
+      "title": "Reopen this job",
+      "reason": "Reason",
+      "confirm": "Reopen",
+      "action": "Reopen"
+    },
+    "cancel": {
+      "title": "Cancel this job",
+      "reason": "Reason",
+      "confirm": "Cancel job",
+      "action": "Cancel"
+    },
+    "tabs": {
+      "label": "Job sections",
+      "overview": "Overview",
+      "visits": "Visits",
+      "billing": "Billing"
+    },
+    "customer": "Customer",
+    "address": "Service location",
+    "contact": "Contact",
+    "duration": "Duration estimate",
+    "responseDue": "Response due",
+    "source": "Source",
+    "direct": "Created directly",
+    "labor": "Labor",
+    "closeReason": "Closing reason",
+    "scope": "Scope",
+    "noScope": "No scope lines.",
+    "item": "Item",
+    "quantity": "Quantity",
+    "unitPrice": "Unit price",
+    "addVisit": "Add visit",
+    "billingMode": "Billing",
+    "billingModes": {
+      "per_job": "Invoice per job",
+      "per_visit": "Invoice per visit",
+      "not_billable": "Not billable"
+    },
+    "depositRequired": "Deposit required",
+    "depositsReceived": "Deposits received",
+    "invoices": "Invoices",
+    "invoiceJob": "Invoice job",
+    "invoiceVisit": "Invoice visit",
+    "visitNumber": "Visit {sequence}",
+    "preview": "Invoice preview",
+    "subtotal": "Subtotal before tax",
+    "previewHelp": "A draft invoice is created; review, approve and post it from the invoice drawer, then apply any deposit here.",
+    "createInvoice": "Create draft invoice",
+    "discard": "Discard",
+    "invoiceStatus": {
+      "draft": "Draft",
+      "pending_approval": "Awaiting approval",
+      "approved": "Approved",
+      "posted": "Posted",
+      "voided": "Voided"
+    },
+    "visitInvoice": "visit invoice",
+    "applyDeposits": "Apply deposits",
+    "noInvoices": "No invoices yet.",
+    "deposits": "Deposits",
+    "recordDeposit": "Record deposit",
+    "noDeposits": "No deposits recorded.",
+    "noCandidates": "The customer has no posted payment held on account.",
+    "payment": "Payment",
+    "linkDeposit": "Record as deposit",
+    "depositHelp": "Receive the deposit as a customer payment left on account in Payments, then record it here; it is applied to the job's invoice once posted."
+  },
+  "visit": {
+    "title": "Service visit",
+    "sequence": "Visit {sequence}",
+    "none": "No visits.",
+    "loadFailed": "The visit could not be loaded.",
+    "actionFailed": "The visit could not be updated.",
+    "loading": "Loading…",
+    "move": {
+      "dispatched": "Dispatch",
+      "en_route": "On my way",
+      "on_site": "Arrived",
+      "unable_to_complete": "Unable to complete"
+    },
+    "unable": {
+      "title": "Unable to complete the visit",
+      "reason": "What prevented the work",
+      "confirm": "Record"
+    },
+    "cancel": {
+      "title": "Cancel this visit",
+      "reason": "Reason",
+      "confirm": "Cancel visit",
+      "action": "Cancel visit"
+    },
+    "review": {
+      "pending": "Completion awaiting review",
+      "approved": "Completion approved",
+      "rejected": "Completion rejected",
+      "pendingRemedy": "A reviewer decides it in Approvals before the visit is invoiced."
+    },
+    "customer": "Customer",
+    "job": "Job",
+    "request": "Request",
+    "address": "Address",
+    "contact": "Contact",
+    "arrivalWindow": "Arrival window",
+    "duration": "Duration estimate",
+    "responseDue": "Response due",
+    "technicians": "Technicians",
+    "unassigned": "Not yet assigned",
+    "instructions": "Instructions",
+    "workNotes": "Work notes",
+    "outcome": "Outcome",
+    "labor": "Labor",
+    "hours": "{hours} h",
+    "laborStatus": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "invoice": "Invoice",
+    "notices": "Customer notices",
+    "noticeKind": {
+      "arrival_window": "Arrival window",
+      "en_route": "On my way"
+    },
+    "noticeStatus": {
+      "queued": "Queued",
+      "sent": "Sent",
+      "failed": "Failed",
+      "suppressed": "Suppressed",
+      "not_enabled": "Not enabled"
+    },
+    "history": "History",
+    "parts": "Parts",
+    "addPart": "Add part",
+    "noParts": "No parts recorded.",
+    "notBilled": "not billed",
+    "issued": "issued",
+    "removePart": "Remove part",
+    "part": "Part",
+    "stockLocation": "Taken from",
+    "quantity": "Quantity",
+    "billable": "Bill the customer for this part",
+    "savePart": "Record part",
+    "discard": "Discard",
+    "complete": {
+      "title": "Complete the visit",
+      "notesPlaceholder": "What was found and done",
+      "labor": "Labor hours",
+      "myLabor": "My hours",
+      "hoursFor": "Hours for {name}",
+      "hoursUnit": "hours",
+      "laborHelp": "Labor goes to timesheets for approval; parts issue from stock when you complete.",
+      "action": "Complete visit"
+    },
+    "photos": "Photos and documents",
+    "uploading": "Uploading…",
+    "addPhoto": "Add photo",
+    "noPhotos": "No photos yet.",
+    "signature": {
+      "title": "Customer sign-off",
+      "image": "Signature of {name}",
+      "inPerson": "Sign on this device",
+      "email": "Email signing link",
+      "emailTitle": "Email the signing link",
+      "recipient": "Customer email",
+      "send": "Send",
+      "emailed": "The signing link was emailed.",
+      "notEmailed": "Not emailed: {detail}",
+      "openLink": "Open signing link",
+      "open": "A signing link is open until {expires}."
+    }
+  },
+  "agreement": {
+    "actionFailed": "The agreement could not be updated.",
+    "generate": "Generate visits now",
+    "generated": "{count, plural, =0 {No new visits were needed.} one {# visit generated.} other {# visits generated.}}",
+    "newVersion": "New version",
+    "ended": {
+      "title": "End this agreement",
+      "reason": "Reason",
+      "confirm": "End agreement",
+      "action": "End"
+    },
+    "cancelled": {
+      "title": "Cancel this agreement",
+      "reason": "Reason",
+      "confirm": "Cancel agreement",
+      "action": "Cancel"
+    },
+    "customer": "Customer",
+    "address": "Service location",
+    "term": "Term",
+    "openEnded": "open-ended",
+    "generatedThrough": "Visits generated through",
+    "job": "Job",
+    "closeReason": "Closing reason",
+    "versions": "Terms",
+    "effectiveFrom": "Effective from {date}",
+    "repeat": {
+      "daily": "{interval, plural, one {Daily} other {Every # days}}",
+      "weekly": "{interval, plural, one {Weekly} other {Every # weeks}}",
+      "monthly": "{interval, plural, one {Monthly} other {Every # months}}",
+      "yearly": "{interval, plural, one {Yearly} other {Every # years}}"
+    },
+    "visits": "Visits"
+  },
+  "myVisits": {
+    "loadFailed": "Your visits could not be loaded.",
+    "previous": "Previous day",
+    "today": "Today",
+    "next": "Next day",
+    "loading": "Loading…",
+    "emptyTitle": "No visits booked",
+    "emptyDescription": "Visits your dispatcher books on you appear here.",
+    "directions": "Directions"
+  },
+  "portal": {
+    "title": "Service requests",
+    "back": "Back",
+    "newTitle": "Request service",
+    "listTitle": "Your requests",
+    "empty": "You have no service requests yet.",
+    "nextVisit": "next visit {when}",
+    "submit": "Send request",
+    "submitting": "Sending…",
+    "submitted": "Request {number} received. We will be in touch to schedule it.",
+    "fields": {
+      "title": "What do you need?",
+      "titlePlaceholder": "For example: furnace not heating",
+      "description": "Details",
+      "address": "Location",
+      "preferredOn": "Preferred date",
+      "preferredTime": "Preferred time",
+      "urgent": "This is urgent"
+    },
+    "time": {
+      "any": "Any time",
+      "morning": "Morning",
+      "afternoon": "Afternoon",
+      "evening": "Evening"
+    },
+    "status": {
+      "new": "Received",
+      "assessment_scheduled": "Assessment scheduled",
+      "assessed": "Assessed",
+      "quoted": "Quote sent",
+      "converted": "Scheduled for work",
+      "declined": "Declined",
+      "cancelled": "Cancelled",
+      "completed": "Completed"
+    }
+  },
+  "sign": {
+    "quoteTitle": "Service quote",
+    "quoteNote": "Your acceptance is recorded with your name, the time and the quote exactly as shown.",
+    "linkInvalid": "This link is invalid or has expired.",
+    "answerFailed": "Your answer could not be recorded.",
+    "loading": "Loading…",
+    "acceptedThanks": "Thank you — the quote is accepted. We will be in touch to schedule the work.",
+    "declinedThanks": "Thank you — we have recorded that you declined the quote.",
+    "quoteHeading": "Quote {number}",
+    "preparedFor": "Prepared for {name}",
+    "addOns": "Optional add-ons",
+    "total": "Total",
+    "depositDue": "A deposit of {amount} is due on acceptance.",
+    "yourName": "Your name",
+    "clear": "Clear",
+    "accept": "Accept quote",
+    "decline": "Decline",
+    "expires": "This link expires on {date}.",
+    "technicians": "Technicians: {names}",
+    "workDone": "Work done",
+    "parts": "Parts used",
+    "quantity": "Quantity",
+    "signPrompt": "Sign to confirm the work was completed",
+    "comment": "Comment (optional)",
+    "sign": "Sign off",
+    "signing": "Signing…",
+    "signFailed": "The signature could not be recorded.",
+    "signedThanks": "Thank you — the visit is signed off."
+  }
+}

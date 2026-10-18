@@ -7,7 +7,8 @@
     "timeline": "Línea de tiempo",
     "calendar": "Mes",
     "gantt": "Diagrama de Gantt",
-    "progress": "Avance"
+    "progress": "Avance",
+    "dispatch": "Despacho"
   },
   "kinds": {
     "customer": "Cliente",
@@ -254,6 +255,10 @@
       "roster": {
         "title": "Cuadrante de turnos gestionado",
         "description": "Patrones de turnos recurrentes, solicitudes de turnos de los empleados, aprobación opcional de la publicación y asistencia por reloj con avisos de retraso, salida anticipada y ausencia."
+      },
+      "service": {
+        "title": "Despacho de servicio",
+        "description": "Columnas por técnico en un eje horario con la cola de visitas por programar; las asignaciones se publican al instante."
       }
     },
     "name": "Nombre",

@@ -1,0 +1,685 @@
+{
+  "loadFailed": "Der Servicedatensatz konnte nicht geladen werden.",
+  "create": {
+    "request": "Neue Serviceanfrage",
+    "job": "Neuer Serviceauftrag",
+    "agreement": "Neuer Servicevertrag"
+  },
+  "titles": {
+    "request": "Serviceanfrage",
+    "job": "Serviceauftrag",
+    "visit": "Serviceeinsatz",
+    "agreement": "Servicevertrag"
+  },
+  "tabs": {
+    "overview": "Übersicht",
+    "requests": "Anfragen",
+    "jobs": "Aufträge",
+    "visits": "Einsätze",
+    "agreements": "Verträge"
+  },
+  "visitStatus": {
+    "unscheduled": "Nicht eingeplant",
+    "scheduled": "Eingeplant",
+    "dispatched": "Disponiert",
+    "en_route": "Unterwegs",
+    "on_site": "Vor Ort",
+    "completed": "Abgeschlossen",
+    "unable_to_complete": "Nicht abschließbar",
+    "cancelled": "Storniert"
+  },
+  "visitKind": {
+    "assessment": "Begutachtung",
+    "service": "Serviceeinsatz"
+  },
+  "priority": {
+    "urgent": "Dringend",
+    "high": "Hoch",
+    "normal": "Normal",
+    "low": "Niedrig"
+  },
+  "billingMode": {
+    "per_job": "Rechnung pro Auftrag",
+    "per_visit": "Rechnung pro Einsatz",
+    "not_billable": "Nicht abrechenbar"
+  },
+  "requestStatus": {
+    "new": "Neu",
+    "assessment_scheduled": "Begutachtung eingeplant",
+    "assessed": "Begutachtet",
+    "quoted": "Angeboten",
+    "converted": "Umgewandelt",
+    "declined": "Abgelehnt",
+    "cancelled": "Storniert"
+  },
+  "jobStatus": {
+    "open": "Offen",
+    "completed": "Abgeschlossen",
+    "cancelled": "Storniert"
+  },
+  "agreementStatus": {
+    "active": "Aktiv",
+    "ended": "Beendet",
+    "cancelled": "Storniert"
+  },
+  "quoteStatus": {
+    "draft": "Entwurf",
+    "sent": "Versendet",
+    "accepted": "Angenommen",
+    "declined": "Abgelehnt"
+  },
+  "requestSource": {
+    "staff": "Mitarbeitende",
+    "portal": "Kundenportal"
+  },
+  "jobStage": {
+    "open": "Offen",
+    "unscheduled": "Nicht eingeplant",
+    "scheduled": "Eingeplant",
+    "in_progress": "In Bearbeitung",
+    "to_invoice": "Abzurechnen",
+    "completed": "Abgeschlossen",
+    "cancelled": "Storniert"
+  },
+  "reviewStatus": {
+    "not_required": "Keine Prüfung",
+    "pending": "Prüfung ausstehend",
+    "approved": "Genehmigt",
+    "rejected": "Abgelehnt"
+  },
+  "format": {
+    "minutes": "{hours} Std. {minutes} Min."
+  },
+  "pages": {
+    "home": {
+      "title": "Service",
+      "description": "Serviceanfragen, Aufträge, Einsätze und wiederkehrende Verträge, disponiert auf Plantafeln der Einsatzplanung."
+    },
+    "requests": {
+      "title": "Serviceanfragen",
+      "description": "Arbeiten, die Kunden über Mitarbeitende oder das Kundenportal anfragen – von der Begutachtung über das Angebot bis zum Auftrag.",
+      "new": "Neue Anfrage"
+    },
+    "jobs": {
+      "title": "Serviceaufträge",
+      "description": "Definierte und kalkulierte Servicearbeiten mit ihren Einsätzen, Anzahlungen und Rechnungen.",
+      "new": "Neuer Auftrag"
+    },
+    "visits": {
+      "title": "Serviceeinsätze",
+      "description": "Alle Einsätze aus Aufträgen, Anfragen und Verträgen mit ihren Technikern und ihrem Status.",
+      "new": "Neuer Einsatz"
+    },
+    "agreements": {
+      "title": "Serviceverträge",
+      "description": "Wiederkehrende Wartungsverträge, die Einsätze aus Konditionen mit Gültigkeitsdatum erzeugen.",
+      "new": "Neuer Vertrag"
+    },
+    "myVisits": {
+      "title": "Meine Einsätze",
+      "description": "Die Ihnen zugewiesenen Serviceeinsätze in Routenreihenfolge."
+    }
+  },
+  "reports": {
+    "service_jobs_by_status": "Serviceaufträge nach Status und Alter",
+    "service_technician_utilization": "Technikerauslastung",
+    "service_first_time_fix": "Erstlösungsquote",
+    "service_quote_win_rate": "Angebotserfolgsquote",
+    "service_revenue_per_job": "Umsatz pro Serviceauftrag"
+  },
+  "list": {
+    "number": "Nummer",
+    "title": "Titel",
+    "location": "Standort",
+    "priority": "Priorität",
+    "preferredOn": "Wunschtermin",
+    "source": "Herkunft",
+    "received": "Eingegangen",
+    "stage": "Phase",
+    "billingMode": "Abrechnung",
+    "responseDue": "Reaktion fällig",
+    "created": "Erstellt",
+    "kind": "Art",
+    "scheduledAt": "Eingeplant",
+    "technicians": "Techniker",
+    "review": "Prüfung",
+    "startsOn": "Beginn",
+    "endsOn": "Ende",
+    "generatedThrough": "Einsätze erzeugt bis"
+  },
+  "home": {
+    "tiles": {
+      "openRequests": "Offene Anfragen",
+      "unscheduledVisits": "Einzuplanende Einsätze",
+      "todayVisits": "Einsätze heute",
+      "inProgressVisits": "In Bearbeitung",
+      "responseBreaches": "Reaktionsziel überschritten",
+      "awaitingReview": "Prüfung ausstehend",
+      "readyToInvoice": "Bereit zur Abrechnung",
+      "quotesAwaitingAnswer": "Unbeantwortete Angebote",
+      "activeAgreements": "Aktive Verträge"
+    },
+    "policyMissing": "Es ist keine Dispositionsrichtlinie in Kraft.",
+    "policyMissingRemedy": "Reaktionsziele, Ankunftszeitfenster und die Vertragserzeugung verwenden die Dispositionsrichtlinie. Fügen Sie unter Einrichtung → Service-Dispositionsrichtlinie eine Version hinzu.",
+    "openPolicy": "Dispositionsrichtlinie öffnen",
+    "boards": "Dispositionstafeln",
+    "noBoards": "Noch keine Dispositionstafel.",
+    "createBoard": "Dispositionstafel erstellen",
+    "reports": "Serviceberichte"
+  },
+  "dispatch": {
+    "board": "Dispositionstafel",
+    "column": "Buchungen für {name}",
+    "retry": "Erneut versuchen",
+    "refresh": "Aktualisieren",
+    "freshness": "Aktualisiert {time}",
+    "saving": "Wird gespeichert…",
+    "undo": "Rückgängig",
+    "dismiss": "Schließen",
+    "minutes": "{count, plural, one {# Minute} other {# Minuten}}",
+    "dueBy": "fällig {time}",
+    "noWorkingDay": "Dieser Tag hat auf der Tafel kein einzelnes Arbeitszeitfenster (zum Beispiel bei einer Zeitumstellung).",
+    "noWorkingDayRemedy": "Die Tafel zeigt 06:00–20:00; prüfen Sie den Arbeitstag der Tafel in ihren Einstellungen.",
+    "readOnly": "Sie können diese Tafel einsehen, aber keine Einsätze zuweisen.",
+    "noTechnicians": "Im Umfang dieser Tafel sind keine Techniker enthalten.",
+    "onLeave": "Abwesend: {type}",
+    "dayOff": "Freier Tag",
+    "scheduledHours": "{hours} Std. eingeplant",
+    "send": "Disponieren",
+    "unassign": "Zurück in die Warteschlange",
+    "errors": {
+      "load": "Die Dispositionstafel konnte nicht geladen werden.",
+      "save": "Die Änderung wurde nicht gespeichert."
+    },
+    "notices": {
+      "assigned": "Einsatz zugewiesen.",
+      "moved": "Buchung verschoben.",
+      "unassigned": "Einsatz in die Warteschlange zurückgegeben.",
+      "dispatched": "Einsatz disponiert.",
+      "undone": "Änderung rückgängig gemacht.",
+      "noticeFailed": "Die Kundenbenachrichtigung konnte nicht gesendet werden."
+    },
+    "override": {
+      "title": "Trotz dieser Warnungen zuweisen?",
+      "reason": "Grund für die Ausnahme",
+      "confirm": "Zuweisen"
+    },
+    "conflicts": {
+      "overlap": "Zu dieser Zeit bereits gebucht",
+      "leave": "An diesem Tag abwesend",
+      "qualification": "Erforderliche Qualifikation fehlt",
+      "non_working_day": "Freier Tag laut Arbeitszeitplan",
+      "outside_working_hours": "Außerhalb der Arbeitszeit",
+      "over_capacity": "Mehr Stunden als eingeplant",
+      "outside_arrival_window": "Außerhalb des Ankunftszeitfensters des Kunden",
+      "after_response_target": "Nach dem Reaktionsziel"
+    },
+    "history": {
+      "assign": "Einsatz zuweisen",
+      "move": "Buchung verschieben",
+      "unassign": "Einsatz in die Warteschlange zurückgeben",
+      "undoReason": "Auf der Dispositionstafel rückgängig gemacht"
+    },
+    "queue": {
+      "title": "Einzuplanen",
+      "search": "Einsätze durchsuchen",
+      "priority": "Priorität",
+      "anyPriority": "Jede Priorität",
+      "sla": "Reaktionsziel",
+      "slaOptions": {
+        "any": "Jedes Ziel",
+        "breached": "Ziel überschritten",
+        "due_today": "Fällig innerhalb von 24 Std.",
+        "due_soon": "Fällig innerhalb von 3 Tagen"
+      },
+      "skill": "Qualifikation",
+      "anySkill": "Jede Qualifikation",
+      "area": "Gebiet",
+      "anyArea": "Jedes Gebiet",
+      "empty": "Keine Einsätze warten auf Einplanung."
+    }
+  },
+  "form": {
+    "loadFailed": "Die Optionen konnten nicht geladen werden.",
+    "choose": "Auswählen…",
+    "search": "Suchen…",
+    "saveFailed": "Der Datensatz wurde nicht gespeichert.",
+    "missingRequired": "Wählen Sie den Kunden und geben Sie einen Titel und ein Startdatum ein.",
+    "customer": "Kunde",
+    "address": "Einsatzort",
+    "noAddress": "Kein Einsatzort",
+    "contact": "Ansprechpartner",
+    "noContact": "Kein Ansprechpartner",
+    "title": "Titel",
+    "description": "Beschreibung",
+    "priority": "Priorität",
+    "priorities": {
+      "urgent": "Dringend",
+      "high": "Hoch",
+      "normal": "Normal",
+      "low": "Niedrig"
+    },
+    "inheritPriority": "Wie der Auftrag",
+    "preferredOn": "Wunschtermin",
+    "preferredTime": "Gewünschte Tageszeit",
+    "times": {
+      "any": "Beliebige Zeit",
+      "morning": "Vormittag",
+      "afternoon": "Nachmittag",
+      "evening": "Abend"
+    },
+    "estimatedMinutes": "Geschätzte Dauer (Minuten)",
+    "billingMode": "Abrechnung",
+    "billingModes": {
+      "per_job": "Rechnung pro Auftrag",
+      "per_visit": "Rechnung pro Einsatz",
+      "not_billable": "Nicht abrechenbar"
+    },
+    "laborItem": "Arbeitsleistungsartikel",
+    "laborRate": "Stundensatz für Arbeitsleistung",
+    "laborRateHint": "Leer lassen, um die Arbeitsleistung zum Artikelpreis abzurechnen",
+    "depositRequired": "Anzahlung erforderlich",
+    "qualifications": "Erforderliche Qualifikationen",
+    "noQualifications": "Es sind keine Qualifikationsarten eingerichtet.",
+    "scopeLines": "Leistungsumfangszeilen",
+    "item": "Artikel",
+    "quantity": "Menge",
+    "unitPrice": "Einzelpreis",
+    "removeLine": "Zeile entfernen",
+    "addLine": "Zeile hinzufügen",
+    "instructions": "Anweisungen für den Techniker",
+    "windowStart": "Ankunftszeitfenster von",
+    "windowEnd": "Ankunftszeitfenster bis",
+    "addVisit": "Einsatz hinzufügen",
+    "discard": "Verwerfen",
+    "repeat": "Wiederholung",
+    "repeats": {
+      "daily": "Täglich",
+      "weekly": "Wöchentlich",
+      "monthly": "Monatlich",
+      "yearly": "Jährlich"
+    },
+    "interval": "Alle (Einheiten)",
+    "weekdays": "Am",
+    "weekday": {
+      "0": "So",
+      "1": "Mo",
+      "2": "Di",
+      "3": "Mi",
+      "4": "Do",
+      "5": "Fr",
+      "6": "Sa"
+    },
+    "monthlyBy": "Monatlich am",
+    "monthlyByDay": "Gleicher Tag im Monat",
+    "monthlyByWeekday": "Gleicher Wochentag im Monat",
+    "windowStarts": "Beginn des Ankunftszeitfensters",
+    "windowEnds": "Ende des Ankunftszeitfensters",
+    "visitLines": "Bei jedem Einsatz abgerechnete Zeilen",
+    "effectiveFrom": "Gültig ab",
+    "reason": "Grund",
+    "reasonPlaceholder": "Warum diese Konditionen gelten",
+    "saveVersion": "Version speichern",
+    "startsOn": "Beginnt am",
+    "endsOn": "Endet am",
+    "createAgreement": "Vertrag erstellen",
+    "createRequest": "Anfrage erstellen",
+    "createJob": "Auftrag erstellen"
+  },
+  "request": {
+    "actionFailed": "Die Anfrage konnte nicht aktualisiert werden.",
+    "convert": "In Auftrag umwandeln",
+    "quote": "Angebot beginnen",
+    "declined": {
+      "title": "Diese Anfrage ablehnen",
+      "reason": "Grund",
+      "confirm": "Ablehnen",
+      "action": "Ablehnen"
+    },
+    "cancelled": {
+      "title": "Diese Anfrage stornieren",
+      "reason": "Grund",
+      "confirm": "Anfrage stornieren",
+      "action": "Stornieren"
+    },
+    "source": {
+      "staff": "Von Mitarbeitenden erfasst",
+      "portal": "Über das Kundenportal"
+    },
+    "customer": "Kunde",
+    "address": "Einsatzort",
+    "contact": "Ansprechpartner",
+    "preferred": "Wunschtermin",
+    "time": {
+      "any": "Beliebige Zeit",
+      "morning": "Vormittag",
+      "afternoon": "Nachmittag",
+      "evening": "Abend"
+    },
+    "received": "Eingegangen",
+    "job": "Auftrag",
+    "closeReason": "Abschlussgrund",
+    "assessments": "Begutachtungseinsätze",
+    "addAssessment": "Begutachtung hinzufügen",
+    "quotes": "Angebote",
+    "noQuotes": "Noch keine Angebote. Beginnen Sie ein Angebot, um die Arbeiten in einem nativen Angebot zu kalkulieren."
+  },
+  "quote": {
+    "loadFailed": "Das Angebot konnte nicht geladen werden.",
+    "actionFailed": "Das Angebot konnte nicht aktualisiert werden.",
+    "terms": "Zusatzleistungen und Anzahlung",
+    "convert": "In Auftrag umwandeln",
+    "openJob": "Auftrag öffnen",
+    "issueFirst": "Bearbeiten Sie die Zeilen im Angebot und stellen Sie es aus, bevor Sie es zur Annahme senden.",
+    "decided": "Beantwortet von {name} am {when}",
+    "sentAt": "Gesendet {when}; der Link läuft ab {expires}",
+    "depositDue": "Anzahlung fällig {amount}",
+    "optionalHelp": "Markieren Sie die Zeilen, die der Kunde als optionale Zusatzleistungen wählen kann; die übrigen sind verpflichtend.",
+    "deposit": "Anzahlung",
+    "depositBasis": {
+      "none": "Keine Anzahlung",
+      "percent": "Prozentsatz",
+      "amount": "Fester Betrag"
+    },
+    "depositPercent": "Anzahlung (%)",
+    "depositAmount": "Anzahlungsbetrag",
+    "saveTerms": "Konditionen speichern",
+    "discard": "Verwerfen",
+    "send": {
+      "action": "Zur Annahme senden",
+      "title": "Angebot zur Annahme senden",
+      "signerName": "Name des Unterzeichners",
+      "signerEmail": "E-Mail des Unterzeichners",
+      "emailed": "Der Annahmelink wurde per E-Mail gesendet.",
+      "notEmailed": "Nicht per E-Mail gesendet: {reason}",
+      "link": "Annahmelink öffnen"
+    }
+  },
+  "job": {
+    "actionFailed": "Der Auftrag konnte nicht aktualisiert werden.",
+    "complete": {
+      "action": "Auftrag abschließen"
+    },
+    "reopen": {
+      "title": "Diesen Auftrag wieder öffnen",
+      "reason": "Grund",
+      "confirm": "Wieder öffnen",
+      "action": "Wieder öffnen"
+    },
+    "cancel": {
+      "title": "Diesen Auftrag stornieren",
+      "reason": "Grund",
+      "confirm": "Auftrag stornieren",
+      "action": "Stornieren"
+    },
+    "tabs": {
+      "label": "Auftragsbereiche",
+      "overview": "Übersicht",
+      "visits": "Einsätze",
+      "billing": "Abrechnung"
+    },
+    "customer": "Kunde",
+    "address": "Einsatzort",
+    "contact": "Ansprechpartner",
+    "duration": "Geschätzte Dauer",
+    "responseDue": "Reaktion fällig",
+    "source": "Herkunft",
+    "direct": "Direkt erstellt",
+    "labor": "Arbeitsleistung",
+    "closeReason": "Abschlussgrund",
+    "scope": "Leistungsumfang",
+    "noScope": "Keine Leistungsumfangszeilen.",
+    "item": "Artikel",
+    "quantity": "Menge",
+    "unitPrice": "Einzelpreis",
+    "addVisit": "Einsatz hinzufügen",
+    "billingMode": "Abrechnung",
+    "billingModes": {
+      "per_job": "Rechnung pro Auftrag",
+      "per_visit": "Rechnung pro Einsatz",
+      "not_billable": "Nicht abrechenbar"
+    },
+    "depositRequired": "Anzahlung erforderlich",
+    "depositsReceived": "Erhaltene Anzahlungen",
+    "invoices": "Rechnungen",
+    "invoiceJob": "Auftrag abrechnen",
+    "invoiceVisit": "Einsatz abrechnen",
+    "visitNumber": "Einsatz {sequence}",
+    "preview": "Rechnungsvorschau",
+    "subtotal": "Zwischensumme vor Steuern",
+    "previewHelp": "Es wird ein Rechnungsentwurf erstellt; prüfen, genehmigen und buchen Sie ihn im Rechnungsbereich und verrechnen Sie anschließend hier eventuelle Anzahlungen.",
+    "createInvoice": "Rechnungsentwurf erstellen",
+    "discard": "Verwerfen",
+    "invoiceStatus": {
+      "draft": "Entwurf",
+      "pending_approval": "Genehmigung ausstehend",
+      "approved": "Genehmigt",
+      "posted": "Gebucht",
+      "voided": "Storniert"
+    },
+    "visitInvoice": "Einsatzrechnung",
+    "applyDeposits": "Anzahlungen verrechnen",
+    "noInvoices": "Noch keine Rechnungen.",
+    "deposits": "Anzahlungen",
+    "recordDeposit": "Anzahlung erfassen",
+    "noDeposits": "Keine Anzahlungen erfasst.",
+    "noCandidates": "Der Kunde hat keine gebuchte, nicht zugeordnete Zahlung auf dem Konto.",
+    "payment": "Zahlung",
+    "linkDeposit": "Als Anzahlung erfassen",
+    "depositHelp": "Vereinnahmen Sie die Anzahlung unter Zahlungen als nicht zugeordnete Kundenzahlung und erfassen Sie sie dann hier; sie wird nach dem Buchen mit der Auftragsrechnung verrechnet."
+  },
+  "visit": {
+    "title": "Serviceeinsatz",
+    "sequence": "Einsatz {sequence}",
+    "none": "Keine Einsätze.",
+    "loadFailed": "Der Einsatz konnte nicht geladen werden.",
+    "actionFailed": "Der Einsatz konnte nicht aktualisiert werden.",
+    "loading": "Wird geladen…",
+    "move": {
+      "dispatched": "Disponieren",
+      "en_route": "Bin unterwegs",
+      "on_site": "Angekommen",
+      "unable_to_complete": "Nicht abschließbar"
+    },
+    "unable": {
+      "title": "Einsatz kann nicht abgeschlossen werden",
+      "reason": "Was die Arbeiten verhindert hat",
+      "confirm": "Erfassen"
+    },
+    "cancel": {
+      "title": "Diesen Einsatz stornieren",
+      "reason": "Grund",
+      "confirm": "Einsatz stornieren",
+      "action": "Einsatz stornieren"
+    },
+    "review": {
+      "pending": "Abschluss wartet auf Prüfung",
+      "approved": "Abschluss genehmigt",
+      "rejected": "Abschluss abgelehnt",
+      "pendingRemedy": "Eine prüfende Person entscheidet darüber unter Genehmigungen, bevor der Einsatz abgerechnet wird."
+    },
+    "customer": "Kunde",
+    "job": "Auftrag",
+    "request": "Anfrage",
+    "address": "Adresse",
+    "contact": "Ansprechpartner",
+    "arrivalWindow": "Ankunftszeitfenster",
+    "duration": "Geschätzte Dauer",
+    "responseDue": "Reaktion fällig",
+    "technicians": "Techniker",
+    "unassigned": "Noch nicht zugewiesen",
+    "instructions": "Anweisungen",
+    "workNotes": "Arbeitsnotizen",
+    "outcome": "Ergebnis",
+    "labor": "Arbeitsleistung",
+    "hours": "{hours} Std.",
+    "laborStatus": {
+      "draft": "Entwurf",
+      "submitted": "Eingereicht",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt"
+    },
+    "invoice": "Rechnung",
+    "notices": "Kundenbenachrichtigungen",
+    "noticeKind": {
+      "arrival_window": "Ankunftszeitfenster",
+      "en_route": "Bin unterwegs"
+    },
+    "noticeStatus": {
+      "queued": "In Warteschlange",
+      "sent": "Gesendet",
+      "failed": "Fehlgeschlagen",
+      "suppressed": "Unterdrückt",
+      "not_enabled": "Nicht aktiviert"
+    },
+    "history": "Verlauf",
+    "parts": "Teile",
+    "addPart": "Teil hinzufügen",
+    "noParts": "Keine Teile erfasst.",
+    "notBilled": "nicht abgerechnet",
+    "issued": "vom Lager entnommen",
+    "removePart": "Teil entfernen",
+    "part": "Teil",
+    "stockLocation": "Entnommen aus",
+    "quantity": "Menge",
+    "billable": "Dieses Teil dem Kunden berechnen",
+    "savePart": "Teil erfassen",
+    "discard": "Verwerfen",
+    "complete": {
+      "title": "Einsatz abschließen",
+      "notesPlaceholder": "Was festgestellt und erledigt wurde",
+      "labor": "Arbeitsstunden",
+      "myLabor": "Meine Stunden",
+      "hoursFor": "Stunden für {name}",
+      "hoursUnit": "Stunden",
+      "laborHelp": "Die Arbeitsleistung geht zur Genehmigung in die Zeiterfassung; Teile werden beim Abschließen vom Lager entnommen.",
+      "action": "Einsatz abschließen"
+    },
+    "photos": "Fotos und Dokumente",
+    "uploading": "Wird hochgeladen…",
+    "addPhoto": "Foto hinzufügen",
+    "noPhotos": "Noch keine Fotos.",
+    "signature": {
+      "title": "Kundenabnahme",
+      "image": "Unterschrift von {name}",
+      "inPerson": "Auf diesem Gerät unterschreiben",
+      "email": "Unterschriftslink per E-Mail senden",
+      "emailTitle": "Unterschriftslink per E-Mail senden",
+      "recipient": "E-Mail des Kunden",
+      "send": "Senden",
+      "emailed": "Der Unterschriftslink wurde per E-Mail gesendet.",
+      "notEmailed": "Nicht per E-Mail gesendet: {detail}",
+      "openLink": "Unterschriftslink öffnen",
+      "open": "Ein Unterschriftslink ist bis {expires} offen."
+    }
+  },
+  "agreement": {
+    "actionFailed": "Der Vertrag konnte nicht aktualisiert werden.",
+    "generate": "Einsätze jetzt erzeugen",
+    "generated": "{count, plural, =0 {Es waren keine neuen Einsätze erforderlich.} one {# Einsatz erzeugt.} other {# Einsätze erzeugt.}}",
+    "newVersion": "Neue Version",
+    "ended": {
+      "title": "Diesen Vertrag beenden",
+      "reason": "Grund",
+      "confirm": "Vertrag beenden",
+      "action": "Beenden"
+    },
+    "cancelled": {
+      "title": "Diesen Vertrag stornieren",
+      "reason": "Grund",
+      "confirm": "Vertrag stornieren",
+      "action": "Stornieren"
+    },
+    "customer": "Kunde",
+    "address": "Einsatzort",
+    "term": "Laufzeit",
+    "openEnded": "unbefristet",
+    "generatedThrough": "Einsätze erzeugt bis",
+    "job": "Auftrag",
+    "closeReason": "Abschlussgrund",
+    "versions": "Konditionen",
+    "effectiveFrom": "Gültig ab {date}",
+    "repeat": {
+      "daily": "{interval, plural, one {Täglich} other {Alle # Tage}}",
+      "weekly": "{interval, plural, one {Wöchentlich} other {Alle # Wochen}}",
+      "monthly": "{interval, plural, one {Monatlich} other {Alle # Monate}}",
+      "yearly": "{interval, plural, one {Jährlich} other {Alle # Jahre}}"
+    },
+    "visits": "Einsätze"
+  },
+  "myVisits": {
+    "loadFailed": "Ihre Einsätze konnten nicht geladen werden.",
+    "previous": "Vorheriger Tag",
+    "today": "Heute",
+    "next": "Nächster Tag",
+    "loading": "Wird geladen…",
+    "emptyTitle": "Keine Einsätze gebucht",
+    "emptyDescription": "Einsätze, die Ihre Disposition Ihnen zuweist, erscheinen hier.",
+    "directions": "Route"
+  },
+  "portal": {
+    "title": "Serviceanfragen",
+    "back": "Zurück",
+    "newTitle": "Service anfragen",
+    "listTitle": "Ihre Anfragen",
+    "empty": "Sie haben noch keine Serviceanfragen.",
+    "nextVisit": "nächster Einsatz {when}",
+    "submit": "Anfrage senden",
+    "submitting": "Wird gesendet…",
+    "submitted": "Anfrage {number} ist eingegangen. Wir melden uns bei Ihnen, um einen Termin zu vereinbaren.",
+    "fields": {
+      "title": "Was benötigen Sie?",
+      "titlePlaceholder": "Zum Beispiel: Heizung wird nicht warm",
+      "description": "Details",
+      "address": "Ort",
+      "preferredOn": "Wunschtermin",
+      "preferredTime": "Gewünschte Tageszeit",
+      "urgent": "Das ist dringend"
+    },
+    "time": {
+      "any": "Beliebige Zeit",
+      "morning": "Vormittag",
+      "afternoon": "Nachmittag",
+      "evening": "Abend"
+    },
+    "status": {
+      "new": "Eingegangen",
+      "assessment_scheduled": "Begutachtung eingeplant",
+      "assessed": "Begutachtet",
+      "quoted": "Angebot gesendet",
+      "converted": "Arbeiten eingeplant",
+      "declined": "Abgelehnt",
+      "cancelled": "Storniert",
+      "completed": "Abgeschlossen"
+    }
+  },
+  "sign": {
+    "quoteTitle": "Serviceangebot",
+    "quoteNote": "Ihre Annahme wird mit Ihrem Namen, dem Zeitpunkt und dem Angebot genau in der angezeigten Form erfasst.",
+    "linkInvalid": "Dieser Link ist ungültig oder abgelaufen.",
+    "answerFailed": "Ihre Antwort konnte nicht erfasst werden.",
+    "loading": "Wird geladen…",
+    "acceptedThanks": "Vielen Dank – das Angebot ist angenommen. Wir melden uns bei Ihnen, um die Arbeiten einzuplanen.",
+    "declinedThanks": "Vielen Dank – wir haben erfasst, dass Sie das Angebot abgelehnt haben.",
+    "quoteHeading": "Angebot {number}",
+    "preparedFor": "Erstellt für {name}",
+    "addOns": "Optionale Zusatzleistungen",
+    "total": "Gesamt",
+    "depositDue": "Bei Annahme ist eine Anzahlung von {amount} fällig.",
+    "yourName": "Ihr Name",
+    "clear": "Löschen",
+    "accept": "Angebot annehmen",
+    "decline": "Ablehnen",
+    "expires": "Dieser Link läuft am {date} ab.",
+    "technicians": "Techniker: {names}",
+    "workDone": "Ausgeführte Arbeiten",
+    "parts": "Verwendete Teile",
+    "quantity": "Menge",
+    "signPrompt": "Unterschreiben Sie, um den Abschluss der Arbeiten zu bestätigen",
+    "comment": "Kommentar (optional)",
+    "sign": "Abnehmen",
+    "signing": "Wird unterschrieben…",
+    "signFailed": "Die Unterschrift konnte nicht erfasst werden.",
+    "signedThanks": "Vielen Dank – der Einsatz ist abgenommen."
+  }
+}

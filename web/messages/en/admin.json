@@ -3956,7 +3956,12 @@
         "description": "GL Audit Number Policies"
       },
       "project-loss-policies": {"title": "Project Loss Policies", "description": "When projects forecasting a loss are flagged at close, and whether the close waits for their loss assessment."},
-      "expense-fx-policies": {"title": "Expense FX Policies", "description": "Whether a foreign-currency expense line may convert at an explicit exchange rate with a reason instead of the dated rate."}
+      "expense-fx-policies": {"title": "Expense FX Policies", "description": "Whether a foreign-currency expense line may convert at an explicit exchange rate with a reason instead of the dated rate."},
+      "service-dispatch-policies": {
+        "title": "Service dispatch policy",
+        "singularTitle": "Service dispatch policy version",
+        "description": "Customer notices, response targets by priority and how far ahead agreements generate visits, effective from a date."
+      }
     },
     "fields": {
       "boardType": "Board type",
@@ -4946,7 +4951,8 @@
     "options": {
       "scheduleBoardType": {
         "people": "People board",
-        "shift_roster": "Managed shift roster"
+        "shift_roster": "Managed shift roster",
+        "dispatch": "Service dispatch board"
       },
       "schedulePatternTarget": {
         "customer": "Customer",
@@ -5677,7 +5683,8 @@
         "timeline": "Timeline",
         "calendar": "Month",
         "gantt": "Gantt",
-        "progress": "Progress"
+        "progress": "Progress",
+        "dispatch": "Dispatch"
       },
       "schedulePublishPolicy": {
         "governed": "Governed publication",
@@ -6816,7 +6823,12 @@
       "scheduleBoardAutomation": "Automation",
       "scheduleBoardAutomationHelp": "What happens after a booking is published on this board.",
       "intercompanyControlAccounts": "Intercompany receivable and payable accounts",
-      "periodEndDimensions": "Dimensions kept on closing lines"
+      "periodEndDimensions": "Dimensions kept on closing lines",
+      "serviceDispatchNotices": "Customer notices",
+      "serviceDispatchNoticesHelp": "Notices are opt-in and sent through the organization's email delivery.",
+      "serviceDispatchResponse": "Response targets",
+      "serviceDispatchResponseHelp": "Targets apply to work requested on or after the effective date.",
+      "serviceDispatchPlanning": "Planning"
     },
     "constructionRateEditor": {
       "tab": "Scope & rates"
@@ -7271,7 +7283,9 @@
       "offerLabel": "Offer label",
       "offerKind": "Offer kind",
       "promotionCode": "Promotion code",
-      "note": "Note"
+      "note": "Note",
+      "sectionsServiceRequests": "Service requests",
+      "sectionsServiceRequestsHelp": "Customers ask for service and follow their requests. Shown while Service dispatch is on."
     },
     "customerPortalSections": {
       "branding": "Branding and timing",
@@ -7896,6 +7910,21 @@
         "line": "Line",
         "problem": "Problem"
       }
+    },
+    "serviceDispatchFields": {
+      "notifyArrivalWindow": "Arrival window notices",
+      "notifyArrivalWindowHelp": "Email the customer the arrival window when a visit is assigned. Customers without an email are skipped.",
+      "notifyEnRoute": "On-my-way notices",
+      "notifyEnRouteHelp": "Email the customer when the technician marks the visit en route.",
+      "arrivalWindowMinutes": "Arrival window (minutes)",
+      "urgentResponseHours": "Urgent response target (hours)",
+      "highResponseHours": "High response target (hours)",
+      "normalResponseHours": "Normal response target (hours)",
+      "lowResponseHours": "Low response target (hours)",
+      "responseHoursHelp": "Hours from the request to the first visit. Leave blank for no target.",
+      "defaultVisitMinutes": "Default visit length (minutes)",
+      "agreementHorizonDays": "Agreement horizon (days)",
+      "agreementHorizonDaysHelp": "How far ahead recurring agreements generate their visits."
     }
   },
   "flows": {

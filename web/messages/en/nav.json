@@ -178,7 +178,11 @@
     "asset-maintenance": "Asset Maintenance",
     "asset-insurance": "Asset Insurance",
     "service": "Service",
-    "my-visits": "My visits"
+    "my-visits": "My visits",
+    "service-requests": "Service requests",
+    "service-jobs": "Service jobs",
+    "service-visits": "Service visits",
+    "service-agreements": "Service agreements"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",
@@ -246,7 +250,8 @@
     "crm-sales": "Sales",
     "hrm-compensation": "Compensation",
     "scheduling": "Scheduling",
-    "intercompany": "Intercompany"
+    "intercompany": "Intercompany",
+    "service": "Service"
   },
   "localWorkspaces": {
     "manufacturing": "Manufacturing",
@@ -277,7 +282,8 @@
     "setup-overhead": "Overhead",
     "crm-sales": "Sales",
     "hrm-compensation": "Compensation",
-    "intercompany": "Intercompany"
+    "intercompany": "Intercompany",
+    "service": "Service"
   },
   "moduleKeywords": {
     "receipts": "receipt, receipts, receive payment, payment, customer payment, cash receipt",

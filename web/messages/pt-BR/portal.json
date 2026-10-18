@@ -30,7 +30,8 @@
     "subscriptions": "Assinaturas",
     "orders": "Pedidos",
     "returns": "Devoluções",
-    "giftCards": "Vales-presente"
+    "giftCards": "Vales-presente",
+    "serviceRequests": "Solicitações de serviço"
   },
   "invoices": {
     "title": "Faturas",

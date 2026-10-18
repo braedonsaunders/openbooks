@@ -178,7 +178,11 @@
     "asset-maintenance": "Anlagenwartung",
     "asset-insurance": "Anlagenversicherung",
     "service": "Service",
-    "my-visits": "Meine Einsätze"
+    "my-visits": "Meine Einsätze",
+    "service-requests": "Serviceanfragen",
+    "service-jobs": "Serviceaufträge",
+    "service-visits": "Serviceeinsätze",
+    "service-agreements": "Serviceverträge"
   },
   "groups": {
     "manufacturing": "Fertigung",
@@ -235,7 +239,8 @@
     "crm-sales": "Vertrieb",
     "hrm-compensation": "Vergütung",
     "scheduling": "Einsatzplanung",
-    "intercompany": "Konzernverrechnung"
+    "intercompany": "Konzernverrechnung",
+    "service": "Service"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Beurteilungen verwalten",
@@ -277,7 +282,8 @@
     "setup-overhead": "Gemeinkosten",
     "crm-sales": "Vertrieb",
     "hrm-compensation": "Vergütung",
-    "intercompany": "Konzernverrechnung"
+    "intercompany": "Konzernverrechnung",
+    "service": "Service"
   },
   "moduleKeywords": {
     "receipts": "Beleg, Zahlungseingang, Zahlung erfassen, Zahlung, Kundenzahlung, Einzahlung",

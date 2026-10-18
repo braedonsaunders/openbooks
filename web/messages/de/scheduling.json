@@ -7,7 +7,8 @@
     "timeline": "Zeitachse",
     "calendar": "Monat",
     "gantt": "Gantt-Diagramm",
-    "progress": "Fortschritt"
+    "progress": "Fortschritt",
+    "dispatch": "Disposition"
   },
   "kinds": {
     "customer": "Kunde",
@@ -254,6 +255,10 @@
       "roster": {
         "title": "Verwalteter Schichtplan",
         "description": "Wiederkehrende Schichtmuster, Schichtanfragen der Mitarbeitenden, optionale Freigabe der Veröffentlichung und Stempeluhr-Anwesenheit mit Hinweisen auf Verspätung, frühes Gehen und Abwesenheit."
+      },
+      "service": {
+        "title": "Service-Disposition",
+        "description": "Techniker-Spalten auf einer Zeitachse mit der Warteschlange einzuplanender Einsätze; Zuweisungen werden sofort veröffentlicht."
       }
     },
     "name": "Bezeichnung",

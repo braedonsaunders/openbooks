@@ -178,7 +178,11 @@
     "asset-maintenance": "Entretien des immobilisations",
     "asset-insurance": "Assurance des immobilisations",
     "service": "Service",
-    "my-visits": "Mes visites"
+    "my-visits": "Mes visites",
+    "service-requests": "Demandes de service",
+    "service-jobs": "Interventions",
+    "service-visits": "Visites de service",
+    "service-agreements": "Contrats de service"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gérer les évaluations",
@@ -246,7 +250,8 @@
     "crm-sales": "Ventes",
     "hrm-compensation": "Rémunération",
     "scheduling": "Planification",
-    "intercompany": "Intercompagnie"
+    "intercompany": "Intercompagnie",
+    "service": "Service"
   },
   "localWorkspaces": {
     "manufacturing": "Fabrication",
@@ -277,7 +282,8 @@
     "setup-overhead": "Frais généraux",
     "crm-sales": "Ventes",
     "hrm-compensation": "Rémunération",
-    "intercompany": "Intercompagnie"
+    "intercompany": "Intercompagnie",
+    "service": "Service"
   },
   "moduleKeywords": {
     "receipts": "reçu, reçus, recevoir un paiement, paiement, encaissement, paiement client",

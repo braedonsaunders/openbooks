@@ -63,7 +63,11 @@
     "collection_attempt": "Tentative de recouvrement",
     "tax_provider_transaction": "Envoi au prestataire fiscal",
     "psp_settlement_line_unmatched": "Ligne de versement non rattachée",
-    "internal_billing": "Facturation interne"
+    "internal_billing": "Facturation interne",
+    "service_request": "Demande de service",
+    "service_job": "Intervention",
+    "service_visit": "Visite de service",
+    "service_agreement": "Contrat de service"
   },
   "resourcing": {
     "fields": {

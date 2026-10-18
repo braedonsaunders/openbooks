@@ -79,6 +79,19 @@ import {
   TIMESHEET_WEEK_BUILT_IN_EXPR,
   TIMESHEET_WEEK_SORTS,
   timesheetWeekWhere,
+  SERVICE_AGREEMENT_BUILT_IN_EXPR,
+  SERVICE_AGREEMENT_SORTS,
+  SERVICE_JOB_BUILT_IN_EXPR,
+  SERVICE_JOB_SORTS,
+  SERVICE_REQUEST_BUILT_IN_EXPR,
+  SERVICE_REQUEST_SORTS,
+  SERVICE_VISIT_BASE_JOINS,
+  SERVICE_VISIT_BUILT_IN_EXPR,
+  SERVICE_VISIT_SORTS,
+  serviceAgreementWhere,
+  serviceJobWhere,
+  serviceRequestWhere,
+  serviceVisitWhere,
   BANK_RECONCILIATION_BASE_JOINS,
   BANK_RECONCILIATION_BUILT_IN_EXPR,
   BANK_RECONCILIATION_SORTS,
@@ -372,6 +385,8 @@ const provisionJoins = sql`join subsidiaries sub on sub.org_id=p.org_id and sub.
     order by fc.effective_on desc,fc.applied_at desc,fc.id desc limit 1) review on true`
 const provisionStatus = sql`case when review.id is null then 'unassessed'
   when review.result->>'recognized'='true' then 'recognized' else 'contingent' end`
+
+const SERVICE_DRAWER_PARAMS = ['request', 'job', 'visit', 'agreement', 'new'] as const
 
 const SOURCES: Record<string, EntityListSource> = {
   webhook_endpoint: {
@@ -1307,6 +1322,46 @@ const SOURCES: Record<string, EntityListSource> = {
     drawerParam: 'retainer',
     basePath: '/resourcing/retainers',
     readPermission: 'retainers.read',
+  },
+  // Service dispatch records open in the service area's own drawer host, which
+  // loads each record client-side; the parameters are mutually exclusive.
+  service_request: {
+    recordType: 'service_request', table: 'service_requests', alias: 'sr', readPermission: 'service.read',
+    baseJoins: sql``, builtInExpr: SERVICE_REQUEST_BUILT_IN_EXPR, sorts: SERVICE_REQUEST_SORTS,
+    defaultSort: sql`sr.created_at`, statusExpr: sql`sr.status`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }, { paramKey: 'priority', filterKey: 'priority' }],
+    where: serviceRequestWhere, drawerParam: 'request', basePath: '/service/requests',
+    overlayDrawer: true, exclusiveDrawerParams: SERVICE_DRAWER_PARAMS,
+    statusVariant: (row) => row.status === 'converted' ? 'success' : row.status === 'quoted' ? 'warning' : row.status === 'declined' || row.status === 'cancelled' ? 'outline' : 'default',
+  },
+  service_job: {
+    recordType: 'service_job', table: 'service_jobs', alias: 'sj', readPermission: 'service.read',
+    baseJoins: sql``, builtInExpr: SERVICE_JOB_BUILT_IN_EXPR, sorts: SERVICE_JOB_SORTS,
+    defaultSort: sql`sj.created_at`, statusExpr: sql`sj.status`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }, { paramKey: 'priority', filterKey: 'priority' }],
+    where: serviceJobWhere, drawerParam: 'job', basePath: '/service/jobs',
+    overlayDrawer: true, exclusiveDrawerParams: SERVICE_DRAWER_PARAMS,
+    statusVariant: (row, value, column) => column === 'stage'
+      ? (value === 'to_invoice' ? 'warning' : value === 'in_progress' ? 'default' : value === 'completed' ? 'success' : 'secondary')
+      : row.status === 'completed' ? 'success' : row.status === 'cancelled' ? 'outline' : 'default',
+  },
+  service_visit: {
+    recordType: 'service_visit', table: 'service_visits', alias: 'sv', readPermission: 'service.read',
+    baseJoins: SERVICE_VISIT_BASE_JOINS, builtInExpr: SERVICE_VISIT_BUILT_IN_EXPR, sorts: SERVICE_VISIT_SORTS,
+    defaultSort: sql`coalesce(sv.occurs_on, sv.preferred_on)`, statusExpr: sql`sv.status`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }, { paramKey: 'priority', filterKey: 'priority' }],
+    where: serviceVisitWhere, drawerParam: 'visit', basePath: '/service/visits',
+    overlayDrawer: true, exclusiveDrawerParams: SERVICE_DRAWER_PARAMS,
+    statusVariant: (row) => row.status === 'completed' ? 'success' : row.status === 'unable_to_complete' ? 'destructive' : row.status === 'en_route' || row.status === 'on_site' ? 'warning' : row.status === 'cancelled' || row.status === 'unscheduled' ? 'outline' : 'default',
+  },
+  service_agreement: {
+    recordType: 'service_agreement', table: 'service_agreements', alias: 'sa', readPermission: 'service.read',
+    baseJoins: sql``, builtInExpr: SERVICE_AGREEMENT_BUILT_IN_EXPR, sorts: SERVICE_AGREEMENT_SORTS,
+    defaultSort: sql`sa.agreement_number`, statusExpr: sql`sa.status`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: serviceAgreementWhere, drawerParam: 'agreement', basePath: '/service/agreements',
+    overlayDrawer: true, exclusiveDrawerParams: SERVICE_DRAWER_PARAMS,
+    statusVariant: (row) => row.status === 'active' ? 'success' : 'outline',
   },
   timesheet_week: {
     recordType: 'timesheet_week',

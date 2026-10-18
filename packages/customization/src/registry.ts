@@ -1808,6 +1808,129 @@ const TIMESHEET_WEEK: RecordTypeMeta = {
   ],
 };
 
+// Service dispatch: requests, jobs, visits and agreements. Status, priority
+// and kind values carry the engine's state machines; labels live in `service`.
+const SERVICE_PRIORITY_OPTIONS = ["urgent", "high", "normal", "low"].map((value) => ({ value, labelKey: `service.priority.${value}` }));
+const serviceSelect = (key: string, labelKey: string, values: readonly string[], prefix: string) => ({
+  key, labelKey, kind: "select" as const, operators: OPERATORS_BY_KIND.select,
+  options: values.map((value) => ({ value, labelKey: `service.${prefix}.${value}` })),
+});
+
+const SERVICE_REQUEST: RecordTypeMeta = {
+  key: "service_request",
+  labelKey: "customization.recordTypes.service_request",
+  category: "entity",
+  featureKey: "serviceDispatch",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  defaultSort: { sortKey: "created_at", dir: "desc" },
+  listColumns: [
+    { key: "number", labelKey: "service.list.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "title", labelKey: "service.list.title", kind: "text", sortable: true, sortKey: "title" },
+    { key: "customer", labelKey: "common.labels.customer", kind: "text" },
+    { key: "location", labelKey: "service.list.location", kind: "text", defaultHidden: true },
+    { key: "priority", labelKey: "service.list.priority", kind: "text", sortable: true, sortKey: "priority" },
+    { key: "preferred_on", labelKey: "service.list.preferredOn", kind: "date", sortable: true, sortKey: "preferred_on" },
+    { key: "source", labelKey: "service.list.source", kind: "text", defaultHidden: true },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "created_at", labelKey: "service.list.received", kind: "date", sortable: true, sortKey: "created_at" },
+  ],
+  listFilters: [
+    serviceSelect("status", "common.labels.status", ["new", "assessment_scheduled", "assessed", "quoted", "converted", "declined", "cancelled"], "requestStatus"),
+    { key: "priority", labelKey: "service.list.priority", kind: "select", operators: OPERATORS_BY_KIND.select, options: SERVICE_PRIORITY_OPTIONS },
+    serviceSelect("source", "service.list.source", ["staff", "portal"], "requestSource"),
+    { key: "title", labelKey: "service.list.title", kind: "text", operators: OPERATORS_BY_KIND.text },
+  ],
+};
+
+const SERVICE_JOB: RecordTypeMeta = {
+  key: "service_job",
+  labelKey: "customization.recordTypes.service_job",
+  category: "entity",
+  featureKey: "serviceDispatch",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  defaultSort: { sortKey: "created_at", dir: "desc" },
+  listColumns: [
+    { key: "number", labelKey: "service.list.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "title", labelKey: "service.list.title", kind: "text", sortable: true, sortKey: "title" },
+    { key: "customer", labelKey: "common.labels.customer", kind: "text" },
+    { key: "location", labelKey: "service.list.location", kind: "text", defaultHidden: true },
+    { key: "priority", labelKey: "service.list.priority", kind: "text", sortable: true, sortKey: "priority" },
+    { key: "stage", labelKey: "service.list.stage", kind: "status" },
+    { key: "billing_mode", labelKey: "service.list.billingMode", kind: "text", defaultHidden: true },
+    { key: "sla_due_at", labelKey: "service.list.responseDue", kind: "date", sortable: true, sortKey: "sla_due_at" },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "created_at", labelKey: "service.list.created", kind: "date", sortable: true, sortKey: "created_at", defaultHidden: true },
+  ],
+  listFilters: [
+    serviceSelect("status", "common.labels.status", ["open", "completed", "cancelled"], "jobStatus"),
+    serviceSelect("stage", "service.list.stage", ["open", "unscheduled", "scheduled", "in_progress", "to_invoice", "completed", "cancelled"], "jobStage"),
+    { key: "priority", labelKey: "service.list.priority", kind: "select", operators: OPERATORS_BY_KIND.select, options: SERVICE_PRIORITY_OPTIONS },
+    serviceSelect("billing_mode", "service.list.billingMode", ["per_job", "per_visit", "not_billable"], "billingMode"),
+    { key: "title", labelKey: "service.list.title", kind: "text", operators: OPERATORS_BY_KIND.text },
+  ],
+};
+
+const SERVICE_VISIT: RecordTypeMeta = {
+  key: "service_visit",
+  labelKey: "customization.recordTypes.service_visit",
+  category: "entity",
+  featureKey: "serviceDispatch",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "number", labelKey: "service.list.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "title", labelKey: "service.list.title", kind: "text" },
+    { key: "customer", labelKey: "common.labels.customer", kind: "text" },
+    { key: "kind", labelKey: "service.list.kind", kind: "text", defaultHidden: true },
+    { key: "priority", labelKey: "service.list.priority", kind: "text", sortable: true, sortKey: "priority" },
+    { key: "scheduled_at", labelKey: "service.list.scheduledAt", kind: "text" },
+    { key: "technicians", labelKey: "service.list.technicians", kind: "text" },
+    { key: "preferred_on", labelKey: "service.list.preferredOn", kind: "date", sortable: true, sortKey: "preferred_on", defaultHidden: true },
+    { key: "sla_due_at", labelKey: "service.list.responseDue", kind: "date", sortable: true, sortKey: "sla_due_at" },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "review_status", labelKey: "service.list.review", kind: "text", defaultHidden: true },
+  ],
+  listFilters: [
+    serviceSelect("status", "common.labels.status", ["unscheduled", "scheduled", "dispatched", "en_route", "on_site", "completed", "unable_to_complete", "cancelled"], "visitStatus"),
+    { key: "priority", labelKey: "service.list.priority", kind: "select", operators: OPERATORS_BY_KIND.select, options: SERVICE_PRIORITY_OPTIONS },
+    serviceSelect("kind", "service.list.kind", ["assessment", "service"], "visitKind"),
+    serviceSelect("review_status", "service.list.review", ["not_required", "pending", "approved", "rejected"], "reviewStatus"),
+  ],
+};
+
+const SERVICE_AGREEMENT: RecordTypeMeta = {
+  key: "service_agreement",
+  labelKey: "customization.recordTypes.service_agreement",
+  category: "entity",
+  featureKey: "serviceDispatch",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "number", labelKey: "service.list.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "title", labelKey: "service.list.title", kind: "text", sortable: true, sortKey: "title" },
+    { key: "customer", labelKey: "common.labels.customer", kind: "text" },
+    { key: "location", labelKey: "service.list.location", kind: "text", defaultHidden: true },
+    { key: "starts_on", labelKey: "service.list.startsOn", kind: "date", sortable: true, sortKey: "starts_on" },
+    { key: "ends_on", labelKey: "service.list.endsOn", kind: "date" },
+    { key: "generated_through", labelKey: "service.list.generatedThrough", kind: "date" },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+  ],
+  listFilters: [
+    serviceSelect("status", "common.labels.status", ["active", "ended", "cancelled"], "agreementStatus"),
+    { key: "title", labelKey: "service.list.title", kind: "text", operators: OPERATORS_BY_KIND.text },
+  ],
+};
+
 const BANK_RECONCILIATION: RecordTypeMeta = {
   key: "bank_reconciliation",
   labelKey: "customization.recordTypes.bank_reconciliation",
@@ -2915,6 +3038,10 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   RESOURCING_DEMAND,
   RETAINER,
   TIMESHEET_WEEK,
+  SERVICE_REQUEST,
+  SERVICE_JOB,
+  SERVICE_VISIT,
+  SERVICE_AGREEMENT,
   BANK_RECONCILIATION,
   BANK_STATEMENT,
   BANK_RULE,

@@ -7,7 +7,8 @@
     "timeline": "时间轴",
     "calendar": "月",
     "gantt": "甘特图",
-    "progress": "进度"
+    "progress": "进度",
+    "dispatch": "派工"
   },
   "kinds": {
     "customer": "客户",
@@ -254,6 +255,10 @@
       "roster": {
         "title": "受管班次表",
         "description": "循环班次模式、员工班次申请、可选的发布审批，以及带迟到、早退和缺勤标记的打卡考勤。"
+      },
+      "service": {
+        "title": "服务派工",
+        "description": "按技术员分列的时间轴视图，附待排程上门队列；分派即时发布。"
       }
     },
     "name": "名称",

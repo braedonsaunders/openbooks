@@ -63,7 +63,11 @@
     "collection_attempt": "回収試行",
     "tax_provider_transaction": "税金プロバイダー送信",
     "psp_settlement_line_unmatched": "未紐付けの支払明細",
-    "internal_billing": "社内請求"
+    "internal_billing": "社内請求",
+    "service_request": "サービス依頼",
+    "service_job": "サービス作業",
+    "service_visit": "サービス訪問",
+    "service_agreement": "サービス契約"
   },
   "resourcing": {
     "fields": {

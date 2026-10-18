@@ -63,7 +63,11 @@
     "collection_attempt": "Intento de cobro",
     "tax_provider_transaction": "Envío al proveedor fiscal",
     "psp_settlement_line_unmatched": "Línea de pago sin vincular",
-    "internal_billing": "Facturación interna"
+    "internal_billing": "Facturación interna",
+    "service_request": "Solicitud de servicio",
+    "service_job": "Trabajo de servicio",
+    "service_visit": "Visita de servicio",
+    "service_agreement": "Contrato de servicio"
   },
   "resourcing": {
     "fields": {

@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { consumePortalLink, portalBillingReviews, portalHome, resolvePortalSession } from '@openbooks/engine/portal'
 import { db, withOrgContext } from '@openbooks/engine/platform/database'
 import { PortalNav, PortalShell } from '@/components/portal/portal-shell'
+import { isFeatureEnabled } from '@/lib/features'
 
 export const runtime = 'nodejs'
 
@@ -33,9 +34,10 @@ export default async function PortalTokenPage({
     redirect(`/portal/${consumed.sessionToken}${reviewId ? `/reviews/${reviewId}` : ''}`)
   }
   const active = session!
-  const [home, reviews] = await withOrgContext(active.orgId, () => Promise.all([
+  const [home, reviews, serviceDispatch] = await withOrgContext(active.orgId, () => Promise.all([
     portalHome(active.orgId, active.partyId, db),
     portalBillingReviews(active.orgId, active.partyId, db),
+    isFeatureEnabled(active.orgId, 'serviceDispatch'),
   ]))
   const awaitingReview = reviews.filter((entry) => entry.status === 'customer_review').length
   const nav = [
@@ -45,6 +47,7 @@ export default async function PortalTokenPage({
     ...(home.settings.sections.orders ? [{ href: '/orders', label: t('nav.orders') }] : []),
     ...(home.settings.sections.returns ? [{ href: '/returns', label: t('nav.returns') }] : []),
     ...(home.settings.sections.giftCards ? [{ href: '/gift-cards', label: t('nav.giftCards') }] : []),
+    ...(serviceDispatch && home.settings.sections.serviceRequests ? [{ href: '/service', label: t('nav.serviceRequests') }] : []),
   ]
   // The home page never lists records: each concept renders one summary
   // link with its count, and the full list lives on its own page. Store

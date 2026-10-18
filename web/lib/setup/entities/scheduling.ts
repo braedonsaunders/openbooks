@@ -18,6 +18,7 @@ const VIEWS: SetupOption[] = [
   { value: 'calendar', labelKey: 'options.scheduleView.calendar' },
   { value: 'gantt', labelKey: 'options.scheduleView.gantt' },
   { value: 'progress', labelKey: 'options.scheduleView.progress' },
+  { value: 'dispatch', labelKey: 'options.scheduleView.dispatch' },
 ]
 const PUBLISH_POLICIES: SetupOption[] = [
   { value: 'live', labelKey: 'options.schedulePublishPolicy.live' },
@@ -516,9 +517,9 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
         scopedOptions: {
           scopeField: 'rowKind',
           byValue: {
-            people: VIEWS.slice(0, 4),
+            people: [...VIEWS.slice(0, 4), ...VIEWS.slice(6)],
             resources: VIEWS.slice(0, 4),
-            tasks: VIEWS.slice(4),
+            tasks: VIEWS.slice(4, 6),
           },
         },
         required: true,
@@ -532,9 +533,9 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
         scopedOptions: {
           scopeField: 'rowKind',
           byValue: {
-            people: VIEWS.slice(0, 4),
+            people: [...VIEWS.slice(0, 4), ...VIEWS.slice(6)],
             resources: VIEWS.slice(0, 4),
-            tasks: VIEWS.slice(4),
+            tasks: VIEWS.slice(4, 6),
           },
         },
         required: true,

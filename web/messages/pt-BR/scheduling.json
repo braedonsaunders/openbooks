@@ -7,7 +7,8 @@
     "timeline": "Linha do tempo",
     "calendar": "Mês",
     "gantt": "Gráfico de Gantt",
-    "progress": "Andamento"
+    "progress": "Andamento",
+    "dispatch": "Despacho"
   },
   "kinds": {
     "customer": "Cliente",
@@ -254,6 +255,10 @@
       "roster": {
         "title": "Escala de turnos gerenciada",
         "description": "Padrões de turnos recorrentes, solicitações de turno dos funcionários, aprovação opcional da publicação e presença por relógio de ponto com avisos de atraso, saída antecipada e ausência."
+      },
+      "service": {
+        "title": "Despacho de serviço",
+        "description": "Colunas por técnico em um eixo de horário com a fila de visitas a agendar; as atribuições são publicadas na hora."
       }
     },
     "name": "Nome",

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { CalendarDays, CalendarCheck, Clock3, Factory, ChartGantt, Boxes } from 'lucide-react'
+import { CalendarDays, CalendarCheck, Clock3, Factory, ChartGantt, Boxes, Wrench } from 'lucide-react'
 import { Button, Drawer, Input, Select, cn } from '@openbooks/ui'
 import { refusalMessageFromBody } from '../../lib/api-error'
 import { scheduleBoardType } from '@openbooks/engine/schedule-boards/board-types'
@@ -15,7 +15,7 @@ export interface ScopeOptions {
   readonly projects: readonly { id: string; name: string }[]
 }
 
-type PresetKey = 'dispatch' | 'shifts' | 'continuous' | 'roster' | 'projects' | 'resources'
+type PresetKey = 'dispatch' | 'service' | 'shifts' | 'continuous' | 'roster' | 'projects' | 'resources'
 
 /** A board type's registered defaults (views, grain, publication) as preset settings. */
 function typeDefaults(key: string): Record<string, unknown> {
@@ -34,16 +34,20 @@ const PRESETS: Record<PresetKey, Record<string, unknown>> = {
   shifts: { rowKind: 'people', grain: 'timed', views: ['timeline', 'grid', 'calendar'], defaultView: 'timeline', rangeDays: 7, publishPolicy: 'staged', dayStarts: '09:00', dayEnds: '17:00', dayBreakMinutes: 30 },
   continuous: { rowKind: 'people', grain: 'timed', views: ['grid', 'timeline', 'calendar'], defaultView: 'grid', rangeDays: 28, publishPolicy: 'staged', dayStarts: '07:00', dayEnds: '19:00', dayBreakMinutes: 60 },
   roster: { ...typeDefaults('shift_roster'), rangeDays: 14, dayStarts: '08:00', dayEnds: '16:30', dayBreakMinutes: 30 },
+  // Service dispatch: technician columns on a time axis with the unscheduled visit queue.
+  service: { ...typeDefaults('dispatch'), rangeDays: 1, dayStarts: '08:00', dayEnds: '17:00', dayBreakMinutes: 30 },
   resources: { rowKind: 'resources', resourceKind: 'equipment', grain: 'day', views: ['grid', 'targets', 'timeline', 'calendar'], defaultView: 'grid', rangeDays: 14, publishPolicy: 'staged', dayStarts: '07:00', dayEnds: '15:30', dayBreakMinutes: 30 },
   projects: { rowKind: 'tasks', grain: 'day', views: ['gantt', 'progress'], defaultView: 'gantt', rangeDays: 14, publishPolicy: 'live', dayStarts: '07:00', dayEnds: '15:30', dayBreakMinutes: 30 },
 }
-const ICONS = { dispatch: CalendarDays, shifts: Clock3, continuous: Factory, roster: CalendarCheck, projects: ChartGantt, resources: Boxes } as const
+const ICONS = { dispatch: CalendarDays, service: Wrench, shifts: Clock3, continuous: Factory, roster: CalendarCheck, projects: ChartGantt, resources: Boxes } as const
 
 function codeFrom(name: string): string {
   return name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'BOARD'
 }
 
-export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, tasksEnabled, resourcesEnabled, equipmentEnabled, contextProjectId, returnBasePath }: {
+export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, tasksEnabled, resourcesEnabled, equipmentEnabled, serviceEnabled = false, contextProjectId, returnBasePath }: {
+  /** Service dispatch is on: offer the dispatch board type. */
+  serviceEnabled?: boolean
   contextProjectId?: string
   returnBasePath?: string
   open: boolean
@@ -57,7 +61,7 @@ export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, 
 }) {
   const t = useTranslations('scheduling')
   const router = useRouter()
-  const available = useMemo(() => (Object.keys(PRESETS) as PresetKey[]).filter((key) => (PRESETS[key].rowKind === 'tasks' ? tasksEnabled : PRESETS[key].rowKind === 'resources' ? resourcesEnabled : peopleEnabled)), [peopleEnabled, tasksEnabled, resourcesEnabled])
+  const available = useMemo(() => (Object.keys(PRESETS) as PresetKey[]).filter((key) => (key === 'service' ? peopleEnabled && serviceEnabled : PRESETS[key].rowKind === 'tasks' ? tasksEnabled : PRESETS[key].rowKind === 'resources' ? resourcesEnabled : peopleEnabled)), [peopleEnabled, tasksEnabled, resourcesEnabled, serviceEnabled])
   const [preset, setPreset] = useState<PresetKey>(available[0] ?? 'dispatch')
   const [resourceKind, setResourceKind] = useState(equipmentEnabled ? 'equipment' : 'location')
   const [name, setName] = useState('')

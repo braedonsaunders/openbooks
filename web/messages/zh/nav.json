@@ -178,7 +178,11 @@
     "asset-maintenance": "资产维护",
     "asset-insurance": "资产保险",
     "service": "服务",
-    "my-visits": "我的上门服务"
+    "my-visits": "我的上门服务",
+    "service-requests": "服务请求",
+    "service-jobs": "服务工单",
+    "service-visits": "服务上门",
+    "service-agreements": "服务协议"
   },
   "groups": {
     "manufacturing": "制造",
@@ -235,7 +239,8 @@
     "crm-sales": "销售",
     "hrm-compensation": "薪酬",
     "scheduling": "排程",
-    "intercompany": "公司间"
+    "intercompany": "公司间",
+    "service": "服务"
   },
   "modulesShort": {
     "hrm-performance-cycles": "管理评估",
@@ -277,7 +282,8 @@
     "setup-overhead": "间接费用",
     "crm-sales": "销售",
     "hrm-compensation": "薪酬",
-    "intercompany": "公司间"
+    "intercompany": "公司间",
+    "service": "服务"
   },
   "moduleKeywords": {
     "receipts": "收据, 收款, 收到付款, 付款, 客户付款, 回款",

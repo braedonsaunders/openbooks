@@ -30,7 +30,8 @@
     "subscriptions": "Subscriptions",
     "orders": "Orders",
     "returns": "Returns",
-    "giftCards": "Gift cards"
+    "giftCards": "Gift cards",
+    "serviceRequests": "Service requests"
   },
   "invoices": {
     "title": "Invoices",

@@ -228,6 +228,13 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
       ...(key === 'retainers' ? { feature: 'retainerBilling', permission: 'retainers.read' } : {}),
     })),
   ] },
+  // Service dispatch: the home and one tab per record family. Dispatch boards
+  // are Scheduling boards of the dispatch type, reached from the home.
+  { id: 'service', label: 'Service', feature: 'serviceDispatch', tabs: [
+    ...[['', 'overview', 'gauge'], ['/requests', 'requests', 'inbox'], ['/jobs', 'jobs', 'wrench'], ['/visits', 'visits', 'calendar-check'], ['/agreements', 'agreements', 'rotate-ccw']].map(([suffix, key, iconKey]) => ({
+      href: `/service${suffix}`, iconKey, ns: 'service', key: `tabs.${key}`, permissionsAny: ['service.read', 'service.manage', 'service.dispatch'],
+    })),
+  ] },
   { id: 'warehouse', label: 'Warehouse', feature: 'warehousing', tabs: [
     { href: '/warehouse', ns: 'warehouse', key: 'home.title', permission: 'items.read' },
     { href: '/picks', iconKey: 'list-checks', ns: 'nav', key: 'modules.picks', permission: 'orders.fulfill', feature: 'fulfillment' },

@@ -2200,6 +2200,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/me/visits': {
+    route: '/me/visits',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/me/visits/view')
+      return {
+        load: () => m.loadMyVisits(),
+        spec: (data) => m.myVisitsSpec(data as never),
+      }
+    },
+  },
   '/migrate': {
     route: '/migrate',
     segments: [],
@@ -3181,6 +3193,66 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadSchedulingPage(input.searchParams ?? {}),
         spec: (data) => m.schedulingSpec(data as never),
+      }
+    },
+  },
+  '/service': {
+    route: '/service',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/service/view')
+      return {
+        load: () => m.loadServiceHome(),
+        spec: (data) => m.serviceHomeSpec(data as never),
+      }
+    },
+  },
+  '/service/agreements': {
+    route: '/service/agreements',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/service/agreements/view')
+      return {
+        load: (input) => m.loadServiceAgreements(input.searchParams ?? {}),
+        spec: (data) => m.serviceAgreementsSpec(data as never),
+      }
+    },
+  },
+  '/service/jobs': {
+    route: '/service/jobs',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/service/jobs/view')
+      return {
+        load: (input) => m.loadServiceJobs(input.searchParams ?? {}),
+        spec: (data) => m.serviceJobsSpec(data as never),
+      }
+    },
+  },
+  '/service/requests': {
+    route: '/service/requests',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/service/requests/view')
+      return {
+        load: (input) => m.loadServiceRequests(input.searchParams ?? {}),
+        spec: (data) => m.serviceRequestsSpec(data as never),
+      }
+    },
+  },
+  '/service/visits': {
+    route: '/service/visits',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/service/visits/view')
+      return {
+        load: (input) => m.loadServiceVisits(input.searchParams ?? {}),
+        spec: (data) => m.serviceVisitsSpec(data as never),
       }
     },
   },

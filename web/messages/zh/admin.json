@@ -3956,7 +3956,12 @@
         "description": "按生效日期管理续订条款、负责人和到期前提醒。"
       },
       "project-loss-policies": {"title": "亏损项目政策", "description": "决定在结账时是否标记预计亏损的项目，以及结账是否需等待其亏损评估。"},
-      "expense-fx-policies": {"title": "费用汇率政策", "description": "外币费用行是否可以使用附理由的指定汇率，而不是按日期的汇率进行换算。"}
+      "expense-fx-policies": {"title": "费用汇率政策", "description": "外币费用行是否可以使用附理由的指定汇率，而不是按日期的汇率进行换算。"},
+      "service-dispatch-policies": {
+        "title": "服务派工策略",
+        "singularTitle": "服务派工策略版本",
+        "description": "客户通知、按优先级的响应目标以及协议提前生成上门的范围，自某一日期起生效。"
+      }
     },
     "fields": {
       "boardType": "排程板类型",
@@ -4946,7 +4951,8 @@
     "options": {
       "scheduleBoardType": {
         "people": "人员排程板",
-        "shift_roster": "受管班次表"
+        "shift_roster": "受管班次表",
+        "dispatch": "服务派工看板"
       },
       "schedulePatternTarget": {
         "customer": "客户",
@@ -5677,7 +5683,8 @@
         "timeline": "时间轴",
         "calendar": "月",
         "gantt": "甘特图",
-        "progress": "进度"
+        "progress": "进度",
+        "dispatch": "派工"
       },
       "schedulePublishPolicy": {
         "governed": "受控发布",
@@ -6816,7 +6823,12 @@
       "scheduleBoardAutomation": "自动化",
       "scheduleBoardAutomationHelp": "在此排程板上发布安排后执行的操作。",
       "intercompanyControlAccounts": "公司间应收应付科目",
-      "periodEndDimensions": "结账行保留的维度"
+      "periodEndDimensions": "结账行保留的维度",
+      "serviceDispatchNotices": "客户通知",
+      "serviceDispatchNoticesHelp": "通知需选择开启，并通过组织的电子邮件发送。",
+      "serviceDispatchResponse": "响应目标",
+      "serviceDispatchResponseHelp": "目标适用于生效日期当天及之后提出的工作。",
+      "serviceDispatchPlanning": "计划"
     },
     "constructionRateEditor": {
       "tab": "适用范围和工资率"
@@ -7271,7 +7283,9 @@
       "offerLabel": "展示文案",
       "offerKind": "类型",
       "promotionCode": "促销码",
-      "note": "备注"
+      "note": "备注",
+      "sectionsServiceRequests": "服务请求",
+      "sectionsServiceRequestsHelp": "客户提交服务请求并跟踪进度。仅在启用服务派工时显示。"
     },
     "customerPortalSections": {
       "branding": "名称与生效日期",
@@ -7896,6 +7910,21 @@
         "line": "行",
         "problem": "问题"
       }
+    },
+    "serviceDispatchFields": {
+      "notifyArrivalWindow": "到达时段通知",
+      "notifyArrivalWindowHelp": "上门分派后通过电子邮件将到达时段告知客户。没有电子邮件的客户将被跳过。",
+      "notifyEnRoute": "“正在路上”通知",
+      "notifyEnRouteHelp": "技术员将上门标记为正在路上时通过电子邮件通知客户。",
+      "arrivalWindowMinutes": "到达时段（分钟）",
+      "urgentResponseHours": "紧急响应目标（小时）",
+      "highResponseHours": "高优先级响应目标（小时）",
+      "normalResponseHours": "普通响应目标（小时）",
+      "lowResponseHours": "低优先级响应目标（小时）",
+      "responseHoursHelp": "从请求到首次上门的小时数。留空表示无目标。",
+      "defaultVisitMinutes": "默认上门时长（分钟）",
+      "agreementHorizonDays": "协议生成范围（天）",
+      "agreementHorizonDaysHelp": "周期性协议提前生成上门的天数。"
     }
   },
   "flows": {

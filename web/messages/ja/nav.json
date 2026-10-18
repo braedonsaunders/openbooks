@@ -178,7 +178,11 @@
     "asset-maintenance": "資産保守",
     "asset-insurance": "資産保険",
     "service": "サービス",
-    "my-visits": "自分の訪問"
+    "my-visits": "自分の訪問",
+    "service-requests": "サービス依頼",
+    "service-jobs": "サービス作業",
+    "service-visits": "サービス訪問",
+    "service-agreements": "サービス契約"
   },
   "groups": {
     "manufacturing": "製造",
@@ -235,7 +239,8 @@
     "crm-sales": "営業",
     "hrm-compensation": "報酬",
     "scheduling": "スケジュール管理",
-    "intercompany": "会社間"
+    "intercompany": "会社間",
+    "service": "サービス"
   },
   "modulesShort": {
     "hrm-performance-cycles": "評価を管理",
@@ -277,7 +282,8 @@
     "setup-overhead": "間接費",
     "crm-sales": "営業",
     "hrm-compensation": "報酬",
-    "intercompany": "会社間"
+    "intercompany": "会社間",
+    "service": "サービス"
   },
   "moduleKeywords": {
     "receipts": "領収, 入金, 入金を受け取る, 支払, 得意先入金, 入金消込",

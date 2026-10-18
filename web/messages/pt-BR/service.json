@@ -1,0 +1,685 @@
+{
+  "loadFailed": "Não foi possível carregar o registro de serviço.",
+  "create": {
+    "request": "Nova solicitação de serviço",
+    "job": "Nova ordem de serviço",
+    "agreement": "Novo contrato de serviço"
+  },
+  "titles": {
+    "request": "Solicitação de serviço",
+    "job": "Ordem de serviço",
+    "visit": "Visita técnica",
+    "agreement": "Contrato de serviço"
+  },
+  "tabs": {
+    "overview": "Visão geral",
+    "requests": "Solicitações",
+    "jobs": "Ordens de serviço",
+    "visits": "Visitas",
+    "agreements": "Contratos"
+  },
+  "visitStatus": {
+    "unscheduled": "Não agendada",
+    "scheduled": "Agendada",
+    "dispatched": "Despachada",
+    "en_route": "A caminho",
+    "on_site": "No local",
+    "completed": "Concluída",
+    "unable_to_complete": "Não foi possível concluir",
+    "cancelled": "Cancelada"
+  },
+  "visitKind": {
+    "assessment": "Avaliação",
+    "service": "Visita técnica"
+  },
+  "priority": {
+    "urgent": "Urgente",
+    "high": "Alta",
+    "normal": "Normal",
+    "low": "Baixa"
+  },
+  "billingMode": {
+    "per_job": "Faturar por ordem de serviço",
+    "per_visit": "Faturar por visita",
+    "not_billable": "Não faturável"
+  },
+  "requestStatus": {
+    "new": "Nova",
+    "assessment_scheduled": "Avaliação agendada",
+    "assessed": "Avaliada",
+    "quoted": "Orçada",
+    "converted": "Convertida",
+    "declined": "Recusada",
+    "cancelled": "Cancelada"
+  },
+  "jobStatus": {
+    "open": "Aberta",
+    "completed": "Concluída",
+    "cancelled": "Cancelada"
+  },
+  "agreementStatus": {
+    "active": "Ativo",
+    "ended": "Encerrado",
+    "cancelled": "Cancelado"
+  },
+  "quoteStatus": {
+    "draft": "Rascunho",
+    "sent": "Enviado",
+    "accepted": "Aceito",
+    "declined": "Recusado"
+  },
+  "requestSource": {
+    "staff": "Equipe",
+    "portal": "Portal do cliente"
+  },
+  "jobStage": {
+    "open": "Aberta",
+    "unscheduled": "Não agendada",
+    "scheduled": "Agendada",
+    "in_progress": "Em andamento",
+    "to_invoice": "A faturar",
+    "completed": "Concluída",
+    "cancelled": "Cancelada"
+  },
+  "reviewStatus": {
+    "not_required": "Sem revisão",
+    "pending": "Aguardando revisão",
+    "approved": "Aprovada",
+    "rejected": "Rejeitada"
+  },
+  "format": {
+    "minutes": "{hours} h {minutes} min"
+  },
+  "pages": {
+    "home": {
+      "title": "Serviços",
+      "description": "Solicitações de serviço, ordens de serviço, visitas e contratos recorrentes, despachados nos quadros de Programação."
+    },
+    "requests": {
+      "title": "Solicitações de serviço",
+      "description": "Serviços pedidos pelos clientes, por meio da equipe ou do portal do cliente, da avaliação e do orçamento até a ordem de serviço.",
+      "new": "Nova solicitação"
+    },
+    "jobs": {
+      "title": "Ordens de serviço",
+      "description": "Serviços com escopo e preço definidos, com suas visitas, sinais e faturas.",
+      "new": "Nova ordem de serviço"
+    },
+    "visits": {
+      "title": "Visitas técnicas",
+      "description": "Todas as visitas de ordens de serviço, solicitações e contratos, com seus técnicos e status.",
+      "new": "Nova visita"
+    },
+    "agreements": {
+      "title": "Contratos de serviço",
+      "description": "Contratos de manutenção recorrentes que geram visitas a partir de condições com data de vigência.",
+      "new": "Novo contrato"
+    },
+    "myVisits": {
+      "title": "Minhas visitas",
+      "description": "As visitas técnicas agendadas para você, na ordem do roteiro."
+    }
+  },
+  "reports": {
+    "service_jobs_by_status": "Ordens de serviço por status e idade",
+    "service_technician_utilization": "Utilização dos técnicos",
+    "service_first_time_fix": "Taxa de resolução na primeira visita",
+    "service_quote_win_rate": "Taxa de aprovação de orçamentos",
+    "service_revenue_per_job": "Receita por ordem de serviço"
+  },
+  "list": {
+    "number": "Número",
+    "title": "Título",
+    "location": "Local",
+    "priority": "Prioridade",
+    "preferredOn": "Data preferida",
+    "source": "Origem",
+    "received": "Recebida",
+    "stage": "Etapa",
+    "billingMode": "Faturamento",
+    "responseDue": "Prazo de resposta",
+    "created": "Criada",
+    "kind": "Tipo",
+    "scheduledAt": "Agendada",
+    "technicians": "Técnicos",
+    "review": "Revisão",
+    "startsOn": "Início",
+    "endsOn": "Fim",
+    "generatedThrough": "Visitas geradas até"
+  },
+  "home": {
+    "tiles": {
+      "openRequests": "Solicitações abertas",
+      "unscheduledVisits": "Visitas a agendar",
+      "todayVisits": "Visitas de hoje",
+      "inProgressVisits": "Em andamento",
+      "responseBreaches": "Meta de resposta vencida",
+      "awaitingReview": "Aguardando revisão",
+      "readyToInvoice": "Prontas para faturar",
+      "quotesAwaitingAnswer": "Orçamentos aguardando resposta",
+      "activeAgreements": "Contratos ativos"
+    },
+    "policyMissing": "Nenhuma política de despacho está em vigor.",
+    "policyMissingRemedy": "As metas de resposta, as janelas de chegada e a geração de contratos usam a política de despacho. Adicione uma versão em Configuração → Política de despacho de serviços.",
+    "openPolicy": "Abrir política de despacho",
+    "boards": "Quadros de despacho",
+    "noBoards": "Nenhum quadro de despacho ainda.",
+    "createBoard": "Criar um quadro de despacho",
+    "reports": "Relatórios de serviços"
+  },
+  "dispatch": {
+    "board": "Quadro de despacho",
+    "column": "Agendamentos de {name}",
+    "retry": "Tentar novamente",
+    "refresh": "Atualizar",
+    "freshness": "Atualizado {time}",
+    "saving": "Salvando…",
+    "undo": "Desfazer",
+    "dismiss": "Dispensar",
+    "minutes": "{count, plural, one {# minuto} other {# minutos}}",
+    "dueBy": "prazo {time}",
+    "noWorkingDay": "Este dia não tem uma janela de trabalho única no quadro (por exemplo, numa mudança de horário).",
+    "noWorkingDayRemedy": "O quadro mostra 06:00–20:00; verifique o dia de trabalho do quadro nas configurações dele.",
+    "readOnly": "Você pode ver este quadro, mas não atribuir visitas.",
+    "noTechnicians": "Nenhum técnico está no escopo deste quadro.",
+    "onLeave": "De licença: {type}",
+    "dayOff": "Folga",
+    "scheduledHours": "{hours} h agendadas",
+    "send": "Despachar",
+    "unassign": "Devolver à fila",
+    "errors": {
+      "load": "Não foi possível carregar o quadro de despacho.",
+      "save": "A alteração não foi salva."
+    },
+    "notices": {
+      "assigned": "Visita atribuída.",
+      "moved": "Agendamento movido.",
+      "unassigned": "Visita devolvida à fila.",
+      "dispatched": "Visita despachada.",
+      "undone": "Alteração desfeita.",
+      "noticeFailed": "Não foi possível enviar o aviso ao cliente."
+    },
+    "override": {
+      "title": "Atribuir apesar destes alertas?",
+      "reason": "Motivo da exceção",
+      "confirm": "Atribuir"
+    },
+    "conflicts": {
+      "overlap": "Já agendado nesse horário",
+      "leave": "De licença nesse dia",
+      "qualification": "Falta uma qualificação exigida",
+      "non_working_day": "Folga na escala de trabalho",
+      "outside_working_hours": "Fora do horário de trabalho",
+      "over_capacity": "Mais horas do que o previsto na escala",
+      "outside_arrival_window": "Fora da janela de chegada do cliente",
+      "after_response_target": "Após a meta de resposta"
+    },
+    "history": {
+      "assign": "Atribuir visita",
+      "move": "Mover agendamento",
+      "unassign": "Devolver visita à fila",
+      "undoReason": "Desfeito no quadro de despacho"
+    },
+    "queue": {
+      "title": "A agendar",
+      "search": "Buscar visitas",
+      "priority": "Prioridade",
+      "anyPriority": "Qualquer prioridade",
+      "sla": "Meta de resposta",
+      "slaOptions": {
+        "any": "Qualquer meta",
+        "breached": "Meta vencida",
+        "due_today": "Vence em 24 h",
+        "due_soon": "Vence em 3 dias"
+      },
+      "skill": "Qualificação",
+      "anySkill": "Qualquer qualificação",
+      "area": "Região",
+      "anyArea": "Qualquer região",
+      "empty": "Nenhuma visita aguardando agendamento."
+    }
+  },
+  "form": {
+    "loadFailed": "Não foi possível carregar as opções.",
+    "choose": "Escolher…",
+    "search": "Buscar…",
+    "saveFailed": "O registro não foi salvo.",
+    "missingRequired": "Escolha o cliente e informe um título e uma data de início.",
+    "customer": "Cliente",
+    "address": "Local do serviço",
+    "noAddress": "Sem local",
+    "contact": "Contato",
+    "noContact": "Sem contato",
+    "title": "Título",
+    "description": "Descrição",
+    "priority": "Prioridade",
+    "priorities": {
+      "urgent": "Urgente",
+      "high": "Alta",
+      "normal": "Normal",
+      "low": "Baixa"
+    },
+    "inheritPriority": "Igual à ordem de serviço",
+    "preferredOn": "Data preferida",
+    "preferredTime": "Horário preferido",
+    "times": {
+      "any": "Qualquer horário",
+      "morning": "Manhã",
+      "afternoon": "Tarde",
+      "evening": "Noite"
+    },
+    "estimatedMinutes": "Duração estimada (minutos)",
+    "billingMode": "Faturamento",
+    "billingModes": {
+      "per_job": "Faturar por ordem de serviço",
+      "per_visit": "Faturar por visita",
+      "not_billable": "Não faturável"
+    },
+    "laborItem": "Item de mão de obra",
+    "laborRate": "Valor da mão de obra por hora",
+    "laborRateHint": "Deixe em branco para faturar a mão de obra pelo preço do item",
+    "depositRequired": "Sinal exigido",
+    "qualifications": "Qualificações exigidas",
+    "noQualifications": "Nenhum tipo de qualificação está configurado.",
+    "scopeLines": "Linhas de escopo",
+    "item": "Item",
+    "quantity": "Quantidade",
+    "unitPrice": "Preço unitário",
+    "removeLine": "Remover linha",
+    "addLine": "Adicionar linha",
+    "instructions": "Instruções para o técnico",
+    "windowStart": "Janela de chegada a partir de",
+    "windowEnd": "Janela de chegada até",
+    "addVisit": "Adicionar visita",
+    "discard": "Descartar",
+    "repeat": "Repetição",
+    "repeats": {
+      "daily": "Diária",
+      "weekly": "Semanal",
+      "monthly": "Mensal",
+      "yearly": "Anual"
+    },
+    "interval": "A cada (unidades)",
+    "weekdays": "Em",
+    "weekday": {
+      "0": "Dom",
+      "1": "Seg",
+      "2": "Ter",
+      "3": "Qua",
+      "4": "Qui",
+      "5": "Sex",
+      "6": "Sáb"
+    },
+    "monthlyBy": "Mensalmente em",
+    "monthlyByDay": "Mesmo dia do mês",
+    "monthlyByWeekday": "Mesmo dia da semana do mês",
+    "windowStarts": "Início da janela de chegada",
+    "windowEnds": "Fim da janela de chegada",
+    "visitLines": "Linhas faturadas a cada visita",
+    "effectiveFrom": "Vigente a partir de",
+    "reason": "Motivo",
+    "reasonPlaceholder": "Por que estas condições se aplicam",
+    "saveVersion": "Salvar versão",
+    "startsOn": "Começa em",
+    "endsOn": "Termina em",
+    "createAgreement": "Criar contrato",
+    "createRequest": "Criar solicitação",
+    "createJob": "Criar ordem de serviço"
+  },
+  "request": {
+    "actionFailed": "Não foi possível atualizar a solicitação.",
+    "convert": "Converter em ordem de serviço",
+    "quote": "Iniciar orçamento",
+    "declined": {
+      "title": "Recusar esta solicitação",
+      "reason": "Motivo",
+      "confirm": "Recusar",
+      "action": "Recusar"
+    },
+    "cancelled": {
+      "title": "Cancelar esta solicitação",
+      "reason": "Motivo",
+      "confirm": "Cancelar solicitação",
+      "action": "Cancelar"
+    },
+    "source": {
+      "staff": "Registrada pela equipe",
+      "portal": "Pelo portal do cliente"
+    },
+    "customer": "Cliente",
+    "address": "Local do serviço",
+    "contact": "Contato",
+    "preferred": "Preferência",
+    "time": {
+      "any": "Qualquer horário",
+      "morning": "Manhã",
+      "afternoon": "Tarde",
+      "evening": "Noite"
+    },
+    "received": "Recebida",
+    "job": "Ordem de serviço",
+    "closeReason": "Motivo do encerramento",
+    "assessments": "Visitas de avaliação",
+    "addAssessment": "Adicionar avaliação",
+    "quotes": "Orçamentos",
+    "noQuotes": "Nenhum orçamento ainda. Inicie um orçamento para precificar o serviço em um orçamento nativo."
+  },
+  "quote": {
+    "loadFailed": "Não foi possível carregar o orçamento.",
+    "actionFailed": "Não foi possível atualizar o orçamento.",
+    "terms": "Adicionais e sinal",
+    "convert": "Converter em ordem de serviço",
+    "openJob": "Abrir ordem de serviço",
+    "issueFirst": "Edite as linhas do orçamento e emita-o antes de enviá-lo para aceite.",
+    "decided": "Respondido por {name} em {when}",
+    "sentAt": "Enviado {when}; o link expira {expires}",
+    "depositDue": "Sinal devido {amount}",
+    "optionalHelp": "Marque as linhas que o cliente pode escolher como adicionais opcionais; as demais são obrigatórias.",
+    "deposit": "Sinal",
+    "depositBasis": {
+      "none": "Sem sinal",
+      "percent": "Percentual",
+      "amount": "Valor fixo"
+    },
+    "depositPercent": "Sinal (%)",
+    "depositAmount": "Valor do sinal",
+    "saveTerms": "Salvar condições",
+    "discard": "Descartar",
+    "send": {
+      "action": "Enviar para aceite",
+      "title": "Enviar orçamento para aceite",
+      "signerName": "Nome do signatário",
+      "signerEmail": "E-mail do signatário",
+      "emailed": "O link de aceite foi enviado por e-mail.",
+      "notEmailed": "Não enviado por e-mail: {reason}",
+      "link": "Abrir o link de aceite"
+    }
+  },
+  "job": {
+    "actionFailed": "Não foi possível atualizar a ordem de serviço.",
+    "complete": {
+      "action": "Concluir ordem de serviço"
+    },
+    "reopen": {
+      "title": "Reabrir esta ordem de serviço",
+      "reason": "Motivo",
+      "confirm": "Reabrir",
+      "action": "Reabrir"
+    },
+    "cancel": {
+      "title": "Cancelar esta ordem de serviço",
+      "reason": "Motivo",
+      "confirm": "Cancelar ordem de serviço",
+      "action": "Cancelar"
+    },
+    "tabs": {
+      "label": "Seções da ordem de serviço",
+      "overview": "Visão geral",
+      "visits": "Visitas",
+      "billing": "Faturamento"
+    },
+    "customer": "Cliente",
+    "address": "Local do serviço",
+    "contact": "Contato",
+    "duration": "Duração estimada",
+    "responseDue": "Prazo de resposta",
+    "source": "Origem",
+    "direct": "Criada diretamente",
+    "labor": "Mão de obra",
+    "closeReason": "Motivo do encerramento",
+    "scope": "Escopo",
+    "noScope": "Nenhuma linha de escopo.",
+    "item": "Item",
+    "quantity": "Quantidade",
+    "unitPrice": "Preço unitário",
+    "addVisit": "Adicionar visita",
+    "billingMode": "Faturamento",
+    "billingModes": {
+      "per_job": "Faturar por ordem de serviço",
+      "per_visit": "Faturar por visita",
+      "not_billable": "Não faturável"
+    },
+    "depositRequired": "Sinal exigido",
+    "depositsReceived": "Sinais recebidos",
+    "invoices": "Faturas",
+    "invoiceJob": "Faturar ordem de serviço",
+    "invoiceVisit": "Faturar visita",
+    "visitNumber": "Visita {sequence}",
+    "preview": "Prévia da fatura",
+    "subtotal": "Subtotal antes dos impostos",
+    "previewHelp": "Uma fatura em rascunho é criada; revise, aprove e lance-a pelo painel da fatura e depois aplique aqui qualquer sinal.",
+    "createInvoice": "Criar fatura em rascunho",
+    "discard": "Descartar",
+    "invoiceStatus": {
+      "draft": "Rascunho",
+      "pending_approval": "Aguardando aprovação",
+      "approved": "Aprovada",
+      "posted": "Lançada",
+      "voided": "Anulada"
+    },
+    "visitInvoice": "fatura da visita",
+    "applyDeposits": "Aplicar sinais",
+    "noInvoices": "Nenhuma fatura ainda.",
+    "deposits": "Sinais",
+    "recordDeposit": "Registrar sinal",
+    "noDeposits": "Nenhum sinal registrado.",
+    "noCandidates": "O cliente não tem nenhum pagamento lançado mantido em conta.",
+    "payment": "Pagamento",
+    "linkDeposit": "Registrar como sinal",
+    "depositHelp": "Receba o sinal como um pagamento de cliente mantido em conta em Pagamentos e registre-o aqui; ele é aplicado à fatura da ordem de serviço depois que ela for lançada."
+  },
+  "visit": {
+    "title": "Visita técnica",
+    "sequence": "Visita {sequence}",
+    "none": "Nenhuma visita.",
+    "loadFailed": "Não foi possível carregar a visita.",
+    "actionFailed": "Não foi possível atualizar a visita.",
+    "loading": "Carregando…",
+    "move": {
+      "dispatched": "Despachar",
+      "en_route": "Estou a caminho",
+      "on_site": "Cheguei",
+      "unable_to_complete": "Não foi possível concluir"
+    },
+    "unable": {
+      "title": "Não foi possível concluir a visita",
+      "reason": "O que impediu o serviço",
+      "confirm": "Registrar"
+    },
+    "cancel": {
+      "title": "Cancelar esta visita",
+      "reason": "Motivo",
+      "confirm": "Cancelar visita",
+      "action": "Cancelar visita"
+    },
+    "review": {
+      "pending": "Conclusão aguardando revisão",
+      "approved": "Conclusão aprovada",
+      "rejected": "Conclusão rejeitada",
+      "pendingRemedy": "Um revisor decide em Aprovações antes de a visita ser faturada."
+    },
+    "customer": "Cliente",
+    "job": "Ordem de serviço",
+    "request": "Solicitação",
+    "address": "Endereço",
+    "contact": "Contato",
+    "arrivalWindow": "Janela de chegada",
+    "duration": "Duração estimada",
+    "responseDue": "Prazo de resposta",
+    "technicians": "Técnicos",
+    "unassigned": "Ainda não atribuída",
+    "instructions": "Instruções",
+    "workNotes": "Notas do serviço",
+    "outcome": "Resultado",
+    "labor": "Mão de obra",
+    "hours": "{hours} h",
+    "laborStatus": {
+      "draft": "Rascunho",
+      "submitted": "Enviado",
+      "approved": "Aprovado",
+      "rejected": "Rejeitado"
+    },
+    "invoice": "Fatura",
+    "notices": "Avisos ao cliente",
+    "noticeKind": {
+      "arrival_window": "Janela de chegada",
+      "en_route": "A caminho"
+    },
+    "noticeStatus": {
+      "queued": "Na fila",
+      "sent": "Enviado",
+      "failed": "Falhou",
+      "suppressed": "Suprimido",
+      "not_enabled": "Não habilitado"
+    },
+    "history": "Histórico",
+    "parts": "Peças",
+    "addPart": "Adicionar peça",
+    "noParts": "Nenhuma peça registrada.",
+    "notBilled": "não faturada",
+    "issued": "baixada do estoque",
+    "removePart": "Remover peça",
+    "part": "Peça",
+    "stockLocation": "Retirada de",
+    "quantity": "Quantidade",
+    "billable": "Cobrar esta peça do cliente",
+    "savePart": "Registrar peça",
+    "discard": "Descartar",
+    "complete": {
+      "title": "Concluir a visita",
+      "notesPlaceholder": "O que foi encontrado e feito",
+      "labor": "Horas de mão de obra",
+      "myLabor": "Minhas horas",
+      "hoursFor": "Horas de {name}",
+      "hoursUnit": "horas",
+      "laborHelp": "A mão de obra vai para os quadros de horas para aprovação; as peças são baixadas do estoque quando você conclui.",
+      "action": "Concluir visita"
+    },
+    "photos": "Fotos e documentos",
+    "uploading": "Enviando…",
+    "addPhoto": "Adicionar foto",
+    "noPhotos": "Nenhuma foto ainda.",
+    "signature": {
+      "title": "Aceite do cliente",
+      "image": "Assinatura de {name}",
+      "inPerson": "Assinar neste dispositivo",
+      "email": "Enviar link de assinatura por e-mail",
+      "emailTitle": "Enviar o link de assinatura por e-mail",
+      "recipient": "E-mail do cliente",
+      "send": "Enviar",
+      "emailed": "O link de assinatura foi enviado por e-mail.",
+      "notEmailed": "Não enviado por e-mail: {detail}",
+      "openLink": "Abrir link de assinatura",
+      "open": "Há um link de assinatura aberto até {expires}."
+    }
+  },
+  "agreement": {
+    "actionFailed": "Não foi possível atualizar o contrato.",
+    "generate": "Gerar visitas agora",
+    "generated": "{count, plural, =0 {Nenhuma nova visita era necessária.} one {# visita gerada.} other {# visitas geradas.}}",
+    "newVersion": "Nova versão",
+    "ended": {
+      "title": "Encerrar este contrato",
+      "reason": "Motivo",
+      "confirm": "Encerrar contrato",
+      "action": "Encerrar"
+    },
+    "cancelled": {
+      "title": "Cancelar este contrato",
+      "reason": "Motivo",
+      "confirm": "Cancelar contrato",
+      "action": "Cancelar"
+    },
+    "customer": "Cliente",
+    "address": "Local do serviço",
+    "term": "Vigência",
+    "openEnded": "por prazo indeterminado",
+    "generatedThrough": "Visitas geradas até",
+    "job": "Ordem de serviço",
+    "closeReason": "Motivo do encerramento",
+    "versions": "Condições",
+    "effectiveFrom": "Vigente a partir de {date}",
+    "repeat": {
+      "daily": "{interval, plural, one {Diária} other {A cada # dias}}",
+      "weekly": "{interval, plural, one {Semanal} other {A cada # semanas}}",
+      "monthly": "{interval, plural, one {Mensal} other {A cada # meses}}",
+      "yearly": "{interval, plural, one {Anual} other {A cada # anos}}"
+    },
+    "visits": "Visitas"
+  },
+  "myVisits": {
+    "loadFailed": "Não foi possível carregar suas visitas.",
+    "previous": "Dia anterior",
+    "today": "Hoje",
+    "next": "Próximo dia",
+    "loading": "Carregando…",
+    "emptyTitle": "Nenhuma visita agendada",
+    "emptyDescription": "As visitas que seu despachante agenda para você aparecem aqui.",
+    "directions": "Como chegar"
+  },
+  "portal": {
+    "title": "Solicitações de serviço",
+    "back": "Voltar",
+    "newTitle": "Solicitar serviço",
+    "listTitle": "Suas solicitações",
+    "empty": "Você ainda não tem solicitações de serviço.",
+    "nextVisit": "próxima visita {when}",
+    "submit": "Enviar solicitação",
+    "submitting": "Enviando…",
+    "submitted": "Solicitação {number} recebida. Entraremos em contato para agendá-la.",
+    "fields": {
+      "title": "Do que você precisa?",
+      "titlePlaceholder": "Por exemplo: aquecedor não está esquentando",
+      "description": "Detalhes",
+      "address": "Local",
+      "preferredOn": "Data preferida",
+      "preferredTime": "Horário preferido",
+      "urgent": "É urgente"
+    },
+    "time": {
+      "any": "Qualquer horário",
+      "morning": "Manhã",
+      "afternoon": "Tarde",
+      "evening": "Noite"
+    },
+    "status": {
+      "new": "Recebida",
+      "assessment_scheduled": "Avaliação agendada",
+      "assessed": "Avaliada",
+      "quoted": "Orçamento enviado",
+      "converted": "Serviço agendado",
+      "declined": "Recusada",
+      "cancelled": "Cancelada",
+      "completed": "Concluída"
+    }
+  },
+  "sign": {
+    "quoteTitle": "Orçamento de serviço",
+    "quoteNote": "Seu aceite é registrado com seu nome, o horário e o orçamento exatamente como exibido.",
+    "linkInvalid": "Este link é inválido ou expirou.",
+    "answerFailed": "Não foi possível registrar sua resposta.",
+    "loading": "Carregando…",
+    "acceptedThanks": "Obrigado — o orçamento foi aceito. Entraremos em contato para agendar o serviço.",
+    "declinedThanks": "Obrigado — registramos que você recusou o orçamento.",
+    "quoteHeading": "Orçamento {number}",
+    "preparedFor": "Preparado para {name}",
+    "addOns": "Adicionais opcionais",
+    "total": "Total",
+    "depositDue": "Um sinal de {amount} é devido no aceite.",
+    "yourName": "Seu nome",
+    "clear": "Limpar",
+    "accept": "Aceitar orçamento",
+    "decline": "Recusar",
+    "expires": "Este link expira em {date}.",
+    "technicians": "Técnicos: {names}",
+    "workDone": "Serviço realizado",
+    "parts": "Peças utilizadas",
+    "quantity": "Quantidade",
+    "signPrompt": "Assine para confirmar que o serviço foi concluído",
+    "comment": "Comentário (opcional)",
+    "sign": "Dar aceite",
+    "signing": "Assinando…",
+    "signFailed": "Não foi possível registrar a assinatura.",
+    "signedThanks": "Obrigado — o aceite da visita foi registrado."
+  }
+}

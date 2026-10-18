@@ -172,7 +172,7 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
     importVia: 'none',
     formSections: [
       { titleKey: 'customerPortalSections.branding', fields: ['portalName', 'effectiveFrom'] },
-      { titleKey: 'customerPortalSections.sections', fields: ['sectionsInvoices', 'sectionsPaymentMethods', 'sectionsSubscriptions', 'sectionsUsage', 'sectionsOrders', 'sectionsReturns', 'sectionsGiftCards'] },
+      { titleKey: 'customerPortalSections.sections', fields: ['sectionsInvoices', 'sectionsPaymentMethods', 'sectionsSubscriptions', 'sectionsUsage', 'sectionsOrders', 'sectionsReturns', 'sectionsGiftCards', 'sectionsServiceRequests'] },
       { titleKey: 'customerPortalSections.returns', fields: ['returnWindowDays', 'returnReasons', 'resolutionRefund', 'resolutionExchange', 'resolutionStoreCredit', 'storeCreditBonusPercent'] },
       { titleKey: 'customerPortalSections.saveOffers', fields: ['saveOffers'] },
     ],
@@ -186,6 +186,7 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
       { key: 'sectionsOrders', labelKey: 'customerPortalFields.sectionsOrders', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
       { key: 'sectionsReturns', labelKey: 'customerPortalFields.sectionsReturns', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
       { key: 'sectionsGiftCards', labelKey: 'customerPortalFields.sectionsGiftCards', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'sectionsServiceRequests', labelKey: 'customerPortalFields.sectionsServiceRequests', kind: 'boolean', defaultValue: true, booleanStyle: 'switch', helpTextKey: 'customerPortalFields.sectionsServiceRequestsHelp' },
       { key: 'returnWindowDays', labelKey: 'customerPortalFields.returnWindowDays', kind: 'integer', required: true, min: 0, max: 365, defaultValue: 30 },
       // Return reasons apply only while portal returns are on; a hidden list
       // is cleared rather than sent as an empty requirement.

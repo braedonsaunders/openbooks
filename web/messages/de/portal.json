@@ -30,7 +30,8 @@
     "subscriptions": "Abos",
     "orders": "Bestellungen",
     "returns": "Retouren",
-    "giftCards": "Geschenkkarten"
+    "giftCards": "Geschenkkarten",
+    "serviceRequests": "Serviceanfragen"
   },
   "invoices": {
     "title": "Rechnungen",
