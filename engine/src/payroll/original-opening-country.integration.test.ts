@@ -93,7 +93,7 @@ async function qualifyOriginalReporting(f: AdoptionFixture, packet: Awaited<Retu
   return filingAccountId;
 }
 
-const canadianAmounts: Record<string, string>[] = [{ taxableYtd: '12000', taxYtd: '125' }, { taxYtd: '125' },
+const canadianAmounts: Record<string, string>[] = [{ taxableYtd: '12000', taxYtd: '125' }, { taxableYtd: '12000' },
   { employerCppYtd: '75', employerEiYtd: '25' }];
 for (const amounts of canadianAmounts) {
   test(`native original Canadian opening retains its amounts after country and owner changes: ${JSON.stringify(amounts)}`, { skip }, async () => {
@@ -201,19 +201,31 @@ test('an all-zero unsigned opening is inert for every year-end population', { sk
 });
 
 
-test('a source-qualified CNT carry-in remains material even when every generic annual opening is zero', {skip}, async()=>{
+test('a source-qualified CNT carry-in is retained exactly beside the remuneration it was assessed on', {skip}, async()=>{
   const f=await withBypassContext(setup);
   try {await withOrgContext(f.orgId,async()=>{
+    // CNT is assessed on remuneration the original employer paid, so its
+    // carry-in is certified on the opening that records that remuneration.
+    // An all-zero carry-in records no opening and so cannot anchor one.
     assert.deepEqual((await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,
       rows:[{employeePartyId:f.employeeId,amounts:{taxableYtd:'0'}}]})).errors,[]);
+    assert.equal((await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,
+      taxYear:2026,allowedSubsidiaryIds:null})).record,null);
+    const amounts={taxableYtd:'725.25'};
+    assert.deepEqual((await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,
+      rows:[{employeePartyId:f.employeeId,amounts}]})).errors,[]);
     const allocations=caAllocations.map(row=>row.programKey==='ca_cnt'?{...row,amount:'725.25'}:row);
-    const packet=await openingPacket(f,{taxableYtd:'0'},
+    const packet=await openingPacket(f,amounts,
       {originalCountry:'CA',originalCurrency:'CAD',coverageStart:'2026-01-01',coverageEnd:'2026-06-30',coverageComplete:true},allocations);
     await qualifyOpeningEmployerAuthority({...packet,subsidiaryId:f.subsidiaryId});
     await qualifyOpeningLevySourceAuthority(packet);
     const source=await readEmployeeOpeningLevySources(db,{orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026});
     assert.equal(source.hasMaterialHistory,true);
     assert.equal(employeeOpeningLevyAmount(source,{programKey:'ca_cnt',region:'QC'}),'725.2500');
-    assert.deepEqual(await t4Slips(f.orgId,2026),[], 'a levy-only carry-in must not invent employee T4 income or require RP allocation');
+    assert.equal(employeeOpeningLevyAmount(source,{programKey:'ca_wcb',region:'QC'}),'0.0000',
+      'the CNT carry-in is not workers-compensation assessable history');
+    assert.equal(source.openingSnapshot?.taxable_ytd,'725.2500','the levy certificate leaves the retained annual amounts unchanged');
+    await assert.rejects(t4Slips(f.orgId,2026),/current Canadian original reporting source is missing/,
+      'the remuneration stays reportable only through its qualified original RP and province allocation');
   });} finally {await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });

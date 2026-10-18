@@ -77,7 +77,10 @@ for (const originalCountry of ['CA', 'US'] as const) {
         assert.equal((await db.execute(sql`update subsidiaries set country='US',base_currency='USD'
           where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`)).rows.length, 1);
         const ein = await seedUsEinAccount(f.orgId, f.actorId, f.subsidiaryId, '12-3456789');
-        allocations = [{ programKey: 'us_futa', region: 'US', filingAccountId: ein, federalAccountId: ein, amount: amounts.insurableYtd }];
+        // The original US report states its unemployment wages for FUTA and
+        // for the state that taxed them.
+        allocations = [{ programKey: 'us_futa', region: 'US', filingAccountId: ein, federalAccountId: ein, amount: amounts.insurableYtd },
+          { programKey: 'us_sui', region: 'TX', filingAccountId: null, federalAccountId: ein, amount: amounts.insurableYtd }];
       }
       const certified = await packet(f, amounts, { originalCountry, originalCurrency: originalCountry === 'CA' ? 'CAD' : 'USD',
         coverageStart: '2026-01-01', coverageEnd: '2026-05-30', coverageComplete: true }, allocations);
