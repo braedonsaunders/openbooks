@@ -1156,6 +1156,8 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
   employeeName: string;
   terminatedOn: string | null;
   lastPayDate: string | null;
+  /** The recorded separation event's facts status; null when none is recorded yet. */
+  factsStatus: string | null;
 }[]> {
   const rows = (await db.execute<{ id: string; display_name: string; country: string | null; terminated_on: string | null; last_pay_date: string | null }>(sql`
     select p.id, p.display_name, prof.country as country, er.terminated_on::text as terminated_on,
@@ -1175,9 +1177,9 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
      group by p.id, p.display_name, prof.country, er.terminated_on
      order by p.display_name
   `));
-  const events=(await db.execute<{id:string;employeePartyId:string;employeeName:string;lastDay:string}>(sql`
+  const events=(await db.execute<{id:string;employeePartyId:string;employeeName:string;lastDay:string;status:string}>(sql`
     select e.id,e.employee_party_id as "employeePartyId",p.display_name as "employeeName",
-      e.last_insurable_earnings_on::text as "lastDay"
+      e.last_insurable_earnings_on::text as "lastDay",e.status
     from payroll_roe_separation_events e join parties p on p.org_id=e.org_id and p.id=e.employee_party_id
     where e.org_id=${orgId} and extract(year from e.interruption_on)::int=${taxYear}
       and e.status in ('draft','confirmed','issued') order by p.display_name,e.interruption_on,e.id`)).rows;
@@ -1194,9 +1196,9 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
   }
   return [
     ...events.map(e=>({roeRowId:roeEventRow(e.employeePartyId,e.id),eventId:e.id,employeePartyId:e.employeePartyId,
-      employeeName:e.employeeName,terminatedOn:e.lastDay,lastPayDate:null})),
+      employeeName:e.employeeName,terminatedOn:e.lastDay,lastPayDate:null,factsStatus:e.status})),
     ...rows.rows.filter(row=>!declaredEmployees.has(row.id)).map(row=>({roeRowId:row.id,eventId:null,
-      employeePartyId:row.id,employeeName:row.display_name,terminatedOn:row.terminated_on,lastPayDate:row.last_pay_date})),
+      employeePartyId:row.id,employeeName:row.display_name,terminatedOn:row.terminated_on,lastPayDate:row.last_pay_date,factsStatus:null})),
   ];
 }
 

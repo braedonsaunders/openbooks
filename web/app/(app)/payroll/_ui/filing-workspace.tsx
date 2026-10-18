@@ -490,7 +490,7 @@ export function FilingSection({
       header: t('issue.reason'),
       cell: (row: FilingRow) => {
         const code = issues.reasons[issues.issueKey(section, row)]
-        if (!code) return <span className="text-slate-400">{t('issue.notIncluded')}</span>
+        if (!code) return <span className="text-slate-400" title={t('issue.notIncluded')}>—</span>
         const label = section.issue!.reasonCodes.find((reason) => reason.code === code)?.label
         return <Badge variant="outline">{code}{label ? ` · ${label}` : ''}</Badge>
       },

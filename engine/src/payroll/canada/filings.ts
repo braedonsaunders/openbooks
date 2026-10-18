@@ -231,6 +231,13 @@ async function roeSlip(orgId: string, _taxYear: number, rowId: string): Promise<
   };
 }
 
+const ROE_FACTS_STATUS_LABELS: Record<string, string> = {
+  none: "Needs review",
+  draft: "Draft",
+  confirmed: "Confirmed",
+  issued: "Issued",
+};
+
 async function roePopulation(orgId: string, taxYear: number): Promise<PayrollFilingData> {
   const candidates = await roeCandidates(orgId, taxYear);
   return {
@@ -238,12 +245,16 @@ async function roePopulation(orgId: string, taxYear: number): Promise<PayrollFil
     columns: [
       { key: "employee", label: "Employee" },
       { key: "lastDay", label: "Last day paid" },
+      { key: "separationFacts", label: "Separation dates" },
     ],
     rows: candidates.map((candidate) => ({
       roeRowId: candidate.roeRowId,
       employeePartyId: candidate.employeePartyId,
       employee: candidate.employeeName,
       lastDay: candidate.terminatedOn ?? candidate.lastPayDate,
+      // Where the employee's ROE stands before it can be issued: no event yet
+      // means the dates still need the employer's review in the drawer.
+      separationFacts: ROE_FACTS_STATUS_LABELS[candidate.factsStatus ?? "none"] ?? candidate.factsStatus,
     })),
   };
 }
