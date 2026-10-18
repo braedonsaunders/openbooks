@@ -28,14 +28,24 @@
  *          are checked; dynamic keys (identifiers, ternaries over
  *          identifiers) resolve at runtime through listSource /
  *          entityListSource, which already throw on unknown types.
+ *   rule5  a native date input anywhere in product code (web/app,
+ *          web/components, web/lib, each packages/<name>/src; non-test): a JSX
+ *          `type="date"` (or a `type={…}` expression naming 'date'), a DOM
+ *          `.type = 'date'` or `setAttribute('type', 'date')`, or a local
+ *          input helper handed 'date' for the `type={type}` it renders.
+ *          Date entry
+ *          renders DateField (web/components/date-field.tsx), which reads
+ *          dates typed in the viewer's format, carries the date keys and
+ *          the calendar, and submits ISO values in forms.
  *
  * Rules 1-3 reconcile against scripts/check-ui-reuse.allowlist.json, keyed
  * by file path with a reviewed reason. The ratchet cuts both ways: a
  * violating file NOT on the list fails immediately, and a list entry whose
  * file no longer violates ALSO fails ("fixed — remove from the
  * allow-list"), so the list cannot rot into permanent amnesty. Each section
- * carries a ceiling comment: the list may only SHRINK. Rule 4 has no
- * allow-list: an unregistered key fails and names the key.
+ * carries a ceiling comment: the list may only SHRINK. Rules 4 and 5 have no
+ * allow-list: an unregistered key or a native date input fails and names
+ * the site.
  *
  *   node scripts/check-ui-reuse.mjs
  */
@@ -231,6 +241,40 @@ function rendersSharedSetupList(path, text, stripped) {
     && renderedImport("ListPageLayout", "web/components/page-layout");
 }
 
+const NATIVE_DATE_PATTERNS = [
+  // JSX attribute, literal or expression: type="date", type={'date'}, type={kind === 'date' ? 'date' : 'text'}
+  /(?:^|[\s{(,])type\s*=\s*(?:"date"|'date'|\{[^{}]*["'`]date["'`][^{}]*\})/g,
+  // DOM writes: input.type = 'date', input.setAttribute('type', 'date')
+  /\.type\s*=\s*["'`]date["'`]/g,
+  /setAttribute\(\s*["'`]type["'`]\s*,\s*["'`]date["'`]\s*\)/g,
+];
+
+/**
+ * Native date inputs in one file. Reads comment-blanked source (the value
+ * is a string literal), so prose about `<input type="date">` never counts.
+ */
+export function scanNativeDateInputs(path, text) {
+  const code = stripComments(text);
+  const violations = [];
+  for (const pattern of NATIVE_DATE_PATTERNS) {
+    pattern.lastIndex = 0;
+    let match;
+    while ((match = pattern.exec(code))) {
+      violations.push({ rule: "native-date-input", path, line: lineOf(code, match.index + (match[0].length - match[0].trimStart().length)) });
+    }
+  }
+  // A local field helper (`field(name, label, type = "text")`) that renders
+  // `type={type}` and is called with 'date' renders a native date input.
+  if (/(?:^|[\s{(,])type\s*=\s*\{\s*[A-Za-z_$][\w$]*\s*\}/.test(code)) {
+    const helperArg = /[(,]\s*["'`]date["'`]\s*[,)]/g;
+    let match;
+    while ((match = helperArg.exec(code))) {
+      violations.push({ rule: "native-date-input", path, line: lineOf(code, match.index) });
+    }
+  }
+  return violations.sort((a, b) => a.line - b.line);
+}
+
 /** All violations in one file of comment/string-blanked source. */
 export function scanText(path, text, registeredKeys = new Set()) {
   const stripped = stripCode(text);
@@ -307,6 +351,24 @@ function discoverScopeFiles() {
         !/\.test\.[tj]sx?$/.test(file) &&
         !/\.d\.tsx?$/.test(file) &&
         file !== SELF,
+    );
+}
+
+/** Product source scanned for native date inputs. */
+function discoverDateScopeFiles() {
+  return execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "web/app", "web/components", "web/lib", "packages"],
+    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  )
+    .split("\0")
+    .filter(Boolean)
+    .filter(
+      (file) =>
+        /\.(tsx?|jsx?|mjs)$/.test(file) &&
+        (!file.startsWith("packages/") || /^packages\/[^/]+\/src\//.test(file)) &&
+        !/\.test\.[tj]sx?$/.test(file) &&
+        !/\.d\.tsx?$/.test(file),
     );
 }
 
@@ -441,6 +503,25 @@ export function main() {
     (abs) => readFileSync(abs, "utf8"),
   );
 
+  const nativeDates = [];
+  for (const file of discoverDateScopeFiles()) {
+    let text;
+    try {
+      text = readFileSync(join(repoRoot(), file), "utf8");
+    } catch {
+      continue;
+    }
+    nativeDates.push(...scanNativeDateInputs(file, text));
+  }
+  if (nativeDates.length > 0) {
+    failed = true;
+    console.error(
+      "FAIL: native date inputs in product code. Render DateField from web/components/date-field.tsx " +
+        "(typed entry in the viewer's format, date keys, calendar and ISO form values):",
+    );
+    for (const v of nativeDates) console.error(`  ${v.path}:${v.line}`);
+  }
+
   const byRule = (rule) => violations.filter((v) => v.rule === rule);
   const tablePaths = [...new Set(byRule("raw-table").map((v) => v.path))].sort();
   const dialogPaths = [...new Set(
@@ -482,7 +563,7 @@ export function main() {
   console.log(
     `PASS: shared UI layer intact across scope ` +
       `(${tablePaths.length} grandfathered table file(s), ${dialogPaths.length} dialog file(s), ` +
-      `${bespokePaths.length} bespoke page(s) allow-listed).`,
+      `${bespokePaths.length} bespoke page(s) allow-listed; no native date inputs).`,
   );
 }
 

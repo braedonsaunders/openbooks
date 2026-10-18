@@ -6,6 +6,7 @@ import {
   TABLE_CEILING,
   extractRegistryKeys,
   loadAllowlist,
+  scanNativeDateInputs,
   scanText,
   sharedPageComposition,
 } from './check-ui-reuse.mjs'
@@ -142,4 +143,29 @@ test('registered server and prepared adapters retain unknown-source refusal', ()
     const violations = scanText('web/components/x.tsx', `<${name} source="unregistered"/>`, KEYS)
     assert.equal(violations.filter(value => value.rule === 'unknown-list-key').length, 1)
   }
+})
+
+test('native date inputs fire in every spelling and name their line', () => {
+  const sites = (text) => scanNativeDateInputs('web/components/a.tsx', text).map((v) => `${v.rule}:${v.line}`)
+  assert.deepEqual(sites('export const A = () => <input type="date" />'), ['native-date-input:1'])
+  assert.deepEqual(sites("export const A = () => <Input\n  value={v}\n  type='date' />"), ['native-date-input:3'])
+  assert.deepEqual(sites("export const A = () => <Input type={'date'} />"), ['native-date-input:1'])
+  assert.deepEqual(sites("export const A = () => <Input type={kind === 'date' ? 'date' : 'text'} />"), ['native-date-input:1'])
+  assert.deepEqual(sites("const el = document.createElement('input')\nel.type = 'date'"), ['native-date-input:2'])
+  assert.deepEqual(sites("el.setAttribute('type', 'date')"), ['native-date-input:1'])
+  assert.deepEqual(
+    sites('const field = (name, type = "text") => <Input id={name} type={type} />\nreturn field("effectiveOn", "date")'),
+    ['native-date-input:2'],
+    'a local helper handed the date type renders a native date input',
+  )
+})
+
+test('the shared date field, date-typed data and prose stay clean', () => {
+  const sites = (text) => scanNativeDateInputs('web/components/a.tsx', text)
+  assert.deepEqual(sites('import { DateField } from "./date-field"\nexport const A = () => <DateField value={v} onChange={set} />'), [])
+  assert.deepEqual(sites("const column = { key: 'workFrom', type: 'date', width: '130px' }"), [], 'a grid column type is data, not an input')
+  assert.deepEqual(sites('// replaces a bare <input type="date"> with the shared field\nexport const A = 1'), [])
+  assert.deepEqual(sites('export const A = () => <input type="datetime-local" /><Input type="time" />'), [], 'date-time and time inputs are out of scope')
+  assert.deepEqual(sites("export const A = () => <Input type={kind === 'number' ? 'number' : 'text'} />"), [])
+  assert.deepEqual(sites("const v = str(props, 'date')\nexport const A = () => <Input value={v} />"), [], 'a date-named read is not an input type')
 })
