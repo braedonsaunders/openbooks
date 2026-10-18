@@ -16,7 +16,9 @@ import { controlDeps } from "../ledger/document-service.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { runRecordFlows } from "../flows/run.ts";
-import { subsidiaryBaseCurrency } from "../stored-value/fx-amounts.ts";
+import { subsidiaryFunctionalCurrency } from "../ledger/document-fx.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { carryingAmountForSettlement, rateMeasuringExactly } from "./settlement-policy.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { applyStandaloneCredits, creditSettlementState } from "./credit-settlement.ts";
@@ -33,6 +35,15 @@ import { applyStandaloneCredits, creditSettlementState } from "./credit-settleme
  * followed by a standalone application of that credit to the invoice. No cash
  * moves, so the settlement lives in the applications ledger like every other
  * credit settlement.
+ *
+ * A foreign-currency invoice is written off in its own currency at the rate its
+ * remaining receivable is carried at (its booked amount net of what has been
+ * applied, never a revaluation, which is unrealized and reverses): the credit
+ * memo records that rate as its explicit rate, so its receivable leg relieves
+ * exactly the carrying amount it settles and the write-off expense is that
+ * carrying amount, the same carrying-amount convention every application of a
+ * credit uses. The receivable clears in both currencies with no exchange
+ * difference left to realize.
  *
  * The credit memo is the native carrier: it reuses the customer credit posting
  * rule, numbering, audit, void and the credit-application ledger rather than
@@ -243,16 +254,14 @@ export async function writeOffInvoiceInTransaction(
     if (!invoice.subsidiaryId) {
       throw new PaymentError(`${invoice.documentNumber} has no legal entity; a write-off must post to one`);
     }
-    const baseCurrency = await subsidiaryBaseCurrency(db, orgId, invoice.subsidiaryId);
-    if (invoice.currency !== baseCurrency) {
-      throw new PaymentError(
-        `${invoice.documentNumber} is in ${invoice.currency}; invoice write-offs are supported only for invoices ` +
-          `in the legal entity's base currency (${baseCurrency})`,
-      );
+    const functionalCurrency = await subsidiaryFunctionalCurrency(db, orgId, invoice.subsidiaryId);
+    if (!functionalCurrency) {
+      throw new PaymentError(`${invoice.documentNumber}'s legal entity has no functional currency; set its base currency in Setup, then write off the invoice again`);
     }
+    const foreign = invoice.currency !== functionalCurrency;
 
-    const openItems = (await db.execute<{ id: string; amount: string }>(sql`
-      select jl.id, abs(jl.amount)::text as amount
+    const openItems = (await db.execute<{ id: string; amount: string; txnAmount: string }>(sql`
+      select jl.id, abs(jl.amount)::text as amount, abs(jl.txn_amount)::text as "txnAmount"
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${orgId} and je.id = ${invoice.entryId} and je.status = 'posted' -- Live entries only: only a current invoice open item authorizes a write-off.
@@ -265,12 +274,16 @@ export async function writeOffInvoiceInTransaction(
       );
     }
     const openLine = openItems[0]!;
-    const applied = (await db.execute<{ applied: string }>(sql`
-      select coalesce(sum(${appliedLegAmountExpr("a", sql`${openLine.id}`, "base")}), 0)::text as applied
+    // The remaining receivable in both frames: what is still owed in the
+    // invoice's currency, and the functional amount it is carried at.
+    const applied = (await db.execute<{ applied: string; applied_txn: string }>(sql`
+      select coalesce(sum(${appliedLegAmountExpr("a", sql`${openLine.id}`, "base")}), 0)::text as applied,
+             coalesce(sum(${appliedLegAmountExpr("a", sql`${openLine.id}`, "transaction")}), 0)::text as applied_txn
         from applications a
        where a.org_id = ${orgId} and a.unapplied_at is null
-         and (a.to_line_id = ${openLine.id} or a.from_line_id = ${openLine.id})`)).rows[0]!.applied;
-    const openBalance = fromUnits(toUnits(openLine.amount) - toUnits(applied));
+         and (a.to_line_id = ${openLine.id} or a.from_line_id = ${openLine.id})`)).rows[0]!;
+    const openCarrying = fromUnits(toUnits(openLine.amount) - toUnits(applied.applied));
+    const openBalance = fromUnits(toUnits(openLine.txnAmount) - toUnits(applied.applied_txn));
 
     // A key that already produced a credit memo is a replay: its amount was
     // checked against the balance when it first posted, and that balance is now
@@ -286,9 +299,39 @@ export async function writeOffInvoiceInTransaction(
       await loadControlAccountsForRoles(db, orgId, ["allowanceForDoubtfulAccounts", "badDebtExpense"]),
     );
 
+    // A foreign-currency invoice is written off in its own currency at the
+    // rate its remaining receivable is carried at, so the credit relieves
+    // exactly the carrying amount it settles and the write-off expense is
+    // that carrying amount: derecognition at book value, with no exchange
+    // difference to realize. (Settling at the write-off date's spot rate
+    // would invent a realized gain or loss on a balance that was never
+    // collected.) The rate is recorded as the credit memo's explicit rate
+    // evidence, which posting re-validates like any recorded rate.
+    let explicitFx: DocumentEditInput["explicitFx"] = undefined;
+    if (foreign && !priorCredit) {
+      if (!(await lockAndCheckOrgFeature(db, orgId, "multiCurrency"))) {
+        throw new PaymentError(
+          `${invoice.documentNumber} is in ${invoice.currency}; writing it off records the receivable's carrying rate, ` +
+            `which needs Multi-currency — turn it on in Company Settings → Features, then write off the invoice again`,
+        );
+      }
+      const carrying = carryingAmountForSettlement(openCarrying, openBalance, amount);
+      explicitFx = {
+        rate: rateMeasuringExactly(amount, carrying).rate,
+        source: "Receivable carrying rate",
+        reason: `The rate ${invoice.documentNumber}'s remaining receivable is carried at, so the write-off relieves its carrying amount`,
+        fromCurrency: invoice.currency,
+        toCurrency: functionalCurrency,
+        rateDate: date,
+      };
+    }
+
     const body: DocumentEditInput = {
       partyId: invoice.partyId,
       subsidiaryId: invoice.subsidiaryId,
+      // The credit is stated in the invoice's own currency.
+      ...(foreign ? { currency: invoice.currency } : {}),
+      ...(explicitFx ? { explicitFx } : {}),
       documentDate: date,
       referenceNumber: invoice.documentNumber,
       memo: `Write-off of ${invoice.documentNumber}: ${reason}`,

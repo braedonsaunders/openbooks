@@ -92,6 +92,28 @@ export function sourceSettlingTarget(target: string, rate: string): { source: st
   return { source: fromUnits(source), settles: mulRate(fromUnits(source), rate) };
 }
 
+/**
+ * The ten-place rate that measures `transaction` at exactly `carrying`
+ * (`mulRate(transaction, rate) === carrying`): the rate a balance is carried
+ * at, recovered from its two frames so a document posted at it clears the
+ * carrying amount to the minor unit. The nearest rate when no ten-place rate
+ * is exact (only for amounts beyond the precision a rate can express).
+ */
+export function rateMeasuringExactly(transaction: string, carrying: string): { rate: string; exact: boolean } {
+  const amount = toUnits(transaction);
+  const base = toUnits(carrying);
+  if (amount <= 0n || base <= 0n) throw new PaymentError("a carrying rate needs positive transaction and carrying amounts");
+  const scale = 10_000_000_000n;
+  const nearest = (base * scale + amount / 2n) / amount;
+  const render = (units: bigint) => `${units / scale}.${(units % scale).toString().padStart(10, "0")}`;
+  for (let step = 0n; step <= 1000n; step += 1n) {
+    for (const candidate of step === 0n ? [nearest] : [nearest - step, nearest + step]) {
+      if (candidate > 0n && toUnits(mulRate(transaction, render(candidate))) === base) return { rate: render(candidate), exact: true };
+    }
+  }
+  return { rate: render(nearest > 0n ? nearest : 1n), exact: false };
+}
+
 /** Settlement-rate evidence for a cross-currency application, as the payment drawers record it. */
 export interface CrossCurrencyEvidence {
   rate: string;

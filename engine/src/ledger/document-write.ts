@@ -1271,7 +1271,7 @@ export async function applyDocumentEdit(
   if (body.explicitFx !== undefined && body.explicitFx !== null) {
     if (!(await isFeatureEnabled(orgId, 'multiCurrency'))) throw new DocumentEditError(404, 'not found')
     if (!EXPLICIT_FX_DOCUMENT_KINDS.has(current.kind)) {
-      throw new DocumentEditError(422, 'an explicit exchange rate can be recorded only on customer invoices and vendor bills')
+      throw new DocumentEditError(422, 'an explicit exchange rate can be recorded only on customer invoices, vendor bills, customer credits and vendor credits')
     }
   }
 

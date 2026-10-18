@@ -41,7 +41,7 @@ test("a request refuses a conversion, date, kind or entity it was not quoted for
   refuse({ ...request, rate: "0" }, /positive exact decimal/);
   refuse({ ...request, source: " " }, /where the exchange rate came from/);
   refuse({ ...request, reason: "short" }, /8 to 500 characters/);
-  refuse(request, /only on customer invoices and vendor bills/, "customer_credit");
+  refuse(request, /only on customer invoices, vendor bills, customer credits and vendor credits/, "cash_sale");
   refuse(request, /assign the document an active subsidiary/, "vendor_bill", null);
   refuse(request, /functional currency of its legal entity, so it has no exchange rate/, "vendor_bill",
     { ...identity, currency: "CAD" });
@@ -95,5 +95,6 @@ test("posting refuses evidence that no longer describes the posting or the store
   assert.match(documentFxPostingRefusal("vendor_bill", evidence, { ...identity, functionalCurrency: "EUR" }, "1.3525")!,
     /legal entity/);
   assert.match(documentFxPostingRefusal("vendor_bill", evidence, identity, "1.36")!, /differs from its recorded rate evidence/);
-  assert.match(documentFxPostingRefusal("customer_credit", evidence, identity, "1.3525")!, /only on customer invoices and vendor bills/);
+  assert.match(documentFxPostingRefusal("cash_sale", evidence, identity, "1.3525")!, /only on customer invoices, vendor bills, customer credits, vendor credits/);
+  assert.equal(documentFxPostingRefusal("customer_credit", evidence, identity, "1.3525000000"), null, "a credit memo may post at its recorded rate");
 });

@@ -16,7 +16,7 @@ export interface ExplicitFxDraft {
 }
 
 /** Kinds that accept an explicit exchange rate. */
-export const EXPLICIT_FX_KINDS: ReadonlySet<string> = new Set(['customer_invoice', 'vendor_bill'])
+export const EXPLICIT_FX_KINDS: ReadonlySet<string> = new Set(['customer_invoice', 'vendor_bill', 'customer_credit', 'vendor_credit'])
 
 /** Stored evidence as the drawer shows it; anything else reads as none. */
 export function storedExplicitFx(value: unknown): ExplicitFxDraft | null {

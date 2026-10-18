@@ -429,3 +429,29 @@ test("a party's unapplied credit is suggested beside the documents it could sett
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
 });
+
+test("a CAD deposit short-pays a USD invoice and the remainder is written off at the receivable's carrying rate", { skip: !DB }, async () => {
+  const f = await fixture({ documentAmount: "100.00", lineAmount: "108.0000", documentCurrency: "USD", documentFxRate: "1.30", permissions: ["banking.reconcile", "ar.pay", "ar.post"] });
+  try {
+    await withBypassContext(() => db.execute(sql`
+      insert into fx_rates (id, org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${randomUUID()}, ${f.org.orgId}, 'CAD', 'USD', ${f.org.date}, 'spot', '0.7407407407', 'Bank of Canada')`));
+    const badDebt = await withBypassContext(() => seedPostingAccount(f.org.orgId, "6950", "Bad debt", "expense", f.org.subsidiaryId));
+    await withBypassContext(() => db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{controlAccounts,badDebtExpense}', to_jsonb(${badDebt}::text)) where id = ${f.org.orgId}`));
+    const result = await record(f, "100.0000", { applied: { [f.openLineId]: "108.0000" }, writeOff: { reason: "Bank charges short-paid" } });
+    assert.equal(result.writeOffDocuments.length, 1);
+    assert.equal(await openOf(f, "ar", f.org.customerId), "0", "80 USD by cash and 20 USD by write-off clear the invoice");
+    const totals = async (accountId: string) => toUnits((await withBypassContext(() => db.execute<{ amount: string }>(sql`
+      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${accountId}`))).rows[0]!.amount)
+    assert.equal(await totals(badDebt), toUnits("26"), "20 USD written off at its 1.30 carrying rate");
+    assert.equal(await totals(f.org.accounts.fxGainLoss), toUnits("-4"), "108 CAD received for 80 USD carried at 104 CAD realizes 4");
+    const residual = (await withBypassContext(() => db.execute<{ base: string }>(sql`
+      select (abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0))::text as base
+        from journal_lines jl left join applications a on a.org_id = jl.org_id and a.to_line_id = jl.id
+       where jl.org_id = ${f.org.orgId} and jl.id = ${f.openLineId} group by jl.id`))).rows[0]!;
+    assert.equal(toUnits(residual.base), 0n, "no carrying amount is left on the receivable");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});

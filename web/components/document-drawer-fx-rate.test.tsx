@@ -116,7 +116,7 @@ test('a posted bill shows its recorded rate without edit actions', async (t) => 
 test('documents in their functional currency, other kinds and unsaved creates show no field', async (t) => {
   for (const props of [
     { doc: bill({ currency: 'CAD' }) },
-    { kind: 'customer_credit' },
+    { kind: 'cash_sale' },
     { isCreate: true },
   ] satisfies Partial<FieldProps>[]) {
     await mount(t, props)

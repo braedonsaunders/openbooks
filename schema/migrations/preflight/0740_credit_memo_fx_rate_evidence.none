@@ -1,0 +1,1 @@
+The migration widens one check constraint to two more document kinds; every existing row already satisfies it, and it reads and rewrites no tenant rows.

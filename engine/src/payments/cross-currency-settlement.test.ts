@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mulRate } from "../money/money.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
-import { crossCurrencyAllocation, sourceSettlingTarget, validateAllocationInputs, validateSettlementEvidence } from "./settlement-policy.ts";
+import { crossCurrencyAllocation, rateMeasuringExactly, sourceSettlingTarget, validateAllocationInputs, validateSettlementEvidence } from "./settlement-policy.ts";
 
 test("the settling source is the largest four-place amount whose cross-rate stays within the balance", () => {
   // 0.7407407407 USD per CAD: 135.0000 CAD settles exactly 100.0000 USD.
@@ -30,4 +30,19 @@ test("a cross-currency allocation cross-foots by construction and carries its ev
 test("a rate that settles nothing, or a non-positive balance, is refused by name", () => {
   assert.throws(() => sourceSettlingTarget("0.0000", "1.2"), PaymentError);
   assert.throws(() => sourceSettlingTarget("0.0001", "100000"), (error: unknown) => error instanceof PaymentError && /settles nothing/.test(error.message));
+});
+
+test("a carrying rate recovered from a balance's two frames measures it back exactly", () => {
+  for (const [transaction, carrying] of [["40.0000", "52.0000"], ["100.0100", "133.3433"], ["333.3300", "444.4389"], ["0.0100", "0.0137"], ["987654.3200", "1312345.6789"]] as const) {
+    const { rate, exact } = rateMeasuringExactly(transaction, carrying);
+    assert.equal(exact, true, `${transaction} → ${carrying}`);
+    assert.equal(mulRate(transaction, rate), carrying);
+  }
+  assert.equal(rateMeasuringExactly("40", "52").rate, "1.3000000000");
+  // Beyond what a ten-place rate can resolve, the nearest rate is returned
+  // and flagged; the credit application realizes the sub-unit remainder.
+  const coarse = rateMeasuringExactly("98765432.1000", "131234567.8901");
+  assert.equal(coarse.exact, false);
+  assert.ok(Math.abs(Number(mulRate("98765432.1000", coarse.rate)) - 131234567.8901) < 0.01);
+  assert.throws(() => rateMeasuringExactly("0", "1"), PaymentError);
 });
