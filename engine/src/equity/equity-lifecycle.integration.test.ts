@@ -393,3 +393,79 @@ test("a SAFE stated in a foreign currency posts at its issue-date rate, refuses 
     await dropScratchOrgReporting(w.org.orgId);
   }
 });
+
+test("a voided note's accrued interest reverses in the next run, and a foreign note accrues at the run date's rate", { skip: !DB }, async () => {
+  const w = await setupEquityWorld({ lifecycle: true });
+  try {
+    await seedSpotRate(w.org.orgId, "USD", "CAD", "2026-07-01", "1.3500000000");
+    await seedSpotRate(w.org.orgId, "USD", "CAD", "2026-07-31", "1.3600000000");
+    const local = await note(w);
+    await note(w, { currency: "USD", considerationAmount: "10000", interestRatePercent: "6" });
+    const july = await postInterestRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" });
+    // 657.53 CAD, and 49.32 USD (10,000 × 6% × 30 / 365) at 1.36.
+    assert.equal(july.total, "724.6052");
+    const lines = await entryLines(w.org.orgId, july.journalEntryId!);
+    assert.ok(lines.some((line) => line.currency === "USD" && line.txn_amount === "-49.3200" && line.amount === "-67.0752"), "the foreign accrual carries its USD amount and rate");
+    await seedSpotRate(w.org.orgId, "USD", "CAD", "2026-08-31", "1.3700000000");
+    await recordSecurityEvent({ ...approve(w), securityId: local.id, kind: "void", effectiveOn: "2026-08-05", reason: "Note recorded in error" });
+    const august = await postInterestRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-08-31" });
+    const reversed = (await db.execute<{ period_amount: string; fx_rate: string | null; functional_amount: string }>(sql`
+      select period_amount::text as period_amount, fx_rate::text as fx_rate, functional_amount::text as functional_amount
+        from equity_interest_run_lines where org_id = ${w.org.orgId} and run_id = ${august.runId} and security_id = ${local.id}`)).rows[0]!;
+    assert.deepEqual(reversed, { period_amount: "-657.5300", fx_rate: null, functional_amount: "-657.5300" }, "the voided note's accrual reverses exactly");
+    // 100.27 USD accrued to August 31 less 49.32 already posted, at 1.37.
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.interestExpense), "136.8767");
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.accruedInterest), "-136.8767");
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
+
+test("voiding an early-exercise certificate returns its units and the next run reverses the deposit it released", { skip: !DB }, async () => {
+  const w = await setupEquityWorld({ lifecycle: true });
+  try {
+    const option = await issueSecurity({
+      ...entity(w), kind: "option", holderPartyId: w.holderId, issueDate: "2026-06-01", shareClassId: w.commonClassId, quantity: "1200",
+      pricePerShare: "1.00", optionType: "nso", expirationDate: "2036-06-01", earlyExercise: true, unvestedRepurchaseBasis: "cost",
+      vestingStart: "2026-06-01", vestingMonths: 12, cliffMonths: 0, vestingFrequency: "monthly",
+      valuation: { sharePrice: "1", volatilityPercent: "50", riskFreeRatePercent: "4", expectedTermYears: "6", dividendYieldPercent: "0", attribution: "graded" },
+    });
+    const exercised = await recordSecurityEvent({ ...manage(w), securityId: option.id, kind: "exercise", effectiveOn: "2026-07-01", quantity: "1200", considerationAccountId: w.org.accounts.bank });
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.deposit), "-1100.0000");
+    await postCompensationRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-08-31" });
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.deposit), "-1000.0000", "August releases 100 shares' deposit");
+    await recordSecurityEvent({ ...approve(w), securityId: exercised.resultingSecurityId!, kind: "void", effectiveOn: "2026-09-05", reason: "Exercise recorded against the wrong grant" });
+    assert.equal((await loadSecurityDetail({ ...manage(w), securityId: option.id, asOf: "2026-09-05" })).state?.outstanding, "1200", "the voided certificate returns its units to the option");
+    const run = await postCompensationRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" });
+    assert.ok(run.releaseJournalEntryId);
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.deposit), "0.0000");
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.common), "0.0000");
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
+
+test("a foreign-currency SAFE converts at the closing-date rate and its liability is remeasured with a realized difference", { skip: !DB }, async () => {
+  const w = await setupEquityWorld({ lifecycle: true });
+  try {
+    await seedSpotRate(w.org.orgId, "USD", "CAD", "2026-07-01", "1.3500000000");
+    await seedSpotRate(w.org.orgId, "USD", "CAD", "2026-07-20", "1.4000000000");
+    const instrument = await safe(w, { currency: "USD", considerationAmount: "10000" });
+    const round = await createRound({ ...entity(w), name: "Seed", shareClassId: w.commonClassId, closedOn: "2026-07-20", pricePerShare: "1.00", preMoneyValuation: "1000000" });
+    const converted = await recordSecurityEvent({ ...manage(w), securityId: instrument.id, kind: "convert", effectiveOn: "2026-07-20", roundId: round.id });
+    const certificate = await loadSecurityDetail({ ...manage(w), securityId: converted.resultingSecurityId!, asOf: "2026-07-20" });
+    assert.equal(certificate.security.quantity, "14000", "10,000 USD at 1.40 converts at 1.00 CAD a share");
+    assert.equal(certificate.security.currency, "CAD");
+    const lines = await entryLines(w.org.orgId, converted.journalEntryId!);
+    assert.equal(linesBalance(lines), 0n);
+    assert.deepEqual(lines.map((line) => [line.account_id, line.amount, line.currency]), [
+      [w.accounts.convertible, "13500.0000", "USD"],
+      [w.org.accounts.fxGainLoss, "500.0000", "CAD"],
+      [w.accounts.common, "-1.4000", "CAD"],
+      [w.accounts.apic, "-13998.6000", "CAD"],
+    ]);
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.convertible), "0.0000");
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
