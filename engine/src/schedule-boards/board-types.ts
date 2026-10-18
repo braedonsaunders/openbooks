@@ -25,6 +25,8 @@ export const SCHEDULE_BOARD_CAPABILITIES = [
   "attendance",
   /** Ended shifts with complete attendance may be formally closed. */
   "closing",
+  /** Service visits are dispatched to technicians from an unscheduled queue, with live field status. */
+  "dispatch",
 ] as const;
 export type ScheduleBoardCapability = (typeof SCHEDULE_BOARD_CAPABILITIES)[number];
 
@@ -65,6 +67,13 @@ export const SCHEDULE_BOARD_TYPES: readonly ScheduleBoardTypeDefinition[] = [
     views: PEOPLE_VIEWS, defaultViews: ["timeline", "grid", "calendar"], defaultView: "timeline", defaultGrain: "timed",
     publishPolicies: ["live", "staged", "governed"], defaultPublishPolicy: "staged",
   },
+  {
+    // Dispatch boards publish each assignment at once so technicians see it.
+    key: "dispatch", rowKind: "people",
+    capabilities: ["bookings", "dispatch"],
+    views: ["dispatch", "timeline", "grid", "calendar"], defaultViews: ["dispatch", "timeline", "calendar"], defaultView: "dispatch", defaultGrain: "timed",
+    publishPolicies: ["live"], defaultPublishPolicy: "live",
+  },
 ];
 
 /** Feature switches a capability needs in addition to its board family (Scheduling or Project Scheduling). */
@@ -75,6 +84,7 @@ export const SCHEDULE_CAPABILITY_FEATURES: Readonly<Record<ScheduleBoardCapabili
   governed_publication: [],
   attendance: ["hrmAttendance"],
   closing: ["hrmAttendance", "hrmShiftClosing"],
+  dispatch: ["serviceDispatch"],
 };
 
 const BY_KEY = new Map(SCHEDULE_BOARD_TYPES.map((type) => [type.key, type]));
@@ -86,6 +96,16 @@ export function scheduleBoardType(key: string): ScheduleBoardTypeDefinition | nu
 /** Whether a board's type declares a capability. Unknown types declare none. */
 export function boardHasCapability(board: { readonly boardType: string }, capability: ScheduleBoardCapability): boolean {
   return BY_KEY.get(board.boardType)?.capabilities.includes(capability) ?? false;
+}
+
+/**
+ * Feature switches a board of this type needs before it is listed or opened
+ * at all: the features of every capability beyond bookings that the type is
+ * built around. Shift roster boards stay usable without attendance; a
+ * dispatch board exists only for service dispatch.
+ */
+export function boardTypeRequiredFeatures(boardType: string): readonly string[] {
+  return BY_KEY.get(boardType)?.capabilities.includes("dispatch") ? SCHEDULE_CAPABILITY_FEATURES.dispatch : [];
 }
 
 /** The board types that schedule a row kind, in registry order. */

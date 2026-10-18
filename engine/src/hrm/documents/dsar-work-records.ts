@@ -36,6 +36,8 @@ function rosterCollections(orgId: string, partyId: string): Collection[] {
     { key: "attendanceShiftObservations", table: "schedule_attendance_observations", where: sql`id in (${observations})`, denied: person },
     { key: "attendanceCheckInClaims", table: "schedule_attendance_event_claims", where: sql`id in (${claims})`, denied: ["released_by"] },
     { key: "attendanceObservationCheckIns", table: "schedule_attendance_observation_events", where: sql`observation_id in (${observations}) and event_claim_id in (${claims})`, denied: [] },
+    // The field status the person recorded on service visits (left, arrived, completed).
+    { key: "serviceVisitStatusHistory", table: "service_visit_events", where: sql`worker_party_id=${partyId}`, denied: ["worker_party_id", "actor_id"], unattributed: true },
     // Earlier roster and attendance rows carried into Unified Scheduling for this person.
     { key: "rosterSourceRecords", table: "schedule_source_records", where: sql`worker_party_id=${partyId}`, denied: ["worker_party_id"] },
     // The person's own published schedule as it was delivered, whoever received it.

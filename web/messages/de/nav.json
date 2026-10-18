@@ -176,7 +176,9 @@
     "asset-proposals": "Anlagenvorschläge",
     "asset-construction": "Anlagen im Bau",
     "asset-maintenance": "Anlagenwartung",
-    "asset-insurance": "Anlagenversicherung"
+    "asset-insurance": "Anlagenversicherung",
+    "service": "Service",
+    "my-visits": "Meine Einsätze"
   },
   "groups": {
     "manufacturing": "Fertigung",

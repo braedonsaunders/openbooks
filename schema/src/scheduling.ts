@@ -5,7 +5,7 @@ import { auditColumns, id, orgRef } from "./helpers";
 export const SCHEDULE_BOARD_ROW_KINDS = ["people", "tasks", "resources"] as const;
 export const SCHEDULE_BOARD_GRAINS = ["day", "timed"] as const;
 export const SCHEDULE_BOARD_VIEWS = {
-  people: ["grid", "targets", "timeline", "calendar"],
+  people: ["grid", "targets", "timeline", "calendar", "dispatch"],
   tasks: ["gantt", "progress"],
   resources: ["grid", "targets", "timeline", "calendar"],
 } as const;
@@ -137,6 +137,8 @@ export const scheduleEntries = pgTable("schedule_entries", {
   closedAt: timestamp("closed_at", { withTimezone: true }),
   closedBy: uuid("closed_by"),
   closeReason: text("close_reason"),
+  /** The service visit a dispatch booking serves; replacements keep it. */
+  serviceVisitId: uuid("service_visit_id"),
 }, (t) => [
   uniqueIndex("schedule_entries_org_id_id_key").on(t.orgId, t.id),
   uniqueIndex("schedule_entries_org_id_supersedes_id_key").on(t.orgId, t.supersedesId).where(sql`${t.supersedesId} is not null and ${t.status} <> 'cancelled'`),

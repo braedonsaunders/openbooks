@@ -1611,6 +1611,20 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": false
   },
   {
+    "name": "service_record_guard",
+    "source": "0751_service_dispatch.sql",
+    "sha256": "e170442faf95f852719ca910cfece6460937a5ee3d6b7ff50b7af14e15e42bf5",
+    "newSha256": "e170442faf95f852719ca910cfece6460937a5ee3d6b7ff50b7af14e15e42bf5",
+    "patch": false
+  },
+  {
+    "name": "service_history_guard",
+    "source": "0751_service_dispatch.sql",
+    "sha256": "0b2538ad7ab29533dc0ad9913a77b05d4e461df523a4318e15c542ed6efee571",
+    "newSha256": "0b2538ad7ab29533dc0ad9913a77b05d4e461df523a4318e15c542ed6efee571",
+    "patch": false
+  },
+  {
     "name": "schedule_source_records_guard",
     "source": "0595_schedule_source_history.sql",
     "sha256": "b1ebb5aa91fc27f4a3d7c1c2c7a110cdf994f6a8d998e7b8f1ede614f23563f0",
@@ -3001,6 +3015,18 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   },
   {
     "name": "schedule_attendance_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "service_record_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "service_history_guard",
     "config": [
       "search_path=public,pg_catalog"
     ]
@@ -4787,6 +4813,96 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "schedule_attendance_event_claims",
     "trigger": "schedule_attendance_guard",
     "function": "schedule_attendance_guard"
+  },
+  {
+    "table": "service_dispatch_policies",
+    "trigger": "service_history_guard",
+    "function": "service_history_guard"
+  },
+  {
+    "table": "service_requests",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "service_agreements",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "service_agreement_versions",
+    "trigger": "service_history_guard",
+    "function": "service_history_guard"
+  },
+  {
+    "table": "service_agreement_lines",
+    "trigger": "service_history_guard",
+    "function": "service_history_guard"
+  },
+  {
+    "table": "service_jobs",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "service_job_lines",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "service_quotes",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "service_quote_lines",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "service_visits",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "service_visit_events",
+    "trigger": "service_history_guard",
+    "function": "service_history_guard"
+  },
+  {
+    "table": "service_visit_parts",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "service_visit_signature_requests",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "service_visit_signatures",
+    "trigger": "service_history_guard",
+    "function": "service_history_guard"
+  },
+  {
+    "table": "service_billings",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "service_job_deposits",
+    "trigger": "service_history_guard",
+    "function": "service_history_guard"
+  },
+  {
+    "table": "service_customer_notices",
+    "trigger": "service_record_guard",
+    "function": "service_record_guard"
+  },
+  {
+    "table": "schedule_source_records",
+    "trigger": "schedule_source_records_guard",
+    "function": "schedule_source_records_guard"
   },
   {
     "table": "schedule_attendance_observation_events",

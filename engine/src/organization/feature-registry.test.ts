@@ -160,7 +160,7 @@ test("optional HRM operations preserve independent capabilities and explicit clo
   for (const dependency of ["hrmShiftPlanning", "hrmAttendance"]) assert.equal(featureEnabled({ ...closing, [dependency]: false }, "hrmShiftClosing"), false);
   const singleSwitches = new Set(["fieldTime", ...FEATURES.filter(feature => feature.parentKey === "hrm").map(feature => feature.key)]);
   assert.ok(singleSwitches.has("hrmPerformance") && singleSwitches.has("hrmRecruiting"));
-  assert.deepEqual(FEATURES.filter(feature => feature.parentKey && singleSwitches.has(feature.parentKey)).map(feature => feature.key), ["hrmShiftClosing"]);
+  assert.deepEqual(FEATURES.filter(feature => feature.parentKey && singleSwitches.has(feature.parentKey)).map(feature => feature.key), ["hrmShiftClosing", "serviceDispatch"]);
 });
 
 test("time tracking stands alone: hourly time needs no job costing", () => {

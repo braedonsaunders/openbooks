@@ -71,6 +71,8 @@ const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[
   // booking keeps both, so the history of who went where is never rewritten.
   ["schedule_entries", "worker_party_id"],
   ["schedule_entries", "customer_party_id"],
+  // A service visit's field history names the technician who moved it.
+  ["service_visit_events", "worker_party_id"],
   // Recurring assignments, shift requests and attendance evidence name the
   // person scheduled, asked or observed; their history is never re-pointed.
   ["schedule_patterns", "customer_party_id"],
@@ -107,6 +109,7 @@ const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
   payroll_employee_employer_assignments: "dated payroll employer assignments",
   hrm_training_courses: "training course authorship evidence",
   schedule_entries: "booking history",
+  service_visit_events: "service visit field history",
   schedule_patterns: "recurring shift pattern targets",
   schedule_pattern_assignments: "recurring shift assignments",
   schedule_entry_requests: "shift request history",
@@ -153,6 +156,11 @@ const IMMUTABLE_COUNTERPARTY_REFS: readonly { table: string; column: string; lab
 
 const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] = [
   ["addresses", "party_id"],
+  // Service requests, jobs and agreements follow the surviving customer; the
+  // service guard admits only the customer reference under the governed merge.
+  ["service_requests", "customer_party_id"],
+  ["service_jobs", "customer_party_id"],
+  ["service_agreements", "customer_party_id"],
   ["ap_capture_items", "vendor_candidate_id"],
   ["channel_orders", "customer_party_id"],
   ["compliance_records", "party_id"],

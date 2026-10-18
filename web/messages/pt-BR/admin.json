@@ -477,7 +477,9 @@
       "sales_rep": "Trabalha as contas, atividades, oportunidades e previsões pessoais atribuídas, e prepara rascunhos de faturas e vendas à vista. Envia os próprios relatórios de despesas. Não pode contabilizar, receber pagamentos nem ver o razão geral.",
       "buyer": "Emite pedidos de compra e recebe as mercadorias correspondentes, com acesso de leitura a fornecedores, itens e contas a pagar. Envia os próprios relatórios de despesas. Não pode contabilizar nem pagar contas, lançar estoque, nem ver banco ou o razão geral.",
       "cashier": "Registra, contabiliza e reembolsa vendas à vista no caixa e consulta saldos de vale-presente. Envia os próprios relatórios de despesas. Não pode ver faturas, banco nem o razão geral.",
-      "project_coordinator": "Registra o próprio tempo, acompanha projetos e prepara rascunhos de faturas para aprovação. Envia os próprios relatórios de despesas. Não pode ver o tempo dos colegas, contabilizar faturas, receber ou fazer pagamentos, nem ver banco ou o razão geral."
+      "project_coordinator": "Registra o próprio tempo, acompanha projetos e prepara rascunhos de faturas para aprovação. Envia os próprios relatórios de despesas. Não pode ver o tempo dos colegas, contabilizar faturas, receber ou fazer pagamentos, nem ver banco ou o razão geral.",
+      "dispatcher": "Registra solicitações de serviço, orça e precifica trabalhos e contratos de serviço, e atribui e reprograma visitas nos quadros de despacho. Registra o próprio tempo e envia os próprios relatórios de despesas. Não pode faturar, receber pagamentos nem ver banco ou o razão geral.",
+      "field_technician": "Vê e atende apenas as visitas de serviço atribuídas a ele: atualiza o status em campo, registra notas de trabalho, peças e mão de obra e coleta a assinatura do cliente. Registra o próprio tempo e envia os próprios relatórios de despesas. Não pode ver visitas de outros técnicos, preços, faturas nem o razão geral."
     }
   },
   "scripts": {
@@ -1291,7 +1293,8 @@
       "expenses": "Relatórios de despesas",
       "intercompany": "Entre empresas",
       "amortization": "Apropriação de despesas",
-      "equity": "Patrimônio e tabela de capitalização"
+      "equity": "Patrimônio e tabela de capitalização",
+      "service": "Despacho de serviços"
     },
     "gl_read": "Ver lançamentos e saldos",
     "gl_manage": "Gerenciar o plano de contas",
@@ -1488,7 +1491,11 @@
     "equity_manage": "Registrar classes de ações, planos, emissões, movimentações de outorgas e ações de patrimônio governadas",
     "equity_approve": "Decidir as ações de patrimônio encaminhadas para aprovação no Flows",
     "assets_capitalize": "Aceitar propostas de ativos e capitalizar imobilizado em andamento",
-    "assets_maintain": "Manter planos de manutenção de ativos e apólices de seguro"
+    "assets_maintain": "Manter planos de manutenção de ativos e apólices de seguro",
+    "service_read": "Ver solicitações, trabalhos, visitas e contratos de serviço",
+    "service_manage": "Registrar solicitações de serviço e gerenciar trabalhos, orçamentos, contratos e conclusões de visita",
+    "service_dispatch": "Atribuir e reprogramar visitas nos quadros de despacho",
+    "service_self": "Atender as próprias visitas de serviço"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -8684,6 +8691,10 @@
     "rebateManagement": {
       "title": "Gestão de bonificações",
       "description": "Gerenciar acordos de clientes e fornecedores, apropriações retroativas, solicitações e liquidações."
+    },
+    "serviceDispatch": {
+      "title": "Despacho de serviços",
+      "description": "Solicitações, orçamentos, trabalhos e contratos recorrentes para serviços de campo, despachados a técnicos em quadros de despacho com status ao vivo, peças, mão de obra, assinatura do cliente e faturamento por visita ou por trabalho. Requer Programação; orçamentos usam Orçamentos e pedidos, peças usam Estoque e mão de obra usa Apontamento de horas."
     }
   },
   "backupsManager": {

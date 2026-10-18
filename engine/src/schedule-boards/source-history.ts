@@ -6,7 +6,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
-import { getBoard, peopleBoardAuthority, type ScheduleActor } from "./boards.ts";
+import { boardAuthority, getBoard, peopleBoardAuthority, type ScheduleActor } from "./boards.ts";
 import { sourceObservationColor } from "./display.ts";
 import { ScheduleError } from "./errors.ts";
 
@@ -91,7 +91,9 @@ export async function readBoardSourceHistory(actor: ScheduleActor, boardId: stri
   return withOrgTransaction(actor.orgId, async () => {
     const board = await getBoard(actor, boardId);
     if (board.rowKind !== 'people') return [];
-    const allowed = await peopleBoardAuthority(actor,'hrm.shifts.read',board.subsidiaryId);
+    // The board's own read authority: shift-planning boards read with
+    // hrm.shifts.read, dispatch boards with the service read grant.
+    const allowed = await boardAuthority(actor, board, 'read');
     if (!isIsoCalendarDate(from) || !isIsoCalendarDate(through) || from > through)
       throw new ScheduleError('Choose a valid source history date range.');
     const records = (await db.execute<Omit<BoardSourceRecord,'color'>>(sql`select r.id,r.source_system as "sourceSystem",r.source_dataset as "sourceDataset",

@@ -13,7 +13,7 @@ import {actorHasPermission} from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { ScheduleError } from "./errors.ts";
-import { boardHasCapability, SCHEDULE_CAPABILITY_FEATURES, type ScheduleBoardCapability } from "./board-types.ts";
+import { boardHasCapability, boardTypeRequiredFeatures, SCHEDULE_CAPABILITY_FEATURES, type ScheduleBoardCapability } from "./board-types.ts";
 
 export interface ScheduleActor {
   readonly orgId: string;
@@ -125,8 +125,30 @@ export async function peopleBoardAuthority(actor: ScheduleActor, permission: Peo
   return lockActorCommandAuthority(db, actor.orgId, actor.actorId, subsidiaryId, permission);
 }
 
+/**
+ * Lock the caller's authority for a dispatch-board command. Dispatch boards
+ * book technicians for service visits, so they answer to the service
+ * permissions rather than the shift-planning ones; Scheduling and Service
+ * dispatch must both be on.
+ */
+async function dispatchBoardAuthority(actor: ScheduleActor, board: ScheduleBoard, mode: "read" | "manage" | "publish"): Promise<ReadonlySet<string> | null> {
+  if (
+    !(await lockAndCheckOrgFeature(db, actor.orgId, "hrm")) ||
+    !(await lockAndCheckOrgFeature(db, actor.orgId, "hrmShiftPlanning")) ||
+    !(await lockAndCheckOrgFeature(db, actor.orgId, "serviceDispatch"))
+  ) {
+    throw new ScheduleError("Service dispatch is switched off for this organization.", {
+      status: 404,
+      code: "schedule_disabled",
+      remedy: "Enable Human Resources, Scheduling and Service dispatch on Company Settings → Features; existing bookings are preserved.",
+    });
+  }
+  return lockActorCommandAuthority(db, actor.orgId, actor.actorId, board.subsidiaryId, mode === "read" ? "service.read" : "service.dispatch");
+}
+
 /** Resource bookings share project scheduling authority and native asset visibility. */
 export async function boardAuthority(actor: ScheduleActor, board: ScheduleBoard, mode: "read" | "manage" | "publish"): Promise<ReadonlySet<string> | null> {
+  if (board.rowKind === "people" && boardHasCapability(board, "dispatch")) return dispatchBoardAuthority(actor, board, mode);
   if (board.rowKind === "people") return peopleBoardAuthority(actor, mode === "read" ? "hrm.shifts.read" : mode === "publish" ? "hrm.shifts.approve" : "hrm.shifts.manage", board.subsidiaryId);
   if (board.rowKind !== "resources") throw new ScheduleError("Open this task board in the Gantt view.", { code: "schedule_wrong_board" });
   if (
@@ -155,6 +177,14 @@ export function listBoards(actor: ScheduleActor, options: { includeArchived?: bo
   return withOrgTransaction(actor.orgId, () => readBoards(actor, options));
 }
 
+/** Whether every feature a board's type is built around is switched on. */
+async function boardTypeEnabled(orgId: string, board: Pick<ScheduleBoard, "boardType">): Promise<boolean> {
+  for (const feature of boardTypeRequiredFeatures(board.boardType)) {
+    if (!(await lockAndCheckOrgFeature(db, orgId, feature))) return false;
+  }
+  return true;
+}
+
 async function readBoards(actor: ScheduleActor, options: { includeArchived?: boolean; generalOnly?: boolean; projectId?: string }): Promise<ScheduleBoard[]> {
   const kinds = await enabledBoardKinds(actor.orgId);
   if (!kinds.people && !kinds.tasks) return [];
@@ -166,7 +196,11 @@ async function readBoards(actor: ScheduleActor, options: { includeArchived?: boo
     rows.some((board) => board.projectId) &&
     kinds.tasks &&
     (await actorHasPermission(db, actor.orgId, actor.actorId, "projects.read"));
+  const typeEnabled = new Map<string, boolean>();
+  for (const type of new Set(rows.map((board) => board.boardType))) typeEnabled.set(type, await boardTypeEnabled(actor.orgId, { boardType: type }));
   return rows.filter(
+    (board) => typeEnabled.get(board.boardType) !== false,
+  ).filter(
     (board) =>
       (board.rowKind === "people"
         ? kinds.people
@@ -190,6 +224,7 @@ export async function getBoard(actor: ScheduleActor, idOrCode: string): Promise<
   if (!board) throw new ScopeNotFoundError();
   const kinds = await enabledBoardKinds(actor.orgId);
   if (!(board.rowKind === "people" ? kinds.people : board.rowKind === "resources" ? kinds.resources : kinds.tasks)) throw new ScopeNotFoundError();
+  if (!(await boardTypeEnabled(actor.orgId, board))) throw new ScopeNotFoundError();
   const allowed = await actorAllowedSubsidiaryIds(db, actor.orgId, actor.actorId);
   if (
     board.projectId &&
@@ -212,7 +247,9 @@ export async function requireBoardCapability(actor: ScheduleActor, board: Schedu
   if (!boardHasCapability(board, capability)) {
     throw new ScheduleError("This board's type does not offer that capability.", {
       code: "schedule_capability_unavailable",
-      remedy: "Use a shift roster board for recurring patterns, shift requests, governed publication and attendance.",
+      remedy: capability === "dispatch"
+        ? "Assign service visits on a dispatch board."
+        : "Use a shift roster board for recurring patterns, shift requests, governed publication and attendance.",
     });
   }
   for (const feature of SCHEDULE_CAPABILITY_FEATURES[capability]) {

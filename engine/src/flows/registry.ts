@@ -5,6 +5,7 @@ import {
 import {SCHEDULE_DISTRIBUTION_SUBJECT_KIND,scheduleDistributionSubjectProfile,scheduleDistributionsFlowAdapter} from './schedule-distribution-adapter.ts';
 import { SCHEDULE_REQUEST_SUBJECT_KIND, scheduleRequestSubjectProfile, scheduleRequestsFlowAdapter } from './schedule-request-adapter.ts';
 import { SCHEDULE_PUBLICATION_SUBJECT_KIND, schedulePublicationSubjectProfile, schedulePublicationsFlowAdapter } from './schedule-publication-adapter.ts';
+import { SERVICE_VISIT_COMPLETION_SUBJECT_KIND, serviceVisitCompletionSubjectProfile, serviceVisitCompletionsFlowAdapter } from './service-visit-adapter.ts';
 import { CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
 import { checklistStepsFlowAdapter, checklistStepSubjectProfile } from "./checklist-steps-adapter.ts";
 import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
@@ -134,6 +135,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if(subjectKind===SCHEDULE_DISTRIBUTION_SUBJECT_KIND)return scheduleDistributionsFlowAdapter;
   if (subjectKind === SCHEDULE_REQUEST_SUBJECT_KIND) return scheduleRequestsFlowAdapter;
   if (subjectKind === SCHEDULE_PUBLICATION_SUBJECT_KIND) return schedulePublicationsFlowAdapter;
+  if (subjectKind === SERVICE_VISIT_COMPLETION_SUBJECT_KIND) return serviceVisitCompletionsFlowAdapter;
   if(subjectKind===CHECKLIST_STEP_SUBJECT_KIND) return checklistStepsFlowAdapter;
   if (subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND) return benefitEnrollmentsFlowAdapter;
   if (subjectKind === BENEFIT_AWARD_SUBJECT_KIND) return benefitAwardsFlowAdapter;
@@ -203,6 +205,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     scheduleDistributionSubjectProfile,
     scheduleRequestSubjectProfile,
     schedulePublicationSubjectProfile,
+    serviceVisitCompletionSubjectProfile,
     scheduleBoardSubjectProfile,
     checklistStepSubjectProfile,
     ...DOCUMENT_FLOW_KINDS.filter((kind) => !DEDICATED_PROFILE_KINDS.has(kind)).map((kind) =>

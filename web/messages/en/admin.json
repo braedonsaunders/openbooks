@@ -477,7 +477,9 @@
       "sales_rep": "Works assigned accounts, activities, opportunities and personal forecasts, and drafts invoices and cash sales. Files their own expense reports. Cannot post, collect payments or see the ledger.",
       "buyer": "Raises purchase orders and receives goods against them, with read access to vendors, items and payables. Files their own expense reports. Cannot post or pay bills, post inventory, or see banking or the ledger.",
       "cashier": "Rings up, posts and refunds cash sales at the till and looks up gift card balances. Files their own expense reports. Cannot see invoices, banking or the ledger.",
-      "project_coordinator": "Logs their own time, follows projects and drafts customer invoices for approval. Files their own expense reports. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger."
+      "project_coordinator": "Logs their own time, follows projects and drafts customer invoices for approval. Files their own expense reports. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger.",
+      "dispatcher": "Takes service requests, quotes and prices service jobs and agreements, and assigns and reschedules visits on dispatch boards. Logs their own time and files their own expense reports. Cannot invoice, take payments or see banking or the ledger.",
+      "field_technician": "Sees and works only the service visits booked on them: updates their field status, records work notes, parts and labor, and collects the customer's signature. Logs their own time and files their own expense reports. Cannot see other technicians' visits, prices, invoices or the ledger."
     }
   },
   "scripts": {
@@ -1280,7 +1282,8 @@
       "expenses": "Expense reports",
       "intercompany": "Intercompany",
       "amortization": "Expense amortization",
-      "equity": "Equity & cap table"
+      "equity": "Equity & cap table",
+      "service": "Service dispatch"
     },
     "gl_read": "View journals and balances",
     "gl_manage": "Manage the chart of accounts",
@@ -1488,7 +1491,11 @@
     "equity_manage": "Record share classes, plans, issuances, award activity and governed equity actions",
     "equity_approve": "Decide equity actions routed for approval in Flows",
     "assets_capitalize": "Accept asset proposals and capitalize construction in progress",
-    "assets_maintain": "Maintain asset maintenance schedules and insurance policies"
+    "assets_maintain": "Maintain asset maintenance schedules and insurance policies",
+    "service_read": "View service requests, jobs, visits and agreements",
+    "service_manage": "Take service requests and manage jobs, quotes, agreements and visit completion",
+    "service_dispatch": "Assign and reschedule visits on dispatch boards",
+    "service_self": "Work your own service visits"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -8684,6 +8691,10 @@
     "rebateManagement": {
       "description": "Govern customer and vendor rebate agreements, retrospective accruals, claims and settlements.",
       "title": "Rebate management"
+    },
+    "serviceDispatch": {
+      "title": "Service dispatch",
+      "description": "Service requests, quotes, jobs and recurring agreements for field service work, dispatched to technicians on dispatch boards with live field status, parts, labor, customer sign-off and invoicing per visit or per job. Requires Scheduling; quoting uses Orders, parts use Inventory and labor uses Time tracking."
     }
   },
   "backupsManager": {

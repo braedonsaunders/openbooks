@@ -2561,6 +2561,34 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "segment_values.name",
   "serials.serial_number",
   "serials.status",
+  // Service work identity, scope descriptions and lifecycle enums; customer
+  // prose (descriptions, instructions, notes and reasons) is masked.
+  "service_agreement_lines.description",
+  "service_agreement_versions.priority",
+  "service_agreement_versions.recurrence", // repeat rule: unit, interval, weekdays and monthly basis
+  "service_agreements.agreement_number",
+  "service_agreements.status",
+  "service_agreements.title",
+  "service_job_lines.description",
+  "service_jobs.billing_mode",
+  "service_jobs.currency",
+  "service_jobs.job_number",
+  "service_jobs.priority",
+  "service_jobs.status",
+  "service_jobs.title",
+  "service_requests.preferred_time",
+  "service_requests.priority",
+  "service_requests.request_number",
+  "service_requests.source",
+  "service_requests.status",
+  "service_requests.title",
+  "service_visit_events.from_status",
+  "service_visit_events.to_status",
+  "service_visits.cancel_kind",
+  "service_visits.kind",
+  "service_visits.priority",
+  "service_visits.review_status",
+  "service_visits.status",
   // Carrier-hub operational references: provider and carrier ids, service
   // names, ISO currency codes, enums, and normalized rate facts carry no
   // person data. Account secrets ride neuterSandbox (nulled on every sandbox

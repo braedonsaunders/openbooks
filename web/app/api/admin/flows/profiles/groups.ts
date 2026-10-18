@@ -56,6 +56,7 @@ const PEOPLE_SUBJECT_KINDS = new Set([
 const OPERATIONS_SUBJECT_KINDS = new Set([
   'work_order',
   'field_ticket',
+  'service_visit_completion',
   'prebill',
   'schedule_board',
   'schedule_distribution',

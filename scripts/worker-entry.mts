@@ -15,6 +15,7 @@ import { installEngineSeams } from "@openbooks/engine/composition/install";
 import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "@openbooks/engine/automations/tick";
 import { runQualificationAlertScan } from "@openbooks/engine/hrm/qualifications/alerts";
 import { maintainPatternAssignments } from "@openbooks/engine/schedule-boards/pattern-store";
+import { maintainServiceAgreements } from "@openbooks/engine/service/agreements";
 import { runMaintenanceAlertScan } from "@openbooks/engine/assets/asset-maintenance";
 import { runInsuranceRenewalScan } from "@openbooks/engine/assets/asset-insurance";
 import { runAssetProposalScanDuty } from "@openbooks/engine/assets/asset-proposals";
@@ -99,7 +100,7 @@ async function orgsWithFeature(feature: string): Promise<string[]> {
  */
 export async function runHrmOrganizationDuty(
   key: string,
-  feature: "hrmDocuments" | "hrmRecruiting" | "hrmShiftPlanning",
+  feature: "hrmDocuments" | "hrmRecruiting" | "hrmShiftPlanning" | "serviceDispatch",
   run: (orgId: string, today: string) => Promise<void>,
 ): Promise<void> {
   const failures: Error[] = [];
@@ -196,6 +197,16 @@ export async function runSchedulePatternDuty(): Promise<void> {
     await withOrgClaim("schedule-pattern-maintenance", orgId, today, async () => {
       const result = await maintainPatternAssignments(orgId);
       if (result.assignments > 0) console.log(`[worker] schedule-pattern-maintenance ${orgId}: ${JSON.stringify(result)}`);
+    });
+  });
+}
+
+/** Keep recurring service agreements generated through their horizons as the calendar advances. */
+export async function runServiceAgreementDuty(): Promise<void> {
+  await runHrmOrganizationDuty("service-agreement-maintenance", "serviceDispatch", async (orgId, today) => {
+    await withOrgClaim("service-agreement-maintenance", orgId, today, async () => {
+      const result = await maintainServiceAgreements(orgId);
+      if (result.generated > 0 || result.failures.length) console.log(`[worker] service-agreement-maintenance ${orgId}: ${JSON.stringify(result)}`);
     });
   });
 }
@@ -367,6 +378,8 @@ export function registerWorkerDuties(): void {
   });
   console.log("[worker] duty registered: schedule-pattern-maintenance");
   registerWorkerDuty({ key: "schedule-pattern-maintenance", run: hourly("schedule-pattern-maintenance", runSchedulePatternDuty) });
+  console.log("[worker] duty registered: service-agreement-maintenance");
+  registerWorkerDuty({ key: "service-agreement-maintenance", run: hourly("service-agreement-maintenance", runServiceAgreementDuty) });
   console.log("[worker] duty registered: hrm-dsar-exports");
   registerWorkerDuty({
     key: "hrm-dsar-exports",

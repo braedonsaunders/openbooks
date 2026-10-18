@@ -176,7 +176,9 @@
     "asset-proposals": "Propuestas de activos",
     "asset-construction": "Obras en curso",
     "asset-maintenance": "Mantenimiento de activos",
-    "asset-insurance": "Seguros de activos"
+    "asset-insurance": "Seguros de activos",
+    "service": "Servicio",
+    "my-visits": "Mis visitas"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gestionar evaluaciones",

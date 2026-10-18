@@ -90,7 +90,9 @@
         "production": "Production",
         "buyer": "Buyer",
         "cashier": "Cashier",
-        "projectCoordinator": "Project Coordinator"
+        "projectCoordinator": "Project Coordinator",
+        "serviceDispatcher": "Service Dispatcher",
+        "fieldTechnician": "Field Technician"
       },
       "due": "Due",
       "overdue": "Overdue",

@@ -10,6 +10,8 @@ import {
 import {registerScheduleDistributionHooks} from '../schedule-boards/distribution-hooks.ts';
 import { registerShiftRequestRouting, releaseShiftRequestApproval, SHIFT_REQUEST_SUBJECT_KIND } from "../schedule-boards/requests.ts";
 import { registerSchedulePublicationRouting, releasePublicationApproval, SCHEDULE_PUBLICATION_SUBJECT_KIND } from "../schedule-boards/publications.ts";
+import { releaseCompletionReview } from "../service/completion.ts";
+import { SERVICE_VISIT_COMPLETION_SUBJECT_KIND } from "../flows/service-visit-adapter.ts";
 import {
   deliverAutomaticSchedule,
   enqueueReviewedSchedule,
@@ -166,6 +168,12 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(SCHEDULE_PUBLICATION_SUBJECT_KIND, async ({ subjectId, outcome, comment, ctx }) => {
     if (!ctx.userId) throw new Error("Schedule publication decisions need the deciding user.");
     await releasePublicationApproval({ orgId: ctx.orgId, actorId: ctx.userId, publicationId: subjectId, outcome, comment });
+  });
+  // A service visit completion review is decided in its Flow; the service
+  // module applies the decision inside the gate's transaction.
+  registerFlowApprovalReleaseHandler(SERVICE_VISIT_COMPLETION_SUBJECT_KIND, async ({ subjectId, outcome, comment, ctx }) => {
+    if (!ctx.userId) throw new Error("Service visit completion decisions need the deciding user.");
+    await releaseCompletionReview({ orgId: ctx.orgId, actorId: ctx.userId, visitId: subjectId, outcome, comment });
   });
   registerScriptJournalWriter(createScriptJournal);
   registerFlowApprovalReleaseHandler(CHECKLIST_STEP_SUBJECT_KIND, releaseChecklistStepApproval);

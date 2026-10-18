@@ -875,6 +875,18 @@ export const NAV_MODULES: NavModule[] = [
     featureKey: 'fieldTickets',
     recordTarget: { kind: 'query', param: 'ticket' },
   },
+  // Service dispatch — requests, jobs, visits and agreements; the dispatch
+  // board itself is a Scheduling board of the dispatch type.
+  {
+    key: 'service',
+    href: '/service',
+    label: 'Service',
+    iconKey: 'wrench',
+    group: 'operations',
+    subgroup: 'delivery',
+    requiredPermissionsAny: ['service.read', 'service.manage', 'service.dispatch'],
+    featureKey: 'serviceDispatch',
+  },
   {
     key: 'payroll',
     href: '/payroll',
@@ -1235,6 +1247,8 @@ NAV_MODULES.push(
   // without close setup or the close workspace.
   { key: 'close-reopen-requests', href: '/accounting/reopen-requests', label: 'Reopen Requests', iconKey: 'history', group: 'accounting', subgroup: 'close', requiredPermission: 'close.reopen', exact: true },
   { key: 'time-clock', href: '/time/clock', label: 'Clock', iconKey: 'timer', group: 'my-work', requiredPermission: 'time.clock', featureKey: 'fieldTime', exact: true },
+  // A technician's own service visits: field status, work, parts and sign-off.
+  { key: 'my-visits', href: '/me/visits', label: 'My visits', iconKey: 'pin', group: 'my-work', requiredPermission: 'service.self', featureKey: 'serviceDispatch', exact: true },
 )
 
 /** Native local destinations are also discoverable and editable in the main menu. */
@@ -1295,7 +1309,7 @@ export function resolveStoredHref(stored: unknown): string | null {
 export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   // HR-15: one My Work entry (Inbox); /notifications stays a route and a
   // Notices filter inside the inbox, but no longer a nav entry.
-  'my-work': ['dashboard', 'approvals', 'me', 'time-clock', 'assistant', 'continuous-close', 'documents', 'apps'],
+  'my-work': ['dashboard', 'approvals', 'me', 'time-clock', 'my-visits', 'assistant', 'continuous-close', 'documents', 'apps'],
   customers: [
     'customers',
     'crm-activities',
@@ -1322,6 +1336,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'projects',
     'timesheets',
     'field-tickets',
+    'service',
     'resourcing',
     'property-management',
     'inventory',

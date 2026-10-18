@@ -90,7 +90,9 @@
         "production": "製造",
         "buyer": "購買担当者",
         "cashier": "レジ担当者",
-        "projectCoordinator": "プロジェクトコーディネーター"
+        "projectCoordinator": "プロジェクトコーディネーター",
+        "serviceDispatcher": "サービスディスパッチャー",
+        "fieldTechnician": "フィールド技術者"
       },
       "due": "期限",
       "overdue": "延滞",

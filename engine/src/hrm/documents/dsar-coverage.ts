@@ -71,6 +71,7 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "schedule_pattern_assignments", domain: "time", linkage: "direct" },
   { table: "schedule_pattern_exceptions", domain: "time", linkage: "transitive" },
   { table: "schedule_entry_requests", domain: "time", linkage: "direct" },
+  { table: "service_visit_events", domain: "time", linkage: "direct" },
   { table: "schedule_attendance_identities", domain: "time", linkage: "direct" },
   { table: "schedule_attendance_events", domain: "time", linkage: "direct" },
   { table: "schedule_attendance_observations", domain: "time", linkage: "direct" },
@@ -171,6 +172,18 @@ export interface DsarExcludedTable {
 }
 
 export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
+  {
+    table: "service_requests",
+    reason: "a customer's service request is a counterparty commercial record; operations remit.",
+  },
+  {
+    table: "service_jobs",
+    reason: "a customer's service job and its priced scope are counterparty commercial records; operations remit.",
+  },
+  {
+    table: "service_agreements",
+    reason: "a customer's recurring service agreement is a counterparty commercial record; operations remit.",
+  },
   {
     table: "withholding_standings",
     reason: "a subcontractor's statutory withholding standing is a counterparty tax record; finance remit.",

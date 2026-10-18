@@ -477,7 +477,9 @@
       "sales_rep": "Bearbeitet zugewiesene Konten, Aktivitäten, Verkaufschancen und eigene Prognosen und erstellt Entwürfe von Rechnungen und Barverkäufen. Reicht eigene Spesenabrechnungen ein. Kann nicht buchen, keine Zahlungen vereinnahmen und das Hauptbuch nicht sehen.",
       "buyer": "Erstellt Bestellungen und bucht Wareneingänge dazu, mit Lesezugriff auf Lieferanten, Artikel und Kreditoren. Reicht eigene Spesenabrechnungen ein. Kann keine Eingangsrechnungen buchen oder bezahlen, keinen Bestand buchen und weder Banking noch Hauptbuch sehen.",
       "cashier": "Kassiert, bucht und erstattet Barverkäufe an der Kasse und prüft Gutscheinguthaben. Reicht eigene Spesenabrechnungen ein. Kann weder Rechnungen noch Banking oder das Hauptbuch sehen.",
-      "project_coordinator": "Erfasst die eigene Zeit, verfolgt Projekte und erstellt Rechnungsentwürfe zur Genehmigung. Reicht eigene Spesenabrechnungen ein. Kann weder die Zeit von Kollegen sehen noch Rechnungen buchen, keine Zahlungen empfangen oder leisten und weder Banking noch Hauptbuch sehen."
+      "project_coordinator": "Erfasst die eigene Zeit, verfolgt Projekte und erstellt Rechnungsentwürfe zur Genehmigung. Reicht eigene Spesenabrechnungen ein. Kann weder die Zeit von Kollegen sehen noch Rechnungen buchen, keine Zahlungen empfangen oder leisten und weder Banking noch Hauptbuch sehen.",
+      "dispatcher": "Erfasst Serviceanfragen, erstellt Angebote, kalkuliert Serviceaufträge und -verträge und weist Einsätze auf Dispositionstafeln zu oder plant sie um. Erfasst die eigene Zeit und reicht eigene Spesenabrechnungen ein. Kann weder fakturieren noch Zahlungen entgegennehmen und weder Banking noch Hauptbuch sehen.",
+      "field_technician": "Sieht und bearbeitet nur die ihm zugewiesenen Serviceeinsätze: aktualisiert den Einsatzstatus, erfasst Arbeitsnotizen, Material und Arbeitszeit und holt die Unterschrift des Kunden ein. Erfasst die eigene Zeit und reicht eigene Spesenabrechnungen ein. Kann weder Einsätze anderer Techniker noch Preise, Rechnungen oder das Hauptbuch sehen."
     }
   },
   "scripts": {
@@ -1291,7 +1293,8 @@
       "expenses": "Spesenabrechnungen",
       "intercompany": "Konzernverrechnung",
       "amortization": "Aufwandsabgrenzung",
-      "equity": "Eigenkapital und Cap Table"
+      "equity": "Eigenkapital und Cap Table",
+      "service": "Servicedisposition"
     },
     "gl_read": "Journale und Salden anzeigen",
     "gl_manage": "Kontenplan verwalten",
@@ -1488,7 +1491,11 @@
     "equity_manage": "Aktiengattungen, Pläne, Ausgaben, Zuteilungsvorgänge und genehmigungspflichtige Eigenkapitalvorgänge erfassen",
     "equity_approve": "Über Eigenkapitalvorgänge entscheiden, die in Flows zur Genehmigung geleitet werden",
     "assets_capitalize": "Anlagenvorschläge übernehmen und Anlagen im Bau aktivieren",
-    "assets_maintain": "Wartungspläne und Versicherungspolicen für Anlagen pflegen"
+    "assets_maintain": "Wartungspläne und Versicherungspolicen für Anlagen pflegen",
+    "service_read": "Serviceanfragen, -aufträge, -einsätze und -verträge anzeigen",
+    "service_manage": "Serviceanfragen erfassen und Aufträge, Angebote, Verträge und Einsatzabschlüsse verwalten",
+    "service_dispatch": "Einsätze auf Dispositionstafeln zuweisen und umplanen",
+    "service_self": "Eigene Serviceeinsätze bearbeiten"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -8684,6 +8691,10 @@
     "rebateManagement": {
       "title": "Bonusverwaltung",
       "description": "Kunden- und Lieferantenvereinbarungen, rückwirkende Bonusabgrenzungen, Ansprüche und Abrechnungen verwalten."
+    },
+    "serviceDispatch": {
+      "title": "Servicedisposition",
+      "description": "Serviceanfragen, Angebote, Aufträge und wiederkehrende Verträge für Außendienstarbeiten, disponiert an Techniker auf Dispositionstafeln mit Live-Status, Material, Arbeitszeit, Kundenunterschrift und Abrechnung pro Einsatz oder pro Auftrag. Erfordert die Einsatzplanung; Angebote nutzen Angebote & Aufträge, Material nutzt Vorräte und Arbeitszeit nutzt die Zeiterfassung."
     }
   },
   "extensions": {

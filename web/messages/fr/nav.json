@@ -176,7 +176,9 @@
     "asset-proposals": "Propositions d’immobilisation",
     "asset-construction": "Immobilisations en cours",
     "asset-maintenance": "Entretien des immobilisations",
-    "asset-insurance": "Assurance des immobilisations"
+    "asset-insurance": "Assurance des immobilisations",
+    "service": "Service",
+    "my-visits": "Mes visites"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gérer les évaluations",

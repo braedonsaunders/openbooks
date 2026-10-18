@@ -93,6 +93,8 @@ export type StoredEntry = {
   startsAt: string; endsAt: string; breakMinutes: number; seriesId: string | null; supersedesId: string | null;
   employmentId: string | null; governed: boolean; patternAssignmentId: string | null; patternOccursOn: string | null; patternSlot: number | null;
   patternOverride: boolean; removesPredecessor: boolean; closed: boolean; requiredQualificationTypeIds: string[]; started: boolean;
+  /** The service visit a dispatch booking serves. */
+  serviceVisitId: string | null;
 };
 
 export const STORED_COLUMNS = sql`id, revision, board_id as "boardId", worker_party_id as "workerPartyId", coalesce(worker_party_id,equipment_unit_id,resource_location_id) as "subjectId",
@@ -105,7 +107,8 @@ export const STORED_COLUMNS = sql`id, revision, board_id as "boardId", worker_pa
   break_minutes as "breakMinutes", series_id as "seriesId", supersedes_id as "supersedesId",
   employment_id as "employmentId", governed, pattern_assignment_id as "patternAssignmentId", pattern_occurs_on::text as "patternOccursOn",
   pattern_slot as "patternSlot", pattern_override as "patternOverride", removes_predecessor as "removesPredecessor",
-  closed_at is not null as closed, required_qualification_type_ids::text[] as "requiredQualificationTypeIds", starts_at <= now() as started`;
+  closed_at is not null as closed, required_qualification_type_ids::text[] as "requiredQualificationTypeIds", starts_at <= now() as started,
+  service_visit_id as "serviceVisitId"`;
 
 export function hash(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
@@ -227,6 +230,8 @@ export async function insertEntry(input: {
   actor: ScheduleActor; board: ScheduleBoard; id: string; booking: Normalized; status: "draft" | "published";
   supersedesId: string | null; reason: string; requestHash: string;
   employmentId?: string | null; requiredQualificationTypeIds?: readonly string[]; origin?: EntryOrigin;
+  /** The service visit a dispatch booking serves; only dispatch boards accept one. */
+  serviceVisitId?: string | null;
 }): Promise<void> {
   const { actor, board, booking } = input;
   const target = booking.target;
@@ -237,7 +242,7 @@ export async function insertEntry(input: {
     (id, org_id, board_id, worker_party_id, equipment_unit_id, resource_location_id, employment_id, subsidiary_id, target_kind, customer_party_id, project_id, project_task_id, location_id, schedule_code_id,
      department_id, detail, notes, span_mode, time_zone, starts_on, ends_on, starts_at, ends_at, break_minutes, series_id, supersedes_id,
      status, published_by, published_at, reason, request_hash, created_by, updated_by,
-     pattern_assignment_id, pattern_occurs_on, pattern_slot, pattern_override, origin_request_id, removes_predecessor, required_qualification_type_ids)
+     pattern_assignment_id, pattern_occurs_on, pattern_slot, pattern_override, origin_request_id, removes_predecessor, required_qualification_type_ids, service_visit_id)
     values (${input.id}, ${actor.orgId}, ${board.id}, ${booking.subject.kind === "person" ? booking.subject.id : null}, ${booking.subject.kind === "equipment" ? booking.subject.id : null}, ${booking.subject.kind === "location" ? booking.subject.id : null},
      ${input.employmentId ?? null}, ${booking.subject.subsidiaryId},
      ${target?.kind ?? null}, ${target?.customerPartyId ?? null}, ${target?.projectId ?? null}, ${target?.projectTaskId ?? null},
@@ -246,7 +251,7 @@ export async function insertEntry(input: {
      ${booking.span.breakMinutes}, ${booking.seriesId}, ${input.supersedesId}, ${input.status},
      ${published ? actor.actorId : null}, ${published ? sql`now()` : null}, ${input.reason}, ${input.requestHash}, ${actor.actorId}, ${actor.actorId},
      ${pattern?.assignmentId ?? null}, ${pattern?.occursOn ?? null}, ${pattern?.slot ?? null}, ${pattern?.override ?? false},
-     ${input.origin?.requestId ?? null}, ${input.origin?.removesPredecessor ?? false}, ${qualifications}::uuid[])
+     ${input.origin?.requestId ?? null}, ${input.origin?.removesPredecessor ?? false}, ${qualifications}::uuid[], ${input.serviceVisitId ?? null})
     returning id`)).rows;
   if (rows.length !== 1) throw new ScheduleError("The booking was not saved.", { code: "schedule_not_saved", remedy: "Reload the board and try again." });
 }
@@ -321,6 +326,16 @@ export async function lockStored(orgId: string, boardId: string, id: string): Pr
   return row;
 }
 
+/** Visit bookings move only through the dispatch commands, which keep the visit in step. */
+export function refuseVisitBooking(row: Pick<StoredEntry, "serviceVisitId">): void {
+  if (row.serviceVisitId) {
+    throw new ScheduleError("This booking serves a service visit.", {
+      code: "schedule_visit_booking",
+      remedy: "Reschedule, reassign or remove it on the dispatch view, which keeps the visit, its arrival window and its customer notices in step.",
+    });
+  }
+}
+
 export function checkRevision(row: StoredEntry, expected: unknown): void {
   if (!Number.isSafeInteger(expected) || row.revision !== expected) {
     throw new ScheduleError("Someone changed this booking since the board was loaded.", { status: 409, code: "schedule_stale", remedy: "Reload the board and make the change again." });
@@ -377,6 +392,7 @@ async function createOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
 async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: ReadonlySet<string> | null, change: Extract<BoardChange, { op: "update" }>, reason: string | null): Promise<ChangeResult> {
   if (change.fields.subject && change.fields.workerPartyId) throw new ScheduleError("Name one booking subject.", { code: "schedule_invalid" });
   const row = await lockStored(actor.orgId, board.id, change.id);
+  refuseVisitBooking(row);
   checkRevision(row, change.expectedRevision);
   if (row.removesPredecessor) {
     throw new ScheduleError("This removal is waiting for approval.", { status: 409, code: "schedule_pending_change", remedy: "Discard the removal to keep the booking, then change it." });
@@ -451,6 +467,7 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
 
 async function cancelOne(actor: ScheduleActor, board: ScheduleBoard, change: Extract<BoardChange, { op: "cancel" }>, reason: string | null): Promise<ChangeResult> {
   const row = await lockStored(actor.orgId, board.id, change.id);
+  refuseVisitBooking(row);
   checkRevision(row, change.expectedRevision);
   const cancelReason = reason ?? `Removed from ${board.name}`;
   if (row.status === "draft") {

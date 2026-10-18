@@ -389,6 +389,14 @@ export const FEATURES: FeatureDef[] = [
   { key: 'hrmAttendance', defaultEnabled: false, category: 'people', group: 'workforce', parentKey: 'hrm' },
   // Formal completion review is an additional opt-in, never required to publish shifts.
   { key: 'hrmShiftClosing', defaultEnabled: false, category: 'people', group: 'workforce', parentKey: 'hrmShiftPlanning', requiresAll: ['hrmAttendance'] },
+  // Service dispatch — service requests, quotes on native estimates, service
+  // jobs and recurring agreements, visits dispatched to technicians on
+  // dispatch boards, field status from My visits, completion with parts,
+  // labor and signatures, and per-visit or per-job invoicing. Dispatch boards
+  // are Scheduling boards, so Scheduling is the parent. Quoting uses Orders,
+  // parts use Inventory and labor uses Time tracking; each refuses by name
+  // while its own feature is off.
+  { key: 'serviceDispatch', defaultEnabled: false, category: 'people', group: 'workforce', navModules: ['service'], parentKey: 'hrmShiftPlanning', recommends: ['orders', 'inventory', 'timeTracking'] },
   // HR documents — hire-to-retire documents with e-signature, retention
   // schedules with audited deletion, and subject-access exports. Toggling
   // never deletes data — rows stay and re-render when re-on.

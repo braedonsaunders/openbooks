@@ -90,7 +90,9 @@
         "production": "Produktion",
         "buyer": "Einkäufer",
         "cashier": "Kassierer",
-        "projectCoordinator": "Projektkoordinator"
+        "projectCoordinator": "Projektkoordinator",
+        "serviceDispatcher": "Servicedisponent",
+        "fieldTechnician": "Servicetechniker"
       },
       "due": "Fällig",
       "overdue": "Überfällig",

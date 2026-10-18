@@ -82,6 +82,8 @@ export interface BoardEntry {
   readonly attendance: BoardAttendance | null;
   /** An open shift request naming this booking. */
   readonly openRequest: { readonly id: string; readonly kind: "release" | "change" | "swap"; readonly status: "awaiting_counterpart" | "pending" } | null;
+  /** The service visit a dispatch booking serves. */
+  readonly serviceVisitId?: string | null;
 }
 
 export interface BoardAttendance {
@@ -186,7 +188,7 @@ export const ENTRY_COLUMNS = sql`e.id, e.revision, e.board_id as "boardId", eb.n
       and not exists (select 1 from schedule_attendance_observations n where n.org_id = o.org_id and n.supersedes_id = o.id)) as attendance,
   (select jsonb_build_object('id', r.id, 'kind', r.kind, 'status', r.status) from schedule_entry_requests r
     where r.org_id = e.org_id and r.status in ('awaiting_counterpart', 'pending') and e.id in (r.entry_id, r.counterpart_entry_id)
-    order by r.created_at, r.id limit 1) as "openRequest"`;
+    order by r.created_at, r.id limit 1) as "openRequest", e.service_visit_id as "serviceVisitId"`;
 
 export const ENTRY_JOINS = sql`from schedule_entries e
   join schedule_boards eb on eb.org_id = e.org_id and eb.id = e.board_id

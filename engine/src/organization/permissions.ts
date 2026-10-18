@@ -333,6 +333,16 @@ export const PERMISSION_CATALOGUE = [
   "hrm.shifts.approve",
   "hrm.attendance.read",
   "hrm.attendance.manage",
+  // Service dispatch: read sees requests, jobs, visits, agreements and the
+  // dispatch boards; manage takes requests, prices jobs and agreements,
+  // records completion and invoices work; dispatch assigns and reschedules
+  // visits on dispatch boards. self is the technician's own visits: the
+  // visits booked on the person behind the login, their field status and
+  // their completion, and nothing else.
+  "service.read",
+  "service.manage",
+  "service.dispatch",
+  "service.self",
   // HR-19 begin: documents and surveys — the same confidentiality rule
   // as employment. documents.read sees HR documents, templates, retention
   // state and exports; documents.manage authors templates, issues/sends/
@@ -776,6 +786,16 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "service",
+    labelKey: "permissions.groups.service",
+    permissions: [
+      { key: "service.read", labelKey: permissionLabelKey("service.read") },
+      { key: "service.manage", labelKey: permissionLabelKey("service.manage") },
+      { key: "service.dispatch", labelKey: permissionLabelKey("service.dispatch") },
+      { key: "service.self", labelKey: permissionLabelKey("service.self") },
+    ],
+  },
+  {
     key: "payroll",
     labelKey: "permissions.groups.payroll",
     permissions: [
@@ -981,6 +1001,11 @@ export const PERMISSION_IMPLICATIONS: Partial<Record<CataloguePermission, readon
   "time.clock": [{ key: "time.read", scope: "own" }],
   // Self-service expenses read, enter and submit the holder's own reports.
   "expenses.self": [{ key: "expenses.read", scope: "own" }, { key: "expenses.create", scope: "own" }],
+  // Managing and dispatching service work read every service record in scope.
+  "service.manage": [{ key: "service.read", scope: "all" }],
+  "service.dispatch": [{ key: "service.read", scope: "all" }],
+  // A technician reads and works only the visits booked on them.
+  "service.self": [{ key: "service.read", scope: "own" }],
 };
 
 /**
@@ -1268,6 +1293,8 @@ export const BUILT_IN_ROLES: Record<
       "time.crew.enter",
       "time.kiosk.manage",
       // HR-20 end
+      "service.read",
+      "service.manage",
       "payroll.read",
       "payroll.manage",
       "payroll.run",
@@ -1579,6 +1606,34 @@ export const BUILT_IN_ROLES: Record<
       "ar.read", "ar.create", "estimates.read", "estimates.create", "estimates.issue", "usage.read", "usage.manage", "usage.bill",
       "parties.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "assistant.use",
+      "hrm.self.read", "hrm.self.request", "hrm.leave.request",
+    ],
+  },
+  // Service dispatcher: takes service requests, quotes and prices jobs and
+  // agreements, and assigns visits to technicians. Invoicing, posting and
+  // collecting stay with accounting.
+  dispatcher: {
+    name: "Service Dispatcher",
+    description:
+      "Takes service requests, quotes and prices service jobs and agreements, and assigns and reschedules visits on dispatch boards. Logs their own time and files their own expense reports. Cannot invoice, take payments or see banking or the ledger.",
+    permissions: [
+      "service.read", "service.manage", "service.dispatch",
+      "estimates.read", "estimates.create", "estimates.issue",
+      "parties.read", "items.read", "reports.read",
+      "time.self", "time.clock", "expenses.self",
+      "documents.read", "feedback.use", "assistant.use",
+      "hrm.self.read", "hrm.self.request", "hrm.leave.request",
+    ],
+  },
+  // Field technician: works the visits booked on them from My visits.
+  field_technician: {
+    name: "Field Technician",
+    description:
+      "Sees and works only the service visits booked on them: updates their field status, records work notes, parts and labor, and collects the customer's signature. Logs their own time and files their own expense reports. Cannot see other technicians' visits, prices, invoices or the ledger.",
+    permissions: [
+      "service.self", "items.read",
+      "time.self", "time.clock", "expenses.self",
+      "feedback.use",
       "hrm.self.read", "hrm.self.request", "hrm.leave.request",
     ],
   },

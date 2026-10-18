@@ -21,6 +21,8 @@ export const SEEDED_ROLE_NAMES: Record<string, string> = {
   Buyer: 'buyer',
   Cashier: 'cashier',
   'Project Coordinator': 'projectCoordinator',
+  'Service Dispatcher': 'serviceDispatcher',
+  'Field Technician': 'fieldTechnician',
 }
 
 /**

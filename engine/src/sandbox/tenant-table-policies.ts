@@ -100,6 +100,27 @@ export const TENANT_TABLE_POLICIES = {
   "schedule_attendance_watermarks": "skip:no-copy",
   "schedule_attendance_observations": "skip:no-copy",
   "schedule_attendance_event_claims": "skip:no-copy",
+  // Service work copies with the bookings, documents and stock it references.
+  // Customer acceptance and sign-off links, the signatures captured through
+  // them and customer notices belong to the source environment.
+  "service_dispatch_policies": "clone:catalog-uuid-rebase",
+  "service_requests": "clone:catalog-uuid-rebase",
+  "service_agreements": "clone:catalog-uuid-rebase",
+  "service_agreement_versions": "clone:catalog-uuid-rebase",
+  "service_agreement_lines": "clone:catalog-uuid-rebase",
+  "service_jobs": "clone:catalog-uuid-rebase",
+  "service_job_lines": "clone:catalog-uuid-rebase",
+  "service_visits": "clone:catalog-uuid-rebase",
+  "service_visit_events": "clone:catalog-uuid-rebase",
+  "service_visit_parts": "clone:catalog-uuid-rebase",
+  "service_billings": "clone:catalog-uuid-rebase",
+  "service_job_deposits": "clone:catalog-uuid-rebase",
+  "service_quotes": "skip:no-copy",
+  "service_quote_lines": "skip:no-copy",
+  "service_visit_signature_requests": "skip:no-copy",
+  "service_visit_signatures": "skip:no-copy",
+  "service_customer_notices": "skip:no-copy",
+  // Native offering inserts recreate these identities using the rebased native ids.
   "schedule_attendance_observation_events": "skip:no-copy",
   "hrm_benefit_catalog": "skip:no-copy",
   // Transfer execution and source artifacts belong to their original environment.

@@ -18,6 +18,7 @@ export { posReceiptEmail, type PosReceiptEmail, type PosReceiptEmailLine } from 
 export { portalMagicLinkEmail } from './portal-magic-link'
 export { paymentMethodSetupEmail } from './payment-method-setup'
 export { scheduleChangeEmail } from './schedule-change'
+export { serviceVisitArrivalWindowEmail, serviceVisitOnTheWayEmail, serviceQuoteEmail, serviceVisitSignatureEmail } from './service-visit'
 export { billingReviewRequestEmail } from './billing-review'
 
 // --- Flow / approval emails (engine/src/flows) -------------------------------

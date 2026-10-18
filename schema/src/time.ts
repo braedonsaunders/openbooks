@@ -202,6 +202,8 @@ export const timeEntries = pgTable(
     ...auditColumns,
     workOrderId: uuid("work_order_id"),
     woOperationId: uuid("wo_operation_id"),
+    /** The service visit this labor was worked on; exclusive with a project or work order. */
+    serviceVisitId: uuid("service_visit_id"),
   },
   (t) => [
     uniqueIndex("time_entries_org_id_id_unique").on(t.orgId, t.id),
@@ -222,7 +224,7 @@ export const timeEntries = pgTable(
     check("time_production_consumed_target_chk",sql`${t.productionConsumedOperationId} is null or (${t.workOrderId} is not null and ${t.woOperationId} is not null and ${t.woOperationId}=${t.productionConsumedOperationId} and ${t.status}='approved')`),
     check(
       "time_entries_one_cost_object_check",
-      sql`${t.projectId} is null or ${t.workOrderId} is null`,
+      sql`num_nonnulls(${t.projectId}, ${t.workOrderId}, ${t.serviceVisitId}) <= 1`,
     ),
     check(
       "time_entries_operation_requires_work_order_check",

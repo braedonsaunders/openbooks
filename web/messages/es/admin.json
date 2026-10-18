@@ -630,7 +630,9 @@
       "sales_rep": "Trabaja las cuentas, actividades, oportunidades y pronósticos personales asignados, y prepara borradores de facturas y ventas al contado. Presenta sus propios informes de gastos. No puede contabilizar, cobrar pagos ni ver el libro mayor.",
       "buyer": "Emite órdenes de compra y recibe la mercancía contra ellas, con acceso de lectura a proveedores, artículos y cuentas por pagar. Presenta sus propios informes de gastos. No puede contabilizar ni pagar facturas, contabilizar inventario ni ver bancos o el libro mayor.",
       "cashier": "Registra, contabiliza y reembolsa ventas al contado en caja y consulta saldos de tarjetas regalo. Presenta sus propios informes de gastos. No puede ver facturas, bancos ni el libro mayor.",
-      "project_coordinator": "Registra su propio tiempo, sigue proyectos y prepara borradores de facturas de cliente para aprobación. Presenta sus propios informes de gastos. No puede ver el tiempo de sus compañeros, contabilizar facturas, cobrar ni pagar, ni ver bancos o el libro mayor."
+      "project_coordinator": "Registra su propio tiempo, sigue proyectos y prepara borradores de facturas de cliente para aprobación. Presenta sus propios informes de gastos. No puede ver el tiempo de sus compañeros, contabilizar facturas, cobrar ni pagar, ni ver bancos o el libro mayor.",
+      "dispatcher": "Registra solicitudes de servicio, cotiza y valora trabajos y contratos de servicio, y asigna y reprograma visitas en los tableros de despacho. Registra su propio tiempo y presenta sus propios informes de gastos. No puede facturar, cobrar pagos ni ver bancos o el libro mayor.",
+      "field_technician": "Ve y atiende solo las visitas de servicio que tiene asignadas: actualiza su estado en campo, registra notas de trabajo, repuestos y mano de obra, y recoge la firma del cliente. Registra su propio tiempo y presenta sus propios informes de gastos. No puede ver visitas de otros técnicos, precios, facturas ni el libro mayor."
     }
   },
   "scripts": {
@@ -1291,7 +1293,8 @@
       "expenses": "Informes de gastos",
       "intercompany": "Intercompañía",
       "amortization": "Amortización de gastos",
-      "equity": "Patrimonio y tabla de capitalización"
+      "equity": "Patrimonio y tabla de capitalización",
+      "service": "Despacho de servicio"
     },
     "gl_read": "Ver asientos y saldos",
     "gl_manage": "Gestionar el plan de cuentas",
@@ -1488,7 +1491,11 @@
     "equity_manage": "Registrar clases de acciones, planes, emisiones, movimientos de adjudicaciones y acciones de patrimonio gobernadas",
     "equity_approve": "Decidir las acciones de patrimonio enviadas a aprobación en Flows",
     "assets_capitalize": "Aceptar propuestas de activos y capitalizar obras en curso",
-    "assets_maintain": "Gestionar planes de mantenimiento de activos y pólizas de seguro"
+    "assets_maintain": "Gestionar planes de mantenimiento de activos y pólizas de seguro",
+    "service_read": "Ver solicitudes, trabajos, visitas y contratos de servicio",
+    "service_manage": "Registrar solicitudes de servicio y gestionar trabajos, cotizaciones, contratos y cierres de visitas",
+    "service_dispatch": "Asignar y reprogramar visitas en tableros de despacho",
+    "service_self": "Atender sus propias visitas de servicio"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -8684,6 +8691,10 @@
     "rebateManagement": {
       "title": "Gestión de descuentos",
       "description": "Gestionar acuerdos de clientes y proveedores, devengos retroactivos, solicitudes y liquidaciones."
+    },
+    "serviceDispatch": {
+      "title": "Despacho de servicio",
+      "description": "Solicitudes, cotizaciones, trabajos y contratos recurrentes para trabajo de servicio en campo, despachados a técnicos en tableros de despacho con estado en vivo, repuestos, mano de obra, firma del cliente y facturación por visita o por trabajo. Requiere Planificación; las cotizaciones usan Cotizaciones y pedidos, los repuestos usan Inventario y la mano de obra usa Control de horas."
     }
   },
   "backupsManager": {

@@ -186,6 +186,7 @@
         "revenue",
         "schedule-boards",
         "scripting",
+        "service",
         "tax-returns"
       ]
     },
@@ -758,6 +759,23 @@
         "organization",
         "payroll",
         "platform"
+      ]
+    },
+    "service": {
+      "description": "Service dispatch: service requests, quotes on native estimates, service jobs and recurring agreements, visits dispatched on dispatch boards, field status, completion with parts, labor and signatures, customer notices, and per-visit or per-job invoicing.",
+      "dependsOn": [
+        "delivery",
+        "flows",
+        "hrm",
+        "inventory",
+        "ledger",
+        "money",
+        "organization",
+        "payments",
+        "payroll",
+        "platform",
+        "records",
+        "schedule-boards"
       ]
     },
     "scheduling": {

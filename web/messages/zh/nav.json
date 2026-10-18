@@ -176,7 +176,9 @@
     "asset-proposals": "资产建议",
     "asset-construction": "在建工程",
     "asset-maintenance": "资产维护",
-    "asset-insurance": "资产保险"
+    "asset-insurance": "资产保险",
+    "service": "服务",
+    "my-visits": "我的上门服务"
   },
   "groups": {
     "manufacturing": "制造",

@@ -166,6 +166,11 @@ const EXCLUDED_CATEGORIES: Category[] = [
       "field ticket configuration and signer identity; ticket activity flows through field_tickets.",
   },
   {
+    prefixes: ["service_visit_signature_requests", "service_customer_notices"],
+    reason:
+      "visit signing-link digests and customer notice delivery plumbing; service activity flows through service_visits and service_visit_signatures.",
+  },
+  {
     prefixes: ["ap_capture_"],
     reason: "AP capture runtime: candidate field values before they post.",
   },

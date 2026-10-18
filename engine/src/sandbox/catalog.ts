@@ -214,6 +214,14 @@ export const EXCLUDE = new Set([
   "payment_links",
   "field_ticket_signature_requests",
   "signature_requests",
+  "service_visit_signature_requests",
+  // Service quote terms are answered through signature requests, which stay
+  // with the source; visit signatures and customer notices are real-world
+  // evidence of that environment's customers.
+  "service_quotes",
+  "service_quote_lines",
+  "service_visit_signatures",
+  "service_customer_notices",
   "hrm_survey_invitations",
   "hrm_document_signers",
   "time_kiosks",

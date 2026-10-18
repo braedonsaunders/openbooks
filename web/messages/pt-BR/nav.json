@@ -176,7 +176,9 @@
     "asset-proposals": "Propostas de Ativos",
     "asset-construction": "Imobilizado em Andamento",
     "asset-maintenance": "Manutenção de Ativos",
-    "asset-insurance": "Seguro de Ativos"
+    "asset-insurance": "Seguro de Ativos",
+    "service": "Serviços",
+    "my-visits": "Minhas visitas"
   },
   "groups": {
     "manufacturing": "Manufatura",

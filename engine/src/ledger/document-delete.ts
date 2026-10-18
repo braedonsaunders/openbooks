@@ -160,6 +160,21 @@ export async function deleteDocument(
       reason: audit.reason?.trim() || "draft_discarded",
       source: audit.source ?? "ui",
     });
+    // Service dispatch provenance: a discarded draft invoice releases the job
+    // or visit it billed so the work can be invoiced again, and a discarded
+    // draft estimate drops its unsent service terms.
+    if (doc.kind === "customer_invoice" || doc.kind === "quote") {
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        select org_id, 'service_billings', id, 'update',
+               jsonb_build_object('before', jsonb_build_object('jobId', job_id, 'visitId', visit_id, 'invoiceId', invoice_document_id), 'after', null,
+                 'reason', ${audit.reason?.trim() || "draft_discarded"}),
+               ${userId ?? null}
+          from service_billings where org_id = ${doc.orgId} and invoice_document_id = ${documentId}`);
+      await tx.execute(sql`delete from service_billings where org_id = ${doc.orgId} and invoice_document_id = ${documentId}`);
+      await tx.execute(sql`delete from service_quote_lines where org_id = ${doc.orgId} and quote_document_id = ${documentId}`);
+      await tx.execute(sql`delete from service_quotes where org_id = ${doc.orgId} and quote_document_id = ${documentId}`);
+    }
     await tx.execute(
       sql`delete from document_links where org_id = ${doc.orgId} and (from_document_id = ${documentId} or to_document_id = ${documentId})`,
     );

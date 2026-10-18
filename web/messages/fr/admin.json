@@ -477,7 +477,9 @@
       "sales_rep": "Gère les comptes, activités, opportunités et prévisions personnelles qui lui sont attribués, et prépare des brouillons de factures et de ventes au comptant. Établit ses propres notes de frais. Ne peut pas comptabiliser, encaisser ni voir le grand livre.",
       "buyer": "Émet des bons de commande et réceptionne les marchandises correspondantes, avec un accès en lecture aux fournisseurs, articles et comptes fournisseurs. Établit ses propres notes de frais. Ne peut pas comptabiliser ni payer de factures, comptabiliser le stock, ni voir la banque ou le grand livre.",
       "cashier": "Encaisse, comptabilise et rembourse les ventes au comptant à la caisse et consulte les soldes des cartes cadeaux. Établit ses propres notes de frais. Ne peut voir ni les factures, ni la banque, ni le grand livre.",
-      "project_coordinator": "Saisit son propre temps, suit les projets et prépare des brouillons de factures clients pour approbation. Établit ses propres notes de frais. Ne peut pas voir le temps de ses collègues, comptabiliser de factures, encaisser ou payer, ni voir la banque ou le grand livre."
+      "project_coordinator": "Saisit son propre temps, suit les projets et prépare des brouillons de factures clients pour approbation. Établit ses propres notes de frais. Ne peut pas voir le temps de ses collègues, comptabiliser de factures, encaisser ou payer, ni voir la banque ou le grand livre.",
+      "dispatcher": "Saisit les demandes de service, établit les devis, chiffre les interventions et contrats de service, et affecte et replanifie les visites sur les tableaux de répartition. Saisit son propre temps et établit ses propres notes de frais. Ne peut pas facturer, encaisser ni voir la banque ou le grand livre.",
+      "field_technician": "Voit et traite uniquement les visites de service qui lui sont affectées : met à jour leur statut terrain, saisit les notes de travail, pièces et main-d’œuvre, et recueille la signature du client. Saisit son propre temps et établit ses propres notes de frais. Ne peut voir ni les visites des autres techniciens, ni les prix, ni les factures, ni le grand livre."
     }
   },
   "scripts": {
@@ -1291,7 +1293,8 @@
       "expenses": "Notes de frais",
       "intercompany": "Intercompagnie",
       "amortization": "Étalement des charges",
-      "equity": "Capitaux propres et table de capitalisation"
+      "equity": "Capitaux propres et table de capitalisation",
+      "service": "Répartition du service"
     },
     "gl_read": "Consulter les journaux et les soldes",
     "gl_manage": "Gérer le plan comptable",
@@ -1488,7 +1491,11 @@
     "equity_manage": "Enregistrer les catégories d’actions, les plans, les émissions, les mouvements d’attributions et les opérations sur capitaux propres encadrées",
     "equity_approve": "Statuer sur les opérations sur capitaux propres soumises à approbation dans Flows",
     "assets_capitalize": "Accepter les propositions d’immobilisation et immobiliser les immobilisations en cours",
-    "assets_maintain": "Gérer les plans d’entretien et les polices d’assurance des immobilisations"
+    "assets_maintain": "Gérer les plans d’entretien et les polices d’assurance des immobilisations",
+    "service_read": "Consulter les demandes, interventions, visites et contrats de service",
+    "service_manage": "Saisir les demandes de service et gérer les interventions, devis, contrats et clôtures de visite",
+    "service_dispatch": "Affecter et replanifier les visites sur les tableaux de répartition",
+    "service_self": "Traiter ses propres visites de service"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -8684,6 +8691,10 @@
     "rebateManagement": {
       "title": "Gestion des ristournes",
       "description": "Gérer les accords clients et fournisseurs, les droits acquis rétroactifs, les demandes et les règlements."
+    },
+    "serviceDispatch": {
+      "title": "Répartition du service",
+      "description": "Demandes, devis, interventions et contrats récurrents pour le service sur le terrain, répartis entre techniciens sur des tableaux de répartition avec statut en direct, pièces, main-d’œuvre, signature du client et facturation par visite ou par intervention. Nécessite la Planification ; les devis utilisent Devis et commandes, les pièces l’Inventaire et la main-d’œuvre le Suivi du temps."
     }
   },
   "backupsManager": {

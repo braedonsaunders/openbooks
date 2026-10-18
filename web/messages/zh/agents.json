@@ -90,7 +90,9 @@
         "production": "生产",
         "buyer": "采购员",
         "cashier": "收银员",
-        "projectCoordinator": "项目协调员"
+        "projectCoordinator": "项目协调员",
+        "serviceDispatcher": "服务调度员",
+        "fieldTechnician": "现场技术员"
       },
       "due": "到期",
       "overdue": "逾期",
