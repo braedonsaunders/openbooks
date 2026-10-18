@@ -1227,9 +1227,9 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     "name": "openbooks_reconciliation_match_guard",
-    "source": "0623_reconciliation_match_clone_authority.sql",
-    "sha256": "febb0a2f859f4c8a6aa95e2c3d8abe66bcd850babeca7038c2c8155369da8966",
-    "newSha256": "442f7133e0dac3816cf6a89622434315cc35e2f7ec24550b6de6d33584311de1",
+    "source": "0645_reconciliation_journal_clearing_groups.sql",
+    "sha256": "442f7133e0dac3816cf6a89622434315cc35e2f7ec24550b6de6d33584311de1",
+    "newSha256": "9f1e32b854b8f966e1e37afbac93f1b5bbebbcd05b151da05cb12f64b868ca3b",
     "patch": true
   },
   {
