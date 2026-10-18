@@ -88,6 +88,8 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
     "users",
     "time_entries",
   ],
+  // The match guard reads its reconciliation, statement line and journal line during INSERT.
+  reconciliation_matches: ["reconciliations", "bank_statement_lines", "journal_lines", "journal_entries"],
 };
 
 /** Tables never copied into a sandbox: sandbox-management tables, real-world
