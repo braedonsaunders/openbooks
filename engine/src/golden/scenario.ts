@@ -1223,9 +1223,12 @@ export async function runScenario(
       if (!isUuid(foreign.id)) {
         throw new Error("rls probe refused: foreign document id is not a UUID");
       }
+      // The probe selects only a foreign document's id and must see nothing,
+      // so it reads documents with the payroll and expense grants a console
+      // operator holding them would have; no row content is returned.
       const seenView = await runUserSql(
         `select id from documents where id = '${foreign.id}'`,
-        { orgId },
+        { orgId, payrollRead: true, expenseRead: true },
       );
       rlsOk = tableProbe.established && tableProbe.tableHidden && seenView.rowCount === 0;
       rlsDetail += tableProbe.established
