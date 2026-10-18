@@ -56,3 +56,53 @@ function matchesNavPath(location: string, href: string, exact?: boolean): boolea
   if (exact || hrefPath === '/') return false
   return pathname.startsWith(hrefPath + '/')
 }
+
+/**
+ * The workspace that owns a location: the one holding its menu entry, else
+ * the one whose home or entries share the most leading path segments with it.
+ * Pages reached inside a module (tabs, local views, record pages) are not menu
+ * entries themselves but still belong to that module's workspace.
+ */
+export function findNavWorkspace<G extends ActiveNavGroup>(
+  location: string | null | undefined,
+  groups: G[],
+): G | null {
+  if (!location) return null
+  const activeHref = findActiveNavHref(location, groups)
+  if (activeHref) {
+    const owner = groups.find((group) => navGroupHrefs(group).includes(activeHref))
+    if (owner) return owner
+  }
+  const segments = pathSegments(location)
+  let best: G | null = null
+  let bestShared = 0
+  for (const group of groups) {
+    for (const href of navGroupHrefs(group)) {
+      const shared = sharedLeadingSegments(segments, pathSegments(href))
+      if (shared > bestShared) {
+        best = group
+        bestShared = shared
+      }
+    }
+  }
+  return best
+}
+
+function navGroupHrefs(group: ActiveNavGroup): string[] {
+  const hrefs = group.groupHref ? [group.groupHref] : []
+  for (const item of group.items) {
+    hrefs.push(item.href)
+    if (item.subgroupHref) hrefs.push(item.subgroupHref)
+  }
+  return hrefs
+}
+
+function pathSegments(location: string): string[] {
+  return (location.split('?', 1)[0] ?? '').split('/').filter(Boolean)
+}
+
+function sharedLeadingSegments(a: string[], b: string[]): number {
+  let shared = 0
+  while (shared < a.length && shared < b.length && a[shared] === b[shared]) shared++
+  return shared
+}

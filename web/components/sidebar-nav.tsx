@@ -98,7 +98,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn, useHydrated } from '@openbooks/ui'
-import { findActiveNavHref } from './sidebar-nav-active'
+import { findActiveNavHref, findNavWorkspace } from './sidebar-nav-active'
 import { NavCountBadge } from './nav-count-badge'
 
 // Map string keys → icon components. RSCs can't serialise function references,
@@ -400,13 +400,14 @@ export function SidebarNav({ groups }: { groups: SidebarNavGroup[] }) {
   )
 }
 
-/** The current page's nav entry and the workspace that owns it. */
+/** The current location, its nav entry and the workspace that owns it. */
 export function useActiveNav(groups: SidebarNavGroup[]) {
   const pathname = usePathname() ?? ''
   const query = useSearchParams().toString()
-  const activeHref = findActiveNavHref(query ? `${pathname}?${query}` : pathname, groups)
-  const activeGroupId = groups.find((group) => groupContainsActiveHref(group, activeHref))?.id ?? null
-  return { activeHref, activeGroupId }
+  const location = query ? `${pathname}?${query}` : pathname
+  const activeHref = findActiveNavHref(location, groups)
+  const activeGroupId = findNavWorkspace(location, groups)?.id ?? null
+  return { location, activeHref, activeGroupId }
 }
 
 /** Keep the current page's entry visible in a scrolling nav whenever `key` changes. */
@@ -418,13 +419,6 @@ export function useScrollActiveIntoView(ref: React.RefObject<HTMLElement | null>
     })
     return () => window.cancelAnimationFrame(frame)
   }, [ref, key, enabled])
-}
-
-function groupContainsActiveHref(group: SidebarNavGroup, activeHref: string | null) {
-  return (
-    group.groupHref === activeHref ||
-    group.items.some((item) => item.href === activeHref || item.subgroupHref === activeHref)
-  )
 }
 
 function persistExpandedGroups(ids: Set<string>) {

@@ -1,10 +1,11 @@
 'use client'
 
 // The desktop sidebar: two layers. A compact rail lists the workspaces as
-// icons; the panel beside it lists the selected workspace's pages. Collapsing
-// the panel leaves only the rail, whose icons then open their pages in a
-// flyout. The choice is persisted in a cookie so the server can render the
-// correct width on the next load (no width flash).
+// icons; the panel beside it lists the pages of the workspace that owns the
+// current page, or of one the reader is browsing. Collapsing slides the panel
+// away and leaves the rail, whose icons then open their pages in a flyout. The
+// choice is persisted in a cookie so the server can render the correct width
+// on the next load (no width flash).
 
 import { useCallback, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -25,6 +26,7 @@ import { useNavGroups } from './use-platform-nav'
 
 const COOKIE = 'sidebar_collapsed'
 const CLOSED_SECTIONS_KEY = 'openbooks.nav.closed-sections'
+const PANEL_ID = 'app-sidebar-panel'
 
 /** Workspaces anchored to the foot of the rail rather than the main list. */
 const FOOT_GROUP_IDS = new Set(['settings'])
@@ -38,21 +40,16 @@ export function AppSidebar({
 }) {
   const t = useTranslations('shell.sidebar')
   const navGroups = useNavGroups(groups)
-  const { activeHref, activeGroupId } = useActiveNav(navGroups)
+  const { location, activeHref, activeGroupId } = useActiveNav(navGroups)
   const [collapsed, setCollapsed] = useState(defaultCollapsed)
-  const [selectedId, setSelectedId] = useState(activeGroupId)
   const panelRef = useRef<HTMLElement>(null)
 
-  // Arriving in another workspace brings its pages into the panel, during
-  // render (same committed value, no extra render).
-  const [prevActiveGroupId, setPrevActiveGroupId] = useState(activeGroupId)
-  if (prevActiveGroupId !== activeGroupId) {
-    setPrevActiveGroupId(activeGroupId)
-    if (activeGroupId) setSelectedId(activeGroupId)
-  }
-
+  // Browsing another workspace lasts until the next navigation; every page
+  // opens the panel on the workspace that owns it.
+  const [browsing, setBrowsing] = useState<{ groupId: string; location: string } | null>(null)
+  const browsedId = browsing?.location === location ? browsing.groupId : null
   const selected =
-    navGroups.find((group) => group.id === selectedId) ??
+    navGroups.find((group) => group.id === browsedId) ??
     navGroups.find((group) => group.id === activeGroupId) ??
     navGroups[0]
 
@@ -78,7 +75,7 @@ export function AppSidebar({
       active={group.id === activeGroupId}
       selected={!collapsed && group.id === selected?.id}
       flyout={collapsed}
-      onSelect={() => setSelectedId(group.id)}
+      onSelect={() => setBrowsing({ groupId: group.id, location })}
     />
   )
   const footGroups = navGroups.filter((group) => FOOT_GROUP_IDS.has(group.id))
@@ -90,71 +87,74 @@ export function AppSidebar({
           <BrandHomeLink mark />
         </div>
         <nav aria-label={t('workspaces')} className="flex min-h-0 flex-1 flex-col px-1 pb-2">
-          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {navGroups.filter((group) => !FOOT_GROUP_IDS.has(group.id)).map(rail)}
           </div>
-          {footGroups.length > 0 || collapsed ? (
-            <div className="mx-2 mt-1 space-y-1 border-t border-slate-200 pt-2 dark:border-slate-800">
-              {footGroups.map(rail)}
-            </div>
-          ) : null}
-          {collapsed ? (
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label={t('expand')}
-              title={t('expand')}
-              className="mx-auto mt-1 grid h-8 w-10 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-800 focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-            >
-              <PanelLeftOpen size={16} />
-            </button>
-          ) : null}
+          <div className="mx-2 mt-1 flex flex-col gap-1 border-t border-slate-200 pt-2 dark:border-slate-800">
+            {footGroups.map(rail)}
+          </div>
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={!collapsed}
+            aria-controls={PANEL_ID}
+            aria-label={collapsed ? t('expand') : t('collapse')}
+            title={collapsed ? t('expand') : t('collapse')}
+            className="mx-auto mt-1 grid h-8 w-10 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-800 focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          >
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
         </nav>
       </div>
 
-      {!collapsed && selected ? (
-        <div className="flex w-56 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex h-14 shrink-0 items-center gap-1 pr-2 pl-3">
-            {selected.groupHref ? (
-              <Link
-                href={selected.groupHref as never}
-                prefetch
-                aria-current={activeHref === selected.groupHref ? 'page' : undefined}
-                data-walkthrough={`nav:${selected.groupHref}`}
-                className={cn(
-                  'group/home flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-[15px] font-semibold tracking-tight transition-colors',
-                  'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
-                  activeHref === selected.groupHref
-                    ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
-                    : 'text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800',
-                )}
-              >
-                <span className="truncate">{selected.label}</span>
-                <ChevronRight
-                  size={14}
-                  className="shrink-0 text-slate-400 opacity-0 transition-opacity group-hover/home:opacity-100 dark:text-slate-500"
-                />
-              </Link>
-            ) : (
-              <h2 className="min-w-0 flex-1 truncate px-2 text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                {selected.label}
-              </h2>
+      <div
+        id={PANEL_ID}
+        inert={collapsed}
+        className={cn(
+          'overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none',
+          collapsed ? 'w-0' : 'w-56',
+        )}
+      >
+        {selected ? (
+          <div
+            className={cn(
+              'flex h-full w-56 flex-col border-r border-slate-200 bg-white transition-[opacity,translate] duration-200 ease-out motion-reduce:transition-none dark:border-slate-800 dark:bg-slate-900',
+              collapsed ? '-translate-x-3 opacity-0' : 'translate-x-0 opacity-100',
             )}
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label={t('collapse')}
-              title={t('collapse')}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-            >
-              <PanelLeftClose size={16} />
-            </button>
+          >
+            <div className="flex h-14 shrink-0 items-center px-3">
+              {selected.groupHref ? (
+                <Link
+                  href={selected.groupHref as never}
+                  prefetch
+                  aria-current={activeHref === selected.groupHref ? 'page' : undefined}
+                  data-walkthrough={`nav:${selected.groupHref}`}
+                  className={cn(
+                    'group/home flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-[15px] font-semibold tracking-tight transition-colors',
+                    'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
+                    activeHref === selected.groupHref
+                      ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
+                      : 'text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800',
+                  )}
+                >
+                  <span className="truncate">{selected.label}</span>
+                  <ChevronRight
+                    size={14}
+                    className="shrink-0 text-slate-400 opacity-0 transition-opacity group-hover/home:opacity-100 dark:text-slate-500"
+                  />
+                </Link>
+              ) : (
+                <h2 className="min-w-0 flex-1 truncate px-2 text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                  {selected.label}
+                </h2>
+              )}
+            </div>
+            <nav ref={panelRef} aria-label={selected.label} className="app-scroll flex-1 overflow-y-auto px-2 pb-3">
+              <PanelItems key={selected.id} groupId={selected.id} items={selected.items} activeHref={activeHref} />
+            </nav>
           </div>
-          <nav ref={panelRef} aria-label={selected.label} className="app-scroll flex-1 overflow-y-auto px-2 pb-3">
-            <PanelItems key={selected.id} groupId={selected.id} items={selected.items} activeHref={activeHref} />
-          </nav>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </aside>
   )
 }
