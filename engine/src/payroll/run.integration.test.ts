@@ -18,21 +18,31 @@ import { calculatePub15T } from "./us/pub15t.ts";
 import { setPackSlotAccount, uninstallPayrollPack } from "./packs.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
 import { US_PACK_RATES } from "./us/rates.ts";
+import { CA_PACK_RATES } from "./canada/rates.ts";
 import { payRunBankFileEntitlement } from "./bank-file-artifact.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { resolveServiceTier, resolvePlanLimit, milestonesReachedInPeriod, validateEntitlementServiceTierConfiguration } from "./entitlements.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedVacationTerms, seedCanadianPayrollComponentsForTest, seedUsSuiAccount, seedUsEinAccount, type UsSuiFixtureSource } from "./filing-test-fixtures.ts";
+import { seedVacationTerms, seedCanadianPayrollComponentsForTest, seedCntSubjectEmployerFixture, seedUsSuiAccount, seedUsEinAccount, type UsSuiFixtureSource } from "./filing-test-fixtures.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
 import { assertPayRunNotStale, payRunStaleness } from "./readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./union.ts";
 import { mutatePayRunAdjustment, PayRunAdjustmentIdempotencyConflict } from "./run-adjustments.ts";
 
 import { transitionFlag } from "../hrm/ai/anomalies.ts";
+import { openingSourceYearFenceKey } from "../organization/payroll-source-fence.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+// These scenarios assert exact CPP/EI/tax/vacation money and never price a
+// workers-compensation premium, so each Canadian hire records the reasoned
+// exemption the calculation requires instead of leaving coverage undecided.
+const WCB_OUT_OF_SCOPE = {
+  wcbExempt: true,
+  wcbExemptReason: 'Not covered by the employer workers-compensation account in this scenario',
+} as const;
 
 async function seedUsSui(orgId: string, actorId: string, employeeId: string, state: string,
   rate: string, wageBase: string, source: UsSuiFixtureSource): Promise<string> {
@@ -73,7 +83,7 @@ test(
       // hire carries one and the profile points at it.
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
       });
 
       await db.execute(sql`insert into payroll_vacation_terms (org_id,employment_id,plan_id,method,percent_floor,effective_from,reason,created_by,updated_by)
@@ -205,6 +215,8 @@ test(
       assert.equal(afterRefusal.documents_status, "draft");
       assert.equal(afterRefusal.line_count, "0", "the gate refusal leaves the GL projection untouched");
       assert.equal(afterRefusal.claimed_count, "0", "the gate refusal leaves time unclaimed");
+      // Reviewing a blocking payroll check is a payroll-manager duty.
+      await grantScratchPermissions(org.orgId, actorId, ["payroll.manage"]);
       await transitionFlag(db, {
         orgId: org.orgId, actorId, flagId: anomalyFlagId,
         to: "acknowledged", reason: "reviewed before releasing this payroll run",
@@ -337,7 +349,7 @@ test(
       });
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
         unionAgreementId: agreementId, unionClassificationId: classificationId,
       }, { percentFloor: null, method: 'accrue' });
 
@@ -472,7 +484,7 @@ test(
       });
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
         unionAgreementId: agreementId, unionClassificationId: classificationId,
       }, { percentFloor: null, method: 'accrue' });
 
@@ -949,7 +961,7 @@ test(
       });
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
+        country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
       }, { percentFloor: null, method: 'accrue' });
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -1025,7 +1037,7 @@ test(
     await grantScratchPermissions(org.orgId, actorId, ["payroll.manage"]);
     try {
       await withOrgContext(org.orgId, async () => {
-        await seedCanadianPostingAccounts(org.orgId);
+        const { craPayable } = await seedCanadianPostingAccounts(org.orgId);
         await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
         await seedPayrollSettings(org.orgId, { features: { payroll: true } });
         const employeeId = randomUUID();
@@ -1040,7 +1052,7 @@ test(
         });
         const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
         await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-          country: "CA", province: "ON", payBasis: "salary", federalClaimCode: 1, provincialClaimCode: 1,
+          country: "CA", province: "ON", payBasis: "salary", federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
         }, { percentFloor: null, method: "accrue" });
         const run = await createPayRun({
           orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -1235,6 +1247,15 @@ test(
           update employee_payroll_profiles set province='QC'
            where org_id=${org.orgId} and employee_party_id=${employeeId} and pay_schedule_id=${scheduleId}
         `);
+        // A Québec employer owes the health services fund and the labour
+        // standards contribution, so the move declares the employer's HSF
+        // sector class and CNT classification; the calculation below then
+        // reaches the withholding override refusal rather than a missing levy.
+        await upsertStatutoryRate({ orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_hsf",
+          region: "QC", filingAccountId: null, taxYear: 2026, values: { sectorOther: "true" },
+          sourceCitation: "Revenu Québec 2026 health services fund contribution rate table",
+          reason: "Declare the ordinary-sector health services fund classification" });
+        await seedCntSubjectEmployerFixture(org.orgId, actorId, org.subsidiaryId, craPayable);
         await assert.rejects(
           mutatePayRunAdjustment({
             ...baseMutation,
@@ -1314,7 +1335,7 @@ test(
       });
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
       }, { percentFloor: '4', method: 'accrue' });
 
       for (const workedOn of ["2026-07-06", "2026-07-08"]) {
@@ -1426,7 +1447,7 @@ test(
       });
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
       }, { percentFloor: '4', method: 'accrue' });
 
       const addHours = async (workedOn: string) => {
@@ -1691,7 +1712,7 @@ async function seedFencedRaceOrg(): Promise<{
   });
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
   await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-    country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+    country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
   }, { percentFloor: '4', method: 'accrue' });
 
   // Two approved entries inside EACH period: every run in these tests must
@@ -1749,6 +1770,7 @@ test(
       const fence = await ytdFenceHalves(payRunYtdFenceKey(org.orgId, employeeId, 2026));
       const employeeFence = await ytdFenceHalves(`payroll-run-ytd:${org.orgId}:${employeeId}`);
       const serviceFence = await ytdFenceHalves(`openbooks:payroll-service:${org.orgId}`);
+      const openingSourceFence = await ytdFenceHalves(openingSourceYearFenceKey(org.orgId, 2026));
 
       holder = await openLockSession();
       await holder.query(
@@ -1796,7 +1818,7 @@ test(
             observed = "both commits were past their gates at once";
             return true;
           }
-          if (parked.length >= 1 && ((await ytdFenceQueued(employeeFence)) || (await ytdFenceQueued(fence)) || (await ytdFenceQueued(serviceFence)))) {
+          if (parked.length >= 1 && ((await ytdFenceQueued(employeeFence)) || (await ytdFenceQueued(fence)) || (await ytdFenceQueued(serviceFence)) || (await ytdFenceQueued(openingSourceFence)))) {
             observed = "second commit queued on a shared financial source fence";
             return true;
           }
