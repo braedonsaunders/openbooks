@@ -12,8 +12,6 @@ export const POS_TENDER_ACCOUNT_TYPES = ["asset_bank", "asset_current_other"] as
 export const POS_TENDER_KINDS = ["cash", "card", "stored_value", "other"] as const;
 export type PosTenderKind = (typeof POS_TENDER_KINDS)[number];
 
-const REGISTER_SETUP_REMEDY = "Correct the register in Setup → Sales → Registers.";
-
 export interface PosRegister {
   id: string;
   code: string;

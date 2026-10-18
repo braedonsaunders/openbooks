@@ -171,6 +171,12 @@ export interface SetupField {
    * `scopeField` from this declaration.
    */
   scopedOptions?: { scopeField: string; byValue: Record<string, SetupOption[]> }
+  /**
+   * A narrower list within the scoped options when a second field names a
+   * value it declares (a board type within its row kind). An empty or
+   * undeclared value keeps the scoped list.
+   */
+  refinedOptions?: { scopeField: string; byValue: Record<string, SetupOption[]> }
   /** ref / multiref option source. */
   ref?: SetupRefSource
   /** Filter native reference choices by the live owning entity. */
@@ -284,6 +290,11 @@ export function setupFieldOptions(field: SetupField, values: Record<string, unkn
       const value = row[valueKey], label = row[labelKey]
       return typeof value === 'string' && value.trim() ? [{ value, label: typeof label === 'string' && label.trim() ? label : value }] : []
     }) : []
+  }
+  const refined = field.refinedOptions
+  if (refined) {
+    const refinement = refined.byValue[String(setupFieldValue(values, refined.scopeField) ?? '')]
+    if (refinement) return refinement
   }
   const scoped = field.scopedOptions
   if (!scoped) return field.options ?? []

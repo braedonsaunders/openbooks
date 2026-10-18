@@ -15,6 +15,7 @@ import {
   type SetupEntity,
   type SetupField,
 } from './registry.ts'
+import { setupFieldOptions } from './types.ts'
 
 test('agents is a first-party setup group served by custom pages, not generic entities', () => {
   const agents = SETUP_GROUPS.find((group) => group.key === 'agents')
@@ -536,3 +537,14 @@ test('every domain-owned setup writer declares its import path', () => {
     }
   }
 });
+
+test('schedule board views follow the board type: only a dispatch board offers the dispatch view', () => {
+  const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!
+  for (const key of ['views', 'defaultView']) {
+    const field = board.fields.find((candidate) => candidate.key === key)!
+    const offered = (values: Record<string, unknown>) => setupFieldOptions(field, values).map((option) => option.value)
+    assert.deepEqual(offered({ rowKind: 'people', boardType: 'people' }), ['grid', 'targets', 'timeline', 'calendar'])
+    assert.deepEqual(offered({ rowKind: 'people', boardType: 'dispatch' }), ['grid', 'timeline', 'calendar', 'dispatch'])
+    assert.deepEqual(offered({ rowKind: 'tasks' }), ['gantt', 'progress'])
+  }
+})

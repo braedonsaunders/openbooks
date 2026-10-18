@@ -543,7 +543,7 @@ test('option-backed board views reopen as named choices and edit through native 
   const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!
   const viewLabels = adminCatalog.options!.scheduleView as unknown as Record<string, string>
   const presentation = { ...board, fields: board.fields.filter(field => ['rowKind', 'views', 'defaultView'].includes(field.key)), formSections: undefined }
-  const { seen } = await mountDrawer(t, { id: '00000000-0000-4000-8000-000000000123', row_kind: 'people', views: ['grid', 'calendar'], default_view: 'grid' },
+  const { seen } = await mountDrawer(t, { id: '00000000-0000-4000-8000-000000000123', row_kind: 'people', board_type: 'people', views: ['grid', 'calendar'], default_view: 'grid' },
     () => Response.json({ id: '00000000-0000-4000-8000-000000000123' }), 'schedule-boards', undefined, undefined, presentation, false)
   const label = [...document.querySelectorAll('label')].find(node => node.textContent?.trim() === FIELD_LABEL.views)
   assert.ok(label)

@@ -194,7 +194,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'filter-chips': { props: ['allLabel', 'basePath', 'currentParams', 'defaultValue', 'hideAll', 'label', 'options', 'pageParamKey', 'paramKey'] },
   'financial-health-view': { props: ['budgetsEnabled', 'canConfigure', 'data', 'defs'] },
   'finding-cell': { props: ['href', 'summary', 'title'] },
-  'flow-builder': { props: ['flow', 'permissions', 'profile', 'roles', 'runs', 'users'] },
+  'flow-builder': { props: ['flow', 'permissions', 'profile', 'roles', 'runs', 'subsidiaries', 'users'] },
   'flow-last-run-cell': { props: ['at', 'fallback', 'status', 'variant'] },
   'flow-name-cell': { props: ['href', 'name'] },
   'flow-row-actions': { props: ['enabled', 'id', 'name', 'updatedAt'] },

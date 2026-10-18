@@ -27,6 +27,9 @@ const PUBLISH_POLICIES: SetupOption[] = [
 // The board-type registry decides which types schedule people and which
 // publication policies each type allows; task and resource boards keep the
 // standard type of their row kind.
+/** Each people board type offers exactly the views its definition declares. */
+const PEOPLE_BOARD_TYPE_VIEWS: Record<string, SetupOption[]> = Object.fromEntries(boardTypesFor('people')
+  .map((type) => [type.key, VIEWS.filter((view) => type.views.includes(view.value))]))
 const PEOPLE_BOARD_TYPES: SetupOption[] = boardTypesFor('people').map((type) => ({ value: type.key, labelKey: `options.scheduleBoardType.${type.key}` }))
 const PUBLISH_POLICIES_BY_TYPE: Record<string, SetupOption[]> = Object.fromEntries(SCHEDULE_BOARD_TYPES.map((type) =>
   [type.key, type.publishPolicies.map((policy) => ({ value: policy, labelKey: `options.schedulePublishPolicy.${policy}` }))]))
@@ -517,11 +520,12 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
         scopedOptions: {
           scopeField: 'rowKind',
           byValue: {
-            people: [...VIEWS.slice(0, 4), ...VIEWS.slice(6)],
+            people: VIEWS.slice(0, 4),
             resources: VIEWS.slice(0, 4),
             tasks: VIEWS.slice(4, 6),
           },
         },
+        refinedOptions: { scopeField: 'boardType', byValue: PEOPLE_BOARD_TYPE_VIEWS },
         required: true,
         defaultValue: ['grid', 'targets', 'timeline', 'calendar'],
         helpTextKey: 'fieldHelp.scheduleBoardViews',
@@ -533,11 +537,12 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
         scopedOptions: {
           scopeField: 'rowKind',
           byValue: {
-            people: [...VIEWS.slice(0, 4), ...VIEWS.slice(6)],
+            people: VIEWS.slice(0, 4),
             resources: VIEWS.slice(0, 4),
             tasks: VIEWS.slice(4, 6),
           },
         },
+        refinedOptions: { scopeField: 'boardType', byValue: PEOPLE_BOARD_TYPE_VIEWS },
         required: true,
         defaultValue: 'grid',
       },

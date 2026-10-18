@@ -50,6 +50,8 @@ export function BookingDrawer({
   const [picking, setPicking] = useState(false)
   const [repeatDays, setRepeatDays] = useIdentityState<Set<string>>(draftIdentity, new Set())
   const [saving, setSaving] = useState(false)
+  // Closing is offered once the booked span has ended, as of when the drawer opened.
+  const [openedAt] = useState(() => Date.now())
 
 
   const [tasks, setTasks] = useIdentityState<ProjectTaskOption[]>([board.board.id, target?.kind, target?.id], [])
@@ -99,7 +101,7 @@ export function BookingDrawer({
   const showAttendance = Boolean(roster?.attendance && boardHasCapability(board.board, 'attendance'))
   const closable = Boolean(roster?.closing && boardHasCapability(board.board, 'closing') && board.canManage && entry.boardId === board.board.id
     && entry.status === 'published' && !entry.closedAt && entry.attendance && (entry.attendance.status === 'present' || entry.attendance.status === 'absent')
-    && Date.parse(entry.endsAt) <= Date.now())
+    && Date.parse(entry.endsAt) <= openedAt)
 
   async function close() {
     if (!entry) return

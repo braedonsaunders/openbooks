@@ -11,7 +11,7 @@ export const FINANCIAL_POLICY_ENTITIES: SetupEntity[] = [
   { key: 'form-layouts', table: 'form_layouts', groupKey: 'accounting', iconKey: 'book-open', orgScoped: true,
     hasActive: true, readOnly: true, rehomed: true, allowCreate: false, allowUpdate: false, allowDelete: false,
     columns: [{ key: 'name', kind: 'text' }, { key: 'recordType', kind: 'text' }], fields: [{ key: 'name', kind: 'text', required: true }, { key: 'recordType', kind: 'text' }] },
-  { ...version, key: 'fx-rate-types', table: 'fx_rate_types', groupKey: 'currency', naturalKey: 'key', refValue: 'key', hasActive: true, allowUpdate: true,
+  { ...version, key: 'fx-rate-types', table: 'fx_rate_types', groupKey: 'currency', naturalKey: 'key', refValue: 'key', hasActive: true, allowUpdate: true, orderBy: 'key',
     columns: [{ key: 'key', kind: 'code' }, { key: 'name', kind: 'text' }, { key: 'isActive', kind: 'badge-active' }],
     fields: [{ key: 'key', kind: 'text', required: true, lockedOnEdit: true }, { key: 'name', kind: 'text', required: true }, { key: 'isActive', kind: 'boolean', defaultValue: true }] },
   { ...version, key: 'account-translation-policies', table: 'account_translation_policies', featureKey: 'multiCurrency',

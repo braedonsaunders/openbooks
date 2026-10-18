@@ -53,6 +53,7 @@ export const CA_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CA_BPE:"Bonus pensionable earnings",CA_BIE:"Bonus EI insurable earnings",CA_BQPIP:"Bonus QPIP insurable earnings",
   CA_T_BASE:"Periodic income tax excluding additional tax",
   CA_TAX_OVERRIDE: "Operator-entered total income-tax withholding for this cheque",
+  CA_BONUS_I_REFERENCE: "Regular pay per period used to tax a bonus paid on its own",
   B: "Bonus / non-periodic pay this period",
   I: "Periodic income this period",
   PI: "Pensionable earnings this period",

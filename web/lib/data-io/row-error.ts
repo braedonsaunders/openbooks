@@ -3,6 +3,12 @@ import { pgErrorCode } from '../setup/coerce'
 
 /** Database wrappers contain SQL and bound values; retain them only in the log. */
 export function importRowError(error: unknown, fallback = 'The record could not be saved — check its values and retry.'): string {
+  // A typed domain refusal (an Error subclass carrying a 4xx status) names its
+  // remedy in its message; its own machine code is not a database code.
+  if (error instanceof Error && error.constructor !== Error) {
+    const status = (error as Error & { status?: unknown }).status
+    if (typeof status === 'number' && Number.isInteger(status) && status >= 400 && status < 500) return error.message
+  }
   // Explicit database RAISE refusals are operator instructions, unlike driver
   // failures. Unwrap the cause so the SQL wrapper never becomes the message.
   let cause: unknown = error

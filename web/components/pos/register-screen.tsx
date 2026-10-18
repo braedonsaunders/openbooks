@@ -56,14 +56,14 @@ export function RegisterScreen(props: { registerId: string; canRefund: boolean; 
   const [lines, setLines] = useState<PosCartLine[]>([])
   const [orderDiscount, setOrderDiscount] = useState<PosDiscount | null>(null)
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null)
-  const [quote, setQuote] = useState<PosQuote | null>(null)
-  const [quoteFor, setQuoteFor] = useState(-1)
+  const [pricedQuote, setQuote] = useState<PosQuote | null>(null)
+  const [pricedFor, setQuoteFor] = useState(-1)
   const [cartVersion, setCartVersion] = useState(0)
-  const [quoteError, setQuoteError] = useState<string | null>(null)
+  const [pricingError, setQuoteError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [hits, setHits] = useState<ItemHit[]>([])
   const [customerQuery, setCustomerQuery] = useState('')
-  const [customerHits, setCustomerHits] = useState<CustomerHit[]>([])
+  const [matchedCustomers, setCustomerHits] = useState<CustomerHit[]>([])
   const [checkoutKey, setCheckoutKey] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -72,6 +72,14 @@ export function RegisterScreen(props: { registerId: string; canRefund: boolean; 
   const scanRef = useRef<HTMLInputElement>(null)
   const currency = context?.register.currency
   const { money } = useMoney(currency)
+
+  // An empty cart has nothing to price: it is current at zero with no refusal.
+  const cartEmpty = !context || lines.length === 0
+  const quote = cartEmpty ? null : pricedQuote
+  const quoteFor = cartEmpty ? cartVersion : pricedFor
+  const quoteError = cartEmpty ? null : pricingError
+  // A customer search starts at two characters; a shorter query lists no one.
+  const customerHits = customerQuery.trim().length < 2 ? [] : matchedCustomers
 
   const loadContext = useCallback(async () => {
     try {
@@ -82,7 +90,17 @@ export function RegisterScreen(props: { registerId: string; canRefund: boolean; 
     }
   }, [props.registerId, t])
 
-  useEffect(() => { void loadContext() }, [loadContext])
+  useEffect(() => {
+    let current = true
+    posRequest<PosRegisterContext>(`/api/pos/registers/${props.registerId}`, {}, t('errors.registerLoad')).then((loaded) => {
+      if (!current) return
+      setContext(loaded)
+      setLoadError(null)
+    }, (cause: unknown) => {
+      if (current) setLoadError(cause instanceof PosRequestError ? [cause.message, cause.remedy].filter(Boolean).join(' ') : t('errors.registerLoad'))
+    })
+    return () => { current = false }
+  }, [props.registerId, t])
 
   const focusScan = useCallback(() => {
     window.setTimeout(() => scanRef.current?.focus(), 0)
@@ -97,12 +115,7 @@ export function RegisterScreen(props: { registerId: string; canRefund: boolean; 
   // Price the cart on the server whenever it changes, debounced so a burst
   // of scans asks once. The Pay button waits for the quote of this version.
   useEffect(() => {
-    if (!context || lines.length === 0) {
-      setQuote(null)
-      setQuoteFor(cartVersion)
-      setQuoteError(null)
-      return
-    }
+    if (!context || lines.length === 0) return
     const version = cartVersion
     const timer = window.setTimeout(() => {
       posRequest<{ quote: PosQuote }>('/api/pos/quote', {
@@ -170,10 +183,7 @@ export function RegisterScreen(props: { registerId: string; canRefund: boolean; 
   }, [search])
 
   useEffect(() => {
-    if (customerQuery.trim().length < 2) {
-      setCustomerHits([])
-      return
-    }
+    if (customerQuery.trim().length < 2) return
     const timer = window.setTimeout(() => {
       posRequest<{ customers: CustomerHit[] }>(`/api/pos/customers?q=${encodeURIComponent(customerQuery.trim())}`, {}, t('errors.search'))
         .then((body) => setCustomerHits(body.customers))

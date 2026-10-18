@@ -22,3 +22,8 @@ test('driver failures expose a log reference without SQL or bound tenant data', 
     assert.equal(logs.length, 1)
   } finally { console.error = prior }
 })
+
+test('a typed domain refusal carrying its own machine code keeps its remedy instead of a log reference', async () => {
+  const { EmployeePartyKindError, EMPLOYEE_PERSON_REFUSAL } = await import('@openbooks/engine/organization/party-kinds')
+  assert.equal(importRowError(new EmployeePartyKindError()), EMPLOYEE_PERSON_REFUSAL)
+})

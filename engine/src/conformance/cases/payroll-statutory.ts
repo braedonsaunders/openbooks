@@ -258,15 +258,15 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     assertion:
       "A $2,000.00 bonus paid with no other income in the year attracts exactly $300.00 of tax at the 15% lump-sum rate — while CPP and EI still apply to the bonus as pensionable and insurable earnings.",
     facts: [
-      "Pay date 2026-01-15, Ontario, 52 pay periods, periodic income of $0.00 with a $2,000.00 bonus.",
+      "Pay date 2026-01-15, Ontario, 52 pay periods, periodic income of $0.00 with a $2,000.00 bonus paid as its own payment.",
       "Annualized income with the bonus is $1,980.67 after the $19.33 F5 bonus split — at or below $5,000, so the flat rate applies.",
       "Bonus tax is 2,000.00 × 15% = $300.00; periodic tax is $0.00.",
-      "CPP on the bonus is (2,000.00 − 67.30) × 5.95% = 114.99565, rounded to $115.00.",
+      "A bonus paid separately from regular pay receives no pay-period CPP basic exemption, so CPP is 2,000.00 × 5.95% = $119.00.",
       "EI on the bonus is 2,000.00 × 1.63% = $32.60.",
     ],
     expected: {
       values: {
-        cpp: "115.0000",
+        cpp: "119.0000",
         ei: "32.6000",
         eiEmployer: "45.6400",
         periodicTax: "0.0000",

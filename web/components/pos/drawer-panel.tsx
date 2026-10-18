@@ -148,7 +148,15 @@ export function DrawerPanel(props: { context: PosRegisterContext; onClosed: () =
     }
   }, [session.id, t])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    let current = true
+    posRequest<{ summary: PosSessionSummary }>(`/api/pos/sessions/${session.id}`, {}, t('errors.report')).then((body) => {
+      if (current) setSummary(body.summary)
+    }, (cause: unknown) => {
+      if (current) setError(refusalText(cause, t('errors.report')))
+    })
+    return () => { current = false }
+  }, [session.id, t])
 
   async function recordMovement() {
     setBusy(true)

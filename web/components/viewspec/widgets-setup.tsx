@@ -312,6 +312,7 @@ export const SETUP_WIDGETS = {
       users={props.users as ComponentProps<typeof FlowBuilder>['users']}
       roles={props.roles as ComponentProps<typeof FlowBuilder>['roles']}
       permissions={props.permissions as ComponentProps<typeof FlowBuilder>['permissions']}
+      subsidiaries={props.subsidiaries as ComponentProps<typeof FlowBuilder>['subsidiaries']}
     />
   ),
   /** The GrapesJS canvas: its own document model, drag-and-drop, the
