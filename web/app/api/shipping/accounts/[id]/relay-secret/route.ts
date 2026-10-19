@@ -15,6 +15,7 @@ const accountParams = z.object({ id: uuidString() })
 export const POST = defineRoute({
   permission: 'shipping.manage',
   feature: 'shippingHub',
+  scope: 'unrestricted',
   params: accountParams,
   handler: async ({ authz, params: { id } }) => {
     const rotated = await db.transaction((tx) =>

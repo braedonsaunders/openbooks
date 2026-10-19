@@ -9,6 +9,7 @@ import { defineRoute } from '@/lib/api/route'
 export const GET = defineRoute({
   permission: 'shipping.manage',
   feature: 'shippingHub',
+  scope: 'unrestricted',
   handler: async ({ authz }) => {
     const accounts = await listShippingAccounts(db, authz.user.orgId)
     return NextResponse.json({ accounts })
@@ -31,6 +32,7 @@ const connectBody = z.object({
 export const POST = defineRoute({
   permission: 'shipping.manage',
   feature: 'shippingHub',
+  scope: 'unrestricted',
   body: connectBody,
   handler: async ({ authz, body }) => {
     const connected = await db.transaction((tx) =>
