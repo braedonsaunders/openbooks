@@ -11,7 +11,10 @@ import {
 } from "../testing/fixtures.ts";
 import {
   createStatementBatchRun,
+  getStatementBatchRun,
+  listStatementBatchRuns,
   listStatementBatchItems,
+  retryStatementBatchRun,
 } from "./statement-batches.ts";
 
 /**
@@ -85,6 +88,48 @@ test("run creation enqueues one job per emailable customer and refuses doubled c
       ),
       /was not recorded/,
     );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("statement batch reads and retries require coverage of the recorded scope", async () => {
+  const org = await createScratchOrg();
+  try {
+    const senderId = await createScratchUser(org.orgId, "Scoped Batch Reader", "accountant");
+    const scope = new Set([org.subsidiaryId]);
+    const enqueued: StatementBatchJobData[] = [];
+    const created = await withOrg(org.orgId, () => createStatementBatchRun({
+      orgId: org.orgId,
+      senderId,
+      periodFrom: null,
+      periodTo: org.date,
+      filters: {},
+      recipients: [{ partyId: org.customerId, balance: "25.0000", overdue: "0.0000", currency: "CAD", toEmail: "a@acme.test" }],
+      excluded: [],
+      allowedSubsidiaryIds: [org.subsidiaryId],
+      enqueue: async (jobs) => enqueued.push(...jobs),
+    }));
+
+    assert.equal((await withOrg(org.orgId, () => getStatementBatchRun(org.orgId, created.runId, scope)))?.id, created.runId);
+    assert.equal(await withOrg(org.orgId, () => getStatementBatchRun(org.orgId, created.runId, new Set())), null);
+    assert.deepEqual(await withOrg(org.orgId, () => listStatementBatchRuns(org.orgId, { allowedSubsidiaryIds: new Set() })), []);
+    assert.deepEqual(await withOrg(org.orgId, () => listStatementBatchItems(org.orgId, created.runId, new Set())), []);
+
+    await assert.rejects(
+      withOrg(org.orgId, () => retryStatementBatchRun(org.orgId, created.runId, senderId, async (jobs) => enqueued.push(...jobs), new Set())),
+      /was not found/,
+    );
+    assert.equal(enqueued.length, 1, "an unauthorized retry does not enqueue another delivery");
+    const retried = await withOrg(org.orgId, () => retryStatementBatchRun(
+      org.orgId,
+      created.runId,
+      senderId,
+      async (jobs) => enqueued.push(...jobs),
+      scope,
+    ));
+    assert.equal(retried.requeued, 1);
+    assert.equal(enqueued.length, 2);
   } finally {
     await dropScratchOrg(org.orgId);
   }

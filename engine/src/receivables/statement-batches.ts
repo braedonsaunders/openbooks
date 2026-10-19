@@ -1,5 +1,31 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+
+/** A run is visible only when the caller covers its recorded scope and every referenced party. */
+function statementBatchScopeFilter(runAlias: string, allowedSubsidiaryIds?: ReadonlySet<string> | null): SQL {
+  if (allowedSubsidiaryIds == null) return sql`true`;
+  const run = sql.raw(runAlias);
+  const allowed = [...allowedSubsidiaryIds];
+  return sql`
+    jsonb_typeof(${run}.authorization_snapshot->'allowedSubsidiaryIds') = 'array'
+    and not exists (
+      select 1
+        from jsonb_array_elements_text(
+          case when jsonb_typeof(${run}.authorization_snapshot->'allowedSubsidiaryIds') = 'array'
+            then ${run}.authorization_snapshot->'allowedSubsidiaryIds' else '[]'::jsonb end
+        ) as snapshot_scope(id)
+       where not (snapshot_scope.id = any(${allowed}::text[]))
+    )
+    and not exists (
+      select 1
+        from statement_batch_items scoped_item
+        left join parties scoped_party
+          on scoped_party.id = scoped_item.party_id and scoped_party.org_id = scoped_item.org_id
+       where scoped_item.org_id = ${run}.org_id and scoped_item.run_id = ${run}.id
+         and (scoped_party.id is null or (scoped_party.subsidiary_id is not null
+           and not (scoped_party.subsidiary_id::text = any(${allowed}::text[]))))
+    )`;
+}
 
 /**
  * Batched customer statements: durable runs and per-customer delivery
@@ -148,7 +174,11 @@ export async function createStatementBatchRun(args: {
   return { runId, queued: args.recipients.length, skipped: args.excluded.length };
 }
 
-export async function getStatementBatchRun(orgId: string, runId: string): Promise<StatementBatchRunRow | null> {
+export async function getStatementBatchRun(
+  orgId: string,
+  runId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<StatementBatchRunRow | null> {
   const rows = (await db.execute<{
     id: string; period_from: string | null; period_to: string; filters: Record<string, unknown>;
     recipient_count: number; status: StatementBatchRunStatus;
@@ -157,7 +187,9 @@ export async function getStatementBatchRun(orgId: string, runId: string): Promis
   }>(sql`
     select id::text as id, period_from::text as period_from, period_to::text as period_to,
            filters, recipient_count, status, authorization_snapshot, created_at, created_by::text as created_by
-      from statement_batch_runs where id = ${runId} and org_id = ${orgId} limit 1`)).rows;
+      from statement_batch_runs where id = ${runId} and org_id = ${orgId}
+        and ${statementBatchScopeFilter("statement_batch_runs", allowedSubsidiaryIds)}
+      limit 1`)).rows;
   const row = rows[0];
   if (!row) return null;
   return {
@@ -173,7 +205,11 @@ export async function getStatementBatchRun(orgId: string, runId: string): Promis
   };
 }
 
-export async function listStatementBatchItems(orgId: string, runId: string): Promise<StatementBatchItemRow[]> {
+export async function listStatementBatchItems(
+  orgId: string,
+  runId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<StatementBatchItemRow[]> {
   const rows = (await db.execute<{
     id: string; run_id: string; party_id: string; party_name: string | null; to_email: string | null;
     balance: string; overdue: string; currency_code: string | null; status: StatementBatchItemStatus;
@@ -183,8 +219,10 @@ export async function listStatementBatchItems(orgId: string, runId: string): Pro
            i.to_email, i.balance, i.overdue, i.currency_code, i.status, i.error,
            i.delivery_key, i.email_log_id::text as email_log_id, i.sent_at
       from statement_batch_items i
+      join statement_batch_runs r on r.id = i.run_id and r.org_id = i.org_id
       left join parties p on p.id = i.party_id and p.org_id = i.org_id
      where i.org_id = ${orgId} and i.run_id = ${runId}
+       and ${statementBatchScopeFilter("r", allowedSubsidiaryIds)}
      order by p.display_name nulls last, i.created_at`)).rows;
   return rows.map((row) => ({
     id: row.id,
@@ -205,7 +243,7 @@ export async function listStatementBatchItems(orgId: string, runId: string): Pro
 
 export async function listStatementBatchRuns(
   orgId: string,
-  opts: { limit?: number; offset?: number } = {},
+  opts: { limit?: number; offset?: number; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ): Promise<(StatementBatchRunRow & { sent: number; failed: number; skipped: number })[]> {
   const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
   const offset = Math.max(opts.offset ?? 0, 0);
@@ -223,6 +261,7 @@ export async function listStatementBatchRuns(
       from statement_batch_runs r
       left join statement_batch_items i on i.run_id = r.id and i.org_id = r.org_id
      where r.org_id = ${orgId}
+       and ${statementBatchScopeFilter("r", opts.allowedSubsidiaryIds)}
      group by r.id
      order by r.created_at desc
      limit ${limit} offset ${offset}`)).rows;
@@ -323,13 +362,19 @@ export async function retryStatementBatchRun(
   runId: string,
   senderId: string,
   enqueue: StatementBatchEnqueuer,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<{ requeued: number }> {
-  const run = await getStatementBatchRun(orgId, runId);
+  const run = await getStatementBatchRun(orgId, runId, allowedSubsidiaryIds);
   if (!run) throw new Error("statement batch run was not found");
   const rearmed = (await db.execute<{ party_id: string }>(sql`
     update statement_batch_items
        set status = 'queued', error = null, updated_at = now()
      where org_id = ${orgId} and run_id = ${runId} and status in ('failed', 'queued') and to_email is not null
+       and exists (
+         select 1 from statement_batch_runs r
+          where r.org_id = ${orgId} and r.id = ${runId}
+            and ${statementBatchScopeFilter("r", allowedSubsidiaryIds)}
+       )
     returning party_id::text as party_id`)).rows;
   if (rearmed.length === 0) return { requeued: 0 };
   await db.execute(sql`

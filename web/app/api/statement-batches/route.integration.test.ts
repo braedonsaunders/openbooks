@@ -165,5 +165,11 @@ test('batch create records the run, detail shows items, retry requeues failures'
     const retryMissing = await withOrgContext(org.orgId, () =>
       retry.POST(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify({}) }), { params: Promise.resolve({ id: randomUUID() }) } as never))
     assert.equal(retryMissing.status, 404)
+
+    await withBypass(() => db.execute(sql`update app_roles set permissions='["ar.create","ar.read"]'::jsonb where org_id=${org.orgId} and key='reviewer'`))
+    const retryDenied = await withOrgContext(org.orgId, () =>
+      retry.POST(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify({}) }), { params: Promise.resolve({ id: createdBody.runId }) } as never))
+    assert.equal(retryDenied.status, 403)
+    assert.equal(enqueued.length, 2, 'retry requires reports.read before enqueueing')
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
