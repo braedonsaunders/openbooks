@@ -4,9 +4,10 @@ import { parseJsonBody } from "@/lib/api/json";
 
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardPermission, type Authz } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupRecord } from '../../../../../lib/setup/write'
+import { setupEntityRoutePermission } from '../../../../../lib/setup/route-auth'
 
 const requestBodySchema = z.record(z.string(), z.json());
 
@@ -19,10 +20,15 @@ export const runtime = 'nodejs'
  * rules, audit) lives in web/lib/setup/write.ts and is shared with the
  * assistant/MCP setup-record tools; this route is the HTTP adapter.
  *
- * Gated by admin.setup.manage. Org-scoped (except the shared `currencies`
- * reference table) and audited to audit_log, mirroring the settings route.
+ * Setup entities require admin.setup.manage; CRM lifecycle lists keep their
+ * module-owned crm.setup.manage gate. Writes remain org-scoped and audited.
  */
-const PERMISSION = 'admin.setup.manage'
+async function authorizeSetupEntity({ params }: { request: Request; params: unknown }) {
+  const entityKey = params && typeof params === 'object' && 'entity' in params
+    ? String((params as { entity: unknown }).entity)
+    : ''
+  return guardPermission(setupEntityRoutePermission(entityKey))
+}
 
 function setupWriteResponse(result: { status: number; body: Record<string, unknown> }) {
   if (result.status === 404) {
@@ -35,9 +41,7 @@ function setupWriteResponse(result: { status: number; body: Record<string, unkno
 
 
 
-async function legacyDELETE(req: Request, { params }: { params: Promise<{ entity: string }> }, options: { reason?: string; auditReason?: string } = {}) {
-  const gate = await guardPermission(PERMISSION)
-  if (gate instanceof NextResponse) return gate
+async function legacyDELETE(req: Request, { params }: { params: Promise<{ entity: string }> }, options: { reason?: string; auditReason?: string } = {}, gate: Authz) {
   const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
   const entityKey = (await params).entity
   const refused = await preflightSetupWrite(actor, entityKey, 'delete')
@@ -49,7 +53,7 @@ async function legacyDELETE(req: Request, { params }: { params: Promise<{ entity
 }
 
 export const POST = defineRoute({
-  permission: "admin.setup.manage",
+  authorize: authorizeSetupEntity,
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "entity": z.string() }),
   handler: async ({ request, params, authz: routeAuthz }) => {
@@ -84,7 +88,7 @@ export const POST = defineRoute({
 });
 
 export const PATCH = defineRoute({
-  permission: "admin.setup.manage",
+  authorize: authorizeSetupEntity,
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "entity": z.string() }),
   handler: async ({ request, params, authz: routeAuthz }) => {
@@ -105,9 +109,9 @@ export const PATCH = defineRoute({
 });
 
 export const DELETE = defineRoute({
-  permission: "admin.setup.manage",
+  authorize: authorizeSetupEntity,
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "entity": z.string() }),
   body: z.strictObject({ reason: z.string().trim().min(1).max(2000).optional(), auditReason: z.string().trim().min(1).max(2000).optional() }).optional(),
-  handler: async ({ request, params, body }) => legacyDELETE(request, { params: Promise.resolve(params) }, body),
+  handler: async ({ request, params, body, authz }) => legacyDELETE(request, { params: Promise.resolve(params) }, body, authz),
 });

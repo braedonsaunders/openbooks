@@ -246,9 +246,10 @@ export const SETUP_WIDGETS = {
   ),
 
   /* --- payment providers setup ------------------------------------------------------ */
-  /** No props: the island fetches its own providers, bank accounts and
-   *  surcharge rules and owns every form. */
-  'payment-providers-workspace': () => <PaymentProvidersClient />,
+  /** Authorized provider and account reads arrive with the server page. */
+  'payment-providers-workspace': (props) => (
+    <PaymentProvidersClient initialData={props.initialData as ComponentProps<typeof PaymentProvidersClient>['initialData']} />
+  ),
 
   /* --- security settings ------------------------------------------------------------ */
   /** No props. Every control is client state or a fetch to /api/auth/*. */

@@ -1,80 +1,37 @@
 "use client";
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Card, CardContent, Input, Label, Select } from "@openbooks/ui";
+import { Button, Card, CardContent, Input, Label, PageHeader, Select, UrlDrawer } from "@openbooks/ui";
 import { fetchAction, type ActionError } from "@braedonsaunders/appkit-errors";
 import { SwitchField } from "../../../../../components/switch";
 import { useAppAction } from "../../../../../lib/use-app-action";
 import { useBusinessToday } from "../../../../../components/business-date-provider";
+import { ListPageLayout } from '@/components/page-layout'
+import { MoneyInput } from '@/components/money-input'
 import { StripeBillingImport } from "./StripeBillingImport";
-import { usePathname, useSearchParams } from 'next/navigation';
+import Link from 'next/link'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ModuleHomeTabs } from '@/components/module-home/tabs';
 import { ProcessorReceiptPolicies } from './ProcessorReceiptPolicies';
 import { DateField } from '@/components/date-field'
+import type {
+  AutomationProviderKey,
+  PaymentAutomationConfig,
+  PaymentProviderAccount,
+  PaymentProviderConfig,
+  PaymentProviderSetupData,
+  PaymentSurchargeRule,
+  ProviderKey,
+} from '@/lib/setup/payment-providers-types'
+import { resolvePaymentProviderView, surchargeRuleDrawerHrefs } from '@/lib/setup/payment-provider-navigation'
 
-type ProviderKey = "stripe" | "adyen" | "gocardless";
-
-type AutomationProviderKey = "paypal" | "shopify_payments" | "square";
-
-type Config = {
-  provider: ProviderKey;
-  displayName: string;
-  isEnabled: boolean;
-  acceptanceEnabled: boolean;
-  defaultBankAccountId: string | null;
-  publishableKey: string | null;
-  surchargeRuleId: string | null;
-  settings: Record<string, unknown>;
-  hasSecrets: boolean;
-  lastError: string | null;
-  refundPolicy: "automatic" | "review" | null;
-  defaultDisputedFundsAccountId: string | null;
-  defaultChargebackLossAccountId: string | null;
-  defaultDisputeFeeAccountId: string | null;
-};
-
-/** Settlement-automation half of a provider that never takes hosted checkout:
- * policy and dispute posting accounts only, saved through the settlements
- * configuration endpoint. */
-type AutomationConfig = {
-  provider: AutomationProviderKey;
-  displayName: string;
-  isEnabled: boolean;
-  refundPolicy: "automatic" | "review" | null;
-  defaultDisputedFundsAccountId: string | null;
-  defaultChargebackLossAccountId: string | null;
-  defaultDisputeFeeAccountId: string | null;
-};
-
-type Account = { id: string; number: string | null; name: string };
-
-type Rule = {
-  id: string;
-  name: string;
-  calculation: string;
-  percent: string | null;
-  fixedAmount: string | null;
-  capAmount: string | null;
-  feeIncomeAccountId: string;
-  provider: ProviderKey | null;
-  paymentMethod: string;
-  effectiveFrom: string;
-  effectiveTo: string | null;
-  isActive: boolean;
-};
-
-type Data = {
-  featureEnabled?: boolean;
-  bankingEnabled?: boolean;
-  configs: Config[];
-  automationConfigs: AutomationConfig[];
-  bankAccounts: Account[];
-  incomeAccounts: Account[];
-  postingAccounts: Account[];
-  surchargeRules: Rule[];
-};
+type Config = PaymentProviderConfig
+type AutomationConfig = PaymentAutomationConfig
+type Account = PaymentProviderAccount
+type Rule = PaymentSurchargeRule
+type Data = PaymentProviderSetupData & { view?: 'checkout' | 'settlement' | 'surcharge' | 'processor_receipts' }
 
 const PROVIDERS: { key: ProviderKey; label: string; merchantAccount?: boolean }[] = [
   { key: "stripe", label: "Stripe" },
@@ -88,17 +45,22 @@ const AUTOMATION_PROVIDERS: { key: AutomationProviderKey; nameKey: string; descr
   { key: "square", nameKey: "squareName", descriptionKey: "squareDescription", channelsNote: false },
 ];
 
-export function PaymentProvidersClient() {
+export function PaymentProvidersClient({ initialData }: {
+  initialData: PaymentProviderSetupData & { view: 'checkout' | 'settlement' | 'surcharge' | 'processor_receipts' }
+}) {
   const t = useTranslations("admin.setup.paymentProviders");
   const tFunding = useTranslations('processorReceipts');
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const fundingView = searchParams.get('view') === 'processor_receipts';
+  const router = useRouter();
+  const ruleDrawerOpen = searchParams.get('rule') === 'new'
+  const requestedView = searchParams.get('view')
+  const view = resolvePaymentProviderView(requestedView, initialData.view, ruleDrawerOpen)
+  const { closeHref: closeRuleHref, newHref: newRuleHref } = surchargeRuleDrawerHrefs(pathname, searchParams.toString())
   const tc = useTranslations("common");
-  const [data, setData] = useState<Data | null>(null);
+  const [data, setData] = useState<Data>(initialData);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const { busy, execute } = useAppAction();
 
   // The unrestricted-scope remedy survives the lifecycle conversion: the
@@ -122,12 +84,7 @@ export function PaymentProvidersClient() {
     } else {
       setError(actionFailureMessage(result.error, t("errors.loadFailed")));
     }
-    setLoading(false);
   }, [actionFailureMessage, t]);
-  useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
-  }, [load]);
 
   async function post(body: Record<string, unknown>) {
     setError(null);
@@ -168,25 +125,27 @@ export function PaymentProvidersClient() {
     return saved;
   }
 
-  if (!data) return loading
-    ? <p className="text-sm text-slate-500">…</p>
-    : <div className="space-y-2" role="alert"><p className="text-sm text-red-600">{error ?? tc("feedback.somethingWentWrong")}</p><Button variant="outline" onClick={() => { setLoading(true); void load(); }}>{tc("actions.retry")}</Button></div>;
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{t("title")}</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{fundingView ? tFunding('description') : t("description")}</p>
-      </div>
-      {error ? <p className="text-sm text-red-600" role="alert">{error}</p> : null}
-      {notice ? <p className="text-sm text-teal-700 dark:text-teal-400">{notice}</p> : null}
-
-      <ModuleHomeTabs placement="local" tabs={[
-        ...(data.featureEnabled !== false ? [{ label: tFunding('providersTab'), href: pathname, active: !fundingView }] : []),
-        ...(data.bankingEnabled !== false ? [{ label: tFunding('accountsTab'), href: `${pathname}?view=processor_receipts`, active: fundingView }] : []),
-      ]} />
-      {fundingView ? <ProcessorReceiptPolicies /> : <>
-
+    <ListPageLayout header={<PageHeader
+      title={t('title')}
+      description={view === 'processor_receipts' ? tFunding('description') : t('description')}
+      actions={view === 'surcharge' ? (
+        <Button asChild><Link href={newRuleHref}>{t('addRule')}</Link></Button>
+      ) : undefined}
+    />}>
+      <div className="space-y-5">
+        <ModuleHomeTabs placement="local" tabs={[
+          ...(data.featureEnabled ? [
+            { label: tFunding('providersTab'), href: pathname, active: view === 'checkout' },
+            { label: t('automationTitle'), href: `${pathname}?view=settlement`, active: view === 'settlement' },
+            { label: t('surchargeRules'), href: `${pathname}?view=surcharge`, active: view === 'surcharge' },
+          ] : []),
+          ...(data.bankingEnabled ? [{ label: tFunding('accountsTab'), href: `${pathname}?view=processor_receipts`, active: view === 'processor_receipts' }] : []),
+        ]} />
+        {error ? <div className="flex items-center justify-between gap-3" role="alert"><p className="text-sm text-red-600">{error}</p><Button variant="outline" onClick={() => void load()}>{tc('actions.retry')}</Button></div> : null}
+        {notice ? <p className="text-sm text-teal-700 dark:text-teal-400">{notice}</p> : null}
+        {view === 'processor_receipts' ? <ProcessorReceiptPolicies /> : null}
+        {view === 'checkout' ? <div className="space-y-5">
       {PROVIDERS.map((p) => (
         <ProviderCard
           key={p.key}
@@ -200,7 +159,9 @@ export function PaymentProvidersClient() {
           t={t}
         />
       ))}
+        </div> : null}
 
+        {view === 'settlement' ? <div className="space-y-5">
       {AUTOMATION_PROVIDERS.map((p) => (
         <AutomationProviderCard
           key={p.key}
@@ -212,16 +173,22 @@ export function PaymentProvidersClient() {
           t={t}
         />
       ))}
+        </div> : null}
 
+        {view === 'surcharge' ?
       <SurchargeRules
         rules={data.surchargeRules}
         incomeAccounts={data.incomeAccounts}
         onSave={post}
         busy={busy}
         t={t}
+        open={ruleDrawerOpen}
+        closeHref={closeRuleHref}
+        onClose={() => router.replace(closeRuleHref)}
       />
-      </>}
-    </div>
+        : null}
+      </div>
+    </ListPageLayout>
   );
 }
 
@@ -592,13 +559,20 @@ function SurchargeRules({
   onSave,
   busy,
   t,
+  open,
+  closeHref,
+  onClose,
 }: {
   rules: Rule[];
   incomeAccounts: Account[];
   onSave: (body: Record<string, unknown>) => Promise<boolean>;
   busy: boolean;
   t: ReturnType<typeof useTranslations>;
+  open: boolean;
+  closeHref: string;
+  onClose: () => void;
 }) {
+  const tc = useTranslations('common')
   const [name, setName] = useState("");
   const [calculation, setCalculation] = useState("percent");
   const [percent, setPercent] = useState("");
@@ -627,12 +601,14 @@ function SurchargeRules({
       setPercent("");
       setFixedAmount("");
       setCapAmount("");
+      onClose();
     }
   }
 
   return (
-    <Card>
-      <CardContent className="space-y-4 p-5">
+    <>
+      <Card>
+        <CardContent className="space-y-4 p-5">
         <div>
           <h2 className="font-semibold text-slate-900 dark:text-white">{t("surchargeRules")}</h2>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t("surchargeHint")}</p>
@@ -679,7 +655,15 @@ function SurchargeRules({
             ))}
           </SharedTableBody>
         </SharedTable>
-        <div className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3 dark:border-slate-800">
+        </CardContent>
+      </Card>
+      <UrlDrawer open={open} closeHref={closeHref} title={t('addRule')} size="lg" footer={(
+        <div className="flex w-full justify-end gap-2">
+          <Button asChild variant="outline"><Link href={closeHref}>{tc('actions.cancel')}</Link></Button>
+          <Button onClick={() => void add()} disabled={busy || !name.trim() || !feeIncomeAccountId}>{t('addRule')}</Button>
+        </div>
+      )}>
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>{t("ruleName")}</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -707,18 +691,18 @@ function SurchargeRules({
           {calculation !== "fixed" ? (
             <div className="space-y-1.5">
               <Label>{t("percent")}</Label>
-              <Input value={percent} onChange={(e) => setPercent(e.target.value)} placeholder="2.9" />
+              <MoneyInput value={percent} onChange={setPercent} field={t('percent')} noun="a percentage" placeholder="2.9" required />
             </div>
           ) : null}
           {calculation !== "percent" ? (
             <div className="space-y-1.5">
               <Label>{t("fixed")}</Label>
-              <Input value={fixedAmount} onChange={(e) => setFixedAmount(e.target.value)} placeholder="0.30" />
+              <MoneyInput value={fixedAmount} onChange={setFixedAmount} field={t('fixed')} placeholder="0.30" required />
             </div>
           ) : null}
           <div className="space-y-1.5">
             <Label>{t("cap")}</Label>
-            <Input value={capAmount} onChange={(e) => setCapAmount(e.target.value)} placeholder="—" />
+            <MoneyInput value={capAmount} onChange={setCapAmount} field={t('cap')} placeholder="—" />
           </div>
           <div className="space-y-1.5">
             <Label>{t("ruleProvider")}</Label>
@@ -742,12 +726,7 @@ function SurchargeRules({
             <DateField value={effectiveFrom} onChange={(value) => setEffectiveFrom(value)} />
           </div>
         </div>
-        <div className="flex justify-end">
-          <Button onClick={() => void add()} disabled={busy || !name || !feeIncomeAccountId}>
-            {t("addRule")}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      </UrlDrawer>
+    </>
   );
 }

@@ -448,7 +448,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'pay-run-row-actions': { props: ['id', 'label'] },
   'pay-run-wizard': { props: [], open: true },
   'payment-operations-editor': { props: ['editor'] },
-  'payment-providers-workspace': { props: [] },
+  'payment-providers-workspace': { props: ['initialData'] },
   'payment-runs-section': { props: ['basePath', 'direction', 'sp'] },
   'payment-schedule-next-run': { props: ['value'] },
   'payments-section': { props: ['basePath', 'kind', 'sp'] },

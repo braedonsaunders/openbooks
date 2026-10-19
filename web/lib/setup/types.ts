@@ -315,6 +315,8 @@ export function setupFieldOptions(field: SetupField, values: Record<string, unkn
 
 export interface SetupColumn {
   key: string
+  /** Resolved, locale-specific label for hosts with a separate message catalog. */
+  label?: string
   /** Presentation label without changing the global field vocabulary. */
   labelKey?: string
   kind: SetupColumnKind
@@ -417,6 +419,8 @@ export interface SetupEntity {
   titleKey?: string
   /** Optional translation key for the singular record name used in drawers. */
   singularTitleKey?: string
+  /** Locale-specific singular name supplied by a host that owns its catalog. */
+  singularTitle?: string
   /** Optional guided creation using the same fields, validation and writer. */
   creationSteps?: { key: string; titleKey: string; descriptionKey: string; fields: string[] }[]
   /** Peer configuration concepts replace one active record body in both read and edit modes. */

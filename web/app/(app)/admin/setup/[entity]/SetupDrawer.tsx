@@ -245,9 +245,9 @@ export function SetupDrawer({
   // form-level alert naming the field, cleared on the next edit.
   const [fieldError, setFieldError] = useState<string | null>(null)
 
-  const entityTitle = entity.singularTitleKey
+  const entityTitle = entity.singularTitle ?? (entity.singularTitleKey
     ? t(entity.singularTitleKey)
-    : t(`entities.${entity.key}.title`)
+    : t(`entities.${entity.key}.title`))
   const set = (key: string, value: unknown) => {
     setFieldError(null)
     // Deliberate re-entry unlocks a precision-locked money field; anything
@@ -557,7 +557,10 @@ export function SetupDrawer({
     const missingField = code === 'invalid' && typeof message === 'string'
       ? /^([A-Za-z][A-Za-z0-9]*) is required$/.exec(message)?.[1]
       : undefined
-    if (missingField) return t('validation.required', { field: t(entity.fields.find((field) => field.key === missingField)?.labelKey ?? `fields.${missingField}`) })
+    if (missingField) {
+      const field = entity.fields.find((candidate) => candidate.key === missingField)
+      return t('validation.required', { field: field?.label ?? t(field?.labelKey ?? `fields.${missingField}`) })
+    }
     if (typeof message === 'string' && message) return remedy ? `${message} — ${remedy}` : message
     if (typeof code === 'string' && code) return code
     if (status !== undefined) return t('errors.noReason', { status })

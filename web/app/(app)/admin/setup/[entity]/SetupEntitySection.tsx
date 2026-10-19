@@ -574,7 +574,7 @@ export async function SetupEntitySection({
                 align: ["number", "money", "percent"].includes(column.kind)
                   ? ("right" as const)
                   : ("left" as const),
-            header: t(column.labelKey ?? `fields.${column.key}`),
+            header: column.label ?? t(column.labelKey ?? `fields.${column.key}`),
             cell: (row) => {
               const content = renderColumn?.(column, row) ??
                 renderCell(column, row, refLabels, t, locale, currencyMinorUnits, timeZone)
