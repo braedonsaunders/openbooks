@@ -1,6 +1,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { assertUnrestrictedScope } from "../organization/subsidiary-scope.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { sealSecret } from "../platform/secrets.ts";
@@ -60,6 +62,7 @@ async function requireWebhooksManage(orgId: string, actorId: string): Promise<vo
       403,
     );
   }
+  assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
 }
 
 async function requireWebhooksGate(runner: SqlExecutor, orgId: string): Promise<void> {

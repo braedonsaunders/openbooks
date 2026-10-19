@@ -19,6 +19,7 @@ import {
   sendWebhookTestPing,
 } from "./endpoints.ts";
 import { runWebhookDeliveryScan, verifyWebhookSignature } from "./deliver.ts";
+import { UnrestrictedScopeError } from "../organization/subsidiary-scope.ts";
 
 /**
  * Outbound webhook transport coverage (integration partition): the
@@ -127,6 +128,25 @@ async function deliveryCount(orgId: string): Promise<number> {
     select count(*)::int as n from webhook_deliveries where org_id = ${orgId}
   `)).rows[0]!.n;
 }
+
+test("restricted webhook managers cannot configure organization-wide endpoints", { skip: !DB }, async () => {
+  const { org, adminId } = await setupOrg();
+  try {
+    await db.execute(sql`
+      update app_roles set subsidiary_restriction = '{"mode":"list","subsidiaryIds":[]}'::jsonb
+       where org_id = ${org.orgId} and key = 'webhook_admin'
+    `);
+    await assert.rejects(
+      makeEndpoint(org.orgId, adminId, "http://127.0.0.1:12345/hook", ["item.updated"]),
+      (error: unknown) => error instanceof UnrestrictedScopeError,
+    );
+    assert.equal((await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from webhook_endpoints where org_id = ${org.orgId}
+    `)).rows[0]!.n, 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test("an event emitted in a rolled-back transaction is never delivered", { skip: !DB }, async () => {
   const { org, adminId } = await setupOrg();
