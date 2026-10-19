@@ -55,6 +55,36 @@ async function binderOf(orgId: string, runId: string) {
   return rows[0]!;
 }
 
+test("post-approval changes persist their invalidation when locking is refused", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    const runId = await startCloseRun({
+      orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, actorId: actors.adminId,
+    });
+    await db.execute(sql`update close_runs set status='approved',current_stage='lock',approved_at=now(),approved_by=${actors.adminId}
+      where id=${runId} and org_id=${org.orgId}`);
+    const documentId = randomUUID();
+    await db.execute(sql`insert into documents
+      (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
+      values (${documentId},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${documentId},${org.date},'CAD',10,0,10)`);
+
+    await assert.rejects(
+      closeApprovedRun(org.orgId, runId, actors.approver1Id),
+      /changed after approval/,
+    );
+    const persisted = (await db.execute<{ status: string; approved_at: Date | null }>(sql`
+      select status,approved_at from close_runs where id=${runId} and org_id=${org.orgId}`)).rows[0]!;
+    assert.equal(persisted.status, "in_progress");
+    assert.equal(persisted.approved_at, null);
+    assert.equal((await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from close_events
+       where org_id=${org.orgId} and run_id=${runId} and event_type='run.data_changed'`)).rows[0]!.count, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("re-publication versions the package and retains the original", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
@@ -121,7 +151,7 @@ test("re-publication versions the package and retains the original", { skip: !DB
     await markApproved();
     await assert.rejects(
       closeApprovedRun(org.orgId, runId, actors.approver1Id),
-      /requires approval or an owner attestation/,
+      /after approval/,
       "a correction posted in the window must revoke the stale approval",
     );
     await markApproved();
