@@ -542,7 +542,7 @@ test("the reminder scan expires lapsed links and sends one reminder each", DB, a
     }
     await db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
-        coalesce(settings->'features', '{}'::jsonb) || '{"hrmShiftPlanning": true, "serviceDispatch": true}'::jsonb)
+        coalesce(settings->'features', '{}'::jsonb) || '{"hrm": true, "hrmShiftPlanning": true, "serviceDispatch": true}'::jsonb)
        where id = ${org.orgId}`);
     const serviceDue = await addServiceQuoteSignature("SQ-DUE", new Date(Date.now() + 60 * 60 * 1000));
     const serviceExpired = await addServiceQuoteSignature("SQ-EXPIRED", new Date(Date.now() - 60 * 60 * 1000));
