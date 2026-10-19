@@ -196,7 +196,7 @@ test("voided POS sales do not count toward session totals or expected cash", { s
   const f = await fixture();
   try {
     const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
-      lines: [{ itemId: f.org.items.fifo, quantity: "1" }],
+      lines: [{ itemId: f.org.items.service, quantity: "1" }],
       payments: [{ kind: "cash", tendered: "10.00" }],
       expectedTotal: "10.0000",
     }), cashier, pricing));
