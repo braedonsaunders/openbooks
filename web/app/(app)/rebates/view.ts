@@ -172,6 +172,7 @@ export async function loadRebates(sp: SearchParams): Promise<RebatesData> {
           db.execute<{ id: string; name: string }>(sql`
             select id, name from accounts where org_id = ${orgId} and type = 'asset_bank'
               and is_active and not is_summary
+              and (subsidiary_id is null or subsidiary_id = ${agreement.subsidiary_id})
               ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
              order by number, name`),
           db.execute<{ base_currency: string }>(sql`

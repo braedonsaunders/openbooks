@@ -99,10 +99,9 @@ export function RebateDrawer({ data }: { data: RebateDrawerData }) {
       const result = await response.json()
       resetDrafts()
       if (result.documentId) {
-        const href = result.kind === 'customer_credit' ? `/ar/credits?doc=${result.documentId}`
-          : result.kind === 'customer_invoice' ? `/ar/invoices?doc=${result.documentId}`
-            : result.kind === 'vendor_credit' ? `/ap/credits?doc=${result.documentId}`
-              : `/ap/bills?doc=${result.documentId}`
+        const href = result.kind === 'customer_credit' || result.kind === 'customer_invoice'
+          ? `/ar/invoices?doc=${result.documentId}`
+          : `/ap/bills?doc=${result.documentId}`
         router.push(href as never)
       } else if (body.action === 'claim' && result.id) {
         router.push(`/rebates?view=claims&record=${result.id}` as never)
@@ -183,7 +182,7 @@ export function RebateDrawer({ data }: { data: RebateDrawerData }) {
               </Button>
             ) : null}
             {c.settlement_document_id ? (
-              <Link className="underline" href={`${a.side === 'customer' ? cmp(c.amount, '0') > 0 ? '/ar/credits' : '/ar/invoices' : cmp(c.amount, '0') > 0 ? '/ap/credits' : '/ap/bills'}?doc=${c.settlement_document_id}`}>
+              <Link className="underline" href={`${a.side === 'customer' ? '/ar/invoices' : '/ap/bills'}?doc=${c.settlement_document_id}`}>
                 {t('drawer.openSettlementDocument')}
               </Link>
             ) : null}
