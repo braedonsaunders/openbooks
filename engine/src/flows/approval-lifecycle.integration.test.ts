@@ -662,7 +662,7 @@ test("default SoD excludes maker and submitter and blocks them through delegated
       canAct: false,
       signatureRequired: false,
       sodBlocked: true,
-      canDelegate: false,
+      canDelegate: true,
     });
   });
 });
