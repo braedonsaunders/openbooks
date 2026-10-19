@@ -115,3 +115,15 @@ export async function getItemFamily(orgId: string, familyId: string): Promise<It
     };
   });
 }
+
+/** Active product families available for linking storefront products. */
+export async function listItemFamilies(orgId: string): Promise<{ id: string; code: string; name: string }[]> {
+  return db.transaction(async (tx) => {
+    await assertItemVariantsReadable(tx, orgId);
+    return (await tx.execute<{ id: string; code: string; name: string }>(sql`
+      select id, code, name
+        from item_families
+       where org_id = ${orgId} and status = 'active'
+       order by name, code, id`)).rows;
+  });
+}

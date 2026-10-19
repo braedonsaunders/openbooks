@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createItemFamily } from '@openbooks/engine/inventory'
+import { createItemFamily, listItemFamilies } from '@openbooks/engine/inventory'
 import { defineRoute } from '@/lib/api/route'
 
 const optionValueSchema = z.union([
@@ -25,6 +25,16 @@ const familyCreateSchema = z.object({
   defaultRate: z.string().nullable().optional(),
   options: z.array(familyOptionSchema).min(1),
 }).strict()
+
+/** Active product families for catalog pickers. */
+export const GET = defineRoute({
+  permission: 'items.read',
+  feature: 'itemVariants',
+  handler: async ({ authz }) => {
+    const families = await listItemFamilies(authz.user.orgId)
+    return NextResponse.json({ options: families.map((family) => ({ value: family.id, label: `${family.code} · ${family.name}` })) })
+  },
+})
 
 /** Create a product family with its ordered options. Variants come later through generate. */
 export const POST = defineRoute({
