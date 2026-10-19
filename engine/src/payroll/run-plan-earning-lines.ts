@@ -8,6 +8,7 @@ import { entitlementMoneyValue, planMovementsForStub, type EntitlementPlan, type
 import { allocateProportionally } from "./run-allocation.ts";
 import { type Line, earningsBase, totalHours, earningJobBuckets } from "./run-stub-records.ts";
 import type { DeclaredVacationAccrualInput } from "./run-vacation-accrual-input.ts";
+import { resolveEntitlementWage } from "./run-entitlement-valuation.ts";
 
 /** Earning lines driven by union fringe agreements and entitlement plan movements, appended to each stub during calculation. */
 
@@ -125,6 +126,7 @@ export async function applyEntitlementPlanMovements(
     employmentId?: string;
     policyDate?: string;
     payDate: string;
+    payCurrency: string;
     /** Employee display name, for the unvalued-hours refusal. */
     employeeName: string;
     vacationPercent: string | null;
@@ -139,7 +141,7 @@ export async function applyEntitlementPlanMovements(
   },
 ): Promise<string> {
   const {
-    orgId, documentId, employeePartyId, payDate, employeeName,
+    orgId, documentId, employeePartyId, payDate, payCurrency, employeeName,
     vacationPercent, payVacationInCash, vacationPlan, plans,
     lines, entitlementMovements, entitlementWarnings,
   } = args;
@@ -191,12 +193,9 @@ export async function applyEntitlementPlanMovements(
       declaredAccrualValues,
     });
     entitlementWarnings.push(...warnings);
-    // One wage lookup serves every plan's hours valuation for this stub, the
-    // same way entitlementBalances values its hours view. Dynamic import, the
-    // way entitlements-db.ts reaches labor-costing.
-    const { resolveWage, laborCostingSettings } = await import("../projects/labor-costing.ts");
-    const wageSettings = await laborCostingSettings(orgId);
-    const resolvedWage = await resolveWage(orgId, employeePartyId, payDate, { annualHoursDefault: wageSettings.annualHours });
+    // The hours bank uses the same transaction-bound wage and currency as the
+    // cheque, so its accrual and payout lines cannot price foreign wages raw.
+    const resolvedWage = await resolveEntitlementWage(tx, orgId, employeePartyId, payDate, payCurrency, true);
     const wage = resolvedWage && cmp(resolvedWage.wage, "0") > 0 ? resolvedWage.wage : null;
     for (const movement of movements) {
       if (!movement.componentId) continue;

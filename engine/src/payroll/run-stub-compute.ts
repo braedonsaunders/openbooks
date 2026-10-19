@@ -342,7 +342,7 @@ export async function calculateStub(
   else if (vacationTier != null && (vacationPercent == null || cmp(vacationTier, vacationPercent) > 0)) vacationPercent = vacationTier;
 
   await settleTerminationBankPayouts(tx, {
-    orgId, documentId, payDate: run.pay_date!, employeePartyId, employmentId,
+    orgId, documentId, payDate: run.pay_date!, payCurrency: run.doc_currency!, employeePartyId, employmentId,
     employeeName: emp.display_name ?? employeePartyId,
     terminationRun, plans, lines, entitlementMovements,
   });
@@ -381,7 +381,7 @@ export async function calculateStub(
   await stampEarningLineStatutoryTreatments(tx, { orgId, payDate: run.pay_date!, workerCompGroupId, lines });
 
   vacationAccrued = await applyEntitlementPlanMovements(tx, {
-    orgId, documentId, employeePartyId, payDate: run.pay_date!,
+    orgId, documentId, employeePartyId, payDate: run.pay_date!, payCurrency: run.doc_currency!,
     employeeName: emp.display_name ?? employeePartyId,
     employmentId: emp.employment_id ?? undefined, policyDate: entitlementPolicyDate, vacationPercent, payVacationInCash, excludeVacationAccrual: paidLeave || vacationElection === null, vacationPlan, plans,
     lines, entitlementMovements, entitlementWarnings, declaredVacationAccruals,

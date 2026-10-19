@@ -99,6 +99,40 @@ for (const unit of ["money", "hours"] as const) {
   });
 }
 
+test("hours entitlement accrual values a foreign wage in the pay run currency", { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId } = await employee(fx, "Foreign Currency Bank Employee", fx.subsidiaryId);
+    await db.execute(sql`update labor_cost_rates set rate='60',currency='USD'
+      where org_id=${fx.orgId} and employee_party_id=${partyId}`);
+    await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${fx.orgId}, 'USD', 'CAD', '2026-01-01', 'spot', '1.5')`);
+    const accrual = randomUUID();
+    await seedPayrollComponent(fx.orgId, accrual, {
+      code: "FX-HOURS-ACCRUAL", name: "Foreign wage hours accrual", kind: "employer_contribution",
+      systemKey: null, liabilityAccountId: fx.accounts.vacationPayable, country: "CA", sequence: 240,
+      isActive: true, createdBy: fx.actorId, updatedBy: fx.actorId,
+    });
+    const planId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans
+      (id,org_id,code,name,unit,direction,accrual_method,accrual_value,accrual_component_id,
+       liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${planId},${fx.orgId},'FXHOURS','Foreign wage hours bank','hours','accrue','fixed_per_period','2',
+        ${accrual},${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await hours(fx, partyId, ["2026-07-13"]);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: "2026-07-12", periodEnd: "2026-07-18" });
+    const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.deepEqual(result.errors, []);
+    const line = (await db.execute<{ amount: string }>(sql`
+      select l.amount::text as amount from pay_stub_lines l
+        join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
+       where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${accrual}
+    `)).rows[0];
+    assert.equal(line?.amount, "180.0000", "two banked hours at CAD 90 per hour post CAD 180");
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
 for (const unit of ['hours', 'money'] as const) {
   test(`an audited keyed-rate payout uses its ${unit} bank and replays exactly once`, { skip: !DB }, async () => {
     const fx = await payrollOrg();

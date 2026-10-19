@@ -5,6 +5,7 @@ import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { cmp, div, isZero, mulDecimal, roundMoney } from "../money/money.ts";
 import { pickPlanLimit } from "./entitlements-limits.ts";
+import { resolveEntitlementWage } from "./run-entitlement-valuation.ts";
 import {
   type ResolvedServiceTiers,
   resolveServiceTiersFrom,
@@ -256,6 +257,10 @@ export async function entitlementBalances(
     excludeRunDocumentId?: string | null;
     /** Plans to report on; loaded from the org when omitted. */
     plans?: readonly EntitlementPlan[];
+    /** Pay-run currency to use when valuing an hours bank for a cheque. */
+    payCurrency?: string;
+    /** Lock the selected wage row when called during calculation. */
+    lockWage?: boolean;
   } = {},
 ): Promise<EntitlementBalance[]> {
   const executor = opts.executor ?? db;
@@ -274,10 +279,10 @@ export async function entitlementBalances(
   `));
   const byPlan = new Map(sums.rows.map((row) => [row.plan_id, row]));
 
-  // One wage lookup serves every plan's hours view.
-  const { resolveWage, laborCostingSettings } = await import("../projects/labor-costing.ts");
-  const wageSettings = await laborCostingSettings(orgId);
-  const resolved = await resolveWage(orgId, employeePartyId, onDate, { annualHoursDefault: wageSettings.annualHours });
+  // One transaction-bound wage lookup serves every plan's hours view.
+  const resolved = await resolveEntitlementWage(
+    executor, orgId, employeePartyId, onDate, opts.payCurrency, opts.lockWage ?? false,
+  );
   const wage = resolved && cmp(resolved.wage, "0") > 0 ? resolved.wage : null;
   const scope = await employeeScope(executor, orgId, employeePartyId, { onDate, employmentId: opts.employmentId });
 
