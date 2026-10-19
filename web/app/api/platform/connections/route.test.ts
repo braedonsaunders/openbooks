@@ -51,6 +51,11 @@ const mockSources = new Map<string, string>([
   [
     "mock:db",
     `
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       const state = globalThis[Symbol.for("openbooks.connection-create-route-test")]
       export const db = {
         async execute() { state.listReads += 1; return { rows: [] } },
@@ -64,7 +69,12 @@ const mockSources = new Map<string, string>([
   ],
   [
     "mock:secrets",
-    `export function sealJson() { return "sealed" }`,
+    `export { KeyedFingerprintError, SEALED_V1_PREFIX, SEALED_V2_PREFIX, SecretIntegrityError,
+        describeSealedBlob, fingerprintUnderKey, isNamedNonProductionEnvironment, keyedFingerprint,
+        keyedFingerprintForComparison, loadDataKeyRing, matchKeyedFingerprint, parseKeyedFingerprint,
+        requireDataKey, unsealJson, unsealSecret, sealSecret }
+        from '${import.meta.resolve('@openbooks/engine/platform/secrets')}'
+      export function sealJson() { return "sealed" }`,
   ],
   [
     "mock:business-date",

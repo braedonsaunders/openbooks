@@ -40,6 +40,11 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       export * from '${import.meta.resolve('@openbooks/engine/platform/db')}'
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       const state = globalThis[Symbol.for('openbooks.payroll-runs-route-test')]
       const sqlText = globalThis.openbooksPayrollRunsSqlText
       export const db = {

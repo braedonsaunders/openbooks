@@ -100,6 +100,11 @@ const mockSources = new Map<string, string>([
       catch (error) { state.item = beforeItem; state.audits = beforeAudits; throw error }
       finally { state.inTransaction = false }
     }
+    export const ambientTenantOrgId = () => null
+    export const currentRequestOrgResolver = () => null
+    export const registerRequestOrgResolver = () => {}
+    export const withBypass = (fn) => fn()
+    export const withBypassContext = (fn) => fn()
   `],
   ['mock:authz', `
     const state = globalThis[Symbol.for('openbooks.item-create-route-test')]

@@ -50,6 +50,11 @@ const mockSources = new Map<string, string>([
   [
     "mock:db",
     `
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       const state = globalThis[Symbol.for('openbooks.subcontracts-route-test')]
       const sqlText = globalThis.openbooksSqlTextSubcontracts
       export const db = {
@@ -68,6 +73,19 @@ const mockSources = new Map<string, string>([
   [
     "mock:subsidiary-scope",
     `export class ScopeNotFoundError extends Error {}
+     export const UNRESTRICTED_SCOPE_REQUIRED = 'requires unrestricted subsidiary access'
+     export class UnrestrictedScopeError extends Error {
+       constructor() { super(UNRESTRICTED_SCOPE_REQUIRED); this.name = 'UnrestrictedScopeError'; this.status = 403 }
+     }
+     export function assertUnrestrictedScope(scope) {
+       if (scope !== null) throw new UnrestrictedScopeError()
+     }
+     export function subsidiaryScopeAllows(scope, subsidiaryId, opts = {}) {
+       if (scope === null) return true
+       if (subsidiaryId == null || subsidiaryId === '') return opts.orgWideNull === true
+       return scope.has(subsidiaryId)
+     }
+     export function subsidiaryVisibleFilter() { return { queryChunks: [] } }
      export async function lockProjectForScope() { return { id: 'project-1', subsidiaryId: null } }
      export async function withScopeSnapshot(_orgId, fn) { return fn() }`,
   ],
@@ -115,6 +133,7 @@ const mockSources = new Map<string, string>([
       export async function createSubcontractPaymentControl() { throw new Error("unexpected createSubcontractPaymentControl") }
       export async function createVendorPayApplication() { throw new Error("unexpected createVendorPayApplication") }
       export async function generateVendorPayApplicationBill() { throw new Error("unexpected generateVendorPayApplicationBill") }
+      export async function listSubcontractRegister() { throw new Error("unexpected listSubcontractRegister") }
       export async function releaseSubcontractPaymentControl() { throw new Error("unexpected releaseSubcontractPaymentControl") }
       export async function releaseVendorRetainage() { throw new Error("unexpected releaseVendorRetainage") }
       export async function removeSubcontractSovLine() { throw new Error("unexpected removeSubcontractSovLine") }

@@ -84,6 +84,7 @@ const mockSources = new Map<string, string>([
       export const currentRequestOrgResolver = () => null
       export const registerRequestOrgResolver = () => {}
       export const ambientTenantOrgId = () => '${ORG_ID}'
+      export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
       export function pinnedTransactionExecutor() { return undefined }
       export const db = {

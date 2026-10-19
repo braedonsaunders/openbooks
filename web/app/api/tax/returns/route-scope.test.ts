@@ -66,6 +66,11 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       export const db = {
         async execute() { return { rows: [] } },
       }

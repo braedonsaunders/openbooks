@@ -69,6 +69,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:drizzle',
     `
+      export { and, asc, desc, eq, inArray, isNull, or } from '${import.meta.resolve('drizzle-orm')}'
       export function sql(strings, ...values) {
         return { strings, values }
       }
@@ -78,6 +79,11 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       const state = globalThis[Symbol.for('openbooks.data-import-route-test')]
       export const schema = {
         documents: Symbol.for('openbooks.data-import-route-test.documents'),
@@ -313,6 +319,9 @@ const mockSources = new Map<string, string>([
       // The pure cap/gate re-export the REAL ./export-cap.ts through this
       // double — never copied. Only impure surfaces are stubbed below.
       export * from '${new URL('./export-cap.ts', import.meta.url).href}'
+      export { MAX_EXPORT_ROWS, enforceExportRowLimit } from '${new URL('./export-cap.ts', import.meta.url).href}'
+      export { duplicateImportRowIndexes, importRowAction } from '${new URL('./resource-core.ts', import.meta.url).href}'
+      export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from '${new URL('./subsidiary-scope.ts', import.meta.url).href}'
 
       export async function orgFeatureEnabled() {
         return false

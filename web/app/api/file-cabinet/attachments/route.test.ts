@@ -33,6 +33,11 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       const state = globalThis[Symbol.for('openbooks.file-cabinet-attachments-route-test')]
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       export const db = {
         execute() { return Promise.resolve({ rows: state.targetRows.shift() ?? [] }) },
       }

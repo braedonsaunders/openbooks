@@ -48,6 +48,7 @@ const mockSources = new Map<string, string>([
         if (key !== 'hrm') throw new Error('unexpected feature ' + key)
         return state.featureOn
       }
+      export async function subsidiaryFeatureEnabled() { return true }
     `,
   ],
   [
