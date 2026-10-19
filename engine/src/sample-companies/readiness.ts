@@ -83,6 +83,7 @@ export async function verifyNativeOperatingEvidence(c: DemoContext): Promise<str
       (select count(*)::int from service_jobs where org_id=${c.orgId} and id in (${ids("service_jobs", ["no-heat", "tune-up", "rooftop"])})) as jobs,
       (select count(*)::int from service_agreements where org_id=${c.orgId} and id=${scenarioRecordId(c, "service_agreements", "seasonal")}) as agreements,
       (select count(*)::int from service_billings b join documents d on d.org_id=b.org_id and d.id=b.invoice_document_id
+        -- Live entries only: readiness confirms the sample company currently holds a posted visit invoice.
         where b.org_id=${c.orgId} and b.job_id=${scenarioRecordId(c, "service_jobs", "no-heat")} and b.released_at is null and (${c.memberSample} or d.status='posted')) as posted,
       (select count(*)::int from service_quotes where org_id=${c.orgId} and quote_document_id=${scenarioRecordId(c, "documents", "service-estimate-rooftop")}
         and status='accepted' and job_id=${scenarioRecordId(c, "service_jobs", "rooftop")}) as accepted`)).rows[0];

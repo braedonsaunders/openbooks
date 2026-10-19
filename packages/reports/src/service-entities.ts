@@ -229,6 +229,7 @@ export const serviceRevenuePerJobEntity: ReportEntity = {
                count(*) FILTER (WHERE d.currency <> j.currency) AS other_currency_invoices
           FROM service_billings b
           JOIN documents d ON d.id = b.invoice_document_id AND d.org_id = b.org_id AND d.kind = 'customer_invoice'
+         -- Live entries only: a job's invoiced revenue counts its current posted billings; a voided invoice releases its billing.
          WHERE b.org_id = j.org_id AND b.job_id = j.id AND b.released_at IS NULL AND d.status = 'posted'
       ) inv`,
   orgColumn: 'j.org_id',
