@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../platform/db.ts";
+import { db, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox, rebaseSandboxControlAccounts, refreshSandbox, resetSandbox } from "./lifecycle.ts";
+import { rebaseClonedJsonReferences } from "./json-references.ts";
 import { declaredRemittanceVendorSettingsKeys } from "../payroll/packs.ts";
 import { PAYROLL_ACCOUNT_SETTING_KEYS } from "../payroll/settings-references.ts";
 import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
@@ -284,4 +285,22 @@ test("invalid source role scope aborts the whole clone without broadening access
   assert.equal(sandbox.status, "failed");
   assert.equal((await db.execute(sql`select id from app_roles where org_id=${sandbox.org_id}`)).rows.length, 0);
   assert.equal((await db.execute(sql`select id from subsidiaries where org_id=${sandbox.org_id}`)).rows.length, 0);
+}));
+
+
+test("preserved sandbox role policies refuse source-tenant identities", enabled, async () => fixture(async (org, actors, child) => {
+  const sandbox = await withOrgContext(org.orgId, () => createSandbox({ productionOrgId: org.orgId,
+    name: "Preserved native scope", tier: "dev", createdBy: actors[0]!, lifecycleAuthority: { actorId: actors[0]! } }));
+  const source = (await db.execute<{ seed: string }>(sql`select sandbox_seed as seed from orgs where id=${sandbox.sandboxOrgId}`)).rows[0]!;
+  const role = (await db.execute<{ id: string }>(sql`update app_roles
+    set subsidiary_restriction=jsonb_build_object('mode','list','subsidiaryIds',jsonb_build_array(${child}::text))
+    where org_id=${sandbox.sandboxOrgId} and key='scoped_list' returning id`)).rows[0]!;
+  const readPolicy = async () => (await db.execute(sql`select subsidiary_restriction from app_roles
+    where org_id=${sandbox.sandboxOrgId} and id=${role.id}`)).rows;
+  const before = await readPolicy();
+  await assert.rejects(withOrgTransaction(sandbox.sandboxOrgId, () => rebaseClonedJsonReferences({
+    productionOrgId: org.orgId, sandboxOrgId: sandbox.sandboxOrgId, seed: source.seed,
+    tier: "dev", copiedTables: new Set(["subsidiaries"]),
+  })), /subsidiary restriction has no counterpart in the target organization/);
+  assert.deepEqual(await readPolicy(), before, "invalid preserved scope is refused without an implicit repair");
 }));

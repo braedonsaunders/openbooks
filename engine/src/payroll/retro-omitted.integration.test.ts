@@ -10,7 +10,7 @@ import {
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
+import { seedCanadianFilingAccountForTest, seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 import { seedHiredEmployee } from "./filing-test-fixtures.ts";
 
@@ -74,6 +74,10 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-08-15', 3, null, true,
                 ${actorId}, ${actorId})`);
 
+      const filingAccountId = await seedCanadianFilingAccountForTest(org.orgId, actorId, {
+        subsidiaryId: org.subsidiaryId, accountNumber: "123456789RP0001", name: "CRA payroll",
+        effectiveFrom: "2026-01-01", eiEmployerMultiplier: "1.4",
+      });
       const hire = async (name: string, hiredOn: string) => {
         const { employeeId } = await seedHiredEmployee(org.orgId, actorId, {
           scheduleId, subsidiaryId: org.subsidiaryId, name, country: "CA", province: "ON",
@@ -81,6 +85,8 @@ test(
           annualHours: "2080", federalClaimCode: 1, provincialClaimCode: 1, hiredOn,
           wcbExempt: true, wcbExemptReason: "The declared employee is outside the employer workers-compensation coverage.",
         });
+        assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+          where org_id=${org.orgId} and employee_party_id=${employeeId} returning id`)).rows.length, 1);
         return employeeId;
       };
 
@@ -100,6 +106,12 @@ test(
       // Sanne joins during the posted period; Teun joins after it ended.
       await hire("Sanne de Vries", "2026-08-20");
       await hire("Teun Bakker", "2026-09-05");
+
+      // Current regular pay supplies the actual income required by the native separate-payment method.
+      const current = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-08-30", periodEnd: "2026-09-12", payDate: "2026-09-15" });
+      assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: current.documentId, actorId })).errors, []);
+      await commitPayRun({ orgId: org.orgId, documentId: current.documentId, actorId });
 
       // ---- Detect + quantify ------------------------------------------------
       const proposal = await proposeRetroPay({

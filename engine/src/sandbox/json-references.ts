@@ -107,17 +107,15 @@ export function remapFlowGraphSubjectScope(
 }
 
 /** Run inside the clone's transaction after every referenced table was copied.
- * Preserved policies keep their sandbox identities; proven legacy production
- * references are repaired and missing scope targets abort refresh atomically. */
+ * Copied policies rebase source identities; preserved policies must already
+ * name native sandbox entities. Missing scope targets abort refresh atomically. */
 export async function rebaseClonedJsonReferences(args: {
   productionOrgId: string; sandboxOrgId: string; seed: string; tier: string; copiedTables: ReadonlySet<string>;
 }): Promise<void> {
   if (args.copiedTables.has("app_roles") || args.copiedTables.has("subsidiaries")) {
-    const ids = await sandboxSubsidiaryMap(args.productionOrgId, args.sandboxOrgId, args.seed);
-    if (!args.copiedTables.has("app_roles")) {
-      const native = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${args.sandboxOrgId}`)).rows;
-      for (const row of native) ids.set(row.id, row.id);
-    }
+    const ids = args.copiedTables.has("app_roles")
+      ? await sandboxSubsidiaryMap(args.productionOrgId, args.sandboxOrgId, args.seed)
+      : new Map((await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${args.sandboxOrgId}`)).rows.map(row => [row.id, row.id]));
     const roles = (await db.execute<{ id: string; subsidiary_restriction: unknown }>(sql`
       select id, subsidiary_restriction from app_roles where org_id = ${args.sandboxOrgId} order by id for update`)).rows;
     for (const role of roles) {

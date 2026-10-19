@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { seedAdoption, calculatedRun } from "./filing-test-fixtures.ts";
+import { seedAdoption, calculatedRun, seedCanadianFilingAccountForTest } from "./filing-test-fixtures.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
@@ -15,6 +15,12 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function seedPostedSource() {
   const fx = await seedAdoption();
+  const filingAccountId = await seedCanadianFilingAccountForTest(fx.orgId, fx.actorId, {
+    subsidiaryId: fx.subsidiaryId, accountNumber: "123456789RP0001", name: "CRA payroll",
+    effectiveFrom: "2026-01-01", eiEmployerMultiplier: "1.4",
+  });
+  assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+    where org_id=${fx.orgId} and employment_id=${fx.employmentId} returning id`)).rows.length, 1);
   const { input } = await calculatedRun(fx);
   await commitPayRun(input);
   const accounts = (

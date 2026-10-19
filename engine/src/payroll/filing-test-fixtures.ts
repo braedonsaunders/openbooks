@@ -6,7 +6,7 @@ import { db } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, seedFlowActors, seedWorkerEmployment, seedVacationTerms } from "../testing/fixtures.ts";
+import { assertFixtureDatabase, createScratchOrg, seedFlowActors, seedWorkerEmployment, seedVacationTerms } from "../testing/fixtures.ts";
 import { type VacationMethod } from "./vacation-terms.ts";
 import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { setPackSlotAccount } from "./packs.ts";
@@ -500,4 +500,19 @@ export async function qualifyCanadianOpeningForTest(input: {
   const reportingFile = await retainFile({ ...input, ...facts, allocations });
   await qualifyCanadianOpeningReportingSource({ ...packet, ...reportingFile, requestId: randomUUID(),
     expectedLevyAuthorityId: levy.id, expectedLevyAllocationSha256: levy.allocationSha256, allocations });
+}
+
+/** A declared CRA registration and dated EI multiple, without inferring employee ownership. */
+export async function seedCanadianFilingAccountForTest(orgId: string, actorId: string, input: {
+  subsidiaryId: string; accountNumber: string; name: string; effectiveFrom: string; eiEmployerMultiplier: string;
+}): Promise<string> {
+  await assertFixtureDatabase();
+  const filingAccountId = randomUUID();
+  assert.equal((await db.execute(sql`insert into payroll_filing_accounts
+    (id,org_id,country,program_type,account_number,name,subsidiary_id,is_default,created_by,updated_by)
+    values(${filingAccountId},${orgId},'CA','ca_rp',${input.accountNumber},${input.name},${input.subsidiaryId},true,${actorId},${actorId}) returning id`)).rows.length, 1);
+  await upsertPayrollEmployerFact({ orgId, actorId, filingAccountId, country: "CA",
+    factKey: "ei_employer_multiplier", effectiveFrom: input.effectiveFrom, value: input.eiEmployerMultiplier,
+    changeReason: "Declared employer EI multiple for the retained CRA registration" });
+  return filingAccountId;
 }

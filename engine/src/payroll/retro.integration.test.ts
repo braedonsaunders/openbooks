@@ -21,7 +21,7 @@ import { payRunReadiness } from "./readiness.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { acknowledgePayRunRefusals, commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
+import { seedCanadianFilingAccountForTest, seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -91,6 +91,13 @@ test(
         wcbExempt: true, wcbExemptReason: 'retro fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
 
+
+      const filingAccountId = await seedCanadianFilingAccountForTest(org.orgId, actorId, {
+        subsidiaryId: org.subsidiaryId, accountNumber: "123456789RP0001", name: "CRA payroll",
+        effectiveFrom: "2026-01-01", eiEmployerMultiplier: "1.4",
+      });
+      assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+        where org_id=${org.orgId} and employee_party_id=${employeeId} returning id`)).rows.length, 1);
 
       // Three committed periods, 60 h on job A and 20 h on job B in each.
       const periods = [
@@ -263,7 +270,7 @@ test(
       ) insert into pay_component_statutory_treatments
         (org_id,pay_component_id,effective_from,program_exclusions,vacationable,created_by,updated_by)
         select org_id,pay_component_id,pay_date,program_exclusions,false,${actorId},${actorId} from closed`);
-      await calculatePayRun({ orgId: org.orgId, documentId: retro.documentId, actorId });
+      assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: retro.documentId, actorId })).errors, []);
       const noVacation = (await db.execute<{ vacation_accrued: string }>(sql`
         select vacation_accrued from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${retro.documentId}
@@ -354,7 +361,7 @@ test(
       assert.deepEqual(await retroRunFindings(org.orgId, retro.documentId), []);
       // The voided competitor changed another run for these employees after
       // this run was calculated; recalculate through the ordinary gate.
-      await calculatePayRun({ orgId: org.orgId, documentId: retro.documentId, actorId });
+      assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: retro.documentId, actorId })).errors, []);
 
       await commitPayRun({ orgId: org.orgId, documentId: retro.documentId, actorId });
       const legs = (await db.execute<{ amount: string; project_id: string | null }>(sql`

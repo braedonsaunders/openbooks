@@ -1,3 +1,4 @@
+import { committedEntitlementMovementSql } from "./entitlement-movement-scope.ts";
 import { PayrollError } from "./error.ts";
 import { resolveEmploymentServiceCredit } from "./service-credit.ts";
 import { sql } from "drizzle-orm";
@@ -274,7 +275,7 @@ export async function entitlementBalances(
       left join pay_runs r on r.org_id = l.org_id and r.document_id = l.pay_run_document_id
      where l.org_id = ${orgId} and l.employee_party_id = ${employeePartyId}
        and l.movement_date <= ${onDate}
-       and r.run_status is distinct from 'draft'
+       and ${committedEntitlementMovementSql(sql`l.pay_run_document_id`, sql`r.run_status`)}
        and (${excludeRunDocumentId}::uuid is null
             or l.pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
      group by l.plan_id
@@ -346,7 +347,7 @@ export async function planBalanceExcludingRun(
      where l.org_id = ${orgId} and l.plan_id = ${planId}
        and l.employee_party_id = ${employeePartyId}
        and l.movement_date <= ${onDate}
-       and r.run_status is distinct from 'draft'
+       and ${committedEntitlementMovementSql(sql`l.pay_run_document_id`, sql`r.run_status`)}
        and (${excludeRunDocumentId}::uuid is null
             or l.pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
   `));

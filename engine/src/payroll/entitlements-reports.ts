@@ -1,3 +1,4 @@
+import { committedEntitlementMovementSql } from "./entitlement-movement-scope.ts";
 import { serviceCreditMilestoneDate, type ServiceCreditBaseline } from "./service-credit.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -46,7 +47,7 @@ export async function employeesNearLimit(
       join entitlement_plans pl on pl.id = l.plan_id and pl.org_id = l.org_id and pl.is_active
       join parties p on p.id = l.employee_party_id and p.org_id = l.org_id
      where l.org_id = ${orgId} and l.movement_date <= ${onDate}
-       and r.run_status is distinct from 'draft'
+       and ${committedEntitlementMovementSql(sql`l.pay_run_document_id`, sql`r.run_status`)}
        and (${opts.planId ?? null}::uuid is null or l.plan_id = ${opts.planId ?? null}::uuid)
      group by l.plan_id, pl.code, pl.name, pl.unit, l.employee_party_id, p.display_name
      having sum(l.amount) <> 0

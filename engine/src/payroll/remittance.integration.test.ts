@@ -698,15 +698,18 @@ test(
       assert.equal(t4Slip!.box16aCpp2, stub.factors.C2);
       assert.equal(t4Slip!.employerCpp2, stub.factors.C2);
 
-      const cpp2Posting = (await db.execute<{ account_id: string; amount: string }>(sql`
-        select account_id, amount from document_lines
-         where org_id = ${org.orgId} and document_id = ${run.documentId}
-           and description = 'CPP2 (employer)'
-      `)).rows;
-      assert.ok(cpp2Posting.some((line) =>
-        line.account_id === cpp2EmployerComponent!.liabilityAccountId
-        && cmp(line.amount, neg(stub.factors.C2!)) === 0),
-      "CPP2 employer credit posts to the liability account the remittance will clear");
+      const cpp2Liability = (await db.execute<{ liability_account_id: string; amount: string }>(sql`
+        select line.liability_account_id,line.amount::text
+          from pay_stub_lines line join pay_stubs stub on stub.org_id=line.org_id and stub.id=line.stub_id
+          join pay_components component on component.org_id=line.org_id and component.id=line.component_id
+         where stub.org_id=${org.orgId} and stub.pay_run_document_id=${run.documentId}
+           and component.system_key='cpp2' and component.kind='employer_contribution'`)).rows;
+      assert.deepEqual(cpp2Liability, [{ liability_account_id: cpp2EmployerComponent!.liabilityAccountId!, amount: stub.factors.C2! }]);
+      const projectedLiability = (await db.execute<{ amount: string }>(sql`
+        select coalesce(sum(amount),0)::text as amount from document_lines
+         where org_id=${org.orgId} and document_id=${run.documentId} and account_id=${craPayable}`)).rows[0]!;
+      assert.equal(cmp(projectedLiability.amount, neg(cra.total)), 0,
+        "the consolidated liability credit includes employee and employer CPP2 exactly once");
 
       // Bill: draft vendor_bill debiting the liability account, marked for the period.
       const bill = await createRemittanceBill(org.orgId, actorId, {

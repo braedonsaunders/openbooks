@@ -1824,7 +1824,7 @@ test("tenant scan failures remain retryable and system recovery requires live pl
     await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:operator,reason:"Infrastructure has recovered and delivery can resume"}), /platform administrator/);
     assert.equal((await readTerminalEvidence(rowId)).length, 1);
     await withOrgTransaction(org.orgId, async () => {
-      await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:platformAdmin,
+      await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId!,actorId:platformAdmin,
         reason:"Infrastructure has recovered and delivery can resume"}), /outside the current transaction/);
     });
     assert.equal((await readTerminalEvidence(rowId)).length, 1);

@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import pg from "pg";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { DB, setupHarness, withHarness, seedEmployment, setFeatures, grant } from "../testing/hrm-harness.ts";
-import { seedPayrollSchedule, seedPayrollProfile, seedEnabledPayrollConfiguration, seedPostingAccount, seedPayrollWage, seedPayrollTime, seedApprovalFlow } from "../testing/fixtures.ts";
+import { seedPayrollStatutoryTreatment, seedPayrollSchedule, seedPayrollProfile, seedEnabledPayrollConfiguration, seedPostingAccount, seedPayrollWage, seedPayrollTime, seedApprovalFlow } from "../testing/fixtures.ts";
 import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from "@openbooks/schema/src/payroll-compensation.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { decideGate } from "../flows/gates.ts";
@@ -62,6 +62,8 @@ async function setup(options: { approvalFlow?: boolean } = {}) {
     const componentId = randomUUID();
     await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,basis,value,is_active)
       values(${componentId},${org.orgId},'PKG_TRAVEL','Travel allowance','earning','CA','fixed_amount','0',true)`);
+    await seedPayrollStatutoryTreatment(org.orgId, componentId, { effectiveFrom: "2026-01-01",
+      programExclusions: [], vacationable: false, createdBy: authorId, updatedBy: authorId });
     const pack = await createCompensationPackage({ orgId: org.orgId, actorId: authorId, subsidiaryId: org.subsidiaryId, code: "FIELD", name: "Field compensation", country: "CA", currency: "CAD", reason: "Declared employer package" });
     const definition: CompensationPackageDefinition = { orgId: org.orgId, country: "CA", currency: "CAD", partialPeriod: "allow",
       inputs: [{ name: "allowance", type: { kind: "money", currency: "CAD" }, source: "assignment", minimum: "0", maximum: "10000" }],
