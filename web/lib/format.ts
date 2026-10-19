@@ -1,7 +1,7 @@
 import type { FiscalPeriodRef } from '@openbooks/reports'
 import { fiscalPeriodLabel } from './fiscal-period-label'
 import { createMoneyFormatter } from './money-format'
-import { periodToDateLabel, weekToDateLabel } from './period-label-catalog'
+import { periodPresetName, periodToDateLabel } from './period-label-catalog'
 
 export { fiscalPeriodLabel }
 
@@ -220,12 +220,14 @@ export function civilDateParams<T extends Record<string, unknown>>(values: T, lo
  * The display name of a resolved report window. A custom window reads as its
  * localized civil bounds (one day for a point-in-time date); a window that is
  * one accounting period reads as that period's label in the viewer's locale
- * (`P05 FY2026 · May 2026`), so every fiscal year reads alike; other presets
- * keep their names. Period resolution stays locale-free; headers, column
+ * (`P05 FY2026 · May 2026`), so every fiscal year reads alike; a window to
+ * date, a rolling or trailing window and a calendar month read from the
+ * locale catalogs, a single day as that day; fiscal notation (FY 2026,
+ * Q1 FY 2026) is kept. Period resolution stays locale-free; headers, column
  * titles and export labels present the window through this one rule.
  */
 export function reportPeriodLabel(
-  period: { presetId?: string; from: string; to: string; label: string; fiscalPeriod?: FiscalPeriodRef; windowName?: string; toDate?: boolean },
+  period: { presetId?: string; from: string; to: string; label: string; fiscalPeriod?: FiscalPeriodRef; windowName?: string; toDate?: boolean; presetNamed?: boolean },
   locale: string,
 ): string {
   if (period.presetId === 'custom') {
@@ -237,10 +239,18 @@ export function reportPeriodLabel(
     // A window that stops before its period ends is that period to date.
     return period.to < period.fiscalPeriod.to ? periodToDateLabel(window, locale) : window
   }
-  if (period.presetId === 'week_to_date') return weekToDateLabel(locale)
   // A window qualified to the business day reads its qualifier from the catalog.
-  if (period.toDate && period.windowName) return periodToDateLabel(period.windowName, locale)
-  return period.label
+  if (period.toDate && period.windowName) return periodToDateLabel(windowLabel(period.windowName, locale), locale)
+  // A single day reads as that day.
+  if (period.from === period.to && isIsoCalendarDate(period.label)) return formatCivilDate(period.label, locale)
+  // Rolling and trailing windows are named by their preset in the catalog.
+  if (period.presetNamed && period.presetId) return periodPresetName(period.presetId, locale)
+  return windowLabel(period.label, locale)
+}
+
+/** A window name in the viewer's locale: a calendar month (`2026-05`) reads as its month; fiscal notation (FY 2026, Q1 FY 2026) is kept. */
+function windowLabel(label: string, locale: string): string {
+  return /^\d{4}-\d{2}$/.test(label) ? monthYearLabel(new Date(`${label}-15T12:00:00Z`), locale, "numeric") : label
 }
 
 

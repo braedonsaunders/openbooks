@@ -131,6 +131,7 @@ export function ReportFilterBar({
   compact?: boolean
 }) {
   const t = useTranslations('reports.filterBar')
+  const tPeriods = useTranslations('periodLabels')
   const router = useRouter()
   const pathname = usePathname()
   const nextParams = useSearchParams()
@@ -302,10 +303,10 @@ export function ReportFilterBar({
               const groupPresets = PERIOD_PRESETS.filter((p) => p.group === group
                 && (!periodPresets || periodPresets.includes(p.id)))
               return groupPresets.length ? (
-                <optgroup key={group} label={t(`periodPresetGroups.${group}`)}>
+                <optgroup key={group} label={tPeriods(`groups.${group}`)}>
                   {groupPresets.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {t(`periodPresets.${p.id}`)}
+                      {tPeriods(`presets.${p.id}`)}
                     </option>
                   ))}
                 </optgroup>

@@ -5,22 +5,22 @@ import { PERIOD_PRESETS, PERIOD_PRESET_GROUP_LABELS } from '@openbooks/reports'
 import { DEFAULT_SEGMENT_ALL_KEY, isDefaultSegmentName } from './segment-labels.ts'
 
 /**
- * The filter bar rendered period presets, preset group headings,
- * breakout nouns and "All X" dimension options in English (or mixed) on
- * fr/es/de/ja/pt-BR/zh. Preset/group labels now come from
- * reports.filterBar.periodPresets.* / periodPresetGroups.*, and default
- * built-in segment names resolve to the fully-translated All-X keys while a
- * tenant-renamed segment keeps its verbatim name.
+ * Period preset names and their group headings come from one catalog, the
+ * `periodLabels` namespace, in every locale: the filter bar, the custom
+ * report filter, the close package picker and every presented report window
+ * read them by stable preset id. Default built-in segment names resolve to
+ * the fully-translated All-X keys while a tenant-renamed segment keeps its
+ * verbatim name.
  */
 const LOCALES = ['en', 'es', 'fr', 'de', 'ja', 'pt-BR', 'zh'] as const
 
 type FilterBarCatalog = {
   filterBar?: {
     payPeriods?: unknown
-    periodPresets?: Record<string, unknown>
-    periodPresetGroups?: Record<string, unknown>
   }
 }
+
+type PeriodLabelsCatalog = { presets?: Record<string, unknown>; groups?: Record<string, unknown> }
 
 function filterBar(locale: string): NonNullable<FilterBarCatalog['filterBar']> {
   const catalog = JSON.parse(
@@ -30,14 +30,18 @@ function filterBar(locale: string): NonNullable<FilterBarCatalog['filterBar']> {
   return catalog.filterBar
 }
 
+function periodLabels(locale: string): PeriodLabelsCatalog {
+  return JSON.parse(readFileSync(new URL(`../messages/${locale}/periodLabels.json`, import.meta.url), 'utf8')) as PeriodLabelsCatalog
+}
+
 test('every period preset has a translated label in every locale', () => {
   assert.ok(PERIOD_PRESETS.length > 0, 'no period presets were loaded — the import broke')
   const missing: string[] = []
   for (const locale of LOCALES) {
-    const presets = filterBar(locale).periodPresets ?? {}
+    const presets = periodLabels(locale).presets ?? {}
     for (const preset of PERIOD_PRESETS) {
       if (typeof presets[preset.id] !== 'string' || !(presets[preset.id] as string).trim()) {
-        missing.push(`${locale}:filterBar.periodPresets.${preset.id}`)
+        missing.push(`${locale}:periodLabels.presets.${preset.id}`)
       }
     }
   }
@@ -47,14 +51,29 @@ test('every period preset has a translated label in every locale', () => {
 test('every preset group has a translated heading in every locale', () => {
   const missing: string[] = []
   for (const locale of LOCALES) {
-    const groups = filterBar(locale).periodPresetGroups ?? {}
+    const groups = periodLabels(locale).groups ?? {}
     for (const group of Object.keys(PERIOD_PRESET_GROUP_LABELS)) {
       if (typeof groups[group] !== 'string' || !(groups[group] as string).trim()) {
-        missing.push(`${locale}:filterBar.periodPresetGroups.${group}`)
+        missing.push(`${locale}:periodLabels.groups.${group}`)
       }
     }
   }
   assert.deepEqual(missing, [], `preset groups with no heading:\n${missing.join('\n')}`)
+})
+
+test('no non-English locale ships an English preset name or group heading', () => {
+  const english = periodLabels('en')
+  const leaks: string[] = []
+  for (const locale of LOCALES.filter((code) => code !== 'en')) {
+    const catalog = periodLabels(locale)
+    for (const preset of PERIOD_PRESETS) {
+      if (catalog.presets?.[preset.id] === english.presets?.[preset.id] || catalog.presets?.[preset.id] === preset.label) leaks.push(`${locale}:presets.${preset.id}`)
+    }
+    for (const [group, heading] of Object.entries(PERIOD_PRESET_GROUP_LABELS)) {
+      if (catalog.groups?.[group] === english.groups?.[group] || catalog.groups?.[group] === heading) leaks.push(`${locale}:groups.${group}`)
+    }
+  }
+  assert.deepEqual(leaks, [], `English preset copy in a translated catalog:\n${leaks.join('\n')}`)
 })
 
 test('the pay-periods optgroup label exists in every locale', () => {

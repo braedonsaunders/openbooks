@@ -7,6 +7,8 @@ import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import { MissingExchangeRateError } from '@/lib/fx-presentation'
 import { isFeatureEnabled } from '@/lib/features'
 import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
+import { reportPeriodLabel } from '../../../lib/format'
+import { resolveLocale } from '../../../lib/locale'
 
 /**
  * Dashboard widget readers for financial ratios, the health score, the
@@ -79,6 +81,8 @@ export async function loadFinancialWidgetMetrics(
   const wantBudget = need('budgetSummary')
   if (!wantHealth && !wantBudget) return {}
   const period = await ctx.period()
+  // The window reads in the viewer's locale; the resolved label stays a stable key.
+  const shown = { ...period, label: reportPeriodLabel(period, await resolveLocale()) }
   const out: Partial<FinancialWidgetMetrics> = {}
 
   const [health, budget] = await Promise.all([
@@ -86,7 +90,7 @@ export async function loadFinancialWidgetMetrics(
       ? (async () => {
           const [t, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
           const strings = healthStrings((key, values) => t(key, values), locale)
-          return healthSummaryData(period, ctx.orgId, ctx.allowedSubsidiaryIds, strings)
+          return healthSummaryData(shown, ctx.orgId, ctx.allowedSubsidiaryIds, strings)
         })().then((data) => ({ ok: true as const, data }), (error: unknown) => ({ ok: false as const, error }))
       : null,
     wantBudget
@@ -107,7 +111,7 @@ export async function loadFinancialWidgetMetrics(
         out.financialSummary = {
           available: true,
           value: {
-            periodLabel: period.label,
+            periodLabel: shown.label,
             currency: h.currency,
             ratios: h.ratios,
             overallScore: h.overallScore,
@@ -117,12 +121,12 @@ export async function loadFinancialWidgetMetrics(
           },
         }
       }
-      if (need('financialInsights')) out.financialInsights = { available: true, value: { periodLabel: period.label, items: h.insights } }
+      if (need('financialInsights')) out.financialInsights = { available: true, value: { periodLabel: shown.label, items: h.insights } }
       if (need('financialTrend')) {
         out.financialTrend = {
           available: true,
           value: {
-            periodLabel: period.label,
+            periodLabel: shown.label,
             points: h.monthly.map((m) => ({
               label: m.label,
               revenue: m.revenue,
@@ -146,7 +150,7 @@ export async function loadFinancialWidgetMetrics(
         value: b === null || b.scenario === null
           ? null
           : {
-              periodLabel: period.label,
+              periodLabel: shown.label,
               scenarioName: b.scenario.name,
               budget: b.totals.budget,
               actual: b.totals.actual,

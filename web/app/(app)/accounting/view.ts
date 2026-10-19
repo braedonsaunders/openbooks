@@ -22,7 +22,7 @@ import { healthStrings, localizedRatioDefs } from '../../../lib/analytics/health
 import { accountingHome } from '../../../lib/module-home/accounting'
 import { homeFiscalWindow } from '../../../lib/module-home/fiscal-window'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { formatCivilDate } from '@/lib/format'
+import { formatCivilDate, reportPeriodLabel } from '@/lib/format'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
@@ -110,9 +110,10 @@ export async function loadAccounting(): Promise<AccountingData> {
   const today = await businessToday(authz.user.orgId)
   const period = await resolvePeriod(null, { orgId: authz.user.orgId, today })
   const yearWindow = homeFiscalWindow(period, today)
+  const periodLabel = reportPeriodLabel(period, locale)
   const windowLabel = yearWindow.throughDate
-    ? t('home.vitals.throughDate', { label: period.label, date: formatCivilDate(yearWindow.throughDate, locale) })
-    : period.label
+    ? t('home.vitals.throughDate', { label: periodLabel, date: formatCivilDate(yearWindow.throughDate, locale) })
+    : periodLabel
   // The health score, net income and the ratio set are financial-statement
   // figures: they follow the same data grants as the statements they come
   // from (reports.read plus the ledger grant the balance sheet and P&L
@@ -129,7 +130,7 @@ export async function loadAccounting(): Promise<AccountingData> {
   const [data, healthResult, navGroups] = await Promise.all([
     accountingHome(authz.user.orgId, authz.allowedSubsidiaryIds, access, locale),
     financialsVisible
-      ? financialHealth({ from: yearWindow.from, to: yearWindow.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, healthStrings(tAnalytics, locale))
+      ? financialHealth({ from: yearWindow.from, to: yearWindow.to, label: periodLabel }, authz.user.orgId, authz.allowedSubsidiaryIds, healthStrings(tAnalytics, locale))
       : Promise.resolve(null),
     resolveNav(
       authz.user.orgId,

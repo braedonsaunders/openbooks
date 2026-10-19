@@ -1,10 +1,10 @@
 import {
-  PERIOD_PRESETS,
   REPORT_ENTITIES,
   type ReportCustomQuery,
   type ReportRule,
   type ReportRuleGroup,
 } from "@openbooks/reports";
+import { periodPresetName } from "../period-label-catalog";
 
 /** A plain-language summary of the parameters a report already has baked into
  * its definition — shown next to each attached report so a package author can
@@ -15,8 +15,6 @@ export type ReportDescriptor = {
   filters: string[];
   measures: string[];
 };
-
-const PRESET_LABEL = new Map(PERIOD_PRESETS.map((preset) => [preset.id, preset.label]));
 
 function columnLabels(entity: string): Map<string, string> {
   const found = REPORT_ENTITIES.find((candidate) => candidate.key === entity);
@@ -54,16 +52,18 @@ function walkFilters(
   group: ReportRuleGroup | null | undefined,
   labels: Map<string, string>,
   out: { filters: string[]; dateRange: string | null },
+  locale: string,
 ): void {
   if (!group) return;
   for (const rule of group.rules) {
     if ("rules" in rule) {
-      walkFilters(rule, labels, out);
+      walkFilters(rule, labels, out, locale);
       continue;
     }
     const leaf = rule as ReportRule;
     if (leaf.op === "period_preset") {
-      out.dateRange = PRESET_LABEL.get(String(leaf.value)) ?? String(leaf.value);
+      // The preset's name from the locale catalogs, keyed by its stable id.
+      out.dateRange = periodPresetName(String(leaf.value), locale);
       continue;
     }
     const label = labels.get(leaf.field) ?? leaf.field;
@@ -72,10 +72,10 @@ function walkFilters(
   }
 }
 
-export function describeQuery(query: ReportCustomQuery): ReportDescriptor {
+export function describeQuery(query: ReportCustomQuery, locale: string): ReportDescriptor {
   const labels = columnLabels(query.entity);
   const acc = { filters: [] as string[], dateRange: null as string | null };
-  walkFilters(query.filters, labels, acc);
+  walkFilters(query.filters, labels, acc, locale);
   const breakouts = (query.breakouts ?? []).map((breakout) => {
     const label = labels.get(breakout.column) ?? breakout.column;
     return breakout.bin ? `${label} (${breakout.bin})` : label;

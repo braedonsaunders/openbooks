@@ -12,6 +12,8 @@ import { customerStrings as buildCustomerStrings } from '@/lib/analytics/custome
 import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import { MissingExchangeRateError } from '@/lib/fx-presentation'
 import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
+import { reportPeriodLabel } from '../../../lib/format'
+import { resolveLocale } from '../../../lib/locale'
 
 /**
  * Dashboard widget readers for Customer Intelligence: revenue
@@ -76,6 +78,8 @@ export async function loadCustomerWidgetMetrics(
   const wantList = need('atRiskCustomers')
   if (!wantConcentration && !wantAtRisk && !wantList) return {}
   const period = await ctx.period()
+  // The window reads in the viewer's locale; the resolved label stays a stable key.
+  const shown = { ...period, label: reportPeriodLabel(period, await resolveLocale()) }
   const out: Partial<CustomerWidgetMetrics> = {}
   const fail = (failed: CustomerUnavailable) => {
     if (wantConcentration) out.concentration = failed
@@ -90,7 +94,7 @@ export async function loadCustomerWidgetMetrics(
     ])
     const strings = buildCustomerStrings((key, values) => t(key, values), locale)
     const data = await customerSummaryData(
-      { from: period.from, to: period.to, label: period.label },
+      { from: period.from, to: period.to, label: shown.label },
       ctx.orgId,
       ctx.allowedSubsidiaryIds,
       strings,
@@ -113,13 +117,13 @@ export async function loadCustomerWidgetMetrics(
       // rendering an HHI of 0 that reads as "perfectly diversified".
       const summary = concentrationOf(data.kpis)
       out.concentration = summary === null
-        ? { available: false, reason: td('concentrationNoRevenue', { period: period.label }) }
-        : { available: true, value: { ...summary, period: period.label } }
+        ? { available: false, reason: td('concentrationNoRevenue', { period: shown.label }) }
+        : { available: true, value: { ...summary, period: shown.label } }
     }
     if (wantAtRisk) {
       out.atRisk = {
         available: true,
-        value: { count: data.kpis.atRiskCount, revenue: data.kpis.atRiskRevenue, period: period.label },
+        value: { count: data.kpis.atRiskCount, revenue: data.kpis.atRiskRevenue, period: shown.label },
       }
     }
     if (wantList) {

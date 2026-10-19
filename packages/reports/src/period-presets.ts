@@ -249,7 +249,7 @@ function shiftPeriod(fy: number, p: number, n: number): [number, number] {
 
 /** Trailing window of `n` months ending on `today` (inclusive). */
 function trailingMonths(today: string, n: number, label: string): DateRange {
-  return { from: addDays(addMonthsIso(today, -n), 1), to: today, label }
+  return { from: addDays(addMonthsIso(today, -n), 1), to: today, label, presetNamed: true }
 }
 
 /**
@@ -558,18 +558,18 @@ export function resolvePreset(id: string, input: ResolvePresetInput): DateRange 
       // utcCivilDate keeps literal years 0001-0099 that Date.UTC would remap onto 1900-1999.
       const dow = utcCivilDate(wy, wm - 1, wd).getUTCDay() // 0=Sun..6=Sat
       const from = addDays(today, -((dow + 6) % 7))
-      return { from, to: today, label: 'Week to date' }
+      return { from, to: today, label: 'Week to date', presetNamed: true }
     }
     case 'last_7_days':
-      return { from: addDays(today, -6), to: today, label: 'Last 7 days' }
+      return { from: addDays(today, -6), to: today, label: 'Last 7 days', presetNamed: true }
     case 'last_30_days':
-      return { from: addDays(today, -29), to: today, label: 'Last 30 days' }
+      return { from: addDays(today, -29), to: today, label: 'Last 30 days', presetNamed: true }
     case 'last_60_days':
-      return { from: addDays(today, -59), to: today, label: 'Last 60 days' }
+      return { from: addDays(today, -59), to: today, label: 'Last 60 days', presetNamed: true }
     case 'last_90_days':
-      return { from: addDays(today, -89), to: today, label: 'Last 90 days' }
+      return { from: addDays(today, -89), to: today, label: 'Last 90 days', presetNamed: true }
     case 'next_30_days':
-      return { from: today, to: addDays(today, 30), label: 'Next 30 days' }
+      return { from: today, to: addDays(today, 30), label: 'Next 30 days', presetNamed: true }
 
     // Custom
     case 'custom': {

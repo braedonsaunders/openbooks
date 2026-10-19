@@ -184,8 +184,35 @@ test('a window that runs to the business day reads its qualifier from the locale
   assert.ok(fiscalToDate.toDate && fiscalToDate.windowName, 'a fiscal year to date names its window')
   assert.equal(reportPeriodLabel(fiscalToDate, 'fr'), `${fiscalToDate.windowName} à ce jour`)
   const week = { presetId: 'week_to_date', ...resolvePreset('week_to_date', { startMonth: 1, today: '2026-10-19' })! }
-  assert.equal(reportPeriodLabel(week, 'es'), 'Semana hasta la fecha')
+  assert.equal(reportPeriodLabel(week, 'es'), (await import('../messages/es/periodLabels.json')).default.presets.week_to_date)
   for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
     assert.doesNotMatch(reportPeriodLabel(yearToDate, locale), /to date/, `${locale} reads the qualifier in its own language`)
   }
+})
+
+test('every preset window reads in the viewer\'s language, keyed by its stable id', async () => {
+  const { PERIOD_PRESETS, resolvePreset } = await import('@openbooks/reports')
+  const catalog = async (locale: string) => (await import(`../messages/${locale}/periodLabels.json`)).default as { presets: Record<string, string> }
+  const [de, ja, fr] = await Promise.all([catalog('de'), catalog('ja'), catalog('fr')])
+  const window = (id: string) => ({ presetId: id, ...resolvePreset(id, { startMonth: 1, today: '2026-10-19' })! })
+  assert.equal(reportPeriodLabel(window('trailing_12_months'), 'de'), de.presets.trailing_12_months)
+  assert.equal(reportPeriodLabel(window('last_30_days'), 'ja'), ja.presets.last_30_days)
+  assert.equal(reportPeriodLabel(window('rolling_quarter'), 'fr'), fr.presets.rolling_quarter)
+  assert.equal(reportPeriodLabel(window('trailing_12_months'), 'en'), 'Trailing 12 Months')
+  // A calendar month and a single day read in the locale, never as ISO text.
+  assert.equal(reportPeriodLabel(window('this_month'), 'de'), 'Okt. 2026')
+  assert.equal(reportPeriodLabel(window('yesterday'), 'fr'), formatCivilDate('2026-10-18', 'fr'))
+  // The resolved window keeps its locale-free label as the stable key.
+  assert.equal(window('trailing_12_months').label, 'Trailing 12 months')
+
+  // No preset that resolves to a window shows English words in a non-English locale.
+  const english = /\b(Trailing|Rolling|Last|Next|Days?|Months?|Week|Year|Quarter|Today|Yesterday|Tomorrow|to date)\b/
+  const leaks: string[] = []
+  for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
+    for (const preset of PERIOD_PRESETS.filter((candidate) => candidate.id !== 'custom')) {
+      const shown = reportPeriodLabel(window(preset.id), locale)
+      if (english.test(shown)) leaks.push(`${locale}:${preset.id} → ${shown}`)
+    }
+  }
+  assert.deepEqual(leaks, [], leaks.join('\n'))
 })

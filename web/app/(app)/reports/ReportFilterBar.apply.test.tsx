@@ -14,11 +14,11 @@ Object.assign(globalThis, { Event: window.Event })
 const { ReportFilterBar } = await import('./ReportFilterBar')
 
 const dir = dirname(fileURLToPath(import.meta.url));
-const messages = {
-  reports: JSON.parse(readFileSync(join(dir, '..', '..', '..', 'messages', 'en', 'reports.json'), 'utf8')),
-  common: JSON.parse(readFileSync(join(dir, '..', '..', '..', 'messages', 'en', 'common.json'), 'utf8')),
-  ui: JSON.parse(readFileSync(join(dir, '..', '..', '..', 'messages', 'en', 'ui.json'), 'utf8')),
-};
+const catalogsFor = (locale: string) => {
+  const read = (ns: string) => JSON.parse(readFileSync(join(dir, '..', '..', '..', 'messages', locale, `${ns}.json`), 'utf8'))
+  return { reports: read('reports'), common: read('common'), ui: read('ui'), periodLabels: read('periodLabels') }
+}
+const messages = catalogsFor('en');
 
 // Typed custom ranges stage until the operator applies them: typing must not
 // navigate, and Apply (or Enter) commits period=custom with both bounds. A
@@ -65,7 +65,7 @@ async function selectPeriod(value: string): Promise<void> {
   const trigger = document.querySelector('button[aria-label="Period"][aria-haspopup="listbox"]')
   assert.ok(trigger, 'the native period picker trigger renders')
   await click(trigger)
-  const label = (messages.reports.filterBar.periodPresets as Record<string, string>)[value]
+  const label = (messages.periodLabels.presets as Record<string, string>)[value]
   const option = [...document.querySelectorAll('button[role="option"]')].find(
     option => option.textContent?.trim() === label,
   )
@@ -230,5 +230,30 @@ test('a staged range that starts after it ends does not commit', async () => {
     assert.equal(replaces.length, 0, 'a reversed range never reaches the report or a saved view')
   } finally {
     await unmount()
+  }
+})
+
+test('the period picker names every preset and group heading in the viewer\'s language', async () => {
+  for (const locale of ['de', 'ja', 'fr']) {
+    const localized = catalogsFor(locale)
+    const { unmount } = await mountDashboard(<ReportFilterBar controls={{ period: true }} />, localized, locale)
+    try {
+      const trigger = document.querySelector('button[aria-haspopup="listbox"]')
+      assert.ok(trigger, `${locale}: the period picker renders`)
+      await click(trigger)
+      const options = [...document.querySelectorAll('button[role="option"]')].map((option) => option.textContent?.trim() ?? '')
+      const presets = localized.periodLabels.presets as Record<string, string>
+      for (const id of ['trailing_12_months', 'last_30_days', 'this_fiscal_quarter', 'rolling_year']) {
+        assert.ok(options.includes(presets[id]!), `${locale}: ${id} reads as ${presets[id]}`)
+      }
+      const english = messages.periodLabels.presets as Record<string, string>
+      const leaked = options.filter((text) => Object.values(english).includes(text) && !Object.values(presets).includes(text))
+      assert.deepEqual(leaked, [], `${locale}: no English preset names`)
+      const headings = Object.values(localized.periodLabels.groups as Record<string, string>)
+      const shownText = document.body.textContent ?? ''
+      assert.ok(headings.some((heading) => shownText.includes(heading)), `${locale}: group headings read in the locale`)
+    } finally {
+      await unmount()
+    }
   }
 })

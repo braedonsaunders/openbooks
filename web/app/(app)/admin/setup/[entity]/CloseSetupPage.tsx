@@ -355,12 +355,12 @@ export async function CloseSetupPage({
   const dbRowBySlug = new Map(((reportDefs.rows)).map((row) => [row.slug, row]));
   function descriptorFor(slug: string, dbRow: ReportDefinitionRow | undefined): ReportDescriptor {
     if (dbRow) {
-      if (dbRow.report_type === "query" && dbRow.query) return describeQuery(dbRow.query);
+      if (dbRow.report_type === "query" && dbRow.query) return describeQuery(dbRow.query, locale);
       if (dbRow.report_type === "statement")
         return describeStatement(dbRow.statement?.params ?? null);
     }
     const staticDef = staticQuery.get(slug);
-    if (staticDef) return describeQuery(staticDef);
+    if (staticDef) return describeQuery(staticDef, locale);
     if (staticStatementParams.has(slug))
       return describeStatement(staticStatementParams.get(slug) ?? null);
     return { dateRange: null, breakouts: [], filters: [], measures: [] };

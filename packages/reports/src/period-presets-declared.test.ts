@@ -63,6 +63,7 @@ describe('resolvePreset with declared fiscal periods', () => {
       from: '2026-01-16',
       to: TODAY,
       label: 'Trailing 3 months',
+      presetNamed: true,
     })
     assert.deepEqual(resolvePreset('today', input), { from: TODAY, to: TODAY, label: TODAY })
   })

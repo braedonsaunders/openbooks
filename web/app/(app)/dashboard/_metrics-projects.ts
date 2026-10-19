@@ -8,6 +8,8 @@ import { trueCostStrings } from '@/lib/analytics/true-cost-strings'
 import { presentationCurrency } from '@/lib/fx-presentation'
 import type { RateFormat } from '@/lib/analytics/true-cost-engine'
 import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
+import { reportPeriodLabel } from '../../../lib/format'
+import { resolveLocale } from '../../../lib/locale'
 
 /**
  * Dashboard widget readers for utilization and overhead absorption (Utilization, True Cost).
@@ -84,6 +86,8 @@ export async function loadProjectWidgetMetrics(
   const wantTrueCost = need('trueCostSummary')
   if (!wantUtilization && !wantTrueCost) return {}
   const period = await ctx.period()
+  // The window reads in the viewer's locale; the resolved label stays a stable key.
+  const shown = { ...period, label: reportPeriodLabel(period, await resolveLocale()) }
   const out: Partial<ProjectWidgetMetrics> = {}
 
   const [utilization, trueCost] = await Promise.all([
@@ -92,7 +96,7 @@ export async function loadProjectWidgetMetrics(
           if (!(await isFeatureEnabled(ctx.orgId, 'timeTracking'))) return null
           const [t, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
           const strings = utilizationStrings((key, values) => t(key, values), locale)
-          return utilizationData(ctx.orgId, period, ctx.allowedSubsidiaryIds, strings)
+          return utilizationData(ctx.orgId, shown, ctx.allowedSubsidiaryIds, strings)
         })().then((data) => ({ ok: true as const, data }), (error: unknown) => ({ ok: false as const, error }))
       : null,
     wantTrueCost
@@ -100,7 +104,7 @@ export async function loadProjectWidgetMetrics(
           if (!(await isFeatureEnabled(ctx.orgId, 'projects'))) return null
           const [t, locale, currency] = await Promise.all([getTranslations('analytics'), getLocale(), presentationCurrency(ctx.orgId)])
           const strings = trueCostStrings((key, values) => t(key, values), locale, currency)
-          return trueCostData(ctx.orgId, period, ctx.allowedSubsidiaryIds, strings)
+          return trueCostData(ctx.orgId, shown, ctx.allowedSubsidiaryIds, strings)
         })().then((data) => ({ ok: true as const, data }), (error: unknown) => ({ ok: false as const, error }))
       : null,
   ])
@@ -113,7 +117,7 @@ export async function loadProjectWidgetMetrics(
       out.utilizationSummary = {
         available: true,
         value: {
-          periodLabel: period.label,
+          periodLabel: shown.label,
           companyPct: u.company.range.percentBilled,
           target: u.config.target,
           anomalyCount: countUtilizationAnomalies(u),
@@ -131,7 +135,7 @@ export async function loadProjectWidgetMetrics(
       out.trueCostSummary = {
         available: true,
         value: {
-          periodLabel: period.label,
+          periodLabel: shown.label,
           compositeRate: k.compositeRate,
           compositeFormat: k.compositeFormat,
           refusal: k.compositeRate === null ? (trueCost.data.compositeRefusal?.message ?? null) : null,

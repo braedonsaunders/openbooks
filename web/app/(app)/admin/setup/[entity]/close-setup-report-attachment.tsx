@@ -64,7 +64,7 @@ export function ReportAttachmentCard({
   onRemove: () => void;
 }) {
   const t = useTranslations("close.setup");
-  const tPeriods = useTranslations("reports");
+  const tPeriods = useTranslations("periodLabels");
   const [open, setOpen] = useState(false);
   const name =
     meta?.name ??
@@ -142,8 +142,8 @@ export function ReportAttachmentCard({
                 options={periodOptions(
                   t("reportParams.closePeriod"),
                   t("reportParams.custom"),
-                  (id) => tPeriods(`periodPresets.${id}` as never),
-                  (group) => tPeriods(`periodPresetGroups.${group}` as never),
+                  (id) => tPeriods(`presets.${id}` as never),
+                  (group) => tPeriods(`groups.${group}` as never),
                 )}
                 searchable
                 ariaLabel={t("reportParams.dateRange")}

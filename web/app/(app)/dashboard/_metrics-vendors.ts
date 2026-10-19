@@ -7,6 +7,8 @@ import { spendVelocityData } from '@/lib/analytics/spend-velocity-data'
 import { reportExpenseAccess } from '@/lib/expense-access'
 import { concentrationBand, type ConcentrationBand } from '@/lib/analytics/vendor-concentration'
 import { englishCatalogMessage, type CatalogMessageFn } from '@/lib/analytics/catalog-strings'
+import { reportPeriodLabel } from '../../../lib/format'
+import { resolveLocale } from '../../../lib/locale'
 
 /**
  * Dashboard widget readers for supplier concentration, payment performance and spend velocity (Vendor Performance, Spend Velocity).
@@ -98,7 +100,9 @@ export async function loadVendorWidgetMetrics(
   if (!wantsVendor && !wantsSpend) return {}
   const out: Partial<VendorWidgetMetrics> = {}
   const period = await ctx.period()
-  const window = { from: period.from, to: period.to, label: period.label }
+  // The window reads in the viewer's locale; the resolved label stays a stable key.
+  const shown = { ...period, label: reportPeriodLabel(period, await resolveLocale()) }
+  const window = { from: period.from, to: period.to, label: shown.label }
   if (wantsVendor) {
     // The dashboard's own loader: same scope, same window, same figures.
     const data = await vendorData(window, ctx.orgId, ctx.allowedSubsidiaryIds)

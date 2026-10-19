@@ -155,6 +155,7 @@ function RuleRow({
 }) {
   const t = useTranslations('reports.custom.filterTree')
   const tReports = useTranslations('reports')
+  const tPeriods = useTranslations('periodLabels')
   const column = entity.columns.find((c) => c.key === rule.field) ?? entity.columns[0]
   const ops = column ? operatorsForKind(column.kind) : []
   const opMeta = ops.find((o) => o.key === rule.op) ?? ops[0]
@@ -206,10 +207,10 @@ function RuleRow({
           onChange={(e) => onChange({ ...rule, value: e.target.value })}
         >
           {PRESET_GROUP_ORDER.map((g) => (
-            <optgroup key={g} label={tReports(`filterBar.periodPresetGroups.${g}`)}>
+            <optgroup key={g} label={tPeriods(`groups.${g}`)}>
               {PERIOD_PRESETS.filter((pp) => pp.group === g).map((pp) => (
                 <option key={pp.id} value={pp.id}>
-                  {tReports(`filterBar.periodPresets.${pp.id}`)}
+                  {tPeriods(`presets.${pp.id}`)}
                 </option>
               ))}
             </optgroup>

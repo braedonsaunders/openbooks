@@ -29,6 +29,12 @@ export type DateRange = {
    */
   windowName?: string
   toDate?: boolean
+  /**
+   * The window is named by its preset (Trailing 12 Months, Last 30 Days):
+   * presenters show the preset's name from the locale catalogs, keyed by
+   * its id, rather than the locale-free `label`.
+   */
+  presetNamed?: boolean
 }
 
 /** The declared accounting period a window covers: its fiscal position and full bounds. */
