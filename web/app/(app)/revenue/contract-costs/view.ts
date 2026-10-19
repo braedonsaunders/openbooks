@@ -18,12 +18,13 @@ import {
   type PageSpec,
 } from "@braedonsaunders/appkit-viewspec";
 import { sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 import { db } from "@openbooks/engine/platform/database";
 import { periodDisplayLabel, periodDisplayLabelSql } from "@openbooks/engine/periods/period-policy";
 import { isUuid, mergeHref, pickString } from "../../../../lib/list-params";
 import { can, requirePermission } from "../../../../lib/authz";
 import { requireFeatureEnabled } from "../../../../lib/feature-gates";
-import { loadAccounts } from "../../../../lib/setup/ref-options";
 import type { ContractCostDrawer } from "./ContractCostDrawer";
 
 type ContractCostDrawerProps = Parameters<typeof ContractCostDrawer>[0];
@@ -98,7 +99,42 @@ export interface ContractCostsData {
   onAssets: boolean;
 }
 
-async function loadAssetPayload(assetId: string, orgId: string, locale: string): Promise<ContractCostAssetPayload | null> {
+function contractCostAssetVisibility(alias: "a" | "asset", allowed: ReadonlySet<string> | null): SQL {
+  if (allowed === null) return sql``;
+  const table = sql.raw(alias);
+  return sql`and (
+    (${table}.revenue_contract_id is not null and exists (
+      select 1 from revenue_contracts scoped_contract
+       where scoped_contract.org_id = ${table}.org_id
+         and scoped_contract.id = ${table}.revenue_contract_id
+         ${subsidiaryVisibleFilter(sql`scoped_contract.subsidiary_id`, allowed, { orgWideNull: true })}
+    ) or ${table}.capitalize_entry_id is not null and exists (
+      select 1 from journal_entries scoped_entry
+       where scoped_entry.org_id = ${table}.org_id
+         and scoped_entry.id = ${table}.capitalize_entry_id
+         ${subsidiaryVisibleFilter(sql`scoped_entry.subsidiary_id`, allowed)}
+    ))
+    and (${table}.revenue_contract_id is null or exists (
+      select 1 from revenue_contracts scoped_contract
+       where scoped_contract.org_id = ${table}.org_id
+         and scoped_contract.id = ${table}.revenue_contract_id
+         ${subsidiaryVisibleFilter(sql`scoped_contract.subsidiary_id`, allowed, { orgWideNull: true })}
+    ))
+    and (${table}.capitalize_entry_id is null or exists (
+      select 1 from journal_entries scoped_entry
+       where scoped_entry.org_id = ${table}.org_id
+         and scoped_entry.id = ${table}.capitalize_entry_id
+         ${subsidiaryVisibleFilter(sql`scoped_entry.subsidiary_id`, allowed)}
+    ))
+  )`;
+}
+
+async function loadAssetPayload(
+  assetId: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  locale: string,
+): Promise<ContractCostAssetPayload | null> {
   const row = (await db.execute<{
     id: string;
     contract_id: string | null;
@@ -122,9 +158,11 @@ async function loadAssetPayload(assetId: string, orgId: string, locale: string):
            a.method, a.status, a.capitalize_entry_id
       from contract_cost_assets a
       left join revenue_contracts c on c.org_id = a.org_id and c.id = a.revenue_contract_id
-      left join parties customer on customer.id = a.customer_party_id
-      left join parties rep on rep.id = a.rep_party_id
-     where a.org_id = ${orgId} and a.id = ${assetId}`)).rows[0];
+       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+      left join parties customer on customer.org_id = a.org_id and customer.id = a.customer_party_id
+      left join parties rep on rep.org_id = a.org_id and rep.id = a.rep_party_id
+     where a.org_id = ${orgId} and a.id = ${assetId}
+       ${contractCostAssetVisibility("a", allowedSubsidiaryIds)}`)).rows[0];
   if (!row) return null;
   // The asset prices in its own currency through the shared ISO exponent:
   // a missing registry row refuses by name (the registry is read-only, so
@@ -151,7 +189,8 @@ async function loadAssetPayload(assetId: string, orgId: string, locale: string):
      where je.org_id = ${orgId}
        and jl.contributor_kind = 'contract_cost_asset'
        and jl.contributor_ref = ${assetId}
-       and je.status in ('posted', 'reversed')
+      and je.status in ('posted', 'reversed')
+      ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, allowedSubsidiaryIds)}
      order by je.posting_date`)).rows;
   return {
     asset: {
@@ -168,12 +207,16 @@ async function loadAssetPayload(assetId: string, orgId: string, locale: string):
       amortEndOn: row.amort_end_on,
       method: row.method,
       status: row.status,
+<<<<<<< HEAD
       carrying: minorUnitsToCanonical(
         row.contract_id === null && row.capitalize_entry_id === null
           ? BigInt(row.amount_minor)
           : await assetCarryingMinor(db, orgId, assetId),
         exponent,
       ),
+=======
+      carrying: minorUnitsToCanonical(await assetCarryingMinor(db, orgId, assetId, allowedSubsidiaryIds), exponent),
+>>>>>>> a46171893a (Scope accounting pickers and history to visible subsidiaries)
       capitalizeEntryId: row.capitalize_entry_id,
     },
     schedule: schedule.map((line) => ({
@@ -209,9 +252,14 @@ export async function loadContractCosts(
     ends_on: string;
   }>(sql`
     select id, fiscal_year, period_number, is_adjustment, starts_on::text as starts_on, ends_on::text as ends_on
-      from accounting_periods
-     where org_id = ${orgId} and not is_adjustment
-     order by starts_on desc`)).rows;
+      from accounting_periods p
+     where p.org_id = ${orgId} and not p.is_adjustment
+       ${authz.allowedSubsidiaryIds === null ? sql`` : sql`and exists (
+         select 1 from subsidiaries s
+          where s.org_id = p.org_id and s.fiscal_calendar_id = p.fiscal_calendar_id
+            ${subsidiaryVisibleFilter(sql`s.id`, authz.allowedSubsidiaryIds)}
+       )`}
+     order by p.starts_on desc`)).rows;
   const selectedPeriodId =
     typeof sp.period === "string" && isUuid(sp.period) && periods.some((p) => p.id === sp.period)
       ? sp.period
@@ -244,22 +292,32 @@ export async function loadContractCosts(
       join currencies cur on cur.code = jl.currency
      where jl.org_id = ${orgId}
        and jl.contributor_kind = 'contract_cost_asset'
-       and je.status in ('posted', 'reversed')`)).rows[0];
+       and je.status in ('posted', 'reversed')
+       ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, authz.allowedSubsidiaryIds)}`)).rows[0];
   const amortized = selectedPeriodId
     ? (await db.execute<{ total: string }>(sql`
-        select coalesce(sum(amount_minor), 0)::text as total
-          from contract_cost_amortization
-         where org_id = ${orgId} and period_id = ${selectedPeriodId}`)).rows[0]
+        select coalesce(sum(amort.amount_minor), 0)::text as total
+          from contract_cost_amortization amort
+          join journal_entries je on je.org_id = amort.org_id and je.id = amort.journal_entry_id
+         where amort.org_id = ${orgId} and amort.period_id = ${selectedPeriodId}
+           ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, authz.allowedSubsidiaryIds)}
+           and exists (
+             select 1 from contract_cost_assets a
+              where a.org_id = amort.org_id
+                and a.id = amort.asset_id
+                ${contractCostAssetVisibility("a", authz.allowedSubsidiaryIds)}
+           )`)).rows[0]
     : null;
 
   const activeAssets = Number(
     (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from contract_cost_assets
-       where org_id = ${orgId} and status = 'active'`)).rows[0]?.n ?? "0",
+      select count(*)::text as n from contract_cost_assets a
+       where a.org_id = ${orgId} and a.status = 'active'
+         ${contractCostAssetVisibility("a", authz.allowedSubsidiaryIds)}`)).rows[0]?.n ?? "0",
   );
 
   const attention: ContractCostAttentionRow[] = (
-    await contractCostAttentionItems(db, orgId)
+    await contractCostAttentionItems(db, orgId, authz.allowedSubsidiaryIds)
   ).map((item) => ({
     assetId: item.assetId,
     kind: item.kind,
@@ -271,16 +329,22 @@ export async function loadContractCosts(
   const contracts = (await db.execute<{ id: string; number: string; customer: string }>(sql`
     select c.id, c.contract_number as number, coalesce(p.display_name, '') as customer
       from revenue_contracts c
-      left join parties p on p.id = c.customer_id
+      left join parties p on p.org_id = c.org_id and p.id = c.customer_id
      where c.org_id = ${orgId} and c.status = 'active'
+       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
      order by c.contract_number`)).rows;
 
   // The capitalize and import pickers offer the same postable accounts every
   // company-settings picker offers, narrowed to the expense and liability
   // types an original commission expense can sit in.
-  const expenseAccounts = (await loadAccounts(orgId))
-    .filter((a) => a.accountType?.startsWith("expense") || a.accountType?.startsWith("liability"))
-    .map((a) => ({ value: a.value, label: a.label }));
+  const expenseAccounts = (await db.execute<{ value: string; label: string }>(sql`
+    select id::text as value,
+           case when coalesce(number, '') <> '' then number || ' · ' || name else name end as label
+      from accounts
+     where org_id = ${orgId} and is_active and not is_summary
+       and (type like 'expense%' or type like 'liability%')
+       ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+     order by number nulls last, name`)).rows;
 
   const policy = (await db.execute<{
     basis: string;
@@ -289,14 +353,20 @@ export async function loadContractCosts(
     asset_account_id: string | null;
     amortization_expense_account_id: string | null;
   }>(sql`
-    select basis, practical_expedient, customer_life_months,
-           asset_account_id, amortization_expense_account_id
-      from contract_cost_policies
-     where org_id = ${orgId} and effective_from <= current_date
-     order by effective_from desc limit 1`)).rows[0] ?? null;
+    select policy.basis, policy.practical_expedient, policy.customer_life_months,
+           asset_account.id as asset_account_id, expense_account.id as amortization_expense_account_id
+      from contract_cost_policies policy
+      left join accounts asset_account on asset_account.org_id = policy.org_id and asset_account.id = policy.asset_account_id
+       ${subsidiaryVisibleFilter(sql`asset_account.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+      left join accounts expense_account on expense_account.org_id = policy.org_id and expense_account.id = policy.amortization_expense_account_id
+       ${subsidiaryVisibleFilter(sql`expense_account.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+     where policy.org_id = ${orgId} and policy.effective_from <= current_date
+     order by policy.effective_from desc limit 1`)).rows[0] ?? null;
 
   const assetId = typeof sp.asset === "string" ? sp.asset : undefined;
-  const payload = assetId && isUuid(assetId) ? await loadAssetPayload(assetId, orgId, locale) : null;
+  const payload = assetId && isUuid(assetId)
+    ? await loadAssetPayload(assetId, orgId, authz.allowedSubsidiaryIds, locale)
+    : null;
   // Attention and assets are sibling views behind URL tabs: one body shows
   // at a time. An open drawer forces its assets list; otherwise attention
   // leads while actionable.

@@ -26,6 +26,7 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
 import { moduleDrawerHref } from '../../../../lib/txn-links'
 import { getMoneyFormatter } from '@/lib/money-server'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 
 /**
  * Intercompany netting runs: the list of runs and one drawer that proposes a
@@ -78,14 +79,17 @@ async function subsidiaryAndBankOptions(orgId: string, allowed: ReadonlySet<stri
   const subsidiaries = (await db.execute<{ id: string; name: string; baseCurrency: string }>(sql`
     select id, name, base_currency as "baseCurrency" from subsidiaries
      where org_id = ${orgId} and is_active and not is_elimination
+       ${subsidiaryVisibleFilter(sql`id`, allowed)}
      order by name`)).rows.filter((sub) => allowed === null || allowed.has(sub.id))
   const banks = (await db.execute<{ id: string; label: string; subsidiaryId: string | null; currency: string | null }>(sql`
     select id, concat_ws(' · ', number, name) as label, subsidiary_id as "subsidiaryId", currency_restriction as currency
       from accounts
      where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
+       ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}
      order by number nulls last, name`)).rows
   const currencyRows = (await db.execute<{ subsidiary_id: string; currency: string }>(sql`
-    select distinct subsidiary_id, currency from journal_lines where org_id = ${orgId}`)).rows
+    select distinct subsidiary_id, currency from journal_lines where org_id = ${orgId}
+      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}`)).rows
   const currencies = [...new Set([
     ...subsidiaries.map(sub => sub.baseCurrency),
     ...banks.filter(bank => bank.subsidiaryId === null || allowed === null || allowed.has(bank.subsidiaryId)).flatMap(bank => bank.currency ? [bank.currency] : []),

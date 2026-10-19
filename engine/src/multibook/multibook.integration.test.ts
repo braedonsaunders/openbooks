@@ -9,7 +9,7 @@ import { bookReplicationGaps, bookReplicationReadiness, replicateEntryToBooks } 
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
-import { closeBookAccountMap, createBookAccountMap, createBookCurrencyVersion } from "./settings.ts";
+import { closeBookAccountMap, createBookAccountMap, createBookCurrencyVersion, listBookAccountMaps, listBookCurrencies } from "./settings.ts";
 import { changeBookReplication } from "./replication-runs.ts";
 import { MultiBookError } from "./errors.ts";
 import { runExpenseAmortization } from "../amortization/run.ts";
@@ -230,6 +230,41 @@ test("account mappings redirect replicated lines and refuse incompatible or retr
     () => assert.fail("a mapping window cannot end before entries it governed"),
     (error: unknown) => assert.ok(error instanceof MultiBookError, String(error)),
   );
+}));
+
+test("multi-book currency and account-map lists respect subsidiary visibility", enabled, () => fixture(async (f) => {
+  const targetAccount = await f.account("income");
+  await createBookCurrencyVersion({
+    orgId: f.org.orgId,
+    actorId: f.actor,
+    allowedSubsidiaryIds: null,
+    input: {
+      bookId: f.book,
+      subsidiaryId: f.org.subsidiaryId,
+      currency: f.baseCurrency,
+      rateType: "spot",
+      effectiveFrom: "2026-07-01",
+    },
+    reason: "Measure this entity in its book currency",
+  });
+  await createBookAccountMap({
+    orgId: f.org.orgId,
+    actorId: f.actor,
+    allowedSubsidiaryIds: null,
+    input: {
+      bookId: f.book,
+      subsidiaryId: f.org.subsidiaryId,
+      sourceAccountId: f.org.accounts.revenue,
+      targetAccountId: targetAccount,
+      effectiveFrom: "2026-07-01",
+    },
+    reason: "Present this entity's revenue separately",
+  });
+
+  assert.equal((await listBookCurrencies(f.org.orgId)).length, 1);
+  assert.equal((await listBookAccountMaps(f.org.orgId)).length, 1);
+  assert.deepEqual(await listBookCurrencies(f.org.orgId, db, new Set()), []);
+  assert.deepEqual(await listBookAccountMaps(f.org.orgId, db, new Set()), []);
 }));
 
 test("activation refuses full history over earlier entries and brings them in as opening balances", enabled, () => fixture(async (f) => {

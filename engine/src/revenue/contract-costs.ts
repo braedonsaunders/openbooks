@@ -39,6 +39,7 @@ import {
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { arePeriodModulesOpen } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { addMonthsStart, daysInCivilMonth, startOfMonth } from "../platform/civil-date.ts";
@@ -372,6 +373,7 @@ export async function assetCarryingMinor(
   runner: SqlExecutor,
   orgId: string,
   assetId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<bigint> {
   const asset = (await runner.execute<{ currency: string }>(sql`
     select currency from contract_cost_assets where org_id = ${orgId} and id = ${assetId}`)).rows[0];
@@ -392,9 +394,16 @@ export async function assetCarryingMinor(
      where jl.org_id = ${orgId}
        and jl.contributor_kind = 'contract_cost_asset'
        and jl.contributor_ref = ${assetId}
+<<<<<<< HEAD
        and jl.currency = ${asset.currency}
        and je.status in ('posted', 'reversed')`)).rows[0];
   return BigInt(row?.carrying ?? "0");
+=======
+       and je.book_id = ${bookId}
+       and je.status in ('posted', 'reversed')
+       ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, allowedSubsidiaryIds)}`)).rows[0];
+  return toUnits(row?.carrying ?? "0") / 10n ** BigInt(4 - exponent);
+>>>>>>> a46171893a (Scope accounting pickers and history to visible subsidiaries)
 }
 
 async function writeAudit(
@@ -1650,6 +1659,7 @@ export interface AttentionItem {
 export async function contractCostAttentionItems(
   runner: SqlExecutor,
   orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<AttentionItem[]> {
   const rows = (await runner.execute<{
     id: string;
@@ -1667,7 +1677,35 @@ export async function contractCostAttentionItems(
       from contract_cost_assets asset
       left join revenue_contracts contract
         on contract.org_id = asset.org_id and contract.id = asset.revenue_contract_id
-     where asset.org_id = ${orgId} and asset.status = 'active'`)).rows;
+       ${subsidiaryVisibleFilter(sql`contract.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+     where asset.org_id = ${orgId} and asset.status = 'active'
+       and (
+         ${allowedSubsidiaryIds === null ? sql`true` : sql`(
+           (asset.revenue_contract_id is not null and exists (
+             select 1 from revenue_contracts scoped_contract
+              where scoped_contract.org_id = asset.org_id
+                and scoped_contract.id = asset.revenue_contract_id
+                ${subsidiaryVisibleFilter(sql`scoped_contract.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+           )) or (asset.capitalize_entry_id is not null and exists (
+           select 1 from journal_entries scoped_entry
+            where scoped_entry.org_id = asset.org_id
+              and scoped_entry.id = asset.capitalize_entry_id
+              ${subsidiaryVisibleFilter(sql`scoped_entry.subsidiary_id`, allowedSubsidiaryIds)}
+           ))
+         )
+         and (asset.revenue_contract_id is null or exists (
+           select 1 from revenue_contracts scoped_contract
+            where scoped_contract.org_id = asset.org_id
+              and scoped_contract.id = asset.revenue_contract_id
+              ${subsidiaryVisibleFilter(sql`scoped_contract.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+         ))
+         and (asset.capitalize_entry_id is null or exists (
+           select 1 from journal_entries scoped_entry
+            where scoped_entry.org_id = asset.org_id
+              and scoped_entry.id = asset.capitalize_entry_id
+              ${subsidiaryVisibleFilter(sql`scoped_entry.subsidiary_id`, allowedSubsidiaryIds)}
+         ))`}
+       )`)).rows;
   const out: AttentionItem[] = [];
   for (const row of rows) {
     if (!row.revenue_contract_id) {
@@ -1678,11 +1716,15 @@ export async function contractCostAttentionItems(
         assetId: row.id,
         kind: "unlinked",
         contractNumber: null,
+<<<<<<< HEAD
         carryingMinor: carrying.toString(),
+=======
+        carryingMinor: (await assetCarryingMinor(runner, orgId, row.id, allowedSubsidiaryIds)).toString(),
+>>>>>>> a46171893a (Scope accounting pickers and history to visible subsidiaries)
         capitalizedOn: row.capitalized_on,
       });
     } else if (row.contract_status === "cancelled") {
-      const carrying = await assetCarryingMinor(runner, orgId, row.id);
+      const carrying = await assetCarryingMinor(runner, orgId, row.id, allowedSubsidiaryIds);
       if (carrying > 0n) {
         out.push({
           assetId: row.id,

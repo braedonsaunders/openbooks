@@ -13,6 +13,7 @@ import {
 } from "../platform/financial-changes.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { loadSubsidiaryContext, restrictionAdmits } from "../organization/subsidiaries.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
@@ -1120,11 +1121,14 @@ export interface AccountMergeHistoryRow {
 export async function listAccountMerges(
   orgId: string,
   options: { limit: number; offset: number; accountId?: string | null },
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<{ rows: AccountMergeHistoryRow[]; total: number }> {
   return withOrgTransaction(orgId, async () => {
     const accountFilter = options.accountId
       ? sql`and (x.source_account_id = ${options.accountId} or x.target_account_id = ${options.accountId})`
       : sql``;
+    const sourceScope = subsidiaryVisibleFilter(sql`sa.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true });
+    const targetScope = subsidiaryVisibleFilter(sql`ta.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true });
     const base = sql`
       select m.id, 'merge' as kind, 'completed' as status, m.source_account_id, m.target_account_id,
              m.effective_date::text as effective_date, m.reason, m.merged_by as actor_id, m.merged_at as at,
@@ -1149,10 +1153,14 @@ export async function listAccountMerges(
         join accounts ta on ta.org_id = ${orgId} and ta.id = x.target_account_id
         left join users u on u.org_id = ${orgId} and u.id = x.actor_id
        where true ${accountFilter}
+         ${sourceScope} ${targetScope}
        order by x.at desc, x.id
        limit ${options.limit} offset ${options.offset}`)).rows;
     const matching = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from (${base}) x where true ${accountFilter}`)).rows[0]?.n ?? 0;
+      select count(*)::int as n from (${base}) x
+        join accounts sa on sa.org_id = ${orgId} and sa.id = x.source_account_id
+        join accounts ta on ta.org_id = ${orgId} and ta.id = x.target_account_id
+       where true ${accountFilter} ${sourceScope} ${targetScope}`)).rows[0]?.n ?? 0;
     return {
       total: matching,
       rows: rows.map((row) => ({

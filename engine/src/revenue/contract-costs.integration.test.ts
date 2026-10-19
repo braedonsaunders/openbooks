@@ -27,6 +27,33 @@ import type { FlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+test("contract-cost attention respects the caller's subsidiary visibility", { skip: !DB }, async () => {
+  const world = await setupCostWorld();
+  try {
+    const asset = await capitalizeContractCost({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      revenueContractId: null,
+      repPartyId: world.repPartyId,
+      customerPartyId: world.org.customerId,
+      costType: "commission",
+      amountMinor: 10000n,
+      currency: "CAD",
+      capitalizedOn: world.org.date,
+      method: "straight_line",
+      originalExpenseAccountId: world.commissionExpenseAccountId,
+      source: { kind: "import" },
+    });
+
+    const unrestricted = await contractCostAttentionItems(db, world.org.orgId);
+    const restricted = await contractCostAttentionItems(db, world.org.orgId, new Set());
+    assert.ok(unrestricted.some((item) => item.assetId === asset.assetId));
+    assert.ok(!restricted.some((item) => item.assetId === asset.assetId));
+  } finally {
+    await dropScratchOrgReporting(world.org.orgId);
+  }
+});
+
 interface CostWorld {
   org: ScratchOrg;
   actors: FlowActors;

@@ -251,6 +251,27 @@ test("a merge moves the balance by a balanced reclass, moves configuration, and 
     const history = await listAccountMerges(s.org.orgId, { limit: 10, offset: 0, accountId: s.target });
     assert.equal(history.total, 1);
     assert.equal(history.rows[0]!.status, "completed");
+
+    const outOfScopeSubsidiary = randomUUID();
+    await withOrgContext(s.org.orgId, async () => {
+      await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${outOfScopeSubsidiary}, ${s.org.orgId}, ${s.org.subsidiaryId}, 'Merge history entity', 'CAD', 'CA')`);
+      await db.execute(sql`update accounts set subsidiary_id = ${outOfScopeSubsidiary}
+        where org_id = ${s.org.orgId} and id in (${s.source}, ${s.target})`);
+    });
+    const restrictedHistory = await listAccountMerges(
+      s.org.orgId,
+      { limit: 10, offset: 0 },
+      new Set([s.org.subsidiaryId]),
+    );
+    assert.equal(restrictedHistory.total, 0, "a merge is hidden when either account is outside the caller's scope");
+    assert.deepEqual(restrictedHistory.rows, []);
+    const visibleHistory = await listAccountMerges(
+      s.org.orgId,
+      { limit: 10, offset: 0 },
+      new Set([outOfScopeSubsidiary]),
+    );
+    assert.equal(visibleHistory.total, 1);
   } finally {
     await dropScratchOrg(s.org.orgId);
   }
