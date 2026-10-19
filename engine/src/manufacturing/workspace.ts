@@ -22,6 +22,7 @@ import { lockManufacturingReadAuthority } from "./authority.ts";
 import { pendingInspectionHold } from "../inventory/inspection-holds.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
+import { isIsoCalendarDate } from "../platform/iso-date.ts";
 
 export type ManufacturingView =
   "work-orders" | "work-centers" | "routings" | "mrp";
@@ -47,6 +48,49 @@ export interface ManufacturingPageData {
 export interface ManufacturingRecordData {
   record: ManufacturingRow;
   sections: Record<string, ManufacturingRow[]>;
+}
+
+export interface ManufacturingHomeSummary {
+  openWorkOrders: number;
+  inProgressWorkOrders: number;
+  pastDueOrOnHoldWorkOrders: number;
+  completedLastSevenDays: number;
+}
+
+/** Counts for the manufacturing cockpit use the same organization, legal-entity,
+ * resource-visibility and actor checks as the work-order list. */
+export async function readManufacturingHomeSummary(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  requestedScope: ReadonlySet<string> | null,
+  input: { subsidiaryId?: string; today: string },
+): Promise<ManufacturingHomeSummary> {
+  await assertManufacturingFeature(tx, orgId, "manufacturing");
+  if (!isIsoCalendarDate(input.today)
+    || (input.subsidiaryId !== undefined && !isUuid(input.subsidiaryId))) {
+    throw new ManufacturingError("Choose a valid manufacturing summary date and legal entity.", {
+      code: "invalid_manufacturing_summary_query",
+    });
+  }
+  const scope = await lockManufacturingReadAuthority(tx, orgId, actorId, requestedScope);
+  const rows = (await tx.execute<ManufacturingHomeSummary & Record<string, unknown>>(sql`
+    select
+      count(*) filter (where work.status not in ('done','closed','cancelled'))::int as "openWorkOrders",
+      count(*) filter (where work.status='in_progress')::int as "inProgressWorkOrders",
+      count(*) filter (where work.status='on_hold' or (work.status in ('draft','released','in_progress') and work.planned_end < ${input.today}::date))::int as "pastDueOrOnHoldWorkOrders",
+      count(*) filter (where work.status in ('done','closed') and work.completed_at >= now() - interval '7 days')::int as "completedLastSevenDays"
+    from mfg_work_orders work
+    where work.org_id=${orgId}
+      ${subsidiaryVisibleFilter(sql`work.subsidiary_id`, scope)}
+      ${orderResourcesVisible(scope, "work")}
+      ${input.subsidiaryId ? sql`and work.subsidiary_id=${input.subsidiaryId}` : sql``}`)).rows[0];
+  return rows ?? {
+    openWorkOrders: 0,
+    inProgressWorkOrders: 0,
+    pastDueOrOnHoldWorkOrders: 0,
+    completedLastSevenDays: 0,
+  };
 }
 
 // Item identities belong to the organization catalog. Legal-entity visibility

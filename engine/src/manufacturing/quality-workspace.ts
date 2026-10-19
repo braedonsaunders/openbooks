@@ -26,16 +26,17 @@ function visible(scope:ReadonlySet<string>|null) {
 export async function assertManufacturingInspectionScope(tx:SqlExecutor,orgId:string,id:string,scope:ReadonlySet<string>|null) {
   if (!(await tx.execute(sql`select inspection.id from inventory_inspections inspection where inspection.org_id=${orgId} and inspection.id=${id} ${visible(scope)}`)).rows.length) throw new ManufacturingNotFoundError();
 }
-export async function listManufacturingInspections(tx:SqlExecutor,orgId:string,actorId:string,query:{workOrderId?:string;status?:'pending'|'pass'|'fail';page?:number}) {
+export async function listManufacturingInspections(tx:SqlExecutor,orgId:string,actorId:string,query:{workOrderId?:string;subsidiaryId?:string;q?:string;status?:'pending'|'pass'|'fail';page?:number}) {
   await assertManufacturingFeature(tx,orgId,'manufacturing');
   const scope=await lockManufacturingReadAuthority(tx,orgId,actorId,null,['manufacturing.read','items.read']);
   const page=query.page??1;
-  if (!Number.isInteger(page) || page<1 || page>100000 || (query.workOrderId&&!isUuid(query.workOrderId))) throw new ManufacturingError("Choose a valid inspection page or work order.",{code:'invalid_inspection_query'});
-  const predicate=sql`inspection.org_id=${orgId} ${visible(scope)} ${query.workOrderId?sql`and inspection.work_order_id=${query.workOrderId}`:sql``} ${query.status?sql`and inspection.status=${query.status} ${query.status==='pending'?sql`and ${inspectionSourceActive(sql`inspection`)}`:sql``}`:sql``}`;
+  if (!Number.isInteger(page) || page<1 || page>100000 || (query.workOrderId&&!isUuid(query.workOrderId)) || (query.subsidiaryId&&!isUuid(query.subsidiaryId)) || (query.q!==undefined&&(typeof query.q!=='string'||query.q.length>200))) throw new ManufacturingError("Choose a valid inspection page, work order, legal entity or search term.",{code:'invalid_inspection_query'});
+  const search=query.q?.trim();
+  const predicate=sql`inspection.org_id=${orgId} ${visible(scope)} ${query.workOrderId?sql`and inspection.work_order_id=${query.workOrderId}`:sql``} ${query.subsidiaryId?sql`and inspection.subsidiary_id=${query.subsidiaryId}`:sql``} ${search?sql`and (inspection.plan_snapshot->>'name' ilike ${'%'+search+'%'} or item.name ilike ${'%'+search+'%'} or lot.lot_number ilike ${'%'+search+'%'} or serial.serial_number ilike ${'%'+search+'%'})`:sql``} ${query.status?sql`and inspection.status=${query.status} ${query.status==='pending'?sql`and ${inspectionSourceActive(sql`inspection`)}`:sql``}`:sql``}`;
   const rows=(await tx.execute<InspectionQueueRow>(sql`select inspection.id,inspection.status,inspection.disposition,inspection.quantity::text,inspection.plan_snapshot->>'name' as name,item.name as "itemName",lot.lot_number as "lotNumber",serial.serial_number as "serialNumber",inspection.work_order_id as "workOrderId",inspection.operation_id as "operationId",inspection.receipt_movement_id as "receiptMovementId",inspection.created_at as "createdAt",count(*) over()::text as "totalCount",${inspectionSourceActive(sql`inspection`)} as "sourceActive"
     from inventory_inspections inspection join items item on item.org_id=inspection.org_id and item.id=inspection.item_id left join lots lot on lot.org_id=inspection.org_id and lot.id=inspection.lot_id left join serials serial on serial.org_id=inspection.org_id and serial.id=inspection.serial_id
     where ${predicate} order by inspection.created_at desc,inspection.id desc limit 25 offset ${(page-1)*25}`)).rows;
-  const total=rows[0]?Number(rows[0].totalCount):Number((await tx.execute<{count:string}>(sql`select count(*)::text as count from inventory_inspections inspection where ${predicate}`)).rows[0]?.count??0);
+  const total=rows[0]?Number(rows[0].totalCount):Number((await tx.execute<{count:string}>(sql`select count(*)::text as count from inventory_inspections inspection join items item on item.org_id=inspection.org_id and item.id=inspection.item_id left join lots lot on lot.org_id=inspection.org_id and lot.id=inspection.lot_id left join serials serial on serial.org_id=inspection.org_id and serial.id=inspection.serial_id where ${predicate}`)).rows[0]?.count??0);
   return {rows,total,page,perPage:25};
 }
 export async function readManufacturingInspection(tx:SqlExecutor,orgId:string,actorId:string,id:string) {

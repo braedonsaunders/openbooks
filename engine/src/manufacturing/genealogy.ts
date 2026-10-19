@@ -70,6 +70,25 @@ export async function searchManufacturingGenealogySeeds(
     limit 100`)).rows;
 }
 
+/** Exact count for the genealogy directory, using the same visibility boundary
+ * as both the picker and trace reader. */
+export async function countManufacturingGenealogySeeds(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  requestedScope: ReadonlySet<string> | null = null,
+): Promise<number> {
+  await assertManufacturingFeature(tx, orgId, "manufacturing");
+  const scope = await lockManufacturingReadAuthority(tx, orgId, actorId, requestedScope, ["manufacturing.read", "items.read"]);
+  const lots = (await tx.execute<{ count: number }>(sql`
+    select count(*)::int as count from lots identity
+    where identity.org_id=${orgId} and ${seedVisibility("lot", scope)}`)).rows[0]?.count ?? 0;
+  const serials = (await tx.execute<{ count: number }>(sql`
+    select count(*)::int as count from serials identity
+    where identity.org_id=${orgId} and ${seedVisibility("serial", scope)}`)).rows[0]?.count ?? 0;
+  return lots + serials;
+}
+
 /** Receipt-batch input evidence takes precedence over legacy order associations.
  * Estimated allocations and legacy links remain explicitly distinguished from recorded inputs. */
 export async function traceManufacturingGenealogy(
