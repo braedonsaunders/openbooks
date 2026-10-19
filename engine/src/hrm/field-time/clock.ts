@@ -239,14 +239,24 @@ async function openPair(
   // recorded: the claim lands before validation, so the open lookup
   // must not see the event itself as its own open pair.
   const rows = (await db.execute<EventRow>(sql`
-    select id::text as id, kind, occurred_at::text as occurred_at,
-           project_id::text as project_id, project_task_id::text as project_task_id,
-           cost_code_ref, pair_id::text as pair_id, status, geo_check, auto_closed
-      from time_clock_events
-     where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-       and kind = 'clock_in' and status = 'recorded'
-       and (${excludeId ?? null}::text is null or id::text != ${excludeId ?? null}::text)
-     order by occurred_at desc limit 1`)).rows;
+    select i.id::text as id, i.kind, i.occurred_at::text as occurred_at,
+           case when switched.id is null then i.project_id::text else switched.project_id::text end as project_id,
+           case when switched.id is null then i.project_task_id::text else switched.project_task_id::text end as project_task_id,
+           case when switched.id is null then i.cost_code_ref else switched.cost_code_ref end as cost_code_ref,
+           i.pair_id::text as pair_id, i.status, i.geo_check, i.auto_closed
+      from time_clock_events i
+      left join lateral (
+        select s.id, s.project_id, s.project_task_id, s.cost_code_ref
+          from time_clock_events s
+         where s.org_id = i.org_id and s.employee_party_id = i.employee_party_id
+           and s.kind = 'switch' and s.status = 'recorded'
+           and (s.occurred_at, s.id) > (i.occurred_at, i.id)
+         order by s.occurred_at desc, s.id desc limit 1
+      ) switched on true
+     where i.org_id = ${orgId} and i.employee_party_id = ${employeePartyId}
+       and i.kind = 'clock_in' and i.status = 'recorded'
+       and (${excludeId ?? null}::text is null or i.id::text != ${excludeId ?? null}::text)
+     order by i.occurred_at desc limit 1`)).rows;
   return rows[0] ?? null;
 }
 
@@ -307,16 +317,23 @@ async function pairAndPostEntries(input: {
        and ((id = ${pairId}) or (occurred_at, id) > ((select occurred_at from time_clock_events where id = ${pairId}), ${pairId}))
        and occurred_at <= ${input.closeOccurredAt}::timestamptz
      order by occurred_at, id`)).rows;
+  const clockIn = events.find((event) => event.id === pairId);
+  if (!clockIn) {
+    throw new FieldTimeError(
+      "event_not_stored",
+      "The clock-in could not be read while closing the shift — no time was posted; retry clock-out",
+    );
+  }
 
   // Build segments: refs change at switch events; breaks accrue to the open segment.
   const segments: Segment[] = [];
   let current: Segment = {
-    fromMs: Date.parse(input.open.occurred_at),
+    fromMs: Date.parse(clockIn.occurred_at),
     toMs: Date.parse(input.closeOccurredAt),
     breakMs: 0,
-    projectId: input.open.project_id,
-    projectTaskId: input.open.project_task_id,
-    costCodeRef: input.open.cost_code_ref,
+    projectId: clockIn.project_id,
+    projectTaskId: clockIn.project_task_id,
+    costCodeRef: clockIn.cost_code_ref,
   };
   let breakStartMs: number | null = null;
   for (const event of events) {
@@ -384,7 +401,7 @@ async function pairAndPostEntries(input: {
     if (grossMs <= 0) continue;
     const netMs = shiftNets[si]!;
     if (netMs <= 0) continue;
-    const refs = si === segments.length - 1 && segments.length > 1
+    const refs = si === segments.length - 1
       ? input.closeRefs
       : { projectId: segment.projectId, projectTaskId: segment.projectTaskId, costCodeRef: segment.costCodeRef };
     // Business midnights: time-entry dates are business dates, the

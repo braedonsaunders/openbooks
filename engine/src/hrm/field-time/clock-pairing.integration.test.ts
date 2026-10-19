@@ -18,8 +18,8 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
-import { recordClockEvent } from "./clock.ts";
-import { approvalFlags } from "./reads.ts";
+import { clockStatus, recordClockEvent } from "./clock.ts";
+import { approvalFlags, crewToday } from "./reads.ts";
 import { FieldTimeError } from "./errors.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -209,29 +209,110 @@ test("a mid-shift project switch deducts the unpaid break once per shift", { ski
       await recordClockEvent({
         orgId: org.orgId, actorUserId: null, employeePartyId: worker,
         kind: "clock_in", occurredAt: "2026-09-14T08:00:00.000Z",
-        source: "mobile", projectId: projectA, clientEventId: randomUUID(),
+        source: "mobile", projectId: projectA, costCodeRef: "CC-A", clientEventId: randomUUID(),
       });
       const switched = await recordClockEvent({
         orgId: org.orgId, actorUserId: null, employeePartyId: worker,
         kind: "switch", occurredAt: "2026-09-14T12:00:00.000Z",
-        source: "mobile", projectId: projectB, clientEventId: randomUUID(),
+        source: "mobile", projectId: projectB, costCodeRef: "CC-B", clientEventId: randomUUID(),
       });
       // The switch re-targets the open pair without closing or posting.
       assert.deepEqual(switched.entryIds, []);
       assert.ok(switched.pairId, "the switch stays on the open pair");
+      const status = await clockStatus(org.orgId, worker);
+      assert.equal(status.projectId, projectB);
+      assert.equal(status.costCodeRef, "CC-B");
+      assert.equal((await crewToday(org.orgId, projectB))[0]?.costCodeRef, "CC-B");
+      assert.equal((await crewToday(org.orgId, projectA)).length, 0);
       const result = await recordClockEvent({
         orgId: org.orgId, actorUserId: null, employeePartyId: worker,
         kind: "clock_out", occurredAt: "2026-09-14T16:00:00.000Z",
-        source: "mobile", projectId: projectB, clientEventId: randomUUID(),
+        source: "mobile", clientEventId: randomUUID(),
       });
       assert.equal(result.entryIds.length, 2);
-      const rows = (await db.execute<{ hours: string; project_id: string }>(sql`
-        select hours::text as hours, project_id::text as project_id from time_entries
+      const rows = (await db.execute<{ hours: string; project_id: string; cost_code_ref: string | null }>(sql`
+        select hours::text as hours, project_id::text as project_id, cost_code_ref from time_entries
          where org_id = ${org.orgId} and employee_party_id = ${worker}
          order by project_id`)).rows;
       // 7.5 paid hours, dealt 3.75 + 3.75 — never 7h from a per-segment deduction.
       assert.deepEqual(rows.map((r) => r.hours), ["3.7500", "3.7500"]);
       assert.deepEqual(rows.map((r) => r.project_id).sort(), [projectA, projectB].sort());
+      assert.deepEqual(rows.map((r) => [r.project_id, r.cost_code_ref]).sort(), [
+        [projectA, "CC-A"], [projectB, "CC-B"],
+      ].sort());
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("clock-out refs apply when a shift has no project segment before clock-out", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId, { unpaidBreakMinutes: 0 });
+    const worker = randomUUID();
+    const project = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, null);
+    await withOrg(org.orgId, async () => {
+      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values
+        (${project}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-C', 'Field job C', 'active', true, '{}'::jsonb)`);
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-09-14T08:00:00.000Z",
+        source: "mobile", clientEventId: randomUUID(),
+      });
+      const result = await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_out", occurredAt: "2026-09-14T16:00:00.000Z",
+        source: "mobile", projectId: project, costCodeRef: "CC-C", clientEventId: randomUUID(),
+      });
+      assert.equal(result.entryIds.length, 1);
+      const rows = (await db.execute<{ project_id: string | null; cost_code_ref: string | null }>(sql`
+        select project_id::text as project_id, cost_code_ref from time_entries
+         where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows;
+      assert.deepEqual(rows, [{ project_id: project, cost_code_ref: "CC-C" }]);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("auto-close keeps the latest switched project on the final segment", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId, { autoCloseHours: 4, unpaidBreakMinutes: 0 });
+    const worker = randomUUID();
+    const projectA = randomUUID();
+    const projectB = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, null);
+    await withOrg(org.orgId, async () => {
+      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values
+        (${projectA}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-A', 'Field job A', 'active', true, '{}'::jsonb),
+        (${projectB}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-B', 'Field job B', 'active', true, '{}'::jsonb)`);
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-09-14T08:00:00.000Z",
+        source: "mobile", projectId: projectA, costCodeRef: "CC-A", clientEventId: randomUUID(),
+      });
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "switch", occurredAt: "2026-09-14T10:00:00.000Z",
+        source: "mobile", projectId: projectB, costCodeRef: "CC-B", clientEventId: randomUUID(),
+      });
+      const next = await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-09-14T13:00:00.000Z",
+        source: "mobile", projectId: projectA, clientEventId: randomUUID(),
+      });
+      assert.ok(next.autoClosedPairId);
+      const rows = (await db.execute<{ hours: string; project_id: string }>(sql`
+        select hours::text as hours, project_id::text as project_id from time_entries
+         where org_id = ${org.orgId} and employee_party_id = ${worker}
+         order by project_id`)).rows;
+      assert.deepEqual(rows, [
+        { hours: "2.0000", project_id: projectA },
+        { hours: "2.0000", project_id: projectB },
+      ]);
     });
   } finally {
     await dropScratchOrg(org.orgId);
