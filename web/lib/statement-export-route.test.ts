@@ -18,7 +18,8 @@ const routeState = {
 
 const mockSources = new Map<string, string>([
   ['mock:intl', `export * from '${import.meta.resolve('next-intl/server')}'
-    export async function getTranslations() { return (key) => key }`],
+    export async function getTranslations() { return (key) => key }
+    export async function getLocale() { return 'en' }`],
   [
     'mock:report-book-label',
     `export function withReportBookColumn(data) { return data }`,

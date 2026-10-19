@@ -149,7 +149,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function getTranslations(){return (key)=>key}",
+        url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return \"en\"}",
       };
     }
     if (

@@ -25,7 +25,8 @@ const mockSources = new Map<string, string>([
   ["mock:email-tokens", `export function appBaseUrl() { return "https://books.example"; }`],
   [
     "mock:i18n",
-    `export async function getTranslations() { return (key) => key }`,
+    `export async function getTranslations() { return (key) => key }
+    export async function getLocale() { return "en" }`,
   ],
 ]);
 

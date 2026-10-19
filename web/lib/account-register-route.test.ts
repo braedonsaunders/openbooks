@@ -16,7 +16,8 @@ const routeState = { accountRegisterCalls: 0, lastBook: undefined as string | un
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
 const mockSources = new Map<string, string>([
-  ['mock:intl', `export async function getTranslations() { return (key) => key }`],
+  ['mock:intl', `export async function getTranslations() { return (key) => key }
+    export async function getLocale() { return 'en' }`],
   ['mock:report-books', `class ReportBookSelectionError extends Error { constructor() { super('Accounting book unavailable'); this.name = 'ReportBookSelectionError'; this.status = 422 } } export async function reportBookSelection(org, id) { if (id !== 'tax-book') throw new ReportBookSelectionError(); return { selectedBook: { id, code: 'TAX', name: 'Tax book' } } }`],
   [
     'mock:authz',
