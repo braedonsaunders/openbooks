@@ -3,7 +3,8 @@ import { reportBookSelection } from '../../../../lib/report-books'
 import { resolveOrgId } from '../../../../lib/org-scope'
 
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import { AS_OF_DEFAULT_PERIOD_PRESET, fiscalYearStartOn, priorFiscalYearEndOn } from '@openbooks/reports'
 import { dimensionOptions, trialBalance } from '../../../../lib/reports'
 import { PNL_TYPES } from '../../../../lib/account-types'
@@ -76,6 +77,7 @@ export async function loadTrialBalance(
   sp: Record<string, string | undefined>,
 ): Promise<TrialBalanceData> {
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   const scheduleDefId = await reportScheduleAnchor('trial-balance')
   const tb = await getTranslations('budgets')
   const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
@@ -242,7 +244,7 @@ export async function loadTrialBalance(
     emptyLabel: t('generalLedger.empty'),
     paper: {
       title: t('trialBalance.title'),
-      periodPhrase: [selectedBook.name, t('trialBalance.description', { date, count: rows.length }), contextLegend].filter(Boolean).join(' · '),
+      periodPhrase: [selectedBook.name, t('trialBalance.description', civilDateParams({ date, count: rows.length }, locale)), contextLegend].filter(Boolean).join(' · '),
       groups: [
         {
           columns: [

@@ -10,15 +10,17 @@ import { resolvePeriod } from '../periods'
 import { reportBookSelection } from '../report-books'
 import { orgBranding } from '../report-pdf'
 import { journalMeasurementExportData } from '../journal-measurement-reports'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { reportPeriodLabel } from '../format'
 
 export async function loadJournalMeasurementReport(kind: 'statistical-journal' | 'gl-audit-numbers',sp: Record<string,string|undefined>) {
   const authz = await requirePermission('gl.read')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period,{customFrom:q.from,customTo:q.to,orgId:authz.user.orgId})
   const { books, selectedBook } = await reportBookSelection(authz.user.orgId,sp.book)
+  const locale = await getLocale()
   const [paper,branding,t] = await Promise.all([
-    journalMeasurementExportData(kind,{orgId:authz.user.orgId,allowedSubsidiaryIds:authz.allowedSubsidiaryIds,from:period.from,to:period.to,label:period.label,bookId:selectedBook.id}),
+    journalMeasurementExportData(kind,{orgId:authz.user.orgId,allowedSubsidiaryIds:authz.allowedSubsidiaryIds,from:period.from,to:period.to,label:reportPeriodLabel(period,locale),bookId:selectedBook.id}),
     orgBranding(authz.user.orgId),getTranslations('reports'),
   ])
   const periods = (await db.execute<{value:string;label:string}>(sql`select id as value,name as label from accounting_periods where org_id=${authz.user.orgId} and starts_on<=${period.to}::date and ends_on>=${period.from}::date order by starts_on desc,period_number`)).rows

@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import {
   column,
   drill,
@@ -157,6 +158,7 @@ export interface AgingData {
 export async function loadAging(sp: Record<string, string | undefined>): Promise<AgingData> {
   const { money: formatMoney } = await getMoneyFormatter()
   const t = await getTranslations('reports.aging')
+  const locale = await getLocale()
   const tr = await getTranslations('reports')
   const tc = await getTranslations('common')
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
@@ -336,7 +338,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     backHref: '/reports',
     backLabel: tr('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: period ? `${t('asOf', { date: asOf })} · ${basisPhrase} · ${t('inCurrency', { currency: target || org?.base_currency || '' })}` : '',
+    periodPhrase: period ? `${t('asOf', civilDateParams({ date: asOf }, locale))} · ${basisPhrase} · ${t('inCurrency', { currency: target || org?.base_currency || '' })}` : '',
     isDetail: Boolean(detailResult),
     isSummary: !detailResult,
     hasSummaryRows: (summary?.rows.length ?? 0) > 0,

@@ -1,5 +1,6 @@
 import 'server-only';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
+import { civilDateTranslator } from './format';
 import { payrollSupportScope } from '@openbooks/engine/payroll/setup';
 import type { ExportData } from './report-pdf';
 import { formatPayrollSupportReport } from './payroll-support-report-contract';
@@ -9,5 +10,5 @@ import type { ResolvedPeriod } from './report-run';
 export async function payrollSupportReportData(period: ResolvedPeriod, params: URLSearchParams): Promise<ExportData> {
   const t = await getTranslations('payroll.supportReport');
   const inventory = payrollSupportScope(period.to);
-  return formatPayrollSupportReport(inventory, period, params, t);
+  return formatPayrollSupportReport(inventory, period, params, civilDateTranslator(t, await getLocale()));
 }

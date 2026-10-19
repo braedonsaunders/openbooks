@@ -1,5 +1,6 @@
 import 'server-only'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../../lib/format'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
@@ -104,6 +105,7 @@ export async function loadStatementBatchComposer(
   assertCan(authz, 'ar.read')
   const { money: formatMoney } = await getMoneyFormatter()
   const tp = await getTranslations('reports.statementBatch')
+  const locale = await getLocale()
   const tr = await getTranslations('reports')
 
   const from = pickString(sp.from) ?? null
@@ -165,7 +167,7 @@ export async function loadStatementBatchComposer(
     backHref: '/reports/statements',
     backLabel: tr('statementsPicker.title'),
     company: org?.name ?? '',
-    periodPhrase: preview.from ? tp('periodRange', { from: preview.from, to: preview.to }) : tp('periodDefault'),
+    periodPhrase: preview.from ? tp('periodRange', civilDateParams({ from: preview.from, to: preview.to }, locale)) : tp('periodDefault'),
     dateRange: { from: preview.from ?? '', to: pickString(sp.to) ?? '' },
     columnCustomer: tp('columnCustomer'),
     columnBalance: tp('columnBalance'),

@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import {
   column,
   field,
@@ -123,6 +124,7 @@ export interface JournalData {
 export async function loadJournal(sp: Record<string, string | undefined>): Promise<JournalData> {
   const { money: formatMoney } = await getMoneyFormatter()
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   const tc = await getTranslations('common')
   // The book label reuses the budgets list's existing filter copy.
   const tb = await getTranslations('budgets')
@@ -189,7 +191,7 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
     backHref: '/reports',
     backLabel: t('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
+    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale))}`,
     truncated: journal?.truncated ?? false,
     paged: (journal?.paging?.entryCount ?? 0) > JOURNAL_PAGE_SIZE,
     page: journal?.paging?.page ?? 1,

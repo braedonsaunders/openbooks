@@ -1,5 +1,6 @@
 import 'server-only'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import { AS_OF_DEFAULT_PERIOD_PRESET, fiscalYearStartOn } from '@openbooks/reports'
 import { filterBar, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { resolveOrgId } from '../../../../lib/org-scope'
@@ -58,6 +59,7 @@ export async function loadBookDifferences(sp: Record<string, string | undefined>
   const orgId = await resolveOrgId()
   await requireFeatureEnabled(orgId, 'multiBookAccounting')
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   const tb = await getTranslations('reports.bookDifferences')
   const scheduleDefId = await reportScheduleAnchor('book-differences')
   const q = parseReportQuery(sp, { defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET })
@@ -170,7 +172,7 @@ export async function loadBookDifferences(sp: Record<string, string | undefined>
     ready: ratesBlocked === null && currencyBasisBlocked === null,
     paper: {
       title: tb('title'),
-      periodPhrase: tb('asOf', { date, primary: primary.name, compare: compare.name }),
+      periodPhrase: tb('asOf', civilDateParams({ date, primary: primary.name, compare: compare.name }, locale)),
       note: sameCurrency ? undefined : tb('currencyNote', { primary: primaryCurrency, compare: compareCurrency }),
       groups: [
         {

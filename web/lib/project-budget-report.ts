@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from './format'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
@@ -107,6 +108,7 @@ export async function projectBudgetExportData(
   period: { to: string },
 ): Promise<ExportData> {
   const t = await getTranslations('reports.projectBudget')
+  const locale = await getLocale()
   const projectParam = p.get('project')
   const options = await projectBudgetProjectOptions(authz)
   const projectId = projectParam && options.some((option) => option.id === projectParam) ? projectParam : null
@@ -119,7 +121,7 @@ export async function projectBudgetExportData(
   if (!projectId) {
     return {
       title: t('title'),
-      dateRangeLabel: t('asOf', { date: period.to }),
+      dateRangeLabel: t('asOf', civilDateParams({ date: period.to }, locale)),
       summary: [],
       groups: [{ kind: 'results', title: t('chooseProject'), columns, rows: [] }],
     }
@@ -131,7 +133,7 @@ export async function projectBudgetExportData(
   const rows = projectBudgetRows(comparison, { unassigned: t('unassigned'), total: t('total') })
   return {
     title: `${t('title')} — ${comparison.projectName}`,
-    dateRangeLabel: t('asOf', { date: comparison.asOf }),
+    dateRangeLabel: t('asOf', civilDateParams({ date: comparison.asOf }, locale)),
     summary: [
       ...(comparison.price.original !== null ? [{ label: t('summary.originalPrice'), value: comparison.price.original, money: true }] : []),
       { label: t('summary.currentPrice'), value: comparison.price.current, money: true },

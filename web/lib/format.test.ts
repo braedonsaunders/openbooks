@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { countLabel, currencyLabel, dateLabel, dateTime, decimalLabel, formatCivilDate, formatCount, formatExactPercent, formatPercent01, monthLabel, monthYearLabel, shortDateLabel, trendWeekLabel, viewerDateTime, viewerNumber } from './format';
+import { civilDateParams, civilDateTranslator, countLabel, currencyLabel, dateLabel, dateTime, decimalLabel, formatCivilDate, formatCount, formatExactPercent, formatPercent01, monthLabel, monthYearLabel, reportPeriodLabel, shortDateLabel, trendWeekLabel, viewerDateTime, viewerNumber } from './format';
 
 // Intl uses narrow/no-break spaces in some locales; compare on plain spaces.
 const nbsp = (s: string): string => s.replace(/[\u00a0\u202f]/g, " ");
@@ -125,3 +125,24 @@ test("viewer formatting uses both the requested locale and organization time zon
   assert.notEqual(local, utc);
   assert.notEqual(viewerNumber(12345.6, "fr"), viewerNumber(12345.6, "en"));
 });
+
+test('report phrase values localize civil dates and pass other values through', () => {
+  assert.deepEqual(
+    civilDateParams({ from: '2026-01-01', to: '2026-12-31', count: 3, book: 'Primary' }, 'en'),
+    { from: 'Jan 1, 2026', to: 'Dec 31, 2026', count: 3, book: 'Primary' },
+  )
+  assert.deepEqual(civilDateParams({ date: '2026-10-19' }, 'de'), { date: '19. Okt. 2026' })
+  assert.deepEqual(civilDateParams({ date: '2026-02-30', label: '2026-10' }, 'en'), { date: '2026-02-30', label: '2026-10' })
+})
+
+test('a localizing report translator formats the as-of date it is given', () => {
+  const t = civilDateTranslator((key, values) => `${key}:${values?.date ?? ''}`, 'fr')
+  assert.equal(t('balanceSheet.asOf', { date: '2026-10-19' }), 'balanceSheet.asOf:19 oct. 2026')
+  assert.equal(t('title'), 'title:')
+})
+
+test('a custom report window reads as its localized bounds while presets keep their names', () => {
+  assert.equal(reportPeriodLabel({ presetId: 'custom', from: '2026-01-01', to: '2026-12-31', label: '2026-01-01 – 2026-12-31' }, 'en'), 'Jan 1, 2026 – Dec 31, 2026')
+  assert.equal(reportPeriodLabel({ presetId: 'custom', from: '2026-10-18', to: '2026-10-18', label: '2026-10-18 – 2026-10-18' }, 'en'), 'Oct 18, 2026')
+  assert.equal(reportPeriodLabel({ presetId: 'this_fiscal_year', from: '2026-01-01', to: '2026-12-31', label: 'FY 2026' }, 'en'), 'FY 2026')
+})

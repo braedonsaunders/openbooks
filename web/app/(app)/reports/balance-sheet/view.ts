@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { getMoneyFormatter } from '@/lib/money-server'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams, reportPeriodLabel } from '../../../../lib/format'
 import {
   ref,
   textBlock,
@@ -80,6 +81,7 @@ export async function loadBalanceSheet(
 ): Promise<BalanceSheetData> {
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   const tb = await getTranslations('budgets')
   const scheduleDefId = await reportScheduleAnchor('balance-sheet')
   // Point-in-time: an unfiltered statement is dated today, never at a
@@ -126,7 +128,7 @@ export async function loadBalanceSheet(
     }
     try {
       subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
-      if (!contextBlocked) view = await balanceSheetView({ from: period.from, to: period.to }, period.label, labels, {
+      if (!contextBlocked) view = await balanceSheetView({ from: period.from, to: period.to }, reportPeriodLabel(period, locale), labels, {
         accountLabels: accountingContext?.labels ?? null,
         breakout: q.breakout,
         compare: q.compare,
@@ -185,7 +187,7 @@ export async function loadBalanceSheet(
 
   return {
     title: t('balanceSheet.title'),
-    description: [selectedBook.name, subView?.label, period ? t('balanceSheet.asOf', { date: period.to }) : null].filter(Boolean).join(' · '),
+    description: [selectedBook.name, subView?.label, period ? t('balanceSheet.asOf', civilDateParams({ date: period.to }, locale)) : null].filter(Boolean).join(' · '),
     backHref: '/reports',
     backLabel: t('hub.title'),
     dimensions: opts,
@@ -213,7 +215,7 @@ export async function loadBalanceSheet(
       ? t('balanceSheet.balanced')
       : t('balanceSheet.offBy', { amount: money(difference) }),
     company: org?.name ?? '',
-    periodPhrase: [selectedBook.name, period ? t('balanceSheet.asOf', { date: period.to }) : null, accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
+    periodPhrase: [selectedBook.name, period ? t('balanceSheet.asOf', civilDateParams({ date: period.to }, locale)) : null, accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
     note: scaleFactor(q.scale).note || '',
     wide: view ? view.columns.length > 4 : false,
     ratesBlocked,

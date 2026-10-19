@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from './format'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { earnedValueByProject, type ProjectEarnedValue } from '@openbooks/engine/projects/earned-value'
@@ -116,12 +117,13 @@ export async function earnedValueExportData(
   period: { to: string },
 ): Promise<ExportData> {
   const t = await getTranslations('reports.earnedValue')
+  const locale = await getLocale()
   const projectParam = p.get('project')
   const projectId = projectParam && isUuid(projectParam) ? projectParam : undefined
   const { rows } = await earnedValueReport(authz, { asOf: period.to, projectId, search: p.get('q') ?? undefined })
   return {
     title: t('title'),
-    dateRangeLabel: t('asOf', { date: period.to }),
+    dateRangeLabel: t('asOf', civilDateParams({ date: period.to }, locale)),
     summary: [],
     groups: [{
       kind: 'results',

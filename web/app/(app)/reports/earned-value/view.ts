@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import {
   column,
   field,
@@ -65,6 +66,7 @@ export async function loadEarnedValueReport(sp: Record<string, string | undefine
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'projectProgress')
   const t = await getTranslations('reports.earnedValue')
+  const locale = await getLocale()
   const tr = await getTranslations('reports')
   const { money } = await getMoneyFormatter()
   const q = parseReportQuery(sp)
@@ -80,7 +82,7 @@ export async function loadEarnedValueReport(sp: Record<string, string | undefine
     backHref: '/reports',
     backLabel: tr('hub.title'),
     company: org?.name ?? '',
-    asOfPhrase: t('asOf', { date: period.to }),
+    asOfPhrase: t('asOf', civilDateParams({ date: period.to }, locale)),
     note: t('note'),
     searchPlaceholder: t('search'),
     primaryFilter: {

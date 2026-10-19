@@ -81,6 +81,8 @@ import { weekStartOf } from '@openbooks/engine/resourcing/weeks'
 import { reportRunLabels } from './report-labels'
 import { runResourcingReport, type ResourcingReportKey } from './resourcing/report-facts'
 import { getTranslations } from 'next-intl/server'
+import { civilDateTranslator, reportPeriodLabel } from './format'
+import { resolveLocale } from './locale'
 import { intercompanyReconciliationExportData } from './intercompany-report'
 import { AccountingContextError, localizeAccountRows, reportAccountingContext, type AccountLabels } from './reports/accounting-context'
 
@@ -259,7 +261,10 @@ export type ResolveReportCtx = {
  * on-screen paper view, and scheduling share exactly one implementation.
  */
 export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: ResolveReportCtx): Promise<ResolvedReport> {
-  const { orgId, t, query: q } = ctx
+  const { orgId, query: q } = ctx
+  // Period and as-of phrases read their civil dates in the translator's locale.
+  const locale = await resolveLocale()
+  const t = civilDateTranslator(ctx.t, locale)
   // Point-in-time statements report balances as of the window end. A bare
   // request (export, schedule, assistant) carrying no period is dated today
   // through the same default the screen uses — never a fiscal year end that
@@ -372,7 +377,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       render: 'data',
       data: runResultToExportData(result, {
         title: tResourcing('title'),
-        dateRangeLabel: ctx.period.label,
+        dateRangeLabel: reportPeriodLabel(ctx.period, locale),
       }),
       requiredPermissions: ['resourcing.read'],
     }
@@ -409,7 +414,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
       view = await profitAndLossView(
         { from: period.from, to: period.to },
-        period.label,
+        reportPeriodLabel(period, locale),
         {
           revenue: t('pnl.revenue'),
           costOfGoodsSold: t('pnl.costOfGoodsSold'),
@@ -425,7 +430,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       periodPhrase = t('balanceSheet.asOf', { date: period.to })
       view = await balanceSheetView(
         { from: period.from, to: period.to },
-        period.label,
+        reportPeriodLabel(period, locale),
         {
           assets: t('balanceSheet.assets'),
           liabilities: t('balanceSheet.liabilities'),
@@ -518,12 +523,12 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       return { render: 'data', data: await trueCostExportData(orgId, period) }
     case 'statistical-journal':
     case 'gl-audit-numbers':
-      return { render: 'data', data: await journalMeasurementExportData(kind, { orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, from: period.from, to: period.to, label: period.label, bookId: detailBookId }), requiredPermissions: ['gl.read'] }
+      return { render: 'data', data: await journalMeasurementExportData(kind, { orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, from: period.from, to: period.to, label: reportPeriodLabel(period, locale), bookId: detailBookId }), requiredPermissions: ['gl.read'] }
     case 'intercompany-reconciliation':
       // Balances as of the window end, within the reader's legal entities.
       return {
         render: 'data',
-        data: await intercompanyReconciliationExportData(orgId, authz.allowedSubsidiaryIds, period.to, period.label),
+        data: await intercompanyReconciliationExportData(orgId, authz.allowedSubsidiaryIds, period.to, t('balanceSheet.asOf', { date: period.to })),
         requiredPermissions: ['intercompany.read'],
         asOf: period.to,
       }
@@ -752,10 +757,13 @@ async function planDefinitionQuery(
   // none is chosen, exactly as the report screen does.
   const asOf = !reportPeriodField(query, entityMap) && reportAsOfField(query, entityMap) ? await resolveReportAsOf(p) : null
   if (asOf) query = { ...query, asOf: asOf.to }
+  // The header names the applied window with localized civil dates, as the
+  // report screen does, rather than the period preset's name.
+  const t = civilDateTranslator(ctx.t, await resolveLocale())
   return {
     query,
-    title: builtIn ? ctx.t(`builtIns.${row.slug}.name`) : row.name,
-    dateRangeLabel: periodField ? ctx.period.label ?? '' : asOf ? ctx.t('balanceSheet.asOf', { date: asOf.to }) : '',
+    title: builtIn ? t(`builtIns.${row.slug}.name`) : row.name,
+    dateRangeLabel: periodField ? t('pnl.dateRange', { from: ctx.period.from, to: ctx.period.to }) : asOf ? t('balanceSheet.asOf', { date: asOf.to }) : '',
     asOf: asOf?.to ?? null,
   }
 }

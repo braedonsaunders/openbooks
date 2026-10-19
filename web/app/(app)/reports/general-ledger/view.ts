@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import {
   column,
   field,
@@ -137,6 +138,7 @@ export async function loadGeneralLedger(
 ): Promise<GeneralLedgerData> {
   const { money: formatMoney } = await getMoneyFormatter()
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   const tc = await getTranslations('common')
   // The book label reuses the budgets list's existing filter copy.
   const tb = await getTranslations('budgets')
@@ -217,7 +219,7 @@ export async function loadGeneralLedger(
     backHref: '/reports',
     backLabel: t('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: [selectedBook.name, t('pnl.dateRange', { from: period.from, to: period.to }), accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
+    periodPhrase: [selectedBook.name, t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale)), accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
     periodFrom: period.from,
     periodTo: period.to,
     truncated: gl?.truncated ?? false,

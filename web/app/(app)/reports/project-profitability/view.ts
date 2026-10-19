@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import {
   filterBar,
   page,
@@ -102,6 +103,7 @@ export async function loadProjectProfitability(
   sp: Record<string, string | undefined>,
 ): Promise<ProjectProfitabilityData> {
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   const authz = await requirePermission('reports.read')
   await requireProjectsFeature(authz.user.orgId)
   const scheduleDefId = await reportScheduleAnchor('project-profitability')
@@ -324,9 +326,9 @@ export async function loadProjectProfitability(
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: sp,
     company: branding.orgName,
-    periodPhrase: t('pnl.dateRange', { from: period.from, to: period.to }),
+    periodPhrase: t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale)),
     emptyLabel: t('projectProfitability.empty'),
-    emptyHint: t('projectProfitability.emptyHint', { period: t('pnl.dateRange', { from: period.from, to: period.to }) }),
+    emptyHint: t('projectProfitability.emptyHint', { period: t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale)) }),
     // The VIEW's currency (the context node's functional currency), not the
     // org base — a foreign-functional subsidiary view states its own money.
     // Mirrors the P&L and balance sheet.

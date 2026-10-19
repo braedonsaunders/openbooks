@@ -2,7 +2,8 @@ import 'server-only'
 import { reportBookSelection } from '../../../../lib/report-books'
 
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import {
   column,
@@ -93,6 +94,7 @@ export async function loadStatementPicker(
   assertCan(authz, 'ar.read')
   const { money: formatMoney } = await getMoneyFormatter()
   const tp = await getTranslations('reports.statementsPicker')
+  const locale = await getLocale()
   const tr = await getTranslations('reports')
 
   const tb = await getTranslations('budgets')
@@ -155,8 +157,8 @@ export async function loadStatementPicker(
     columnBalance: tp('columnBalance'),
     company: org?.name ?? '',
     periodPhrase: books.length > 1
-      ? `${selectedBook.name} · ${from && to ? tp('periodRange', { from, to }) : tp('periodDefault')}`
-      : from && to ? tp('periodRange', { from, to }) : tp('periodDefault'),
+      ? `${selectedBook.name} · ${from && to ? tp('periodRange', civilDateParams({ from, to }, locale)) : tp('periodDefault')}`
+      : from && to ? tp('periodRange', civilDateParams({ from, to }, locale)) : tp('periodDefault'),
     primaryFilter: books.length > 1
       ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) }
       : null,

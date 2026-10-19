@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import {
   ref,
   textBlock,
@@ -77,6 +78,7 @@ export async function loadBudgetReport(
   sp: Record<string, string | undefined>,
 ): Promise<BudgetReportData> {
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   const tb = await getTranslations('budgets')
   const authz = await requirePermission('reports.read')
   await requireFeatureEnabled(authz.user.orgId, 'budgets')
@@ -190,7 +192,7 @@ export async function loadBudgetReport(
     periodPhrase:
       scenarios.length === 0
         ? t('budget.description')
-        : `${scenarioName ?? ''} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
+        : `${scenarioName ?? ''} · ${t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale))}`,
     emptyNote: t('budget.noScenarios'),
     wide: (view?.columns.length ?? 0) > 4,
     hasView: Boolean(view),

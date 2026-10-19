@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from './format'
 import { db } from '@openbooks/engine/platform/db'
 import { trialBalance } from './reports/statements'
 import type { DimFilter } from './reports/filters'
@@ -104,6 +105,7 @@ export async function bookDifferencesExportData(args: {
   compareCurrency: string
 }): Promise<ExportData> {
   const t = await getTranslations('reports.bookDifferences')
+  const locale = await getLocale()
   const { primary, compare } = await bookDifferenceSelection(args.orgId, args.compareBook)
   const sameCurrency = args.primaryCurrency === args.compareCurrency
   const rows = await bookDifferenceRows({
@@ -112,7 +114,7 @@ export async function bookDifferencesExportData(args: {
   })
   return {
     title: t('title'),
-    dateRangeLabel: t('asOf', { date: args.asOf, primary: primary.name, compare: compare.name }),
+    dateRangeLabel: t('asOf', civilDateParams({ date: args.asOf, primary: primary.name, compare: compare.name }, locale)),
     summary: [],
     groups: [{
       kind: 'results',

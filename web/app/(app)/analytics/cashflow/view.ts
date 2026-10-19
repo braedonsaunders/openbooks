@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { analyticsConfig } from '../../../../lib/analytics/config'
@@ -62,7 +63,7 @@ export async function loadCashflow(sp: Record<string, string | undefined>): Prom
     title: t('title'),
     backLabel: t('backToHub'),
     // The native header interpolates this literally, outside next-intl.
-    periodLabel: t('asOf', { date: data.asOf }),
+    periodLabel: t('asOf', civilDateParams({ date: data.asOf }, locale)),
     horizon,
     data,
   }

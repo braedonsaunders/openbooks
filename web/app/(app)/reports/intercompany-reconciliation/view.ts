@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import { filterBar, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { AS_OF_DEFAULT_PERIOD_PRESET } from '@openbooks/reports'
 import { requirePermission } from '../../../../lib/authz'
@@ -38,8 +39,8 @@ export async function loadIntercompanyReconciliation(
   await requireFeatureEnabled(authz.user.orgId, 'multiSubsidiary')
   const q = parseReportQuery(sp, { defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET })
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
-  const [t, tr, branding] = await Promise.all([getTranslations('intercompany'), getTranslations('reports'), orgBranding(authz.user.orgId)])
-  const data = await intercompanyReconciliationExportData(authz.user.orgId, authz.allowedSubsidiaryIds, period.to, t('reconciliation.asOf', { date: period.to }))
+  const [t, tr, branding, locale] = await Promise.all([getTranslations('intercompany'), getTranslations('reports'), orgBranding(authz.user.orgId), getLocale()])
+  const data = await intercompanyReconciliationExportData(authz.user.orgId, authz.allowedSubsidiaryIds, period.to, t('reconciliation.asOf', civilDateParams({ date: period.to }, locale)))
   return {
     title: data.title,
     description: t('reconciliation.description'),

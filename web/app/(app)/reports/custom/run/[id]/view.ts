@@ -5,7 +5,8 @@ import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { payrollSubsidiaryScopeFilter } from '@openbooks/engine/payroll/scope'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams, reportPeriodLabel } from '../../../../../../lib/format'
 import {
   pagination,
   ref,
@@ -141,6 +142,7 @@ export async function loadReportRun(
     : 0
 
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   const tRunner = await getTranslations('reports.custom.runner')
   const tc = await getTranslations('common')
 
@@ -175,16 +177,16 @@ export async function loadReportRun(
       const q = parseReportQuery(sp)
       const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
       query = applyPeriodOverride(query, periodField, { from: period.from, to: period.to })
-      periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
-      periodLabel = period.label
+      periodPhrase = t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale))
+      periodLabel = reportPeriodLabel(period, locale)
     }
     // A point-in-time source reads as of the as-of control's date, today
     // when none is chosen; the cumulative movements are bounded by it alone.
     if (asOfField && !periodField) {
       const asOf = await resolveReportAsOf(sp)
       query = { ...query, asOf: asOf.to }
-      periodPhrase = t('balanceSheet.asOf', { date: asOf.to })
-      periodLabel = asOf.label
+      periodPhrase = t('balanceSheet.asOf', civilDateParams({ date: asOf.to }, locale))
+      periodLabel = reportPeriodLabel(asOf, locale)
     }
   } catch (err) {
     queryError = err instanceof Error ? err : new Error('Invalid report filters')

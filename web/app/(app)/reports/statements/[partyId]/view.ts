@@ -4,7 +4,8 @@ import { reportBookSelection } from '../../../../../lib/report-books'
 import { isUuid } from '../../../../../lib/list-params'
 
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../../lib/format'
 import {
   column,
   drill,
@@ -117,6 +118,7 @@ export async function loadStatement(
 ): Promise<StatementData> {
   const { money: formatMoney } = await getMoneyFormatter()
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   const tc = await getTranslations('common')
   const authz = await requirePermission('reports.read')
   // A malformed party id is not-found, never a 500 from the uuid cast in
@@ -191,7 +193,7 @@ export async function loadStatement(
     backHref: `/reports/registers?side=${side}`,
     backLabel: side === 'ap' ? t('registers.apTitle') : t('registers.arTitle'),
     company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
+    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale))}`,
     receivablesHref: `/reports/statements/${partyId}?side=ar&${keep}`,
     payablesHref: `/reports/statements/${partyId}?side=ap&${keep}`,
     receivablesLabel: t('registers.receivables'),
@@ -211,7 +213,7 @@ export async function loadStatement(
         bucket: b,
       },
     })),
-    agingAsOfLabel: t('statements.agingAsOf', { date: period.to }),
+    agingAsOfLabel: t('statements.agingAsOf', civilDateParams({ date: period.to }, locale)),
     agingTotalLabel: t('aging.columns.total'),
     agingTotal: m(st?.aging.total ?? '0.0000'),
     agingTotalDrill: { kind: 'aging', label: name, side, asOf: period.to, partyId },

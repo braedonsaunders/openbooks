@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import {
   column,
   field,
@@ -68,6 +69,7 @@ export async function loadProjectBudgetReport(sp: Record<string, string | undefi
   const orgId = authz.user.orgId
   await requireProjectsFeature(orgId)
   const t = await getTranslations('reports.projectBudget')
+  const locale = await getLocale()
   const tr = await getTranslations('reports')
   const { money } = await getMoneyFormatter()
   const q = parseReportQuery(sp)
@@ -102,7 +104,7 @@ export async function loadProjectBudgetReport(sp: Record<string, string | undefi
     backHref: '/reports',
     backLabel: tr('hub.title'),
     company: org?.name ?? '',
-    asOfPhrase: comparison ? `${comparison.projectName} · ${t('asOf', { date: period.to })}` : t('asOf', { date: period.to }),
+    asOfPhrase: comparison ? `${comparison.projectName} · ${t('asOf', civilDateParams({ date: period.to }, locale))}` : t('asOf', civilDateParams({ date: period.to }, locale)),
     baselineNote: !comparison
       ? ''
       : original

@@ -198,6 +198,47 @@ export function formatExactPercent(value: string, locale: string, fractionDigits
 }
 
 /**
+ * Message values with every civil `YYYY-MM-DD` value replaced by its
+ * localized calendar day, for display phrases such as a report's period or
+ * as-of line. Other values pass through unchanged, so machine values (file
+ * names, query parameters) are never built from the result.
+ */
+export function civilDateParams<T extends Record<string, unknown>>(values: T, locale: string): T {
+  const localized: Record<string, unknown> = { ...values }
+  for (const [key, value] of Object.entries(values)) {
+    if (isIsoCalendarDate(value)) localized[key] = formatCivilDate(value, locale)
+  }
+  return localized as T
+}
+
+/**
+ * The display name of a resolved report window. A custom window reads as its
+ * localized civil bounds (one day for a point-in-time date); presets keep
+ * their names. Period resolution stays locale-free; headers, column titles
+ * and export labels present the window through this one rule.
+ */
+export function reportPeriodLabel(
+  period: { presetId?: string; from: string; to: string; label: string },
+  locale: string,
+): string {
+  if (period.presetId !== 'custom') return period.label
+  const from = formatCivilDate(period.from, locale)
+  return period.from === period.to ? from : `${from} – ${formatCivilDate(period.to, locale)}`
+}
+
+/**
+ * A report translator whose civil-date message values read as localized
+ * calendar days, for builders that compose period and as-of phrases from a
+ * translator alone. The locale must be the translator's own locale.
+ */
+export function civilDateTranslator(
+  t: (key: string, values?: Record<string, string | number>) => string,
+  locale: string,
+): (key: string, values?: Record<string, string | number>) => string {
+  return (key, values) => t(key, values && civilDateParams(values, locale))
+}
+
+/**
  * A civil YYYY-MM-DD date as a medium date in the operator locale, anchored
  * at UTC noon so the civil day never shifts with the server timezone.
  */
@@ -210,3 +251,4 @@ export function formatCivilDate(isoDate: string, locale: string): string {
   });
 }
 import { fixedDecimal } from '@openbooks/engine/money/decimal'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'

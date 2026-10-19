@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams, reportPeriodLabel } from '../../../../lib/format'
 import {
   ref,
   textBlock,
@@ -85,6 +86,7 @@ export interface PnlData {
 
 export async function loadPnl(sp: Record<string, string | undefined>): Promise<PnlData> {
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   // The book label reuses the budgets list's existing filter copy.
   const tb = await getTranslations('budgets')
   const scheduleDefId = await reportScheduleAnchor('pnl')
@@ -123,7 +125,7 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
     }
     try {
       subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
-      if (!contextBlocked) view = await profitAndLossView({ from: period.from, to: period.to }, period.label, labels, {
+      if (!contextBlocked) view = await profitAndLossView({ from: period.from, to: period.to }, reportPeriodLabel(period, locale), labels, {
         accountLabels: accountingContext?.labels ?? null,
         breakout: q.breakout,
         compare: q.compare,
@@ -166,12 +168,12 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
 
   return {
     title,
-    description: `${selectedBook ? `${selectedBook.name} · ` : ''}${subView?.label ? `${subView.label} · ` : ''}${period?.label ?? ''}${scale.note ? ` · ${scale.note.toLowerCase()}` : ''}`,
+    description: `${selectedBook ? `${selectedBook.name} · ` : ''}${subView?.label ? `${subView.label} · ` : ''}${period ? reportPeriodLabel(period, locale) : ''}${scale.note ? ` · ${scale.note.toLowerCase()}` : ''}`,
     backHref: '/reports',
     backLabel: t('hub.title'),
     hubLabel: t('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: [selectedBook.name, period ? t('pnl.dateRange', { from: period.from, to: period.to }) : null, accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
+    periodPhrase: [selectedBook.name, period ? t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale)) : null, accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
     note: scale.note || '',
     wide: view ? view.columns.length > 4 : false,
     truncated: view?.truncated ?? false,

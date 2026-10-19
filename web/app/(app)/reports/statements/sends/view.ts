@@ -1,5 +1,6 @@
 import 'server-only'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../../lib/format'
 import {
   column,
   field,
@@ -63,6 +64,7 @@ export async function loadStatementBatchRuns(
 ): Promise<StatementBatchRunsData> {
   const authz = await requirePermission('ar.read')
   const tp = await getTranslations('reports.statementBatch')
+  const locale = await getLocale()
   const tr = await getTranslations('reports')
   const org = await orgInfo()
 
@@ -91,7 +93,7 @@ export async function loadStatementBatchRuns(
       return {
         rowKey: run.id,
         created: stamp,
-        period: run.periodFrom ? tp('periodRange', { from: run.periodFrom, to: run.periodTo }) : run.periodTo,
+        period: run.periodFrom ? tp('periodRange', civilDateParams({ from: run.periodFrom, to: run.periodTo }, locale)) : run.periodTo,
         recipients: String(run.recipientCount),
         sent: String(run.sent),
         failed: String(run.failed),

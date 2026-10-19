@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import { column, field, ref, rootRef, table, text, textBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { ScheduleError } from '@openbooks/engine/schedule-boards/errors'
 import { statementReportSpec } from '@/lib/reports/statement-report-spec'
@@ -45,6 +46,7 @@ export async function loadAttendanceExceptionsReport(sp: Record<string, string |
   const orgId = authz.user.orgId
   for (const feature of ['hrm', 'hrmShiftPlanning', 'hrmAttendance']) await requireFeatureEnabled(orgId, feature)
   const t = await getTranslations('reports.attendanceExceptions')
+  const locale = await getLocale()
   const tr = await getTranslations('reports')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId })
@@ -65,7 +67,7 @@ export async function loadAttendanceExceptionsReport(sp: Record<string, string |
     backHref: '/reports',
     backLabel: tr('hub.title'),
     company: org?.name ?? '',
-    rangePhrase: t('range', { from: period.from, to: period.to }),
+    rangePhrase: t('range', civilDateParams({ from: period.from, to: period.to }, locale)),
     note: t('note'),
     searchPlaceholder: t('search'),
     filters: [

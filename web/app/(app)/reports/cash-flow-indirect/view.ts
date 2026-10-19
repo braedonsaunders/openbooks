@@ -3,7 +3,8 @@ import { reportBookSelection } from '../../../../lib/report-books'
 import { resolveOrgId } from '../../../../lib/org-scope'
 
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import {
   ref,
   widgetBlock,
@@ -76,6 +77,7 @@ export async function loadCashFlowIndirect(
 ): Promise<CashFlowIndirectData> {
   const { money: formatMoney } = await getMoneyFormatter()
   const t = await getTranslations('reports.cashFlowIndirect')
+  const locale = await getLocale()
   const tr = await getTranslations('reports')
   const scheduleDefId = await reportScheduleAnchor('cash-flow-indirect')
   const tb = await getTranslations('budgets')
@@ -336,7 +338,7 @@ export async function loadCashFlowIndirect(
     backHref: '/reports',
     backLabel: tr('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('dateRange', { from, to })}`,
+    periodPhrase: `${selectedBook.name} · ${t('dateRange', civilDateParams({ from, to }, locale))}`,
     reconciliationLabel: t('reconciliation'),
     reconciliationStatus: cf === null
       ? ''

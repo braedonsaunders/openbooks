@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { reportPeriodLabel } from '../../../../lib/format'
 import {
   filterBar,
   page,
@@ -61,9 +62,9 @@ export async function loadTrueCost(
   await requireProjectsFeature(authz.user.orgId)
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
-  const [data, branding, definitionId, t, tc] = await Promise.all([
+  const [data, branding, definitionId, t, tc, locale] = await Promise.all([
     trueCostExportData(authz.user.orgId, period), orgBranding(authz.user.orgId), reportScheduleAnchor('true-cost'),
-    getTranslations('reports'), getTranslations('analytics.trueCost'),
+    getTranslations('reports'), getTranslations('analytics.trueCost'), getLocale(),
   ])
   // The analytics dashboard keeps the report's period query, exactly as the
   // dashboard's own open-report link does in reverse.
@@ -72,7 +73,7 @@ export async function loadTrueCost(
   const dashboardQs = dashboardQuery.toString()
   return {
     title: data.title,
-    description: period.label,
+    description: reportPeriodLabel(period, locale),
     backHref: '/reports',
     backLabel: t('hub.title'),
     plannerHref: `/analytics/true-cost${dashboardQs ? `?${dashboardQs}` : ''}`,

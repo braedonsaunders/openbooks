@@ -3,7 +3,8 @@ import { reportBookSelection } from '../../../../lib/report-books'
 import { resolveOrgId } from '../../../../lib/org-scope'
 
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../lib/format'
 import {
   column,
   drill,
@@ -132,6 +133,7 @@ export interface RegistersData {
 export async function loadRegisters(sp: Record<string, string | undefined>): Promise<RegistersData> {
   const { money: formatMoney } = await getMoneyFormatter()
   const t = await getTranslations('reports')
+  const locale = await getLocale()
   const tc = await getTranslations('common')
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
   const scheduleDefId = await reportScheduleAnchor('registers', { side })
@@ -208,7 +210,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
     backHref: '/reports',
     backLabel: t('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
+    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale))}`,
     truncated: reg?.truncated ?? false,
     paged: (reg?.paging?.partyCount ?? 0) > REGISTER_PAGE_SIZE,
     page: reg?.paging?.page ?? 1,

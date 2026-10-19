@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from './format'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
@@ -90,12 +91,13 @@ export function attendanceReportFilters(read: (key: string) => string | null | u
 /** The report as the shared paper/PDF/XLSX/CSV shape. */
 export async function attendanceExceptionsExportData(authz: Authz, p: URLSearchParams, period: { from: string; to: string }): Promise<ExportData> {
   const t = await getTranslations('reports.attendanceExceptions')
+  const locale = await getLocale()
   const boards = await attendanceBoardOptions(authz)
   const filters = attendanceReportFilters((key) => p.get(key), boards)
   const rows = await attendanceExceptionReport(authz, { from: period.from, through: period.to, ...filters, search: p.get('q') ?? undefined })
   return {
     title: t('title'),
-    dateRangeLabel: t('range', { from: period.from, to: period.to }),
+    dateRangeLabel: t('range', civilDateParams({ from: period.from, to: period.to }, locale)),
     summary: [],
     groups: [{
       kind: 'results',

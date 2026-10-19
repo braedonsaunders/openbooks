@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { civilDateParams } from '../../../../../lib/format'
 import { ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '@/lib/authz'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
@@ -39,11 +40,12 @@ function breakoutValue(value: string | undefined): ResourcingBreakout {
 export async function loadBenchReport(sp: Record<string, string | undefined>): Promise<ReportData> {
   const authz = await requirePermission('resourcing.read')
   await requireFeatureEnabled(authz.user.orgId, 'resourcing')
-  const [t, rt, branding, reportsT] = await Promise.all([
+  const [t, rt, branding, reportsT, locale] = await Promise.all([
     getTranslations('resourcing.reports.bench'),
     reportRunLabels(),
     orgBranding(authz.user.orgId),
     getTranslations('reports'),
+    getLocale(),
   ])
   const parsed = parseReportQuery(sp)
   const period = await resolvePeriod(parsed.period, { customFrom: parsed.from, customTo: parsed.to, orgId: authz.user.orgId })
@@ -87,7 +89,7 @@ export async function loadBenchReport(sp: Record<string, string | undefined>): P
     backHref: '/reports',
     backLabel: reportsT('hub.title'),
     company: branding.orgName,
-    periodPhrase: t('periodPhrase', { from: firstSunday, to: lastSunday }),
+    periodPhrase: t('periodPhrase', civilDateParams({ from: firstSunday, to: lastSunday }, locale)),
     result,
     drillTarget: { kind: 'time', label: t('title'), from: firstSunday, to: lastSunday },
     dimensions: { ...dims, projects: [], locations: [], classes: [] },

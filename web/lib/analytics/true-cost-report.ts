@@ -5,15 +5,16 @@ import { trueCostData } from './true-cost-data'
 import { trueCostStrings } from './true-cost-strings'
 import { presentationCurrency } from '../fx-presentation'
 import type { ExportData } from '../report-pdf'
+import { reportPeriodLabel } from '../format'
 
 /** One output contract for paper, spreadsheet, CSV, PDF and scheduled runs. */
-export async function trueCostExportData(orgId: string, period: { from: string; to: string; label: string }): Promise<ExportData> {
+export async function trueCostExportData(orgId: string, period: { presetId?: string; from: string; to: string; label: string }): Promise<ExportData> {
   const authz = await requireReportAuthz(orgId)
   const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
   const strings = trueCostStrings((key, values) => tc(key, values), locale, await presentationCurrency(orgId))
   const [data, t] = await Promise.all([trueCostData(orgId, period, authz.allowedSubsidiaryIds, strings), getTranslations('analytics.trueCost')])
   return {
-    title: t('title'), dateRangeLabel: period.label,
+    title: t('title'), dateRangeLabel: reportPeriodLabel(period, locale),
     summary: [
       // A refused composite exports its refusal, never a zero.
       { label: t('summary.compositeRate'), value: data.kpis.compositeRate ?? data.compositeRefusal?.message ?? '—', money: data.kpis.compositeRate !== null },
