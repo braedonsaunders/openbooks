@@ -25,6 +25,7 @@ import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
 import type { AmortizationScheduleDrawerData } from './view'
 import { DateField } from '@/components/date-field'
+import { amortizationSourceHref } from '@/lib/amortization-source-link'
 
 export const SCHEDULE_STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline' | 'destructive'> = {
   draft: 'outline',
@@ -173,6 +174,7 @@ export function ScheduleDrawer({ detail, canManage, closeHref, destinationAccoun
         {actions.length > 0 && (
           <div hidden={panel !== 'changes'}>
             <ScheduleChangeForm
+              key={`${s.id}:${s.status}`}
               scheduleId={s.id}
               revision={s.revision}
               actions={actions}
@@ -186,7 +188,7 @@ export function ScheduleDrawer({ detail, canManage, closeHref, destinationAccoun
 }
 
 function SourceLink({ kind, documentId, label }: { kind: string; documentId: string; label: string }) {
-  const href = kind === 'vendor_bill' ? `/ap/bills?doc=${documentId}` : kind === 'journal' ? `/journal?doc=${documentId}` : kind === 'expense_report' ? `/expenses?doc=${documentId}` : null
+  const href = amortizationSourceHref(kind, documentId)
   return href ? <Link href={href} className="font-medium text-teal-700 dark:text-teal-300">{label}</Link> : <>{label}</>
 }
 
