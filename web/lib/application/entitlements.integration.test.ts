@@ -23,7 +23,11 @@ function context(
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): ApplicationContext {
   return {
-    authz: { user: { orgId } as ApplicationContext['authz']['user'], permissions: new Set(permissions), allowedSubsidiaryIds },
+    authz: {
+      user: { orgId } as ApplicationContext['authz']['user'],
+      permissions: new Set(permissions),
+      allowedSubsidiaryIds: allowedSubsidiaryIds === null ? null : new Set(allowedSubsidiaryIds),
+    },
     source: 'api', requestId: randomUUID(), apiKeyId: null,
   }
 }
