@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
-import { normalizeMoney } from '@openbooks/engine/money/money'
+import { cmp, normalizeMoney } from '@openbooks/engine/money/money'
+import { createDraftAsset, placeDraftInService } from '@openbooks/engine/assets/asset-drafts'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import '../../../../../lib/feature-gates';
 import { isFeatureEnabled } from '../../../../../lib/features'
@@ -57,6 +58,8 @@ function isCapitalizationRace(error: unknown): boolean {
  * the unit (cost, dates, serial, subsidiary), link it back onto the unit, and it
  * begins depreciating on the Fixed Assets register. The user refines the asset's
  * category (which drives the depreciation method and tax class) on the asset.
+ * In-service dates activate depreciation only when the category supplies a
+ * usable schedule configuration; otherwise the asset remains a draft.
  */
 export const POST = defineRoute({
   permission: 'assets.manage',
@@ -147,32 +150,45 @@ export const POST = defineRoute({
           return { kind: 'acquisition_cost_invalid' }
         }
 
-        // Serialize the org-wide advisory allocation with every capitalization
-        // route.  The unique constraint remains the final authority for other
-        // fixed-asset writers, while this fence keeps max()+1 deterministic here.
-        await tx.execute(sql`
-          select pg_advisory_xact_lock(
-            hashtextextended(${`equipment-capitalization:${orgId}`}, 0)
-          )`)
-        const lockedNextRes = (await tx.execute<{ n: number }>(sql`
-          select coalesce(max((regexp_replace(asset_number, '\\D', '', 'g'))::int), 0) + 1 as n
-            from fixed_assets
-           where org_id = ${orgId} and asset_number ~ '^FA-\\d+$'`))
-        const lockedAssetNumber = `FA-${String(Number(lockedNextRes.rows[0]?.n ?? 1)).padStart(4, '0')}`
-        const lockedStatus = lockedUnit.in_service_on ? 'in_service' : 'draft'
+        const asset = await createDraftAsset(tx, {
+          orgId,
+          actorId: userId,
+          subsidiaryId: lockedOwnedSub.rows[0]!.id,
+          categoryId,
+          name: lockedUnit.name,
+          description: lockedUnit.description,
+          acquisitionCost: lockedAcquisitionCost,
+          acquiredOn: lockedUnit.acquired_on,
+          inServiceOn: lockedUnit.in_service_on,
+          serialNumber: lockedUnit.serial_number,
+          provenance: { source: 'equipment_capitalization', equipmentUnitId: id },
+        })
 
-        const ins = (await tx.execute<{ id: string }>(sql`
-          insert into fixed_assets
-            (org_id, subsidiary_id, category_id, asset_number, name, description, status,
-             acquired_on, in_service_on, acquisition_cost, salvage_value, serial_number, created_by, updated_by)
-          values (${orgId}, ${lockedOwnedSub.rows[0]!.id}, ${categoryId}, ${lockedAssetNumber}, ${lockedUnit.name},
-                  ${lockedUnit.description}, ${lockedStatus}, ${lockedUnit.acquired_on}, ${lockedUnit.in_service_on},
-                  ${lockedAcquisitionCost}, '0', ${lockedUnit.serial_number}, ${userId}, ${userId})
-          returning id`))
-        const newId = ins.rows[0]!.id
+        if (lockedUnit.in_service_on) {
+          const defaults = (await tx.execute<{
+            depreciation_method: string | null
+            depreciation_method_id: string | null
+            useful_life_months: number | null
+            depreciation_units_total: string | null
+          }>(sql`
+            select depreciation_method, depreciation_method_id, useful_life_months,
+                   depreciation_units_total::text as depreciation_units_total
+              from fixed_assets where org_id = ${orgId} and id = ${asset.id}`)).rows[0]
+          if (!defaults) throw new Error('new equipment asset was not available for service placement')
+          const hasUsefulLife = defaults.useful_life_months !== null && defaults.useful_life_months > 0
+          const isManualWithoutFormula = !defaults.depreciation_method_id && defaults.depreciation_method === 'manual'
+          const hasProductionUnits = !defaults.depreciation_method_id
+            && defaults.depreciation_method === 'units_of_production'
+            && defaults.depreciation_units_total !== null
+            && cmp(defaults.depreciation_units_total, '0') > 0
+          if (hasUsefulLife || isManualWithoutFormula || hasProductionUnits) {
+            await placeDraftInService(tx, { orgId, assetId: asset.id, actorId: userId })
+          }
+        }
+
         const linked = (await tx.execute<{ fixed_asset_id: string }>(sql`
           update equipment_units
-             set fixed_asset_id = ${newId}, revision = revision + 1, updated_at = now(), updated_by = ${userId}
+             set fixed_asset_id = ${asset.id}, revision = revision + 1, updated_at = now(), updated_by = ${userId}
            where id = ${id} and org_id = ${orgId} and fixed_asset_id is null
            returning fixed_asset_id`))
         // The row lock above makes this path unreachable for a normal race, but
@@ -182,9 +198,9 @@ export const POST = defineRoute({
 
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'fixed_assets', ${newId}, 'insert',
-                  ${JSON.stringify({ capitalizedFromEquipment: id, assetNumber: lockedAssetNumber })}::jsonb, ${userId})`)
-        return { kind: 'created', assetId: newId, assetNumber: lockedAssetNumber }
+          values (${orgId}, 'equipment_units', ${id}, 'update',
+                  ${JSON.stringify({ fixedAssetId: asset.id })}::jsonb, ${userId})`)
+        return { kind: 'created', assetId: asset.id, assetNumber: asset.assetNumber }
       })
     } catch (error) {
       // The 0068 storage guards deliberately abort a losing transaction so its
