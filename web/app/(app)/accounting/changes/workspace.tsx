@@ -16,6 +16,7 @@ import { ReverseAssetChange } from "./ReverseAssetChange";
 import { ChangeActions } from "./ChangeActions";
 import { ChangeGateDecision } from "./ChangeGateDecision";
 import type { DelegateOption } from "../../inbox/GateActions";
+import { gateDelegateOptions } from "@/lib/gate-delegates";
 import { gateDecisionCapability } from "@openbooks/engine/flows/module";
 import type { AccountingChangesWorkspaceData } from "./view";
 
@@ -125,15 +126,9 @@ export async function AccountingChangesWorkspace({ data }: { data: AccountingCha
   const awaitingGate =
     actionableGate == null ? gateDecisions.find((gate) => gate.sodBlocked) ?? null : null;
   const decisionGate = actionableGate ?? awaitingGate;
-  const delegateUsers: DelegateOption[] =
-    decisionGate && (can(auth, "flows.manage") || decisionGate.assigneeUserId === auth.user.id)
-      ? (
-          await db.execute<DelegateOption>(sql`
-        select id::text as id, name from users
-         where org_id = ${orgId} and is_active and id <> ${auth.user.id}
-         order by name limit 500`)
-        ).rows
-      : [];
+  // Delegate is offered only where the hand-off is accepted (the gate's
+  // direct assignee or an organization admin), never on flows.manage alone.
+  const delegateUsers: DelegateOption[] = await gateDelegateOptions(orgId, auth.user.id, decisionGate?.id ?? null)
   const eventTitle = row
     ? t.has(`lifecycle.operations.${row.operation}`)
       ? t(`lifecycle.operations.${row.operation}`)
