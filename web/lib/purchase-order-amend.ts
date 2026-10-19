@@ -5,10 +5,11 @@ import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/
 import { ScopeNotFoundError, subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/records/transaction-audit'
 import { SubmitError, submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
-import { cmp } from '@openbooks/engine/money/money'
 import { computeOrderTotals, exactOrderMoney, orderTaxProfileMap } from '../app/api/_order/lib'
 import { exactOrderQuantity, exactOrderUnitPrice } from '../app/api/_order/line-selection'
 import { persistLineTaxComponents } from './bills'
+import { compareDecimal } from './exact-decimal'
+import { purchaseOrderAmendQuantityFloor } from './purchase-order-amend-quantity'
 
 /**
  * Amendment refusal: the order is not amendable (wrong status, stale
@@ -143,6 +144,7 @@ export async function amendPurchaseOrder(
       unitPrice: string
       quantityFulfilled: string
       quantityBilled: string
+      quantityCancelled: string
       taxCodeId: string | null
       taxGroupId: string | null
     }>(sql`
@@ -150,6 +152,7 @@ export async function amendPurchaseOrder(
              quantity::text as quantity, unit_price::text as "unitPrice",
              quantity_fulfilled::text as "quantityFulfilled",
              quantity_billed::text as "quantityBilled",
+             quantity_cancelled::text as "quantityCancelled",
              tax_code_id as "taxCodeId", tax_group_id as "taxGroupId"
         from document_lines
        where org_id = ${input.orgId} and document_id = ${input.orderId}
@@ -167,18 +170,20 @@ export async function amendPurchaseOrder(
       let quantity = String(line.quantity)
       if (change.quantity !== undefined) {
         const parsed = exactOrderQuantity(change.quantity)
-        if (parsed === 'invalid' || cmp(parsed, '0') <= 0) {
+        if (parsed === 'invalid' || compareDecimal(parsed, '0') <= 0) {
           throw new PurchaseOrderAmendError(`line ${line.lineNumber}: quantity must be a positive decimal quantity`)
         }
-        // Received and billed quantities are posted evidence: the amended
-        // order may grow past them (an accepted over-shipment) but never
-        // shrink below them.
-        const floor = cmp(String(line.quantityFulfilled), String(line.quantityBilled)) >= 0
-          ? String(line.quantityFulfilled)
-          : String(line.quantityBilled)
-        if (cmp(parsed, floor) < 0) {
+        // Fulfillment, billing, and cancellations already consume the order
+        // quantity. An amendment may grow past them but may not invalidate
+        // the remaining-quantity equations used by receiving and billing.
+        const floor = purchaseOrderAmendQuantityFloor(
+          String(line.quantityFulfilled),
+          String(line.quantityBilled),
+          String(line.quantityCancelled),
+        )
+        if (compareDecimal(parsed, floor) < 0) {
           throw new PurchaseOrderAmendError(
-            `line ${line.lineNumber}: quantity ${parsed} is below the received or billed quantity ${floor} — void the receipt or bill before reducing it`,
+            `line ${line.lineNumber}: quantity ${parsed} is below the received or billed quantity plus cancellations ${floor} — increase it to at least ${floor}, or correct the recorded receipt or bill first`,
             422,
             'applied',
           )
@@ -188,7 +193,7 @@ export async function amendPurchaseOrder(
       let unitPrice = String(line.unitPrice)
       if (change.unitPrice !== undefined) {
         const parsed = exactOrderUnitPrice(change.unitPrice)
-        if (parsed === 'invalid' || cmp(parsed, '0') < 0) {
+        if (parsed === 'invalid' || compareDecimal(parsed, '0') < 0) {
           throw new PurchaseOrderAmendError(`line ${line.lineNumber}: unit price must be a non-negative decimal amount`)
         }
         unitPrice = parsed
@@ -248,8 +253,9 @@ export async function amendPurchaseOrder(
       const line = stored[index]!
       const recomputed = computed.lines[index]!
       const amount = exactOrderMoney(recomputed.amount)
+      const taxInputAmount = exactOrderMoney(recomputed.taxInputAmount)
       const taxAmount = exactOrderMoney(recomputed.taxAmount)
-      if (amount === 'invalid' || taxAmount === 'invalid') {
+      if (amount === 'invalid' || taxInputAmount === 'invalid' || taxAmount === 'invalid') {
         throw new PurchaseOrderAmendError('amended order totals contain an invalid amount')
       }
       const amended = amendments.find((entry) => entry.line.id === line.id)
@@ -258,6 +264,7 @@ export async function amendPurchaseOrder(
            set quantity = ${amended?.quantity ?? String(line.quantity)},
                unit_price = ${amended?.unitPrice ?? String(line.unitPrice)},
                amount = ${amount},
+               tax_input_amount = ${taxInputAmount},
                tax_amount = ${taxAmount},
                updated_by = ${input.actorId}
          where id = ${line.id} and org_id = ${input.orgId}
@@ -268,6 +275,10 @@ export async function amendPurchaseOrder(
           `${name} changed while it was being amended; reload and try again`,
         )
       }
+      await db.execute(sql`
+        delete from document_line_tax_components
+         where org_id = ${input.orgId} and document_line_id = ${line.id}
+      `)
       await persistLineTaxComponents(db, {
         orgId: input.orgId,
         documentLineId: line.id,

@@ -52,7 +52,7 @@
     "toastVoided": "Cancelado",
     "amend": "Alterar",
     "amendTitle": "Alterar quantidades e preços aprovados",
-    "amendHint": "As quantidades podem superar o pedido, mas nunca ficar abaixo do recebido ou faturado. A alteração é auditada com seu motivo e re-aprovada via Flow quando houver um configurado.",
+    "amendHint": "As quantidades podem superar o pedido, mas nunca ficar abaixo da maior quantidade recebida ou faturada, somada às quantidades canceladas. A alteração é auditada com seu motivo e re-aprovada via Flow quando houver um configurado.",
     "amendSave": "Salvar alteração",
     "amendSaved": "Pedido alterado",
     "amendFailed": "Falha ao alterar",

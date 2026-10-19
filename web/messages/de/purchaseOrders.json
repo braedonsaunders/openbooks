@@ -52,7 +52,7 @@
     "toastVoided": "Storniert",
     "amend": "Ändern",
     "amendTitle": "Genehmigte Mengen und Preise ändern",
-    "amendHint": "Mengen dürfen über die bestellte Menge hinaus erhöht, aber nie unter die erhaltene oder fakturierte Menge gesenkt werden. Die Änderung wird mit ihrer Begründung protokolliert und bei konfiguriertem Flow erneut genehmigt.",
+    "amendHint": "Mengen dürfen über die bestellte Menge hinaus erhöht werden, aber nie unter die höhere Menge aus Wareneingang oder Fakturierung zuzüglich stornierter Mengen sinken. Die Änderung wird mit ihrer Begründung protokolliert und bei konfiguriertem Flow erneut genehmigt.",
     "amendSave": "Änderung speichern",
     "amendSaved": "Bestellung geändert",
     "amendFailed": "Änderung fehlgeschlagen",
