@@ -8,6 +8,7 @@ import { DB, seedEmployment, seedWage, setupHarness, withHarness } from "../../t
 import { employeeTotalCompensation } from "./total-compensation.ts";
 import { createBenefitProgram, activateBenefitProgram } from "../benefits/programs.ts";
 import { createBenefitAward } from "../benefits/awards.ts";
+import { seedPayrollComponent, seedPayrollStatutoryTreatment } from "../../testing/fixtures.ts";
 
 const setup = () => setupHarness({
   features: ["hrm", "payroll"],
@@ -33,9 +34,10 @@ test("annual variable compensation includes all committed lines while history st
       const stubId = randomUUID();
       await db.execute(sql`
         insert into documents (id, org_id, kind, document_number, document_date, currency, status,
-          subtotal, tax_total, total, custom, extra_dims, void_reason)
+          subtotal, tax_total, total, custom, extra_dims, void_reason, voided_at, voided_by)
         values (${documentId}, ${org.orgId}, 'pay_run', ${`PAY-${documentId}`}, ${date}::date,
-          'CAD', ${status}, 0, 0, 0, '{}'::jsonb, '{}'::jsonb, ${status === 'voided' ? 'Cancelled payroll period' : null})`);
+          'CAD', ${status}, 0, 0, 0, '{}'::jsonb, '{}'::jsonb, ${status === 'voided' ? 'Cancelled payroll period' : null},
+          ${status === 'voided' ? sql`now()` : null}, ${status === 'voided' ? reader : null})`);
       await db.execute(sql`
         insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
           pay_date, tax_year, run_status, run_type)
@@ -73,12 +75,23 @@ test("annual variable compensation includes all committed lines while history st
 test("HRM compensation retains benefit awards while Payroll is disabled", { skip: !DB }, async () => {
   await withHarness(setup, async ({ org, reader }) => {
     const worker = await seedEmployment(org.orgId, org.subsidiaryId);
+    const componentId = randomUUID();
+    const clearing = (await db.execute<{ id: string }>(sql`insert into accounts
+      (org_id, number, name, type, is_active, is_summary)
+      values (${org.orgId}, '1455', 'Recognition benefit clearing', 'asset_current_other', true, false)
+      returning id`)).rows[0]!;
+    await seedPayrollComponent(org.orgId, componentId, {
+      code: 'RECOGNITION', name: 'Recognition benefit', kind: 'earning', country: 'CA', paymentKind: 'non_cash',
+      nonCashAccountId: clearing.id, basis: 'fixed_amount', taxable: true, pensionable: true, insurable: false, vacationable: false,
+    });
+    await seedPayrollStatutoryTreatment(org.orgId, componentId, { effectiveFrom: '2026-01-01', programExclusions: [],
+      vacationable: false, createdBy: reader, updatedBy: reader });
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features,payroll}', 'false'::jsonb)
        where id = ${org.orgId}`);
     const program = await createBenefitProgram({ orgId: org.orgId, actorId: reader,
       code: 'RECOGNITION', name: 'Recognition award', family: 'reward', legalEntityId: org.subsidiaryId,
-      currency: 'CAD', effectiveFrom: '2026-01-01', deliveryMethod: 'external', fixedAmount: '250',
+      currency: 'CAD', effectiveFrom: '2026-01-01', deliveryMethod: 'external', fixedAmount: '250', payComponentId: componentId,
       eligibility: 'all_employees', approvalMode: 'none', reason: 'Recognize employee service' });
     await activateBenefitProgram({ orgId: org.orgId, actorId: reader, programId: program.id,
       reason: 'Open employee service recognition' });

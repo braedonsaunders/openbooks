@@ -300,10 +300,14 @@ test(
       const stub = result.slips.find((slip) => slip.employeePartyId === fx.qcStubEmployee);
       assert.ok(stub);
       assert.equal(stub.boxA, "40000.0000");
-      const refused = await editPromise;
-      assert.equal(refused.created, 0); assert.equal(refused.updated, 0);
-      assert.equal(refused.errors.length, 1);
-      assert.match(refused.errors[0]!.message, /committed|locked|source-qualified/i);
+      await assert.rejects(editPromise, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /committed|locked|source-qualified/i);
+        const refused = (error as Error & { result: { created: number; updated: number; errors: unknown[] } }).result;
+        assert.equal(refused.created, 0); assert.equal(refused.updated, 0);
+        assert.equal(refused.errors.length, 1);
+        return true;
+      });
       const retained = await withOrgContext(fx.orgId, () => readEmployeeCanadianOpeningReportingSource(db, {
         orgId: fx.orgId, employeePartyId: fx.qcStubEmployee, taxYear: 2026 }));
       assert.deepEqual(retained, original);

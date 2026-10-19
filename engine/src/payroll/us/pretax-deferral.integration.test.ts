@@ -663,7 +663,7 @@ test(
       await assert.rejects(db.execute(sql`update payroll_opening_account_bases set insurable_ytd=0
         where org_id=${fx.orgId} and employee_party_id=${employee} and program_key='us_sui'`),
         (error: unknown) => {
-          assert.match(guardRefusalMessage(error) ?? '', /Source-qualified statutory opening amounts must be preserved/);
+          assert.match(guardRefusalMessage(error, { includeRaisedCheckViolations: true }) ?? '', /Source-qualified statutory opening amounts must be preserved/);
           return true;
         });
       const run = await createPayRun({

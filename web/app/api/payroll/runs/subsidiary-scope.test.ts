@@ -82,7 +82,7 @@ const { GET: getBankFilePanel, POST: postBankFileGenerate } = (await import(bank
 const { POST: postBankFileRelease } = (await import(bankFileReleaseUrl)) as typeof import("./[id]/bank-file/[fileId]/route.ts");
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment } = await import(
+const { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment, grantScratchPermissions } = await import(
   "@openbooks/engine/testing/fixtures"
 );
 
@@ -195,6 +195,10 @@ test(
       const actors = await withBypass(() => seedFlowActors(orgId));
       const adminId = actors.adminId; // unrestricted caller
       const actorAId = actors.submitterId; // subsidiary-A-restricted caller
+      await withBypass(async () => {
+        await grantScratchPermissions(orgId, adminId, ['payroll.read', 'payroll.run']);
+        await grantScratchPermissions(orgId, actorAId, ['payroll.read', 'payroll.run']);
+      });
 
       // Fixture seeds — including the engine-assisted run/file setup — run
       // under the test bypass. The route helpers below run each call inside
@@ -367,10 +371,10 @@ const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle")
         assert.equal(stubs.status, 404);
         assert.equal(await stubs.text(), JSON.stringify({ error: "no stubs to print" }));
         const cheques = await chequesPdf(runA.documentId);
-        assert.equal(cheques.status, 409, "cheque printing reaches its configuration refusal after scope authorization");
+        assert.equal(cheques.status, 409, "cheque printing reaches its lifecycle refusal after scope authorization");
         assert.equal(
           await cheques.text(),
-          JSON.stringify({ error: "Configure an active payroll cheque template in PDF templates before printing payroll cheques" }),
+          JSON.stringify({ error: "commit the pay run before printing its cheques" }),
         );
         const panel = await bankPanel(runA.documentId);
         const panelBody = (await panel.json()) as { entitlement: { refusal: { code: string } } };
