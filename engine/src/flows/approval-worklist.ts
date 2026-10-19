@@ -7,6 +7,7 @@ import {
   worklistGateKindCounts,
   worklistGates,
   type GateSubsidiaryScope,
+  type WorklistAudience,
   type WorklistGate,
 } from "./gates.ts";
 import {
@@ -15,6 +16,8 @@ import {
   worklistDirectTimesheets,
   type DirectTimesheetWeek,
 } from "./timesheet-direct.ts";
+
+export type { WorklistAudience } from "./gates.ts";
 
 /**
  * The unified approvals worklist. Flows gates are only one approval
@@ -36,6 +39,14 @@ import {
  * - the caller's own submissions are excluded everywhere (separation of
  *   duties is enforced again at decide time);
  * - restricted subsidiary sets filter fail-closed, mirroring the gate path.
+ *
+ * The paged reader also serves the organization audience — the oversight
+ * view of every pending, live item in the organization, whoever it is
+ * assigned to or submitted by. It reads the same legs through the same
+ * liveness, legal-entity, kind, search and overdue predicates; only the
+ * assignee condition and the own-submission exclusions are dropped. Whether
+ * the viewer may decide a given row is resolved per row by the caller, never
+ * implied by its presence in that view.
  */
 
 export interface WorklistDocument {
@@ -80,6 +91,8 @@ export interface WorklistTimesheet {
   weekStart: string;
   submittedAt: string | null;
   createdAt: string;
+  /** False when separation of duties bars the reader as the week's timekeeper. */
+  actorMayApprove: boolean;
 }
 
 export type UnifiedApproval =
@@ -132,6 +145,7 @@ interface LegOpts {
   prefix?: number;
   kind?: string;
   query?: string;
+  audience?: WorklistAudience;
 }
 
 function worklistDocumentWhere(
@@ -140,12 +154,13 @@ function worklistDocumentWhere(
   allowedSubsidiaryIds: GateSubsidiaryScope,
   kind?: string,
   query?: string,
+  audience?: WorklistAudience,
 ): SQL {
   const needle = query?.trim().toLowerCase()
   return sql`d.org_id = ${orgId} and d.status = 'pending_approval'
     and d.void_requested_at is null
-    and (d.submitted_by is null or d.submitted_by <> ${userId})
-    and (d.created_by is null or d.created_by <> ${userId})
+    ${audience === "organization" ? sql`` : sql`and (d.submitted_by is null or d.submitted_by <> ${userId})
+    and (d.created_by is null or d.created_by <> ${userId})`}
     and not exists (
       select 1 from flow_gates g
        where g.org_id = d.org_id and g.subject_id = d.id and g.status = 'pending'
@@ -175,7 +190,7 @@ async function worklistDocuments(
            d.submitted_at::text as "submittedAt", d.created_at::text as "createdAt"
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
-     where ${worklistDocumentWhere(orgId, userId, allowedSubsidiaryIds, opts?.kind, opts?.query)}
+     where ${worklistDocumentWhere(orgId, userId, allowedSubsidiaryIds, opts?.kind, opts?.query, opts?.audience)}
      order by coalesce(d.submitted_at, d.created_at), d.id
      ${opts?.prefix != null ? sql`limit ${opts.prefix}` : sql``}`)).rows;
   return rows
@@ -189,11 +204,12 @@ async function worklistDocumentKindCounts(
   allowedSubsidiaryIds: GateSubsidiaryScope,
   kind?: string,
   query?: string,
+  audience?: WorklistAudience,
 ): Promise<Map<string, number>> {
   const rows = (await db.execute<{ kind: string; n: string }>(sql`
     select d.kind as kind, count(*) as n
       from documents d
-     where ${worklistDocumentWhere(orgId, userId, allowedSubsidiaryIds, kind, query)}
+     where ${worklistDocumentWhere(orgId, userId, allowedSubsidiaryIds, kind, query, audience)}
      group by d.kind`)).rows;
   return new Map(rows.map((row) => [row.kind, Number(row.n)]));
 }
@@ -203,12 +219,12 @@ async function worklistDocumentKindCounts(
  * flow gate. Deliberately unfiltered by subsidiary — the budgets module
  * itself scopes by grant, not by line subsidiary, so the inbox mirrors the
  * drawer the row links to. The submitter never sees their own submission
- * here, mirroring the document leg.
+ * in their own worklist, mirroring the document leg.
  */
-function worklistBudgetWhere(orgId: string, userId: string, kind?: string, query?: string): SQL {
+function worklistBudgetWhere(orgId: string, userId: string, kind?: string, query?: string, audience?: WorklistAudience): SQL {
   const needle = query?.trim().toLowerCase()
   return sql`bs.org_id = ${orgId} and bs.status = 'pending_approval'
-    and (bs.submitted_by is null or bs.submitted_by <> ${userId})
+    ${audience === "organization" ? sql`` : sql`and (bs.submitted_by is null or bs.submitted_by <> ${userId})`}
     and not exists (
       select 1 from flow_gates g
        where g.org_id = bs.org_id and g.subject_id = bs.id and g.status = 'pending'
@@ -232,19 +248,19 @@ async function worklistBudgets(
            bs.created_at::text as "createdAt"
       from budget_scenarios bs
       left join budget_lines bl on bl.scenario_id = bs.id and bl.org_id = bs.org_id
-     where ${worklistBudgetWhere(orgId, userId, opts?.kind, opts?.query)}
+     where ${worklistBudgetWhere(orgId, userId, opts?.kind, opts?.query, opts?.audience)}
      group by bs.id
      order by coalesce(bs.submitted_at, bs.created_at), bs.id
      ${opts?.prefix != null ? sql`limit ${opts.prefix}` : sql``}`)).rows;
   return rows.map((row) => ({ kind: "budget" as const, ...row }));
 }
 
-async function worklistBudgetCount(orgId: string, userId: string, kind?: string, query?: string): Promise<number> {
+async function worklistBudgetCount(orgId: string, userId: string, kind?: string, query?: string, audience?: WorklistAudience): Promise<number> {
   const rows = (await db.execute<{ n: string }>(sql`
     select count(*) as n from (
       select bs.id
         from budget_scenarios bs
-       where ${worklistBudgetWhere(orgId, userId, kind, query)}
+       where ${worklistBudgetWhere(orgId, userId, kind, query, audience)}
        group by bs.id
     ) s`)).rows;
   return Number(rows[0]?.n ?? 0);
@@ -253,6 +269,12 @@ async function worklistBudgetCount(orgId: string, userId: string, kind?: string,
 export interface WorklistPageScope extends WorklistScope {
   /** Gate + gateless-document legs ride the flows approval grant. */
   includeFlows?: boolean;
+  /**
+   * `caller` (the default): the caller's own worklist. `organization`: every
+   * pending, live item in the organization inside the caller's legal-entity
+   * boundary, whatever its assignee and whoever submitted it.
+   */
+  audience?: WorklistAudience;
 }
 
 export interface WorklistPageResult {
@@ -281,6 +303,7 @@ function toWorklistTimesheet(week: DirectTimesheetWeek): WorklistTimesheet {
     weekStart: week.week_start,
     submittedAt: week.submitted_at,
     createdAt: week.created_at,
+    actorMayApprove: week.actor_may_approve,
   };
 }
 
@@ -296,18 +319,19 @@ function worklistCounts(
   scope: WorklistPageScope,
   { kind, query, overdue }: Pick<WorklistPage, "kind" | "query" | "overdue"> = {},
 ): Promise<[Map<string, number>, Map<string, number>, number, number]> {
+  const audience = scope.audience ?? "caller";
   return Promise.all([
     scope.includeFlows !== false
-      ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, kind, query, overdue)
+      ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, kind, query, overdue, audience)
       : Promise.resolve(new Map<string, number>()),
     scope.includeFlows !== false && !overdue
-      ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, kind, query)
+      ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, kind, query, audience)
       : Promise.resolve(new Map<string, number>()),
     scope.includeBudgets === true && (kind == null || kind === "budget_scenario") && !overdue
-      ? worklistBudgetCount(orgId, userId, kind, query)
+      ? worklistBudgetCount(orgId, userId, kind, query, audience)
       : Promise.resolve(0),
     scope.includeTimesheets === true && !overdue
-      ? worklistDirectTimesheetCount(db, orgId, userId, scope.allowedSubsidiaryIds, kind, query)
+      ? worklistDirectTimesheetCount(db, orgId, userId, scope.allowedSubsidiaryIds, kind, query, audience)
       : Promise.resolve(0),
   ]);
 }
@@ -367,21 +391,22 @@ export async function worklistApprovalsPage(
   const includeFlows = scope.includeFlows !== false;
   const includeBudgets = scope.includeBudgets === true;
   const includeTimesheets = scope.includeTimesheets === true;
+  const audience = scope.audience ?? "caller";
   const skipBudgets = filtered && kind !== "budget_scenario";
   const skipTimesheets = filtered && kind !== DIRECT_TIMESHEET_UNION_KIND;
 
   const [gateRows, documentRows, budgetRows, timesheetRows] = await Promise.all([
     includeFlows
-      ? worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, { prefix, kind, query, overdue })
+      ? worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, { prefix, kind, query, overdue, audience })
       : Promise.resolve([]),
     includeFlows && !overdue
-      ? worklistDocuments(orgId, userId, scope.allowedSubsidiaryIds, { prefix, kind, query })
+      ? worklistDocuments(orgId, userId, scope.allowedSubsidiaryIds, { prefix, kind, query, audience })
       : Promise.resolve([]),
     includeBudgets && !skipBudgets && !overdue
-      ? worklistBudgets(orgId, userId, { prefix, kind, query })
+      ? worklistBudgets(orgId, userId, { prefix, kind, query, audience })
       : Promise.resolve([]),
     includeTimesheets && !skipTimesheets && !overdue
-      ? worklistDirectTimesheets(db, orgId, userId, scope.allowedSubsidiaryIds, { prefix, kind, query })
+      ? worklistDirectTimesheets(db, orgId, userId, scope.allowedSubsidiaryIds, { prefix, kind, query, audience })
       : Promise.resolve([]),
   ]);
   const [gateCounts, documentCounts, budgetCount, timesheetCount] = await worklistCounts(orgId, userId, scope, { kind, query, overdue });
@@ -390,14 +415,14 @@ export async function worklistApprovalsPage(
   const [chipGateCounts, chipDocumentCounts, chipBudgetCount, chipTimesheetCount] = filtered
     ? await Promise.all([
         includeFlows
-          ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, undefined, query, overdue)
+          ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, undefined, query, overdue, audience)
           : Promise.resolve(new Map<string, number>()),
         includeFlows && !overdue
-          ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, undefined, query)
+          ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, undefined, query, audience)
           : Promise.resolve(new Map<string, number>()),
-        includeBudgets && !overdue ? worklistBudgetCount(orgId, userId, undefined, query) : Promise.resolve(0),
+        includeBudgets && !overdue ? worklistBudgetCount(orgId, userId, undefined, query, audience) : Promise.resolve(0),
         includeTimesheets && !overdue
-          ? worklistDirectTimesheetCount(db, orgId, userId, scope.allowedSubsidiaryIds, undefined, query)
+          ? worklistDirectTimesheetCount(db, orgId, userId, scope.allowedSubsidiaryIds, undefined, query, audience)
           : Promise.resolve(0),
       ])
     : [gateCounts, documentCounts, budgetCount, timesheetCount];

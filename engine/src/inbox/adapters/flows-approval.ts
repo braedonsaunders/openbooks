@@ -51,7 +51,6 @@ async function gateItem(gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["g
   if (INBOX_OWNED_GATE_SUBJECTS.has(gate.subjectKind)) return null;
   const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
   const onBehalf = gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : "";
-  const waitingSince = new Date(gate.createdAt).toISOString().slice(0, 10);
   // Resolve the separation-of-duties outcome in advance through the same
   // native gate check the decide path enforces: a submitter/maker the
   // gate's prevent-self-approval excludes sees "Awaiting another approver"
@@ -62,10 +61,11 @@ async function gateItem(gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["g
     kind: "flows_approval",
     title: gate.title,
     subtitle: awaitingAnother
-      ? `Awaiting another approver — ${gate.subjectLabel ?? gate.subjectKind}${onBehalf} — waiting since ${waitingSince}`
-      : `${gate.subjectLabel ?? gate.subjectKind}${onBehalf} — waiting since ${waitingSince}`,
+      ? `Awaiting another approver — ${gate.subjectLabel ?? gate.subjectKind}${onBehalf}`
+      : `${gate.subjectLabel ?? gate.subjectKind}${onBehalf}`,
     dueAt,
     createdAt: new Date(gate.createdAt).toISOString(),
+    waitingSince: new Date(gate.createdAt).toISOString(),
     priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
     subjectHref: gate.href ?? "/inbox",
     actions: awaitingAnother

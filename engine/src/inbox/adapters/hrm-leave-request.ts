@@ -35,9 +35,10 @@ export const hrmLeaveRequestAdapter: InboxAdapter = {
         id: inboxItemId("hrm_leave_request", `gate:${gate.id}`),
         kind: "hrm_leave_request",
         title: gate.title,
-        subtitle: `leave approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
+        subtitle: `leave approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""}`,
         dueAt,
         createdAt: new Date(gate.createdAt).toISOString(),
+        waitingSince: new Date(gate.createdAt).toISOString(),
         priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/hrm/leave",
         actions: [

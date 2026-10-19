@@ -1,7 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
-import type { GateSubsidiaryScope } from "./gates.ts";
+import type { GateSubsidiaryScope, WorklistAudience } from "./gates.ts";
 import { TIMESHEET_WEEK_SUBJECT_KIND } from "./timesheet-weeks-adapter.ts";
 
 /**
@@ -22,7 +22,9 @@ import { TIMESHEET_WEEK_SUBJECT_KIND } from "./timesheet-weeks-adapter.ts";
  * while the org's time-approval policy prevents self-approval (the default
  * when no policy row exists), so their own weeks never inflate the badge.
  * Single-id resolution (the act path's re-check) skips the self exclusion
- * so a barred week reports its precise refusal instead of "not found".
+ * so a barred week reports its precise refusal instead of "not found". The
+ * organization audience (the oversight view of every waiting week) skips
+ * it too, and each row reports whether the actor may decide it.
  */
 
 /**
@@ -38,6 +40,13 @@ export type DirectTimesheetWeek = {
   created_at: string;
   entries: number;
   hours: string;
+  /**
+   * The actor may decide this week under the org's time-approval policy:
+   * false only when separation of duties bars them as its timekeeper. The
+   * caller's own listing excludes those weeks, so there it is always true;
+   * the organization listing keeps them and reports the bar per row.
+   */
+  actor_may_approve: boolean;
 };
 
 export interface DirectTimesheetWindow {
@@ -46,6 +55,12 @@ export interface DirectTimesheetWindow {
   query?: string;
   /** Resolve one week by id for the act path (skips the self exclusion). */
   id?: string;
+  /**
+   * `organization` lists every gateless submitted week in scope, the
+   * actor's own included (each row reports actor_may_approve);
+   * `caller` (the default) applies the self exclusion.
+   */
+  audience?: WorklistAudience;
 }
 
 function directTimesheetWhere(
@@ -78,9 +93,12 @@ function directTimesheetWhere(
     ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}`;
 }
 
-/** The shared SoD exclusion, applied to every listing/count read. */
-function directTimesheetSelfExclusion(orgId: string, actorId: string): SQL {
-  return sql`and (
+/**
+ * The shared SoD condition: the actor may decide the week unless the org's
+ * time-approval policy prevents self-approval and the week is their own.
+ */
+function directTimesheetActorMayApprove(orgId: string, actorId: string): SQL {
+  return sql`(
     not coalesce((
       select prevent_self_approval from time_approval_policies
        where org_id = ${orgId} and is_active
@@ -94,8 +112,15 @@ function directTimesheetSelfExclusion(orgId: string, actorId: string): SQL {
   )`;
 }
 
-function directTimesheetColumns(): SQL {
-  return sql`w.id::text as id, w.employee_party_id::text as employee_party_id,
+/** The shared SoD exclusion, applied to every caller listing/count read. */
+function directTimesheetSelfExclusion(orgId: string, actorId: string, audience?: WorklistAudience): SQL {
+  if (audience === "organization") return sql``;
+  return sql`and ${directTimesheetActorMayApprove(orgId, actorId)}`;
+}
+
+function directTimesheetColumns(orgId: string, actorId: string): SQL {
+  return sql`${directTimesheetActorMayApprove(orgId, actorId)} as actor_may_approve,
+    w.id::text as id, w.employee_party_id::text as employee_party_id,
     p.display_name as person_name, w.week_start::text as week_start,
     w.submitted_at::text as submitted_at, w.created_at::text as created_at,
     (select count(*)::int from time_entries te
@@ -116,11 +141,11 @@ export async function worklistDirectTimesheets(
   window?: DirectTimesheetWindow,
 ): Promise<DirectTimesheetWeek[]> {
   const rows = (await exec.execute<DirectTimesheetWeek>(sql`
-    select ${directTimesheetColumns()}
+    select ${directTimesheetColumns(orgId, actorId)}
       from timesheet_weeks w
       join parties p on p.org_id = w.org_id and p.id = w.employee_party_id
      where ${directTimesheetWhere(orgId, actorId, allowedSubsidiaryIds, window?.kind, window?.query, window?.id)}
-     ${window?.id ? sql`` : directTimesheetSelfExclusion(orgId, actorId)}
+     ${window?.id ? sql`` : directTimesheetSelfExclusion(orgId, actorId, window?.audience)}
      order by w.submitted_at nulls last, w.week_start, w.id
      ${window?.prefix != null ? sql`limit ${window.prefix}` : sql``}
   `)).rows;
@@ -134,13 +159,14 @@ export async function worklistDirectTimesheetCount(
   allowedSubsidiaryIds: GateSubsidiaryScope,
   kind?: string,
   query?: string,
+  audience?: WorklistAudience,
 ): Promise<number> {
   const rows = (await exec.execute<{ n: string }>(sql`
     select count(*) as n
       from timesheet_weeks w
       join parties p on p.org_id = w.org_id and p.id = w.employee_party_id
      where ${directTimesheetWhere(orgId, actorId, allowedSubsidiaryIds, kind, query)}
-     ${directTimesheetSelfExclusion(orgId, actorId)}
+     ${directTimesheetSelfExclusion(orgId, actorId, audience)}
   `)).rows;
   return Number(rows[0]?.n ?? 0);
 }

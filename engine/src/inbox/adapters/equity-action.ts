@@ -39,7 +39,6 @@ async function equityGates(ctx: InboxListContext): Promise<WorklistGate[]> {
 
 async function toItem(gate: WorklistGate, ctx: InboxListContext): Promise<InboxItem> {
   const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
-  const waitingSince = new Date(gate.createdAt).toISOString().slice(0, 10);
   const onBehalf = gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : "";
   const subject = gate.subjectLabel ?? "Equity action";
   // The same separation-of-duties check the decision enforces, resolved in
@@ -50,10 +49,11 @@ async function toItem(gate: WorklistGate, ctx: InboxListContext): Promise<InboxI
     kind: "equity_action",
     title: gate.title,
     subtitle: awaitingAnother
-      ? `Awaiting another approver — ${subject}${onBehalf} — waiting since ${waitingSince}`
-      : `${subject}${onBehalf} — waiting since ${waitingSince}`,
+      ? `Awaiting another approver — ${subject}${onBehalf}`
+      : `${subject}${onBehalf}`,
     dueAt,
     createdAt: new Date(gate.createdAt).toISOString(),
+    waitingSince: new Date(gate.createdAt).toISOString(),
     priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
     subjectHref: gate.href ?? `/equity?request=${gate.subjectId}`,
     actions: awaitingAnother

@@ -40,6 +40,12 @@ export interface InboxItem {
    */
   readonly dueAt: string | null;
   readonly createdAt: string;
+  /**
+   * When the work started waiting on its approver, as an ISO instant, for
+   * items that wait on a decision. Surfaces render it in the viewer's
+   * locale and time zone; it never rides inside the free-text subtitle.
+   */
+  readonly waitingSince?: string | null;
   readonly priority: InboxPriority;
   readonly subjectHref: string;
   readonly actions: readonly InboxActionDef[];

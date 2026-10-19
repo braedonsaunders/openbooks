@@ -5,7 +5,7 @@ import { db, pool, schema, withOrg, withBypassContext, withOrgContext, withTrans
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
 import { DOCUMENT_FLOW_KINDS } from "./subject-profiles.ts";
-import { resolveSubjectSubsidiaries } from "./subject-scope.ts";
+import { resolveSubjectSubsidiaries, subjectSubsidiarySql } from "./subject-scope.ts";
 import { CLOSE_RUN_SUBJECT_KIND, closeRunsFlowAdapter } from "./close-runs-adapter.ts";
 import { MANUFACTURING_BOM_APPROVAL_OPERATION, MANUFACTURING_LOSS_DISPOSITION_OPERATION, MANUFACTURING_ROUTING_APPROVAL_OPERATION, MANUFACTURING_SCRAP_RESTATEMENT_OPERATION, MANUFACTURING_STANDARD_ROLLUP_OPERATION } from "../platform/financial-changes.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -1125,29 +1125,54 @@ export interface WorklistGatePage {
   kind?: string;
   query?: string;
   overdue?: boolean;
+  /**
+   * Whose gates the leg reads. `caller` (the default) is the caller's own
+   * worklist: gates assigned to them, to a role they hold, or delegated to
+   * them. `organization` is every pending, live gate in the organization
+   * inside the caller's legal-entity boundary, whatever its assignee — the
+   * oversight view. Both share the liveness, scope, kind, search and
+   * overdue predicates, so the two readings differ only in the assignee
+   * condition.
+   */
+  audience?: WorklistAudience;
 }
 
+/** Whose approvals a worklist read covers (see WorklistGatePage.audience). */
+export type WorklistAudience = "caller" | "organization";
+
 /**
- * SQL pre-filter reproducing gateSubsidiaryScopeAllows for the rows the
- * documents join already carries an entity for, plus each custom scope's
- * own worklist predicate. Other non-document subjects (d.id is null) pass
- * through to resolveWorklistSubsidiaries + the JS filter below — the
- * predicate drops in SQL only what the JS filter would drop, so full and
- * paged reads return the same rows.
+ * SQL pre-filter reproducing gateSubsidiaryScopeAllows exactly: a document
+ * subject by its own entity, every other subject by the owner its kind's
+ * declared scope names (subjectSubsidiarySql — the same owners
+ * resolveSubjectSubsidiaries returns), and custom scopes by their own
+ * worklist predicate. A subject with no provable entity fails closed. Custom
+ * scopes without a worklist predicate pass through to
+ * resolveWorklistSubsidiaries + the JS filter, so the predicate drops in SQL
+ * only what the JS filter would drop: rows, page windows and kind counts all
+ * read the same boundary.
  */
 function worklistGateScopeSql(allowedSubsidiaryIds: GateSubsidiaryScope): SQL {
   if (allowedSubsidiaryIds == null) return sql``;
   const ids = JSON.stringify([...allowedSubsidiaryIds]);
-  const predicates = listFlowSubjectProfiles().flatMap(({ subjectKind }) => {
+  const scoped = listFlowSubjectProfiles().flatMap(({ subjectKind }) => {
     const scope = getFlowAdapter(subjectKind)?.scope;
-    return scope?.via === "custom" && scope.worklistPredicate
-      ? [{ subjectKind, predicate: scope.worklistPredicate(ids) }]
-      : [];
+    return scope ? [{ subjectKind, scope }] : [];
   });
-  const filteredKinds = JSON.stringify(predicates.map((entry) => entry.subjectKind));
+  const predicates = scoped.flatMap(({ subjectKind, scope }) =>
+    scope.via === "custom" && scope.worklistPredicate
+      ? [{ subjectKind, predicate: scope.worklistPredicate(ids) }]
+      : []);
+  const unfilteredCustomKinds = JSON.stringify(scoped
+    .filter(({ scope }) => scope.via === "custom" && !scope.worklistPredicate)
+    .map(({ subjectKind }) => subjectKind));
+  const owner = subjectSubsidiarySql(
+    scoped.filter(({ scope }) => scope.via !== "custom"),
+    { kind: sql`g.subject_kind`, id: sql`g.subject_id`, org: sql`g.org_id` },
+  );
   return sql`and (
-    (d.id is null and g.subject_kind not in (select jsonb_array_elements_text(${filteredKinds}::jsonb)))
-    or d.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
+    d.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
+    or (d.id is null and ${owner} in (select jsonb_array_elements_text(${ids}::jsonb)::uuid))
+    or (d.id is null and g.subject_kind in (select jsonb_array_elements_text(${unfilteredCustomKinds}::jsonb)))
     ${sql.join(predicates.map(({ subjectKind, predicate }) =>
       sql`or (g.subject_kind = ${subjectKind} and ${predicate})`), sql` `)}
   )`;
@@ -1219,6 +1244,26 @@ function worklistDirectWhere(
     ${worklistGateOverdueSql(overdue)}`;
 }
 
+/**
+ * Every pending, live gate in the organization, whatever its assignee, under
+ * the same liveness, legal-entity, kind, search and overdue predicates the
+ * caller's worklist applies.
+ */
+function worklistOrganizationWhere(
+  orgId: string,
+  allowedSubsidiaryIds: GateSubsidiaryScope,
+  kind: string | undefined,
+  query: string | undefined,
+  overdue: boolean | undefined,
+): SQL {
+  return sql`g.org_id = ${orgId} and g.status = 'pending'
+    ${worklistLiveGateSql()}
+    ${worklistGateScopeSql(allowedSubsidiaryIds)}
+    ${worklistGateKindSql(kind)}
+    ${worklistGateSearchSql(query)}
+    ${worklistGateOverdueSql(overdue)}`;
+}
+
 export async function worklistGates(
   orgId: string,
   userId: string,
@@ -1236,10 +1281,24 @@ export async function worklistGates(
    */
   page?: WorklistGatePage,
 ): Promise<WorklistGate[]> {
-  const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
   const kind = page?.kind;
   const query = page?.query;
   const overdue = page?.overdue;
+  if (page?.audience === "organization") {
+    // The oversight reading has no assignee condition and so no delegation
+    // arm: a delegated gate is listed once, under its current assignee.
+    const rows = (await db.execute<Record<string, unknown>>(sql`
+      ${WORKLIST_SELECT}
+       where ${worklistOrganizationWhere(orgId, allowedSubsidiaryIds, kind, query, overdue)}
+       order by g.created_at, g.id
+       limit ${page.prefix}
+    `)).rows.map((row) => mapWorklistRow(row, null));
+    await resolveWorklistSubsidiaries(orgId, rows, allowedSubsidiaryIds);
+    return allowedSubsidiaryIds != null
+      ? rows.filter((g) => gateSubsidiaryScopeAllows(allowedSubsidiaryIds, g.subsidiaryId))
+      : rows;
+  }
+  const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
   // The id tiebreaker pins page boundaries: without a unique order key
   // Postgres may return tied rows in any order and rows duplicate or drop
   // across pages (same rule as the document list order clause).
@@ -1295,7 +1354,8 @@ export async function worklistGates(
 
 /**
  * Per-kind totals for the gate leg under the exact predicates worklistGates
- * applies (direct + delegated-minus-direct, scope, kind). The approvals page
+ * applies (direct + delegated-minus-direct, scope, kind; or, for the
+ * organization audience, every live gate in scope). The approvals page
  * derives its total and kind chips from these aggregates instead of counting
  * fetched rows, so the counts stay exact while the rows stay windowed.
  */
@@ -1307,8 +1367,8 @@ export async function worklistGateKindCounts(
   kind?: string,
   query?: string,
   overdue?: boolean,
+  audience: WorklistAudience = "caller",
 ): Promise<Map<string, number>> {
-  const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
   const counts = new Map<string, number>();
   const accumulate = (rows: Array<{ kind: string; n: string }>) => {
     for (const row of rows) counts.set(row.kind, (counts.get(row.kind) ?? 0) + Number(row.n));
@@ -1320,6 +1380,16 @@ export async function worklistGateKindCounts(
       left join close_runs cr on cr.id = g.subject_id and cr.org_id = g.org_id and g.subject_kind = ${CLOSE_RUN_SUBJECT_KIND}
       left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id
       ${WORKLIST_SUBJECT_JOINS}`;
+  if (audience === "organization") {
+    accumulate((await db.execute<{ kind: string; n: string }>(sql`
+      select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
+        ${baseJoins}
+       where ${worklistOrganizationWhere(orgId, allowedSubsidiaryIds, kind, query, overdue)}
+       group by coalesce(d.kind, g.subject_kind)
+    `)).rows);
+    return counts;
+  }
+  const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
   accumulate((await db.execute<{ kind: string; n: string }>(sql`
     select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
       ${baseJoins}

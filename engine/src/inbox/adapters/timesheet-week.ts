@@ -93,9 +93,10 @@ export const timesheetWeekAdapter: InboxAdapter = {
         id: inboxItemId("timesheet_week", `gate:${gate.id}`),
         kind: "timesheet_week",
         title: gate.title,
-        subtitle: `timesheet approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
+        subtitle: `timesheet approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""}`,
         dueAt,
         createdAt: new Date(gate.createdAt).toISOString(),
+        waitingSince: new Date(gate.createdAt).toISOString(),
         priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/timesheets",
         actions: [

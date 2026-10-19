@@ -30,9 +30,10 @@ export const expenseReportAdapter: InboxAdapter = {
           id: inboxItemId("expense_report", `gate:${gate.id}`),
           kind: "expense_report",
           title: gate.title,
-          subtitle: `expense approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
+          subtitle: `expense approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""}`,
           dueAt,
           createdAt: new Date(gate.createdAt).toISOString(),
+          waitingSince: new Date(gate.createdAt).toISOString(),
           priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
           subjectHref: gate.href ?? "/expenses/reports",
           actions: [

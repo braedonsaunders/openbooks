@@ -88,10 +88,11 @@ function toItem(ctx: InboxListContext, row: DirectApprovalWeek): InboxItem {
     kind: 'timesheet_approval',
     title: `Approve timesheet — ${person}, week of ${row.week_start}`,
     subtitle: row.entries === 0
-      ? `no-hours declaration submitted ${submittedAt.slice(0, 10)}`
-      : `${row.entries} submitted ${row.entries === 1 ? 'line' : 'lines'} · ${row.hours}h — waiting since ${submittedAt.slice(0, 10)}`,
+      ? 'no-hours declaration'
+      : `${row.entries} submitted ${row.entries === 1 ? 'line' : 'lines'} · ${row.hours}h`,
     dueAt: null,
     createdAt: submittedAt,
+    waitingSince: submittedAt,
     priority: priorityForDueDate(null, ctx.asOf, ctx.timeZone),
     subjectHref: `/timesheets?timesheet=${row.employee_party_id}:${row.week_start}`,
     actions: [{ key: 'approve', label: 'Approve', style: 'primary' as const, needsReason: false }],
