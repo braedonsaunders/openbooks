@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { Button, FieldLabel, Input, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import { DateField } from '../../../components/date-field'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 export interface ReceiptPrefillLine {
   sourceLineId: string
@@ -51,7 +52,7 @@ export function GoodsReceiptForm({ orderId, apiBase, warehouses, onSubmit, onClo
   const t = useTranslations('purchaseOrders.shared')
   const tCommon = useTranslations('common')
   const [prefill, setPrefill] = React.useState<Prefill | null>(null)
-  const [prefillFailed, setPrefillFailed] = React.useState(false)
+  const [prefillError, setPrefillError] = React.useState<string | null>(null)
   const [reloadNonce, setReloadNonce] = React.useState(0)
   const [receiptDate, setReceiptDate] = React.useState('')
   const [quantities, setQuantities] = React.useState<Record<string, string>>({})
@@ -64,31 +65,36 @@ export function GoodsReceiptForm({ orderId, apiBase, warehouses, onSubmit, onClo
   React.useEffect(() => {
     let cancelled = false
     async function load() {
-      setPrefillFailed(false)
+      setPrefillError(null)
       try {
         const res = await fetch(`${apiBase}/${orderId}/receive`)
-        if (!res.ok || cancelled) {
-          if (!cancelled) setPrefillFailed(true)
+        if (!res.ok) {
+          const message = await readApiErrorMessage(res, t('receive.prefillFailed'))
+          if (!cancelled) setPrefillError(message)
+          return
+        }
+        if (cancelled) {
           return
         }
         const data = (await res.json()) as Partial<Prefill>
         if (cancelled) return
         if (typeof data.receiptDate !== 'string' || !Array.isArray(data.lines)) {
-          setPrefillFailed(true)
+          setPrefillError(t('receive.prefillFailed'))
           return
         }
         setPrefill(data as Prefill)
+        setPrefillError(null)
         setReceiptDate(data.receiptDate)
         setQuantities(Object.fromEntries(data.lines.map((line) => [line.sourceLineId, line.remaining])))
       } catch {
-        if (!cancelled) setPrefillFailed(true)
+        if (!cancelled) setPrefillError(t('receive.prefillFailed'))
       }
     }
     void load()
     return () => {
       cancelled = true
     }
-  }, [apiBase, orderId, reloadNonce])
+  }, [apiBase, orderId, reloadNonce, t])
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -180,11 +186,11 @@ export function GoodsReceiptForm({ orderId, apiBase, warehouses, onSubmit, onClo
         >
           <div className="space-y-4 p-6">
             <h2 className="text-lg font-semibold">{t('receive.title')}</h2>
-            {prefill === null && !prefillFailed ? (
+            {prefill === null && prefillError === null ? (
               <p>{tCommon('actions.loading')}</p>
-            ) : prefillFailed || prefill === null ? (
+            ) : prefillError !== null || prefill === null ? (
               <div className="space-y-3">
-                <p role="alert">{t('receive.prefillFailed')}</p>
+                <p role="alert">{prefillError ?? t('receive.prefillFailed')}</p>
                 <div className="flex justify-end gap-2">
                   <Button variant="secondary" onClick={onClose}>{tCommon('actions.cancel')}</Button>
                   <Button onClick={() => setReloadNonce((n) => n + 1)}>{t('saveFailedRetry')}</Button>

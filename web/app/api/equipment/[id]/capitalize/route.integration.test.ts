@@ -82,7 +82,7 @@ const hooks = registerHooks({
   },
 });
 
-const routeUrl = "./route.ts?equipment-capitalization-concurrency-test";
+const routeUrl: string = "./route.ts?equipment-capitalization-concurrency-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, pool } = await import("@openbooks/engine/platform/db");
@@ -199,12 +199,24 @@ test(
       const state = await db.execute<{
         fixed_asset_id: string | null;
         asset_count: number;
+        asset_status: string | null;
+        depreciation_method: string | null;
+        useful_life_months: number | null;
+        schedule_count: number;
       }>(sql`
         select
           (select fixed_asset_id from equipment_units where id = ${fixture.equipmentId}) as fixed_asset_id,
-          (select count(*)::int from fixed_assets where org_id = ${fixture.org.orgId}) as asset_count`);
+          (select count(*)::int from fixed_assets where org_id = ${fixture.org.orgId}) as asset_count,
+          (select status from fixed_assets where id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as asset_status,
+          (select depreciation_method from fixed_assets where id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as depreciation_method,
+          (select useful_life_months from fixed_assets where id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as useful_life_months,
+          (select count(*)::int from depreciation_schedules where asset_id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as schedule_count`);
       assert.equal(state.rows[0]?.fixed_asset_id, winnerBody.assetId, "the winner's id remains linked");
       assert.equal(state.rows[0]?.asset_count, 1, "the race must not duplicate the fixed asset");
+      assert.equal(state.rows[0]?.asset_status, "in_service");
+      assert.equal(state.rows[0]?.depreciation_method, "straight_line");
+      assert.equal(state.rows[0]?.useful_life_months, 60);
+      assert.ok((state.rows[0]?.schedule_count ?? 0) > 0, "an in-service asset must have depreciation schedules");
       routeState.authz = { user: { orgId: fixture.org.orgId, id: fixture.actorId }, permissions: new Set(["*"]), allowedSubsidiaryIds: new Set() };
       const [hidden, missing] = await Promise.all([post(fixture), post(fixture, randomUUID())]);
       assert.deepEqual([hidden.status, missing.status, await hidden.json()], [404, 404, await missing.json()]);

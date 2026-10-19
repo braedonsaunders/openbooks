@@ -6,7 +6,7 @@ import {
 } from "@openbooks/engine/inventory";
 import { DemandPlanningError } from "@openbooks/engine/inventory";
 import { db } from "@openbooks/engine/platform/database";
-import { guardSubsidiaryScope } from "@/lib/authz";
+import { can, guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { planningTransaction } from "../../_transaction";
 import { convertBuyGroup, type BuyConvertLine } from "../../_buy";
@@ -61,10 +61,10 @@ export const POST = defineRoute({
       if (row.action === "buy") buys.push({ row, vendorId: line.vendorId });
       else transfers.push({ row, fromLocationId: line.fromLocationId });
     }
-    if (buys.length > 0 && !authz.permissions.has("ap.create")) {
-      return Response.json({ error: "forbidden", permission: "ap.create", message: "Missing required grant: ap.create." }, { status: 403 });
+    if (buys.length > 0 && !can(authz, "purchase_orders.create")) {
+      return Response.json({ error: "forbidden", permission: "purchase_orders.create", message: "Missing required grant: purchase_orders.create." }, { status: 403 });
     }
-    if (transfers.length > 0 && !authz.permissions.has("items.post")) {
+    if (transfers.length > 0 && !can(authz, "items.post")) {
       return Response.json({ error: "forbidden", permission: "items.post", message: "Missing required grant: items.post." }, { status: 403 });
     }
     const purchaseOrders: Array<{ id: string; supplierId: string; suggestionIds: string[]; replayed: boolean }> = [];

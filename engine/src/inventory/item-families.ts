@@ -60,4 +60,5 @@ export {
   bulkEditVariants,
   detachVariant,
   type BulkEditVariantsInput,
+  type BulkEditVariantsResult,
 } from "./item-family-variants.ts";

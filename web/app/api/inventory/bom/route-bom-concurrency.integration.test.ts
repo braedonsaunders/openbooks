@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -74,7 +75,7 @@ const hooks = registerHooks({
   },
 });
 
-const routeUrl = "./route.ts?bom-route-concurrency-test";
+const routeUrl: string = "./route.ts?bom-route-concurrency-test";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, pool } = await import("@openbooks/engine/platform/db");
@@ -352,6 +353,38 @@ test("GET names component lines from catalog identity and keeps inactive lines a
     };
     assert.equal(datedBody.components.length, 1);
     assert.equal(datedBody.components[0]!.isCurrent, false);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("unprofiled kits offer and save commercial-only recipe components", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Kit Setup Admin", "admin");
+    await authenticate(org.orgId, actorId);
+    const kitId = randomUUID();
+    await db.execute(sql`
+      insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom,
+                         create_plans_on, revenue_allocation, income_account_id)
+      values (${kitId}, ${org.orgId}, 'kit', 'Virtual kit', false, true, '{}'::jsonb,
+              'billing', 'normal', ${org.accounts.revenue})`);
+
+    const detail = await GET(new Request(`http://localhost/api/inventory/bom?assemblyItemId=${kitId}`));
+    assert.equal(detail.status, 200);
+    const body = await detail.json() as { validItems: { id: string }[] };
+    assert.ok(body.validItems.some((item) => item.id === org.items.service));
+    assert.ok(body.validItems.some((item) => item.id === org.items.component));
+    assert.ok(!body.validItems.some((item) => item.id === kitId));
+
+    const saved = await PUT(putRequest({
+      assemblyItemId: kitId,
+      expectedVersion: null,
+      reason: "Add a service component to this kit",
+      components: [{ componentItemId: org.items.service, quantityPer: "1" }],
+    }));
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json() as { componentCount: number }).componentCount, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }

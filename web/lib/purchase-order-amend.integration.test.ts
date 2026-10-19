@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import {
@@ -11,6 +12,8 @@ import {
 } from "@openbooks/engine/testing/fixtures";
 import { submitAndReleaseIfUngated, submitForApproval } from "@openbooks/engine/flows/module";
 import { decideGate } from "@openbooks/engine/testing/flows/gates";
+import { computeLineTaxes } from "@openbooks/engine/tax/tax";
+import { loadTaxProfileConfig, persistLineTaxComponents } from "@openbooks/engine/tax/persist";
 import {
   amendPurchaseOrder,
   PurchaseOrderAmendError,
@@ -33,8 +36,9 @@ async function docState(orgId: string, id: string) {
 }
 
 async function lineState(orgId: string, orderId: string) {
-  const rows = (await db.execute<{ quantity: string; unitPrice: string; amount: string }>(sql`
-    select quantity::text as quantity, unit_price::text as "unitPrice", amount::text as amount
+  const rows = (await db.execute<{ quantity: string; unitPrice: string; amount: string; taxInputAmount: string; taxAmount: string }>(sql`
+    select quantity::text as quantity, unit_price::text as "unitPrice", amount::text as amount,
+           tax_input_amount::text as "taxInputAmount", tax_amount::text as "taxAmount"
       from document_lines where org_id = ${orgId} and document_id = ${orderId}`)).rows;
   return rows[0]!;
 }
@@ -171,6 +175,60 @@ test("a unit-price change re-prices the line and header totals", { skip: !DB }, 
     assert.equal(line.unitPrice, "11.00000000");
     assert.equal(line.amount, "33440.0000");
     assert.equal((await docState(org.orgId, orderId)).total, "33440.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("taxed amendments rebuild tax evidence and enforce the exact cancelled quantity floor", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    const { orderId, lineId } = await seedApprovedPurchaseOrder(org.orgId, actors.submitterId);
+    const taxCodeId = randomUUID();
+    await db.execute(sql`insert into tax_codes (id, org_id, code, name, applies_to, is_active, collected_account_id, paid_account_id)
+      values (${taxCodeId}, ${org.orgId}, 'AMEND-PURCHASE-TAX', 'Amendment purchase tax', 'purchases', true, ${org.accounts.taxOutput}, ${org.accounts.taxInput})`);
+    await db.execute(sql`insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from)
+      values (${org.orgId}, ${taxCodeId}, '10', '2020-01-01')`);
+
+    const tax = computeLineTaxes('1000', await loadTaxProfileConfig(org.orgId, { taxCodeId, taxGroupId: null }, org.date));
+    await db.execute(sql`update documents set status = 'draft' where id = ${orderId} and org_id = ${org.orgId}`);
+    await db.execute(sql`update document_lines
+      set quantity = '100', quantity_fulfilled = '40', quantity_cancelled = '30', unit_price = '10',
+          amount = ${tax.netAmount}, tax_code_id = ${taxCodeId}, tax_input_amount = ${tax.inputAmount}, tax_amount = ${tax.taxTotal}
+      where id = ${lineId} and org_id = ${org.orgId}`);
+    await persistLineTaxComponents(org.orgId, lineId, tax.components, actors.submitterId);
+    await db.execute(sql`update documents set status = 'approved' where id = ${orderId} and org_id = ${org.orgId}`);
+
+    await assert.rejects(
+      amendPurchaseOrder({
+        orderId,
+        orgId: org.orgId,
+        actorId: actors.submitterId,
+        reason: 'reduce below received and cancelled units',
+        lines: [{ lineId, quantity: '69.99999999' }],
+      }),
+      (error: unknown) => error instanceof PurchaseOrderAmendError && error.code === 'applied' && /at least 70\.0000/.test(error.message),
+    );
+
+    const result = await amendPurchaseOrder({
+      orderId,
+      orgId: org.orgId,
+      actorId: actors.submitterId,
+      reason: 'accept the exact remaining purchase quantity',
+      lines: [{ lineId, quantity: '70.00000001', unitPrice: '10.00000001' }],
+    });
+    assert.equal(result.status, 'approved');
+    const line = await lineState(org.orgId, orderId);
+    assert.equal(line.quantity, '70.00000001');
+    assert.equal(line.unitPrice, '10.00000001');
+    assert.equal(line.amount, '700.0000');
+    assert.equal(line.taxInputAmount, '700.0000');
+    assert.equal(line.taxAmount, '70.0000');
+    const components = (await db.execute<{ sequence: number; taxAmount: string }>(sql`
+      select sequence, tax_amount::text as "taxAmount" from document_line_tax_components
+       where org_id = ${org.orgId} and document_line_id = ${lineId} order by sequence`)).rows;
+    assert.deepEqual(components, [{ sequence: 1, taxAmount: '70.0000' }]);
   } finally {
     await dropScratchOrg(org.orgId);
   }

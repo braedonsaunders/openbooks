@@ -40,7 +40,6 @@ export interface BankRuleDrawerPayload extends Record<string, unknown> {
   departments: { value: string; label: string }[]
   locations: { value: string; label: string }[]
   classes: { value: string; label: string }[]
-  taxCodes: { value: string; label: string }[]
   parties: { value: string; label: string }[]
   seedFromLine: { description: string | null; amount: string } | null
 }
@@ -65,7 +64,7 @@ export async function loadBankingRules(
   const openId = pickString(sp.rule)
   const fromLine = pickString(sp.fromLine)
 
-  const [offsetAccounts, reconAccountsRes, departments, locations, classes, taxCodes, parties, open, seedLine] =
+  const [offsetAccounts, reconAccountsRes, departments, locations, classes, parties, open, seedLine] =
     (await Promise.all([
       db.execute<AccountRow>(sql`
         select id, number, name from accounts
@@ -80,7 +79,6 @@ export async function loadBankingRules(
       db.execute<DimensionRow>(sql`select id, code, name from departments where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
       db.execute<DimensionRow>(sql`select id, code, name from locations where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
       db.execute<DimensionRow>(sql`select id, code, name from classes where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
-      db.execute<DimensionRow>(sql`select id, code, name from tax_codes where org_id = ${authz.user.orgId} and is_active order by code limit 500`),
       db.execute<PartyRow>(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`),
       openId && openId !== 'new' && isUuid(openId)
         ? db.execute<BankRuleRow>(sql`
@@ -138,7 +136,6 @@ export async function loadBankingRules(
           departments: dimensionOptions(departments.rows),
           locations: dimensionOptions(locations.rows),
           classes: dimensionOptions(classes.rows),
-          taxCodes: dimensionOptions(taxCodes.rows),
           parties: parties.rows.map((party) => ({ value: party.id, label: party.display_name })),
           seedFromLine: seed,
         }

@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm'
 import { apCaptureReprocessJobId, enqueueApCapture } from '@openbooks/jobs'
 import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { lockScopeRows, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
-import { materializeCapture, type ActivatedCaptureRule } from '@openbooks/engine/payables/ap-capture-service'
+import { CaptureMaterializationError, materializeCapture, type ActivatedCaptureRule } from '@openbooks/engine/payables/ap-capture-service'
 import '../../../../lib/authz';
 import { parseBulkActionIds } from '../../../../lib/api/bulk-ids'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
@@ -15,7 +15,7 @@ import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 const captureIds = z.array(uuidString()).min(1).max(50)
 const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('reject'), ids: captureIds }),
-  z.strictObject({ action: z.literal('materialize'), ids: captureIds }),
+  z.strictObject({ action: z.literal('materialize'), ids: captureIds, priceOverride: z.boolean().optional() }),
   z.strictObject({ action: z.literal('reprocess'), ids: captureIds, confirmDiscardCorrections: z.boolean().optional() }),
 ])
 
@@ -80,7 +80,7 @@ export const POST = defineRoute({
     }
     const action = parsed.action
     const ids = parsed.ids
-    const results: Array<{ id: string; ok: boolean; error?: string; errorCode?: string; corrections?: number; documentId?: string; rulesActivated?: ActivatedCaptureRule[] }> = []
+    const results: Array<{ id: string; ok: boolean; error?: string; errorCode?: string; details?: Record<string, unknown>; corrections?: number; documentId?: string; rulesActivated?: ActivatedCaptureRule[] }> = []
     for (const id of ids) {
       try {
         if (action === 'reject') {
@@ -194,12 +194,20 @@ export const POST = defineRoute({
             orgId: gate.user.orgId,
             captureItemId: id,
             actorId: gate.user.id,
+            priceOverride: parsedBody.data.action === 'materialize' && parsedBody.data.priceOverride === true,
             allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
           })
           results.push({ id, ok: true, documentId: created.documentId, rulesActivated: created.rulesActivated })
         }
       } catch (error) {
-        results.push({ id, ok: false, error: error instanceof Error ? error.message : 'failed' })
+        const captureError = error instanceof CaptureMaterializationError ? error : null
+        results.push({
+          id,
+          ok: false,
+          error: error instanceof Error ? error.message : 'failed',
+          errorCode: captureError?.code,
+          details: captureError?.details,
+        })
       }
     }
     return NextResponse.json({ results })

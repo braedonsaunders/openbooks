@@ -352,6 +352,12 @@ const consolidatedRows = [
                        from documents
                       where org_id = \${org.orgId} and kind = 'journal') as journals,
                     (select count(*)::int
+                       from documents d
+                       join document_lines dl on dl.org_id = d.org_id and dl.document_id = d.id
+                      where d.org_id = \${org.orgId} and d.kind = 'journal'
+                        and d.subsidiary_id = \${org.subsidiaryId}
+                        and dl.subsidiary_id = \${org.subsidiaryId}) as subsidiary_lines,
+                    (select count(*)::int
                        from journal_entries
                       where org_id = \${org.orgId} and status = 'posted') as posted_entries,
                     (select count(*)::int
@@ -366,6 +372,7 @@ const consolidatedRows = [
                 \`);
                 assert.deepEqual(state.rows[0], {
                   journals: 1,
+                  subsidiary_lines: 2,
                   posted_entries: 1,
                   rule_matches: 1,
                   match_status: "matched",

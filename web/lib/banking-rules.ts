@@ -30,8 +30,8 @@ import {
 /**
  * Reconciliation rules — the engine behind the `bank_match_rules` table. A rule
  * tests unmatched imported bank lines against a nested and/or condition tree and
- * either excludes them or auto-creates a categorizing journal (DR the bank
- * account, CR one or more offset lines with their own dimensions / party / tax)
+ * either excludes them or auto-creates an untaxed categorizing journal (DR the bank
+ * account, CR one or more offset lines with their own dimensions and party)
  * which is then matched into the account's open reconciliation. Rules support
  * split lines, boolean grouping, a suggest-vs-auto posture, and a dry-run
  * preview that never touches the ledger. Orchestration lives here;
@@ -211,6 +211,7 @@ async function applyRuleIfStillCurrent(
     if (isCategorizeOutcome(current.outcome) && current.outcome.mode === 'suggest') {
       return 'suggested'
     }
+    if (isCategorizeOutcome(current.outcome)) assertUntaxedSplits(current.outcome.lines)
     const recId = await ensureReconciliation()
     await postCategorizeForLine(orgId, userId, ctx, recId, accountId, line, current)
     return 'categorized'
@@ -319,6 +320,7 @@ export async function applyRuleToLine(
     )
     return
   }
+  if (isCategorizeOutcome(rule.outcome)) assertUntaxedSplits(rule.outcome.lines)
   const recId = opts.reconciliationId ?? (await ensureOpenReconciliation(orgId, userId, line.account_id, scope))
   await postCategorizeForLine(orgId, userId, ctx, recId, line.account_id, line, rule)
 }
@@ -510,6 +512,7 @@ function toPreviewLine(line: BankLine): Omit<PreviewMatch, 'ruleId' | 'ruleName'
 function previewSplit(line: BankLine, outcome: RuleOutcome): Pick<PreviewMatch, 'splitPreview' | 'splitRefusal'> {
   if (outcome.action !== 'categorize') return {}
   try {
+    assertUntaxedSplits(outcome.lines)
     return { splitPreview: resolveSplitAmounts(line.amount, outcome.lines).map((r) => ({ accountId: r.line.accountId, amount: r.amount })) }
   } catch (error) {
     if (error instanceof BankRuleRefusal) return { splitRefusal: error.message }
@@ -523,7 +526,7 @@ function previewSplit(line: BankLine, outcome: RuleOutcome): Pick<PreviewMatch, 
 
 /**
  * Create + post a manual journal that books a bank line against one or more
- * offset lines (each with its own dimensions / party / tax code), returning the
+ * offset lines (each with its own dimensions / party), returning the
  * id of the posted journal line on the bank account (the one a reconciliation
  * match points at). `amount` is signed from the bank's perspective: the bank
  * line carries it verbatim, the offsets its negation, split per `resolveSplit`.
@@ -540,6 +543,16 @@ export class JournalPostingDeniedError extends Error {
   readonly status = 403
 }
 
+/** Bank-rule journals do not calculate tax; reject legacy/configured tax lines before posting. */
+function assertUntaxedSplits(splits: RuleSplitLine[]): void {
+  if (splits.some((split) => split.taxCodeId)) {
+    throw new BankRuleRefusal(
+      'bank-rule journals cannot calculate tax; edit the rule and clear tax codes from its split lines, or create a tax-aware journal in Journals and match it in Match Bank Data',
+      422,
+    )
+  }
+}
+
 export async function createCategorizingJournal(
   orgId: string,
   userId: string,
@@ -553,11 +566,16 @@ export async function createCategorizingJournal(
     currency: string
   },
 ): Promise<string> {
+  assertUntaxedSplits(opts.splits)
   const poster = await resolveAuthzByUserId(orgId, userId)
   if (poster === null || !can(poster, 'gl.post')) {
     throw new JournalPostingDeniedError(
       'missing permission: gl.post — categorizing journals post to the ledger; leave the line unmatched for a gl.post holder',
     )
+  }
+  const subsidiaryId = await bankAccountSubsidiary(orgId, opts.bankAccountId, true)
+  if (subsidiaryId === undefined) {
+    throw new BankRuleRefusal('Bank account not found; refresh Match Bank Data and select an active bank account', 404)
   }
   const documentNumber = await nextDocumentNumber(orgId, 'journal', 'JE-')
   const [doc] = await db
@@ -565,6 +583,7 @@ export async function createCategorizingJournal(
     .values({
       orgId,
       kind: 'journal',
+      subsidiaryId,
       documentNumber,
       documentDate: opts.date,
       currency: opts.currency,
@@ -582,6 +601,7 @@ export async function createCategorizingJournal(
     orgId,
     documentId: doc!.id,
     lineNumber: i + 2,
+    subsidiaryId,
     accountId: r.line.accountId,
     amount: r.amount,
     description: r.line.description ?? opts.memo,
@@ -590,7 +610,6 @@ export async function createCategorizingJournal(
     projectId: r.line.projectId ?? null,
     locationId: r.line.locationId ?? null,
     classId: r.line.classId ?? null,
-    taxCodeId: r.line.taxCodeId ?? null,
   }))
 
   await db.insert(schema.documentLines).values([
@@ -598,6 +617,7 @@ export async function createCategorizingJournal(
       orgId,
       documentId: doc!.id,
       lineNumber: 1,
+      subsidiaryId,
       accountId: opts.bankAccountId,
       amount: opts.amount,
       description: opts.memo,

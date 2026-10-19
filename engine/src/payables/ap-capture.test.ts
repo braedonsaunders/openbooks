@@ -18,6 +18,7 @@ import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import {
   billableRemainderUnits,
+  assertCapturePurchaseOrderMatches,
   CaptureMaterializationError,
   lineRequiresReceipt,
   materializeCapture,
@@ -44,6 +45,19 @@ test("normalizeCapturedDecimal handles localized and signed OCR amounts exactly"
   assert.equal(normalizeCapturedDecimal("(45.10)"), "-45.1000");
   assert.equal(normalizeCapturedDecimal("1.25E2"), "125.0000");
   assert.throws(() => normalizeCapturedDecimal("1.00001"), /precision/);
+});
+
+test("capture materialization refuses unresolved and incompletely matched purchase orders", () => {
+  const line = { description: "Part", productCode: null, quantity: "1.0000", unit: null, unitPrice: "10.0000", amount: "10.0000", taxAmount: "0.0000", accountId: "account-1", purchaseOrderLineId: null, confidence: null };
+  assert.throws(
+    () => assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-9999", lines: [line] }, null),
+    (error: unknown) => error instanceof CaptureMaterializationError && error.code === "purchase_order_unresolved" && /select an approved purchase order|clear its reference/i.test(error.message),
+  );
+  assert.throws(
+    () => assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-100", lines: [line] }, "po-1"),
+    (error: unknown) => error instanceof CaptureMaterializationError && error.code === "po_line_unmatched" && error.details?.line === 1 && /match every line/i.test(error.message),
+  );
+  assert.doesNotThrow(() => assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-100", lines: [{ ...line, purchaseOrderLineId: "po-line-1" }] }, "po-1"));
 });
 
 test("normalizeCapturedDecimal refuses ambiguous comma text instead of guessing", () => {
@@ -328,24 +342,31 @@ test("provider failures name the fault without echoing response bodies", async (
 test("PO matching enforces both ordered and received quantities exactly", () => {
   assert.deepEqual(validatePurchaseOrderQuantities({
     invoiceQuantity: "2.0000", orderedQuantity: "10.0000", billedQuantity: "8.5000",
-    fulfilledQuantity: "9.0000", requiresReceipt: true,
+    cancelledQuantity: "0.0000", fulfilledQuantity: "9.0000", requiresReceipt: true,
   }), [
     { code: "po_quantity_exceeded", expected: "1.5000", actual: "2.0000" },
     { code: "receipt_quantity_shortfall", expected: "0.5000", actual: "2.0000" },
   ]);
   assert.deepEqual(validatePurchaseOrderQuantities({
     invoiceQuantity: "0.3333", orderedQuantity: "1.0000", billedQuantity: "0.3333",
-    fulfilledQuantity: "0.6666", requiresReceipt: true,
+    cancelledQuantity: "0.0000", fulfilledQuantity: "0.6666", requiresReceipt: true,
   }), []);
   assert.deepEqual(validatePurchaseOrderQuantities({
     invoiceQuantity: "1.0000", orderedQuantity: "1.0000", billedQuantity: "0.0000",
-    fulfilledQuantity: "0.0000", requiresReceipt: false,
+    cancelledQuantity: "0.0000", fulfilledQuantity: "0.0000", requiresReceipt: false,
   }), []);
+  assert.deepEqual(validatePurchaseOrderQuantities({
+    invoiceQuantity: "1.00000002", orderedQuantity: "10.00000000", cancelledQuantity: "4.00000000",
+    billedQuantity: "4.99999999", fulfilledQuantity: "7.00000002", requiresReceipt: true,
+  }), [
+    { code: "po_quantity_exceeded", expected: "1.00000001", actual: "1.00000002" },
+  ]);
 });
 
 const stockPoLine = {
   invoiceQuantity: "6.0000",
   orderedQuantity: "10.0000",
+  cancelledQuantity: "0.0000",
   billedQuantity: "0.0000",
   fulfilledQuantity: "6.0000",
   poUnitPrice: "10.0000",
@@ -370,7 +391,7 @@ test("PO match refuses an off-price capture the quantity and receipt legs would 
     ["receipt_quantity_shortfall"],
   );
   assert.equal(billableRemainderUnits({
-    orderedQuantity: "10.0000", billedQuantity: "0.0000", fulfilledQuantity: "0.0000",
+    orderedQuantity: "10.0000", cancelledQuantity: "0.0000", billedQuantity: "0.0000", fulfilledQuantity: "0.0000",
     itemId: "item-1", itemKind: "inventory",
   }), 0n);
 });
@@ -383,10 +404,32 @@ test("PO match accepts captures within the price tolerance unchanged", () => {
 test("PO capture billing deltas move in the document's commercial direction", () => {
   assert.equal(purchaseOrderBilledQuantityDelta("vendor_bill", "2.1250"), "2.1250");
   assert.equal(purchaseOrderBilledQuantityDelta("vendor_credit", "2.1250"), "-2.1250");
+  assert.equal(purchaseOrderBilledQuantityDelta("vendor_bill", "0.00000001"), "0.00000001");
+  assert.equal(purchaseOrderBilledQuantityDelta("vendor_credit", "0.00000001"), "-0.00000001");
   assert.throws(
     () => purchaseOrderBilledQuantityDelta("vendor_credit", "0.0000"),
     /quantity must be positive/,
   );
+});
+
+test("PO quantity matching retains eight decimals and subtracts cancellations", () => {
+  assert.deepEqual(matchPurchaseOrderLine({
+    ...stockPoLine,
+    invoiceQuantity: "0.00000005",
+    orderedQuantity: "1.00000005",
+    cancelledQuantity: "0.00000002",
+    billedQuantity: "0.00000003",
+    fulfilledQuantity: "0.00000008",
+    invoiceUnitPrice: "10.0000",
+  }), []);
+  assert.equal(billableRemainderUnits({
+    orderedQuantity: "1.00000007",
+    cancelledQuantity: "0.00000002",
+    billedQuantity: "0.00000003",
+    fulfilledQuantity: "0.50000004",
+    itemId: "item-1",
+    itemKind: "inventory",
+  }), 50_000_001n);
 });
 
 test("PO vendor credits release billed quantity and reject over-credit", () => {
@@ -542,6 +585,24 @@ test(
         select quantity_billed::text from document_lines where id = ${poLineId}
       `)).rows[0]!.quantity_billed);
       assert.equal(billed, "4.0000", "an over-credit cannot underflow the PO billed balance");
+
+      await db.execute(sql`
+        update document_lines set quantity_cancelled = 5
+         where id = ${poLineId} and org_id = ${org.orgId}
+      `);
+      const overCancelledId = await insertCapture("vendor_bill", "BILL-CAPTURE-CANCELLED", "2.0000");
+      await assert.rejects(
+        materializeCapture({ orgId: org.orgId, captureItemId: overCancelledId, actorId, allowedSubsidiaryIds: null }),
+        (error: unknown) => error instanceof CaptureMaterializationError && /only 1\.0000 remains/.test(error.message),
+      );
+      billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
+        select quantity_billed::text from document_lines where id = ${poLineId}
+      `)).rows[0]!.quantity_billed);
+      assert.equal(billed, "4.0000", "cancelled quantity is excluded from AP capture billing");
+      await db.execute(sql`
+        update document_lines set quantity_cancelled = 0
+         where id = ${poLineId} and org_id = ${org.orgId}
+      `);
 
       const racingBillA = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-A", "4.0000");
       const racingBillB = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-B", "4.0000");
@@ -815,6 +876,7 @@ test("PO match requires a receipt when an item-backed line has no kind", () => {
   );
   assert.equal(billableRemainderUnits({
     orderedQuantity: "10.0000",
+    cancelledQuantity: "0.0000",
     billedQuantity: "0.0000",
     fulfilledQuantity: "0.0000",
     itemId: "item-1",

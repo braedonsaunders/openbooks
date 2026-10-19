@@ -1,4 +1,4 @@
-import { db } from "../platform/db.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 import { cmp, fromUnits, toUnits } from "../money/money.ts";
 import { persistReceiptMoney, lockInventoryPosition } from "./position.ts";
 import { InventoryError } from "./contracts.ts";
@@ -28,6 +28,10 @@ export interface AdjustInput {
   locationId?: string | null;
   /** Set when the adjustment books a stock count's variance. */
   admission?: "count";
+  /** Join a document correction's transaction so stock and source counters commit together. */
+  tx?: SqlExecutor;
+  /** Source document line for governed document corrections. */
+  documentLineId?: string | null;
 }
 
 /**
@@ -51,7 +55,7 @@ export async function adjustInventory(
   // Keep the adjustment-account lookup in the same lock boundary as the
   // delegated movement. Lock the position first to preserve the canonical
   // position → profile ordering used by receive/issue and avoid deadlocks.
-  return db.transaction(async (tx) => {
+  const apply = async (tx: SqlExecutor): Promise<MovementResult> => {
     // Canonical lock order: fence the position before any row lock, or a
     // peer holding the fence deadlocks against this transaction at posting.
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
@@ -82,6 +86,7 @@ export async function adjustInventory(
         locationId: input.locationId,
         admission: input.admission,
         stockCountLineId: input.stockCountLineId,
+        documentLineId: input.documentLineId,
         tx,
       });
     }
@@ -103,7 +108,9 @@ export async function adjustInventory(
       locationId: input.locationId,
       admission: input.admission,
       stockCountLineId: input.stockCountLineId,
+      documentLineId: input.documentLineId,
       tx,
     });
-  });
+  };
+  return input.tx ? apply(input.tx) : db.transaction(apply);
 }

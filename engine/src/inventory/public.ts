@@ -43,6 +43,7 @@ export {
   type UpdateFamilyInput,
   type BulkBarcodeInput,
   type BulkEditVariantsInput,
+  type BulkEditVariantsResult,
   type ConvertItemInput,
   type CreateFamilyWithVariantsInput,
   type CreateVariantChoice,
@@ -88,6 +89,7 @@ export {
 } from './warehouses.ts'
 /** Kit recipes behind the sellable-kit promise: components effective on the movement date. */
 export {
+  kitComponentMovesStock,
   kitComponentQuantities,
   loadKitComponents,
   type KitComponent,

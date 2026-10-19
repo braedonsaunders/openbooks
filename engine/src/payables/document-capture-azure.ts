@@ -216,23 +216,29 @@ export function isCanonicalMoney(value: string): boolean {
   return canonicalDecimal(value, 4) !== null;
 }
 
-export function invalidMoneyIssue(fieldLabel: string, noun: string, raw: string, extra: Partial<CaptureIssue> = {}): CaptureIssue {
+export function invalidMoneyIssue(
+  fieldLabel: string,
+  noun: string,
+  raw: string,
+  extra: Partial<CaptureIssue> = {},
+  maxScale = 4,
+): CaptureIssue {
   const cause = decimalNullCause(raw);
   return {
     code: "invalid_amount",
     severity: "blocking",
     actual: raw,
     cause: cause.cause,
-    ...causeRemedyTokens(cause),
-    message: decimalNullRefusal(fieldLabel, noun, raw, 4),
+    ...causeRemedyTokens(cause, maxScale),
+    message: decimalNullRefusal(fieldLabel, noun, raw, maxScale),
     ...extra,
   };
 }
 
 /** Catalog remedy tokens for one decimal refusal, keyed by its cause. */
-function causeRemedyTokens(cause: DecimalNullCause): Partial<CaptureIssue> {
+function causeRemedyTokens(cause: DecimalNullCause, maxScale: number): Partial<CaptureIssue> {
   switch (cause.cause) {
-    case "scale": return { expected: String(cause.decimals), detail: "4" };
+    case "scale": return { expected: String(maxScale), detail: String(maxScale) };
     case "separator": return { expected: cause.separator };
     case "decimal-comma": return { expected: cause.dotted };
     case "ambiguous-comma": return { expected: cause.grouped, detail: cause.dotted };

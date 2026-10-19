@@ -53,6 +53,7 @@ export interface ApCaptureDrawer {
   purchaseOrders: { id: string; label: string }[]
   canLookupPurchaseOrders: boolean
   canCreate: boolean
+  canApprovePriceOverride: boolean
 }
 
 export interface ApCaptureData {
@@ -234,6 +235,7 @@ export async function loadApCapture(
         purchaseOrders: options.purchaseOrders,
         canLookupPurchaseOrders,
         canCreate,
+        canApprovePriceOverride: can(authz, 'ap.approve'),
       }
     : null
   return {

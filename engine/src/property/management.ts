@@ -3,7 +3,7 @@ export { billCamReconciliation, cancelCamPool, createCamPool, finalizeCamPool, r
 export { recordSecurityDeposit, reverseSecurityDepositTransaction } from "./deposits.ts";
 export { MAX_LEASE_SCHEDULE_HORIZON_MONTHS, activatePropertyLease, addLeaseEscalation, applyLeaseEscalation, scheduleLeaseCharges, terminatePropertyLease } from "./lease-schedules.ts";
 export { addLeaseCharge, cancelPropertyLease, createPropertyLease, emptyRefToNull, updatePropertyLease } from "./leases.ts";
-export { PropertyManagementError, depositBalance, depositPostingShape, depositReversalKind, escalatedRent, isSecurityDepositImportConflict, leaseChargeSchedule, overlapDayCount, prorateLeaseCharge } from "./management-foundation.ts";
+export { PropertyManagementError, depositBalance, depositPostingShape, depositReversalKind, escalatedRent, isSecurityDepositImportConflict, leaseChargeSchedule, overlapDayCount, prorateCamEstimateByDays, prorateLeaseCharge } from "./management-foundation.ts";
 export type { DepositKind, SchedulePeriod } from "./management-foundation.ts";
 export { createManagedProperty, createPropertyUnit, deleteManagedProperty, deletePropertyUnit, updateManagedProperty, updatePropertyUnit } from "./properties.ts";
 export { assessLeaseLateFees, billDueLeaseCharges, levelLeaseRentStraightLine, runDuePropertyBilling } from "./rent-billing.ts";

@@ -76,6 +76,39 @@ test("BOM proposal applies with no Flow", { skip: !DB }, async () => {
   } finally { await dropScratchOrg(f.org.orgId); }
 });
 
+test("kit recipes accept unprofiled kits and commercial-only components", { skip: !DB }, async () => {
+  const f = await setup();
+  const kitId = randomUUID();
+  try {
+    await run((tx) => tx.execute(sql`
+      insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom,
+                         create_plans_on, revenue_allocation, income_account_id)
+      values (${kitId}, ${f.org.orgId}, 'kit', 'Virtual kit', false, true, '{}'::jsonb,
+              'billing', 'normal', ${f.org.accounts.revenue})`));
+    const result = await run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: kitId,
+      expectedVersion: null,
+      reason: "Add a commercial service to the kit contents",
+      components: [{
+        componentItemId: f.org.items.service,
+        quantityPer: "1",
+        effectiveFrom: null,
+        effectiveTo: null,
+        operationSeq: null,
+        scrapPct: null,
+        isByproduct: false,
+      }],
+    }));
+    assert.deepEqual(result, { assemblyItemId: kitId, version: await run((tx) => readBomPolicyVersion(tx, f.org.orgId, kitId)), componentCount: 1 });
+    const stored = await run((tx) => tx.execute<{ componentItemId: string }>(sql`
+      select component_item_id as "componentItemId" from bom_components
+       where org_id=${f.org.orgId} and assembly_item_id=${kitId}`));
+    assert.deepEqual(stored.rows, [{ componentItemId: f.org.items.service }]);
+  } finally {
+    await dropScratchOrg(f.org.orgId);
+  }
+});
+
 test("BOM routes through gates when a Flow exists", { skip: !DB }, async () => {
   const f = await setup();
   try {

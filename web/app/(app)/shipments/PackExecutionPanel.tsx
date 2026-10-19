@@ -42,6 +42,7 @@ export function PackExecutionPanel({
   const [bin, setBin] = useState(shipment.lines[0]?.binId ?? ""),
     [lineIds, setLineIds] = useState<string[]>([]);
   const [bins, setBins] = useState<{ id: string; code: string }[]>([]);
+  const firstLineBinId = shipment.lines[0]?.binId ?? "";
   const [destination, setDestination] = useState(""),
     [reason, setReason] = useState(""),
     [busy, setBusy] = useState(false),
@@ -53,8 +54,12 @@ export function PackExecutionPanel({
         if (!response.ok) throw new Error(await readApiErrorMessage(response, "Cartons could not be loaded"));
         return await response.json() as { units: UnitView[]; bins: { id: string; code: string }[] };
       })
-      .then(result => { setUnits(result.units); setBins(result.bins); });
-  }, [shipment.id]);
+      .then(result => {
+        setUnits(result.units);
+        setBins(result.bins);
+        setBin(current => current || firstLineBinId || result.bins[0]?.id || "");
+      });
+  }, [firstLineBinId, shipment.id]);
   useEffect(() => {
     let active = true;
     void load().catch((cause) => {
@@ -81,8 +86,12 @@ export function PackExecutionPanel({
         "/api/shipping/handling-units",
         body,
       );
+      if (body.action === "create" && result.id) {
+        setLineIds([]);
+        setCode("");
+        setSelected(result.id);
+      }
       await load();
-      if (body.action === "create" && result.id) setSelected(result.id);
       if (body.action === "move") setMoveKey(crypto.randomUUID());
       router.refresh();
     } catch (cause) {

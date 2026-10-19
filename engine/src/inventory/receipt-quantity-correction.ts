@@ -7,7 +7,7 @@ import { adjustInventory } from "./movements.ts";
 import { assertInventoryDate } from "./position.ts";
 import { InventoryError } from "./contracts.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit, type TransactionAuditSnapshot } from "../records/transaction-audit.ts";
-import { type LiveReceiptMovement, liveReceiptMovements, layerCover } from "./receipt-void-state.ts";
+import { liveReceiptMovements, layerCover, lockReceiptInventoryPositions } from "./receipt-void-state.ts";
 
 /** Correcting a consumed purchase receipt line to its delivered quantity through a shrink adjustment. */
 
@@ -102,6 +102,7 @@ export async function correctReceiptQuantity(
   assertInventoryDate(date, "correction date");
   const { orgId, actorId, receiptId } = input;
   return db.transaction(async (tx) => {
+    await lockReceiptInventoryPositions(tx, orgId, receiptId);
     const header = (await tx.execute<{
       document_number: string;
       status: string;
@@ -120,9 +121,19 @@ export async function correctReceiptQuantity(
       line_number: number;
       item_id: string;
       quantity: string;
+      correction_quantity: string;
       source_line_id: string | null;
     }>(sql`
       select l.id, l.line_number, l.item_id, l.quantity::text as quantity,
+             (select coalesce(sum(c.quantity + coalesce((
+                select sum(r.quantity) from inventory_movements r
+                 where r.org_id = c.org_id and r.reverses_movement_id = c.id and r.status = 'posted'
+              ), 0)), 0)::text
+                from inventory_movements c
+               where c.org_id = l.org_id and c.document_line_id = l.id
+                 and c.kind = 'issue' and c.status = 'posted'
+                 and (c.idempotency_key like 'receipt-remainder-%'
+                      or c.idempotency_key like 'receipt-quantity-%')) as correction_quantity,
              l.custom->'receipt'->>'sourceLineId' as source_line_id
         from document_lines l
        where l.document_id = ${receiptId} and l.org_id = ${orgId}
@@ -135,7 +146,7 @@ export async function correctReceiptQuantity(
         );
       }
     }
-    const targets: { line: (typeof receiptLines)[number]; corrected: string; over: string }[] = [];
+    const targets: { line: (typeof receiptLines)[number]; current: string; corrected: string; over: string }[] = [];
     for (const request of input.lines) {
       const line = byLineId.get(request.receiptLineId);
       if (!line) {
@@ -143,18 +154,19 @@ export async function correctReceiptQuantity(
       }
       const label = `goods-receipt line ${line.line_number}`;
       const corrected = parseCorrectedQuantity(request.correctedQuantity, label);
-      const over = fromQuantityUnits(toQuantityUnits(line.quantity) - toQuantityUnits(corrected));
+      const current = fromQuantityUnits(toQuantityUnits(line.quantity) + toQuantityUnits(line.correction_quantity));
+      const over = fromQuantityUnits(toQuantityUnits(current) - toQuantityUnits(corrected));
       if (cmp(over, "0") === 0) {
         throw new InventoryError(
-          `${label} already records ${line.quantity} — nothing to correct; receive a shortfall through the purchase order instead`,
+          `${label} already records ${current} — nothing to correct; receive a shortfall through the purchase order instead`,
         );
       }
       if (cmp(over, "0") < 0) {
         throw new InventoryError(
-          `${label} records ${line.quantity} but the correction raises it to ${corrected} — receive the shortfall through the purchase order instead`,
+          `${label} records ${current} but the correction raises it to ${corrected} — receive the shortfall through the purchase order instead`,
         );
       }
-      targets.push({ line, corrected, over });
+      targets.push({ line, current, corrected, over });
     }
     const movements = await liveReceiptMovements(tx, orgId, receiptId);
     if (movements.length === 0) {
@@ -181,6 +193,7 @@ export async function correctReceiptQuantity(
     }
     const correctedLines: CorrectReceiptQuantityResult["correctedLines"] = [];
     const remainderByLine = new Map<string, string>();
+    let total = "0";
     for (const target of targets) {
       let lineRemainder = "0";
       for (const movement of movements.filter((entry) => entry.document_line_id === target.line.id)) {
@@ -194,7 +207,7 @@ export async function correctReceiptQuantity(
         throw new InventoryError(
           `goods-receipt line ${target.line.line_number} records ${target.line.quantity} but only ${lineRemainder} remains unconsumed — ` +
             `the rest already left through a sale or transfer the correction cannot reverse. ` +
-            `Correct to no less than ${fromQuantityUnits(toQuantityUnits(target.line.quantity) - toQuantityUnits(lineRemainder))}, ` +
+            `Correct to no less than ${fromQuantityUnits(toQuantityUnits(target.current) - toQuantityUnits(lineRemainder))}, ` +
             `and claim the vendor's short delivery on an account-only vendor credit instead`,
         );
       }
@@ -202,7 +215,7 @@ export async function correctReceiptQuantity(
       correctedLines.push({
         receiptLineId: target.line.id,
         lineNumber: target.line.line_number,
-        receivedQuantity: target.line.quantity,
+        receivedQuantity: target.current,
         correctedQuantity: target.corrected,
         adjustedQuantity: target.over,
       });
@@ -260,7 +273,6 @@ export async function correctReceiptQuantity(
     // A line split across lots distributes its over-receipt pro-rata over
     // the remainders (floored, residual to the last), so the shares sum
     // to the over-receipt exactly.
-    const groups = new Map<string, { movement: LiveReceiptMovement; quantity: string }[]>();
     for (const target of targets) {
       const over = remainderByLine.get(target.line.id);
       if (!over) continue;
@@ -272,35 +284,29 @@ export async function correctReceiptQuantity(
       if (remainderTotal <= 0n) continue;
       const overUnits = toQuantityUnits(over);
       let assigned = 0n;
-      lineMovements.forEach((movement, index) => {
+      for (let index = 0; index < lineMovements.length; index += 1) {
+        const movement = lineMovements[index]!;
         const share = index < lineMovements.length - 1
           ? (overUnits * remainders[index]!) / remainderTotal
           : overUnits - assigned;
         assigned += share;
-        if (share <= 0n) return;
-        const key = `${movement.item_id}:${movement.stock_location_id}:${movement.subsidiary_id}:${movement.lot_id ?? ""}:${movement.serial_id ?? ""}`;
-        const list = groups.get(key) ?? [];
-        list.push({ movement, quantity: fromQuantityUnits(share) });
-        groups.set(key, list);
-      });
-    }
-    let total = "0";
-    for (const list of groups.values()) {
-      const first = list[0]!.movement;
-      let quantity = "0";
-      for (const entry of list) quantity = add(quantity, entry.quantity);
-      total = add(total, quantity);
-      await adjustInventory(orgId, actorId, {
-        itemId: first.item_id,
-        stockLocationId: first.stock_location_id,
-        quantityDelta: neg(quantity),
-        subsidiaryId: first.subsidiary_id,
-        date,
-        lotId: first.lot_id,
-        serialId: first.serial_id,
-        memo: `Correct receipt quantity for goods receipt ${header.document_number}: ${reason}`,
-        idempotencyKey: `receipt-quantity-${receiptId}-${first.item_id}-${first.stock_location_id}-${first.lot_id ?? ""}-${first.serial_id ?? ""}-${quantity}`,
-      });
+        if (share <= 0n) continue;
+        const quantity = fromQuantityUnits(share);
+        total = add(total, quantity);
+        await adjustInventory(orgId, actorId, {
+          itemId: movement.item_id,
+          stockLocationId: movement.stock_location_id,
+          quantityDelta: neg(quantity),
+          subsidiaryId: movement.subsidiary_id,
+          date,
+          lotId: movement.lot_id,
+          serialId: movement.serial_id,
+          documentLineId: movement.document_line_id,
+          tx,
+          memo: `Correct receipt quantity for goods receipt ${header.document_number}: ${reason}`,
+          idempotencyKey: `receipt-quantity-${receiptId}-${movement.id}-${target.corrected}`,
+        });
+      }
     }
     // The cover leg: approved lines are storage-immutable, so each source
     // header reopens while its counters restore (the order-cycle pattern),

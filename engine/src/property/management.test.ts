@@ -18,6 +18,7 @@ import {
   escalatedRent,
   leaseChargeSchedule,
   overlapDayCount,
+  prorateCamEstimateByDays,
   prorateLeaseCharge,
 } from "./management.ts";
 
@@ -114,6 +115,18 @@ test("CAM overlap is inclusive and excludes non-overlapping occupancy", () => {
   assert.equal(overlapDayCount("2026-01-15", "2026-03-15", "2026-01-01", "2026-12-31"), 60);
   assert.equal(overlapDayCount("2025-01-01", "2025-12-31", "2026-01-01", "2026-12-31"), 0);
   assert.equal(overlapDayCount("2026-12-31", "2027-01-31", "2026-01-01", "2026-12-31"), 1);
+});
+
+test("CAM estimate proration assigns each day once and preserves total minor units", () => {
+  const january = prorateCamEstimateByDays("3100", "2026-01-15", "2026-02-14", Array.from({ length: 17 }, (_, day) => `2026-01-${String(day + 15).padStart(2, "0")}`));
+  const february = prorateCamEstimateByDays("3100", "2026-01-15", "2026-02-14", Array.from({ length: 14 }, (_, day) => `2026-02-${String(day + 1).padStart(2, "0")}`));
+  assert.equal(january, "1700.0000");
+  assert.equal(february, "1400.0000");
+  assert.equal(prorateCamEstimateByDays("0.0001", "2026-01-01", "2026-01-03", ["2026-01-01"]), "0.0001");
+  assert.throws(
+    () => prorateCamEstimateByDays("10", "2026-01-01", "2026-01-03", ["2026-01-04"]),
+    (error: unknown) => error instanceof PropertyManagementError && /unique dates within the schedule period/.test(error.message),
+  );
 });
 
 test("escalation and schedule helpers reject unknown policies instead of miscomputing", () => {

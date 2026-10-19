@@ -22,10 +22,17 @@ import { lockFamily, writeFamilyAudit } from "./item-family-store.ts";
 
 export interface BulkEditVariantsInput {
   variantIds: string[];
+  /** Fence route-scoped edits before any mutation. */
+  expectedFamilyId?: string;
   price?: string | null;
   cost?: string | null;
   barcode?: BulkBarcodeInput | null;
   isActive?: boolean | null;
+}
+
+export interface BulkEditVariantsResult {
+  familyId: string;
+  updated: string[];
 }
 
 /**
@@ -33,11 +40,21 @@ export interface BulkEditVariantsInput {
  * audited transaction. Every id must be a variant of one family; anything
  * else is refused naming the item.
  */
+export function bulkEditVariants(
+  orgId: string,
+  actorId: string | null,
+  input: BulkEditVariantsInput & { expectedFamilyId: string },
+): Promise<BulkEditVariantsResult | null>;
+export function bulkEditVariants(
+  orgId: string,
+  actorId: string | null,
+  input: BulkEditVariantsInput,
+): Promise<BulkEditVariantsResult>;
 export async function bulkEditVariants(
   orgId: string,
   actorId: string | null,
   input: BulkEditVariantsInput,
-): Promise<{ familyId: string; updated: string[] }> {
+): Promise<BulkEditVariantsResult | null> {
   const ids = [...new Set(input.variantIds)];
   if (ids.length === 0) {
     throw new ItemFamilyError("no variants were chosen", "variants_required", "choose at least one variant", 422);
@@ -103,10 +120,11 @@ export async function bulkEditVariants(
       );
     }
     const familyIds = new Set(rows.map((row) => row.family_id));
-    if (familyIds.size !== 1 || familyIds.has(null)) {
+    if (familyIds.has(null)) {
       const plain = rows.find((row) => row.family_id === null);
+      if (!plain) throw new InventoryError("the selected family membership changed; reload the item catalog");
       throw new ItemFamilyError(
-        `${plain!.code ?? plain!.name} is not a variant of any family`,
+        `${plain.code ?? plain.name} is not a variant of any family`,
         "not_a_variant",
         "choose items that belong to a product family",
         422,
@@ -120,7 +138,8 @@ export async function bulkEditVariants(
         422,
       );
     }
-    const familyId = [...familyIds][0]!;
+    const familyId = rows[0]!.family_id!;
+    if (input.expectedFamilyId !== undefined && familyId !== input.expectedFamilyId) return null;
     await lockFamily(tx, orgId, familyId);
     if (barcode !== undefined && barcode !== null) {
       const taken = (await tx.execute<{ item_id: string; code: string | null; name: string }>(sql`
@@ -153,7 +172,9 @@ export async function bulkEditVariants(
       }
       if (barcode !== undefined) {
         if (barcode === null) {
-          await tx.execute(sql`delete from item_identifiers where org_id = ${orgId} and item_id = ${row.id} and kind = 'internal'`);
+          await tx.execute(sql`delete from item_identifiers
+            where org_id = ${orgId} and item_id = ${row.id}
+              and kind in (${sql.join(BARCODE_KINDS.map((kind) => sql`${kind}`), sql`, `)})`);
         } else {
           const identifier = (await tx.execute<{ id: string }>(sql`
             select id from item_identifiers where org_id = ${orgId} and item_id = ${row.id} and kind = ${barcode.kind}`)).rows[0];

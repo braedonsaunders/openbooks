@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/platform/business-date";
+import { endOfMonth, startOfMonth } from "@openbooks/engine/platform/civil-date";
 
 // A vendor bill converted from a purchase order's received stock. Its lines
 // keep the purchase-order line provenance that posting reads, and carry the
@@ -19,6 +21,7 @@ const {
   convertOrder,
   createOrderDraft,
   receivePurchaseOrder,
+  receivePurchaseOrderRemainder,
 } = await import("./order-cycle.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/testing/fixtures"
@@ -44,7 +47,7 @@ async function dropFixture(orgId: string): Promise<void> {
 }
 
 /** An approved purchase order for one stocked line of ten units at two each. */
-async function approvedOrder(fx: Fixture): Promise<{ orderId: string; sourceLineId: string }> {
+async function approvedOrder(fx: Fixture, cancelled = "0"): Promise<{ orderId: string; sourceLineId: string }> {
   const { org, userId } = fx;
   const order = await withOrg(org.orgId, () =>
     createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null),
@@ -54,10 +57,10 @@ async function approvedOrder(fx: Fixture): Promise<{ orderId: string; sourceLine
     await db.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, item_id, account_id, description, quantity, unit,
-         unit_price, amount, tax_amount, quantity_fulfilled, quantity_billed, stock_location_id, custom)
+         unit_price, amount, tax_amount, quantity_fulfilled, quantity_cancelled, quantity_billed, stock_location_id, custom)
       values
         (${sourceLineId}, ${org.orgId}, ${order.id}, 1, ${org.items.fifo}, ${org.accounts.invAsset},
-         'Widget', '10', 'ea', '2', '20', '0', '0', '0', ${org.stockLocationId}, '{}'::jsonb)
+         'Widget', '10', 'ea', '2', '20', '0', '0', ${cancelled}, '0', ${org.stockLocationId}, '{}'::jsonb)
     `);
     await db.execute(sql`
       update documents
@@ -199,6 +202,91 @@ test("converting received stock refuses when its item has no received-not-billed
       )
     ).rows[0]!.count;
     assert.equal(bills, 0, "a refused conversion writes no bill");
+  } finally {
+    await dropFixture(fx.org.orgId);
+  }
+});
+
+test("receiving subtracts cancelled quantity and accumulates same-line lot requests", { skip: !DB }, async () => {
+  const fx = await newFixture();
+  try {
+    const { org, userId } = fx;
+    const { orderId, sourceLineId } = await approvedOrder(fx, "6");
+    const lotIds = [randomUUID(), randomUUID()];
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        update item_inventory_profiles set tracking = 'lot'
+         where org_id = ${org.orgId} and item_id = ${org.items.fifo}
+      `);
+      for (const [index, lotId] of lotIds.entries()) {
+        await db.execute(sql`
+          insert into lots (id, org_id, item_id, lot_number)
+          values (${lotId}, ${org.orgId}, ${org.items.fifo}, ${`RCV-${index}-${randomUUID()}`})
+        `);
+      }
+    });
+
+    await assert.rejects(
+      withOrg(org.orgId, () => receivePurchaseOrder(org.orgId, userId, orderId, {
+        receiptDate: org.date,
+        idempotencyKey: `receipt-${randomUUID()}`,
+        lines: [
+          { sourceLineId, quantity: "4", lotId: lotIds[0] },
+          { sourceLineId, quantity: "2", lotId: lotIds[1] },
+        ],
+      })),
+      (error: unknown) => error instanceof ConversionError && /only 4\.0000 remaining/.test(error.message),
+    );
+    await assert.rejects(
+      withOrg(org.orgId, () => receivePurchaseOrder(org.orgId, userId, orderId, {
+        receiptDate: org.date,
+        idempotencyKey: `receipt-${randomUUID()}`,
+        lines: [{ sourceLineId, quantity: "5", lotId: lotIds[0] }],
+      })),
+      (error: unknown) => error instanceof ConversionError && /only 4\.0000 remaining/.test(error.message),
+    );
+    const facts = await withOrgContext(org.orgId, () => db.execute<{ received: string; receipts: number }>(sql`
+      select (select quantity_fulfilled::text from document_lines where id = ${sourceLineId}) as received,
+             (select count(*)::int from documents where org_id = ${org.orgId} and kind = 'purchase_receipt') as receipts
+    `));
+    assert.equal(toUnits(facts.rows[0]!.received), toUnits("0"));
+    assert.equal(facts.rows[0]!.receipts, 0, "both refused quantities leave the order and inventory untouched");
+  } finally {
+    await dropFixture(fx.org.orgId);
+  }
+});
+
+test("receiving the purchase-order remainder excludes cancelled quantity", { skip: !DB }, async () => {
+  const fx = await newFixture();
+  try {
+    const { org, userId } = fx;
+    const { orderId, sourceLineId } = await approvedOrder(fx, "6");
+    const receiptDate = await businessToday(org.orgId);
+    const openPeriod = await db.execute<{ id: string }>(sql`
+      select id from accounting_periods
+       where org_id = ${org.orgId} and starts_on <= ${receiptDate} and ends_on >= ${receiptDate}
+       limit 1
+    `);
+    if (!openPeriod.rows[0]) {
+      const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+        select fiscal_calendar_id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}
+      `)).rows[0]!.fiscal_calendar_id;
+      const periodNumber = Number(receiptDate.slice(5, 7));
+      await db.execute(sql`
+        insert into accounting_periods
+          (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${randomUUID()}, ${org.orgId}, ${Number(receiptDate.slice(0, 4))}, ${periodNumber},
+                ${receiptDate.slice(0, 7)}, ${startOfMonth(receiptDate)}, ${endOfMonth(receiptDate)}, false, ${calendarId})
+      `);
+    }
+    await withOrg(org.orgId, () => receivePurchaseOrderRemainder(org.orgId, userId, orderId));
+    const facts = await withOrgContext(org.orgId, () => db.execute<{ received: string; moved: string }>(sql`
+      select (select quantity_fulfilled::text from document_lines where id = ${sourceLineId}) as received,
+             (select coalesce(sum(quantity), 0)::text from inventory_movements
+               where org_id = ${org.orgId} and item_id = ${org.items.fifo} and status = 'posted') as moved
+    `));
+    assert.equal(toUnits(facts.rows[0]!.received), toUnits("4"));
+    assert.equal(toUnits(facts.rows[0]!.moved), toUnits("4"));
   } finally {
     await dropFixture(fx.org.orgId);
   }

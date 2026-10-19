@@ -383,6 +383,7 @@
     "./apps/invocations": "./src/apps/invocations.ts",
     "./apps/runtime": "./src/apps/runtime.ts",
     "./assets/asset-change-reversals": "./src/assets/asset-change-reversals.ts",
+    "./assets/asset-drafts": "./src/assets/asset-drafts.ts",
     "./assets/asset-changes": "./src/assets/asset-changes.ts",
     "./assets/asset-lifecycle": "./src/assets/asset-lifecycle.ts",
     "./assets/depreciation-formula": "./src/assets/depreciation-formula.ts",

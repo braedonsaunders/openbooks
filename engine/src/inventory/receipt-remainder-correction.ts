@@ -6,7 +6,7 @@ import { adjustInventory } from "./movements.ts";
 import { assertInventoryDate } from "./position.ts";
 import { InventoryError } from "./contracts.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit, type TransactionAuditSnapshot } from "../records/transaction-audit.ts";
-import { type LiveReceiptMovement, liveReceiptMovements, layerCover } from "./receipt-void-state.ts";
+import { liveReceiptMovements, layerCover, lockReceiptInventoryPositions } from "./receipt-void-state.ts";
 
 /** Correcting the undelivered remainder of a purchase receipt that is partly consumed, without voiding the consumed part. */
 
@@ -49,6 +49,7 @@ export async function correctReceiptRemainder(
   assertInventoryDate(date, "correction date");
   const { orgId, actorId, receiptId } = input;
   return db.transaction(async (tx) => {
+    await lockReceiptInventoryPositions(tx, orgId, receiptId);
     const header = (await tx.execute<{
       document_number: string;
       status: string;
@@ -171,33 +172,23 @@ export async function correctReceiptRemainder(
     // native adjustment, one call per item, location, lot, and serial so
     // tracked cover keeps its identity.
     const adjustedLines: { movementId: string; itemId: string; quantity: string }[] = [];
-    const groups = new Map<string, { movement: LiveReceiptMovement; quantity: string }[]>();
     for (const movement of movements) {
-      const remainder = remainderByMovement.get(movement.id);
-      if (!remainder) continue;
-      const key = `${movement.item_id}:${movement.stock_location_id}:${movement.subsidiary_id}:${movement.lot_id ?? ""}:${movement.serial_id ?? ""}`;
-      const list = groups.get(key) ?? [];
-      list.push({ movement, quantity: remainder });
-      groups.set(key, list);
-    }
-    for (const list of groups.values()) {
-      const first = list[0]!.movement;
-      let quantity = "0";
-      for (const entry of list) quantity = add(quantity, entry.quantity);
+      const quantity = remainderByMovement.get(movement.id);
+      if (!quantity) continue;
       await adjustInventory(orgId, actorId, {
-        itemId: first.item_id,
-        stockLocationId: first.stock_location_id,
+        itemId: movement.item_id,
+        stockLocationId: movement.stock_location_id,
         quantityDelta: neg(quantity),
-        subsidiaryId: first.subsidiary_id,
+        subsidiaryId: movement.subsidiary_id,
         date,
-        lotId: first.lot_id,
-        serialId: first.serial_id,
+        lotId: movement.lot_id,
+        serialId: movement.serial_id,
+        documentLineId: movement.document_line_id,
+        tx,
         memo: `Correct phantom remainder of goods receipt ${header.document_number}: ${reason}`,
-        idempotencyKey: `receipt-remainder-${receiptId}-${first.item_id}-${first.stock_location_id}-${first.lot_id ?? ""}-${first.serial_id ?? ""}`,
+        idempotencyKey: `receipt-remainder-${receiptId}-${movement.id}`,
       });
-      for (const entry of list) {
-        adjustedLines.push({ movementId: entry.movement.id, itemId: entry.movement.item_id, quantity: entry.quantity });
-      }
+      adjustedLines.push({ movementId: movement.id, itemId: movement.item_id, quantity });
     }
     // The cover leg: approved lines are storage-immutable, so each source
     // header reopens while its counters restore (the order-cycle pattern),

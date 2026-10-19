@@ -119,6 +119,7 @@ export const POST = defineRoute({
           const replacement = await createExpenseCorrectionDraft(id, body, {
             orgId: user.orgId,
             userId: user.id,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
           })
           const result = await requestDocumentVoid({
             documentId: id,

@@ -90,8 +90,8 @@ async function readJson(res: Response): Promise<{ ok: boolean; body: Record<stri
  * nested error, remedy, code) instead of only the error field. Callers pass
  * the already-parsed body; the shared helper never invents locale copy.
  */
-function errorMessage(body: Record<string, unknown>): string {
-  return refusalMessageFromBody(body, { fallback: 'This action failed.' }) ?? 'This action failed.'
+function errorMessage(body: Record<string, unknown>, fallback = 'This action failed.'): string {
+  return refusalMessageFromBody(body, { fallback }) ?? fallback
 }
 
 const STATUS_KEYS = ['sent', 'viewed', 'signed', 'declined', 'expired', 'voided'] as const
@@ -109,10 +109,12 @@ export function QuoteCashSection(props: {
   lines: Array<{ id: string; description: string | null }>
 }) {
   const t = useTranslations('estimates')
+  const tCommon = useTranslations('common')
   const { money } = useMoney(props.currency)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [hidden, setHidden] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [plans, setPlans] = useState<Plan[]>([])
   const [editing, setEditing] = useState<null | {
@@ -134,21 +136,29 @@ export function QuoteCashSection(props: {
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/estimates/${encodeURIComponent(props.quoteId)}/terms`)
-    if (res.status === 404) {
-      setHidden(true)
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const res = await fetch(`/api/estimates/${encodeURIComponent(props.quoteId)}/terms`)
+      if (res.status === 404) {
+        setHidden(true)
+        setLoading(false)
+        return
+      }
+      const { ok, body } = await readJson(res)
+      if (!ok) {
+        const message = errorMessage(body, tCommon('feedback.loadFailed'))
+        setLoadError(message)
+        toast.error(message)
+        return
+      }
+      setPreview(body as unknown as Preview)
+    } catch {
+      setLoadError(tCommon('feedback.loadFailed'))
+    } finally {
       setLoading(false)
-      return
     }
-    const { ok, body } = await readJson(res)
-    if (!ok) {
-      toast.error(errorMessage(body))
-      setLoading(false)
-      return
-    }
-    setPreview(body as unknown as Preview)
-    setLoading(false)
-  }, [props.quoteId])
+  }, [props.quoteId, tCommon])
 
   useEffect(() => {
     queueMicrotask(() => { void load() })
@@ -164,8 +174,16 @@ export function QuoteCashSection(props: {
   }, [hidden, editing])
 
   if (hidden) return null
-  if (loading || !preview) {
+  if (loading) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">{t('quoteCash.loading')}</p>
+  }
+  if (loadError || !preview) {
+    return (
+      <div className="space-y-2 text-sm">
+        <p role="alert" className="text-destructive">{loadError ?? tCommon('feedback.loadFailed')}</p>
+        <Button variant="outline" onClick={() => void load()}>{tCommon('actions.retry')}</Button>
+      </div>
+    )
   }
 
   const draft = preview.quote.status === 'draft'

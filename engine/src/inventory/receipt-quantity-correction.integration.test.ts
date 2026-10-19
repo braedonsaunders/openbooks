@@ -14,6 +14,7 @@ import {
   correctReceiptQuantity,
 } from "@openbooks/engine/inventory/receipt-void-dependents";
 import { getOnHand } from "@openbooks/engine/testing/inventory/position";
+import { livePurchaseOrderLineReceipts } from "@openbooks/engine/inventory/bill-matchable-lines";
 import {
   createOrderDraft,
   fulfillSalesOrder,
@@ -178,6 +179,20 @@ test("a consumed-by-sale receipt line corrects to its true delivered quantity", 
        where org_id = ${seed.orgId} and row_id = ${receipt.receiptId}
          and changes->>'mode' = 'receipt_quantity_corrected'`)).rows[0]!.count;
     assert.equal(audit, 1, "the correction is audited against the receipt");
+
+    const nextCorrection = await correctReceiptQuantity({
+      orgId: seed.orgId,
+      actorId: seed.actorId,
+      receiptId: receipt.receiptId,
+      lines: [{ receiptLineId: receipt.lineId, correctedQuantity: "60" }],
+      reason: REASON,
+      date: seed.date,
+    });
+    assert.equal(toUnits(nextCorrection.correctedLines[0]!.receivedQuantity), toUnits("70"), "the next correction starts from the effective receipt quantity");
+    assert.equal(toUnits(nextCorrection.adjustedQuantity), toUnits("10"), "only the additional ten phantom units leave");
+    assert.equal(toUnits((await getOnHand(seed.orgId, seed.fifo, seed.location)).quantity), toUnits("0"));
+    assert.equal(toUnits(await fulfilledOf(seed, po.lineId)), toUnits("60"));
+    assert.equal(toUnits((await livePurchaseOrderLineReceipts(db, seed.orgId, po.lineId)).quantity), toUnits("60"), "bill matching sees corrected receipt cover");
   } finally {
     await dropScratchOrg(seed.orgId);
   }

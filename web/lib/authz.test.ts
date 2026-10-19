@@ -103,7 +103,7 @@ const hooks = registerHooks({
   },
 });
 
-const routeUrl = "../app/api/dunning/route.ts?authz-route-contract";
+const routeUrl: string = "../app/api/dunning/route.ts?authz-route-contract";
 const { GET, POST } = (await import(routeUrl)) as typeof import(
   "../app/api/dunning/route.ts"
 );
@@ -136,7 +136,7 @@ const behavioralHooks = registerHooks({
   },
 });
 
-const behavioralUrl = './authz.ts?behavioral'
+const behavioralUrl: string = './authz.ts?behavioral'
 const {
   can,
   subsidiaryScopeAllows,
@@ -286,6 +286,8 @@ test("can() honors exact and wildcard grants", () => {
   assert.equal(can(authzWith(["ap.*"]), "ap.post"), true);
   assert.equal(can(authzWith(["ap.*"]), "ar.post"), false);
   assert.equal(can(authzWith(["*"]), "admin.users.manage"), true);
+  assert.equal(can(authzWith(["*"]), "purchase_orders.create"), true);
+  assert.equal(can(authzWith(["items.*"]), "items.post"), true);
 });
 
 test("assertCan throws ForbiddenError only when can() is false", () => {

@@ -363,6 +363,75 @@ test("bulk edit refuses items that are not variants, naming the item", { skip: !
   }
 });
 
+test("bulk edit refuses mixed families and fences the route family before writes", { skip: !DB }, async () => {
+  const { org, actorId } = await setup();
+  try {
+    const firstFamily = await createTee(org.orgId, actorId);
+    const secondFamily = await withBypassContext(() => createItemFamily(org.orgId, actorId, {
+      code: "HAT",
+      name: "Classic Hat",
+      category: "Apparel",
+      kind: "inventory",
+      defaultUnit: "each",
+      defaultRate: "29.99",
+      options: SIZE_COLOR,
+    }));
+    const firstVariants = await withBypassContext(() => generateFamilyVariants(org.orgId, actorId, firstFamily.id));
+    const secondVariants = await withBypassContext(() => generateFamilyVariants(org.orgId, actorId, secondFamily.id));
+    const first = firstVariants.variants[0]!;
+    const other = secondVariants.variants[0]!;
+
+    await assert.rejects(
+      withBypassContext(() => bulkEditVariants(org.orgId, actorId, {
+        variantIds: [first.id, other.id],
+        price: "10",
+      })),
+      (error: unknown) => error instanceof ItemFamilyError && error.code === "mixed_families",
+    );
+    const mismatch = await withBypassContext(() => bulkEditVariants(org.orgId, actorId, {
+      variantIds: [other.id],
+      expectedFamilyId: firstFamily.id,
+      price: "10",
+    }));
+    assert.equal(mismatch, null);
+    const prices = await withBypassContext(async () => (await db.execute<{
+      id: string;
+      default_rate: string;
+    }>(sql`select id, default_rate::text from items where org_id = ${org.orgId} and id in (${first.id}, ${other.id})`)).rows);
+    assert.deepEqual(prices.map((row) => [row.id, row.default_rate]), [
+      [first.id, "19.9900"],
+      [other.id, "29.9900"],
+    ]);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("clearing a variant barcode removes every supported identifier kind", { skip: !DB }, async () => {
+  const { org, actorId } = await setup();
+  try {
+    const family = await createTee(org.orgId, actorId);
+    const generated = await withBypassContext(() => generateFamilyVariants(org.orgId, actorId, family.id));
+    const variantId = generated.variants[0]!.id;
+    await withBypassContext(async () => {
+      for (const kind of ["internal", "gtin", "upc", "ean"]) {
+        await db.execute(sql`
+          insert into item_identifiers (org_id, item_id, kind, value, created_by)
+          values (${org.orgId}, ${variantId}, ${kind}, ${`CLEAR-${kind}-${variantId.slice(0, 8)}`}, ${actorId})`);
+      }
+    });
+    await withBypassContext(() => bulkEditVariants(org.orgId, actorId, {
+      variantIds: [variantId],
+      barcode: null,
+    }));
+    const count = await withBypassContext(async () => (await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from item_identifiers where org_id = ${org.orgId} and item_id = ${variantId}`)).rows[0]!.count);
+    assert.equal(count, 0);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("detach keeps the item and clears only its family membership", { skip: !DB }, async () => {
   const { org, actorId } = await setup();
   try {

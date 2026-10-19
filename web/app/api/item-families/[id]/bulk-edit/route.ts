@@ -29,12 +29,13 @@ export const POST = defineRoute({
     }
     const result = await bulkEditVariants(gate.user.orgId, gate.user.id, {
       variantIds: body.variantIds,
+      expectedFamilyId: id,
       price: body.price,
       cost: body.cost,
-      barcode: body.barcode ?? undefined,
+      barcode: body.barcode,
       isActive: body.isActive,
     })
-    if (result.familyId !== id) return notFound('record')
+    if (!result || result.familyId !== id) return notFound('record')
     return NextResponse.json(result)
   },
 })

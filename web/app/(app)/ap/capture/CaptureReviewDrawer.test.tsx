@@ -13,6 +13,7 @@ import test from "node:test";
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
   var __drawerToasts: { kind: string; message: string }[] | undefined;
+  var __drawerConfirmCalls: unknown[] | undefined;
 }
 
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
@@ -36,6 +37,10 @@ registerHooks({
         url: "data:text/javascript,export const toast={success(m){(globalThis.__drawerToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__drawerToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__drawerToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
       };
     }
+    if (specifier === "../../../../lib/confirm") {
+      const source = "export async function confirmDialog(options){(globalThis.__drawerConfirmCalls??=[]).push(options);return true}";
+      return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(source)}` };
+    }
     return next(specifier, context);
   },
 });
@@ -56,7 +61,7 @@ const REV2 = "2026-09-17T12:00:02.000000Z";
 
 const CAPTURE_ID = "cap-test-1";
 
-function initialDetail(invoiceNumber: string | null) {
+function initialDetail(invoiceNumber: string | null, priceVariance = false) {
   return {
     id: CAPTURE_ID,
     status: "needs_review",
@@ -78,10 +83,10 @@ function initialDetail(invoiceNumber: string | null) {
       memo: null,
       lines: [],
     },
-    validation_issues: [],
+    validation_issues: priceVariance ? [{ code: "po_price_variance", severity: "blocking" as const, field: "unitPrice", lineIndex: 0, expected: "10.00", actual: "11.00", message: "Price exceeds the order tolerance." }] : [],
     overall_confidence: null,
     vendor_candidate_id: null,
-    purchase_order_id: null,
+    purchase_order_id: priceVariance ? "po-1" : null,
     document_id: null,
     last_error: null,
     contentType: "application/pdf",
@@ -94,10 +99,12 @@ function initialDetail(invoiceNumber: string | null) {
 
 type SentSave = { normalized: { invoiceNumber: string | null }; expectedUpdatedAt: string };
 
-async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) => void) {
+async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) => void, options: { priceVariance?: boolean; canApprovePriceOverride?: boolean } = {}) {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   globalThis.__drawerToasts = [];
+  globalThis.__drawerConfirmCalls = [];
   const sent: SentSave[] = [];
+  const materializeBodies: unknown[] = [];
   const pending: Array<(response: Response) => void> = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -109,15 +116,20 @@ async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) =
         pending.push(resolve);
       });
     }
+    if (url === `/api/ap-capture/${CAPTURE_ID}/materialize` && init?.method === "POST") {
+      materializeBodies.push(init.body ? JSON.parse(String(init.body)) : null);
+      return Response.json({ documentId: "draft-1" });
+    }
     return Response.json({});
   }) as typeof fetch;
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
+  let finished = false;
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <CaptureReviewDrawer initial={initialDetail(invoiceNumber)} vendors={[]} accounts={[]} purchaseOrders={[]} canCreate />
+        <CaptureReviewDrawer initial={initialDetail(invoiceNumber, options.priceVariance)} vendors={[]} accounts={[]} purchaseOrders={[]} canCreate canApprovePriceOverride={options.canApprovePriceOverride} />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -126,6 +138,7 @@ async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) =
   return {
     host,
     sent,
+    materializeBodies,
     respond(status: number, body: unknown) {
       const next = pending.shift();
       assert.ok(next, "a PATCH must be in flight to respond to");
@@ -135,6 +148,8 @@ async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) =
       });
     },
     async done() {
+      if (finished) return;
+      finished = true;
       globalThis.fetch = prior;
       await act(async () => {
         root.unmount();
@@ -143,6 +158,24 @@ async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) =
     },
   };
 }
+
+test("price variance override requires approval permission and sends explicit confirmation", async (t) => {
+  const denied = await mount("INV-OVERRIDE-DENIED", () => {}, { priceVariance: true });
+  t.after(() => denied.done());
+  assert.equal([...document.querySelectorAll("button")].some((button) => button.textContent?.includes("Approve variance and create draft")), false);
+
+  await denied.done();
+  const approved = await mount("INV-OVERRIDE", () => {}, { priceVariance: true, canApprovePriceOverride: true });
+  t.after(() => approved.done());
+  const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.includes("Approve variance and create draft"));
+  assert.ok(button, "an approver can create a draft with only purchase-order price variance blocking");
+  await act(async () => {
+    button.click();
+    await tick();
+  });
+  assert.deepEqual(globalThis.__drawerConfirmCalls, ["This approves the purchase-order price variance for this bill and creates an AP draft. Continue?"]);
+  assert.deepEqual(approved.materializeBodies, [{ priceOverride: true }]);
+});
 
 function invoiceInput(value: string): HTMLInputElement {
   // The drawer renders through a portal to document.body, so query the whole

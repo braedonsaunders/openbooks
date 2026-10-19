@@ -56,7 +56,7 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'destructive' | 'ou
   ready: 'success', materialized: 'success', needs_review: 'warning', duplicate: 'warning', failed: 'destructive', extracting: 'secondary', queued: 'secondary', rejected: 'outline',
 }
 
-export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders, canLookupPurchaseOrders = true, canCreate }: { initial: CaptureDetail; vendors: Option[]; accounts: Option[]; purchaseOrders: Option[]; canLookupPurchaseOrders?: boolean; canCreate: boolean }) {
+export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders, canLookupPurchaseOrders = true, canCreate, canApprovePriceOverride = false }: { initial: CaptureDetail; vendors: Option[]; accounts: Option[]; purchaseOrders: Option[]; canLookupPurchaseOrders?: boolean; canCreate: boolean; canApprovePriceOverride?: boolean }) {
   const t = useTranslations('ap.capture')
   const tc = useTranslations('common')
   const router = useRouter()
@@ -263,12 +263,21 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
     }
   }
 
-  async function createDraft() {
+  async function createDraft(priceOverride = false) {
     if (dirty && !(await save())) return
+    if (priceOverride && !(await confirmDialog(t('priceOverrideConfirm')))) return
     setActing('materialize')
     try {
-      const response = await fetch(`/api/ap-capture/${initial.id}/materialize`, { method: 'POST' })
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
+      const response = await fetch(`/api/ap-capture/${initial.id}/materialize`, {
+        method: 'POST',
+        ...(priceOverride ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ priceOverride: true }) } : {}),
+      })
+      if (!response.ok) {
+        const failure = await response.clone().json().catch(() => null) as { code?: string; details?: { line?: number } } | null
+        if (failure?.code === 'purchase_order_unresolved') throw new Error(t('issues.purchase_order_unresolved'))
+        if (failure?.code === 'po_line_unmatched') throw new Error(t('issues.po_line_unmatched', { line: failure.details?.line ?? 1 }))
+        throw new Error(await readApiErrorMessage(response, t('actionFailed')))
+      }
       const body = (await response.json()) as { documentId?: string }
       if (!body?.documentId) throw new Error(t('actionFailed'))
       toast.success(t('draftCreated'))
@@ -331,11 +340,14 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
       </button>
     ) : badge
   }
+  const blockingIssues = issues.filter((value) => value.severity === 'blocking')
+  const priceOverrideAvailable = canApprovePriceOverride && blockingIssues.length > 0 && blockingIssues.every((value) => value.code === 'po_price_variance')
   const headerActions = canCreate ? (
     <div className="flex items-center gap-2">
       {['failed', 'needs_review', 'ready', 'duplicate'].includes(status) ? <Button variant="outline" size="sm" disabled={acting !== null} onClick={() => void action('reprocess')}>{acting === 'reprocess' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}{t('reprocess')}</Button> : null}
       {!['materialized', 'rejected', 'queued', 'extracting'].includes(status) ? <Button variant="outline" size="sm" disabled={acting !== null} onClick={() => void action('reject')}><X size={13} />{t('reject')}</Button> : null}
       {['ready', 'needs_review'].includes(status) && !issues.some((value) => value.severity === 'blocking') ? <Button size="sm" disabled={acting !== null || saving || dirty} onClick={() => void createDraft()}>{acting === 'materialize' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}{t('createDraft')}</Button> : null}
+      {['ready', 'needs_review'].includes(status) && priceOverrideAvailable ? <Button size="sm" disabled={acting !== null || saving || dirty} onClick={() => void createDraft(true)}>{acting === 'materialize' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}{t('createDraftPriceOverride')}</Button> : null}
     </div>
   ) : undefined
 

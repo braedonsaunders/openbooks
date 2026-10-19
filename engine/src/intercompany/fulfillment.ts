@@ -21,7 +21,7 @@ import type {
   CrossSubsidiaryVoidRequest,
 } from "../inventory/cross-subsidiary.ts";
 import { IntercompanyError } from "./errors.ts";
-import { intercompanyPostingBook, intercompanyPostingPeriod, postMirrorReversal, resolveSpotRates } from "./ledger-support.ts";
+import { assertIntercompanyPeriodsOpen, intercompanyPostingBook, intercompanyPostingPeriod, postMirrorReversal, resolveSpotRates } from "./ledger-support.ts";
 import { spotTranslation } from "./netting-math.ts";
 import { transferPricingPolicyInEffect, transferUnitPrice, type TransferPricingPolicy } from "./transfer-pricing.ts";
 
@@ -155,7 +155,14 @@ async function postCrossCharge(
     return built;
   });
   const bookId = await asInventoryRefusal(() => intercompanyPostingBook(runner, input.orgId));
-  const periodId = await asInventoryRefusal(() => intercompanyPostingPeriod(runner, input.orgId, input.date));
+  const periodId = await asInventoryRefusal(() => intercompanyPostingPeriod(runner, input.orgId, input.date, input.sellingSubsidiaryId));
+  await asInventoryRefusal(() => assertIntercompanyPeriodsOpen(runner, {
+    orgId: input.orgId,
+    date: input.date,
+    bookId,
+    subsidiaryIds: [input.sellingSubsidiaryId, input.fulfillingSubsidiaryId],
+    modules: [],
+  }));
   let posted: PostEntryResult;
   try {
     posted = await postEntry(runner, {
@@ -380,10 +387,17 @@ async function returned(runner: SqlExecutor, request: CrossSubsidiaryReturnReque
 async function voided(runner: SqlExecutor, request: CrossSubsidiaryVoidRequest): Promise<void> {
   const charge = await chargeForMovement(runner, request.orgId, request.issueMovementId);
   if (!charge) return;
-  const status = (await runner.execute<{ status: string; entry_number: string }>(sql`
-    select status, entry_number from journal_entries where org_id = ${request.orgId} and id = ${charge.entry_id}`)).rows[0];
+  const status = (await runner.execute<{ status: string; entry_number: string; book_id: string }>(sql`
+    select status, entry_number, book_id from journal_entries where org_id = ${request.orgId} and id = ${charge.entry_id}`)).rows[0];
   if (!status || status.status !== "posted") return;
-  const periodId = await asInventoryRefusal(() => intercompanyPostingPeriod(runner, request.orgId, request.reversalDate));
+  const periodId = await asInventoryRefusal(() => intercompanyPostingPeriod(runner, request.orgId, request.reversalDate, charge.selling_subsidiary_id));
+  await asInventoryRefusal(() => assertIntercompanyPeriodsOpen(runner, {
+    orgId: request.orgId,
+    date: request.reversalDate,
+    bookId: status.book_id,
+    subsidiaryIds: [charge.selling_subsidiary_id, charge.fulfilling_subsidiary_id],
+    modules: [],
+  }));
   await asInventoryRefusal(() => postMirrorReversal(runner, {
     orgId: request.orgId,
     entryId: charge.entry_id,

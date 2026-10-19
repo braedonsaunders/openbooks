@@ -56,6 +56,17 @@ test('outcomes reject silent defaults and malformed dimensions', () => {
   assert.equal(validateOutcome({ ...outcome({ accountId, portion: { kind: 'remainder' } }), mode: 'automatic' }).ok, false)
 })
 
+test('outcomes reject tax codes that bank-rule journals cannot post', () => {
+  const result = validateOutcome({
+    action: 'categorize',
+    version: 2,
+    mode: 'auto',
+    lines: [{ accountId, portion: { kind: 'remainder' }, taxCodeId: accountId }],
+  })
+  assert.equal(result.ok, false)
+  assert.match(!result.ok ? result.error : '', /cannot calculate tax/)
+})
+
 test('outcomes reject percent portions totalling more than 100', () => {
   const outcome = (lines: Record<string, unknown>[]) => ({
     action: 'categorize',

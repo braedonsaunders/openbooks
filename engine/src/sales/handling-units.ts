@@ -79,7 +79,7 @@ async function admitUnitRead(
   actorId: string,
   entityId: string,
 ) {
-  await lockActorCommandAuthority(tx, orgId, actorId, entityId, "orders.read");
+  await lockActorCommandAuthority(tx, orgId, actorId, entityId, "orders.fulfill");
   if (!(await lockAndCheckOrgFeature(tx, orgId, "fulfillment")))
     throw new InventoryError(
       "Turn on fulfillment in Company Settings → Features before reviewing cartons",

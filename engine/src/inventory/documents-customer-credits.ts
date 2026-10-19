@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { add, cmp, fromUnits, isZero, neg, roundDiv, toUnits } from "../money/money.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
 import {
@@ -518,7 +519,7 @@ async function returnCustomerCreditInventoryLine(
       lotId: line.selection.lotId,
       serialId: line.selection.serialId,
     },
-    "receipt",
+    "customer_return",
   );
   const { source, alreadyReturned } = await validateCustomerReturnSource(
     runner,
@@ -528,6 +529,15 @@ async function returnCustomerCreditInventoryLine(
     line,
     true,
   );
+  const reversesMovementId =
+    profile.tracking === "serial" || profile.tracking === "lot_serial"
+      ? source.id
+      : null;
+  const reversalReason = reversesMovementId
+    ? `Customer credit return of shipment ${reversesMovementId}`
+    : null;
+  const movementActorId =
+    reversesMovementId && actorId === null ? SYSTEM_ACTOR_ID : actorId;
   // Goods return to the entity that shipped them. For a cross-subsidiary
   // shipment that is the fulfilling entity, not the crediting one.
   const holderId = source.subsidiary_id;
@@ -620,14 +630,16 @@ async function returnCustomerCreditInventoryLine(
     insert into inventory_movements
       (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id,
        lot_id, serial_id, quantity, unit_cost, total_value, document_line_id,
-       journal_entry_id, idempotency_key, status, memo, created_by, updated_by)
+       journal_entry_id, idempotency_key, reverses_movement_id, reversal_reason,
+       status, memo, created_by, updated_by)
     values
       (${orgId}, ${holderId}, ${line.itemId}, 'receipt', ${date},
        ${line.stockLocationId}, ${line.selection.lotId}, ${line.selection.serialId},
        ${quantity}, ${unitCost}, ${inventoryValue}, ${line.lineId}, ${entryId},
-       ${line.kitItemId ? inventoryKitComponentReturnKey(line.lineId, line.itemId) : inventoryPostingEffectKey(line.lineId, "return")}, 'posted',
+       ${line.kitItemId ? inventoryKitComponentReturnKey(line.lineId, line.itemId) : inventoryPostingEffectKey(line.lineId, "return")},
+       ${reversesMovementId}, ${reversalReason}, 'posted',
        ${`Customer return of shipment ${line.selection.sourceIssueMovementId}`},
-       ${actorId}, ${actorId})
+       ${movementActorId}, ${movementActorId})
     returning id
   `)).rows[0]!;
   // The layer carries the EXACT restored value, never quantity × a rounded
@@ -669,7 +681,7 @@ async function returnCustomerCreditInventoryLine(
     await runner.execute(sql`
       update serials
          set status = 'in_stock', current_stock_location_id = ${line.stockLocationId},
-             updated_at = now(), updated_by = ${actorId}
+             updated_at = now(), updated_by = ${movementActorId}
        where id = ${line.selection.serialId} and org_id = ${orgId}
     `);
   }

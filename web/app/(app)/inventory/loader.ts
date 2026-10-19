@@ -10,15 +10,11 @@ import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
 import { parseListParams, pickString } from '../../../lib/list-params'
 import type { BomAssembly } from './BomWorkspace'
-import type { ReceivablePurchaseOrder } from './ReceiveAgainstPoDrawer'
+import { listReceivablePurchaseOrders } from '../../../lib/receivable-purchase-orders'
 import type { InventoryWorkspaceData } from './InventoryWorkspace'
 import { canPostInventoryMovement } from './movement-permissions'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import type { InventoryPageData } from './view'
-
-type ReceivablePurchaseOrderRow = {
-  [Field in keyof ReceivablePurchaseOrder]: ReceivablePurchaseOrder[Field]
-}
 
 type InventoryView = 'onhand' | 'movements' | 'counts' | 'locations' | 'bom' | 'holds' | 'consignment' | 'cycles'
 
@@ -88,21 +84,9 @@ export async function loadInventory(
       ])
     : null
 
-  // Approved purchase orders still waiting for stock: the standalone
-  // receive entry offers exactly the orders the receive route will accept.
+  // Offer the same stocked, non-direct-shipment orders as the receipt flow.
   const receivablePos = showReceivePicker
-    ? await db.execute<ReceivablePurchaseOrderRow>(sql`
-        select d.id, d.document_number as "number", p.display_name as "vendor",
-               count(*)::int as "openLines"
-          from documents d
-          join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
-          left join parties p on p.id = d.party_id and p.org_id = d.org_id
-         where d.org_id = ${orgId} and d.kind = 'purchase_order' and d.status = 'approved'
-           and dl.quantity > dl.quantity_fulfilled + dl.quantity_cancelled
-           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-         group by d.id, d.document_number, d.document_date, p.display_name
-         order by d.document_date desc, d.document_number, d.id
-         limit 100`)
+    ? await listReceivablePurchaseOrders(orgId, authz.allowedSubsidiaryIds)
     : null
 
   const countParams = parseListParams(sp, { sort: 'date', dir: 'desc', perPage: 25, allowedSorts: ['date'] as const })

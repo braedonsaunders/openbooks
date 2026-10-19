@@ -1,4 +1,6 @@
 import { add, cmp, fromUnits, sum, toUnits } from "../money/money.ts";
+import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import {
@@ -75,29 +77,35 @@ export type NormalizedCapture = {
 export function validatePurchaseOrderQuantities(input: {
   invoiceQuantity: string;
   orderedQuantity: string;
+  cancelledQuantity: string;
   billedQuantity: string;
   fulfilledQuantity: string;
   requiresReceipt: boolean;
 }): Array<{ code: "po_quantity_exceeded" | "receipt_quantity_shortfall"; expected: string; actual: string }> {
-  const billable = fromUnits(toUnits(input.orderedQuantity) - toUnits(input.billedQuantity));
+  const invoiceUnits = toQuantityUnits(input.invoiceQuantity);
+  const billableUnits = toQuantityUnits(input.orderedQuantity)
+    - toQuantityUnits(input.cancelledQuantity)
+    - toQuantityUnits(input.billedQuantity);
+  const billable = fromQuantityUnits(billableUnits > 0n ? billableUnits : 0n);
   const issues: Array<{ code: "po_quantity_exceeded" | "receipt_quantity_shortfall"; expected: string; actual: string }> = [];
-  if (cmp(input.invoiceQuantity, billable) > 0) {
-    issues.push({ code: "po_quantity_exceeded", expected: billable, actual: input.invoiceQuantity });
+  if (invoiceUnits > billableUnits) {
+    issues.push({ code: "po_quantity_exceeded", expected: billable, actual: fromQuantityUnits(invoiceUnits) });
   }
   if (input.requiresReceipt) {
-    const received = fromUnits(toUnits(input.fulfilledQuantity) - toUnits(input.billedQuantity));
-    if (cmp(input.invoiceQuantity, received) > 0) {
-      issues.push({ code: "receipt_quantity_shortfall", expected: received, actual: input.invoiceQuantity });
+    const receivedUnits = toQuantityUnits(input.fulfilledQuantity) - toQuantityUnits(input.billedQuantity);
+    const received = fromQuantityUnits(receivedUnits > 0n ? receivedUnits : 0n);
+    if (invoiceUnits > receivedUnits) {
+      issues.push({ code: "receipt_quantity_shortfall", expected: received, actual: fromQuantityUnits(invoiceUnits) });
     }
   }
   return issues;
 }
 
 function exactProduct(quantity: string, price: string): string {
-  const product = toUnits(quantity) * toUnits(price);
+  const product = toQuantityUnits(quantity) * toUnits(price);
   const negative = product < 0n;
   const absolute = negative ? -product : product;
-  const rounded = (absolute + 5_000n) / 10_000n;
+  const rounded = (absolute + 50_000_000n) / 100_000_000n;
   return fromUnits(negative ? -rounded : rounded);
 }
 
@@ -249,8 +257,14 @@ export function validateNormalizedCapture(
     if (!line.description && !line.productCode) {
       issues.push({ code: "missing_line_description", severity: "warning", lineIndex });
     }
+    const quantityValid = canonicalDecimal(line.quantity, 8) !== null;
+    if (!quantityValid) {
+      issues.push(invalidMoneyIssue(
+        `line ${lineIndex + 1} quantity`, "a quantity", line.quantity,
+        { field: "quantity", lineIndex }, 8,
+      ));
+    }
     const entries = [
-      ["quantity", line.quantity, "a quantity"],
       ["unitPrice", line.unitPrice, "an amount"],
       ["amount", line.amount, "an amount"],
       ["taxAmount", line.taxAmount, "an amount"],
@@ -264,7 +278,7 @@ export function validateNormalizedCapture(
         issues.push({ code: "amount_out_of_range", severity: "blocking", lineIndex });
       }
     }
-    if (lineMoneyValid) {
+    if (quantityValid && lineMoneyValid) {
       const expected = exactProduct(line.quantity, line.unitPrice);
       if (cmp(expected, line.amount) !== 0) {
         issues.push({ code: "line_math_mismatch", severity: "blocking", lineIndex, expected, actual: line.amount });

@@ -32,7 +32,7 @@ import {
   type NettingPairResult,
 } from "./netting-math.ts";
 import {
-  assertIntercompanyPeriodOpen,
+  assertIntercompanyPeriodsOpen,
   intercompanyPostingBook,
   intercompanyPostingPeriod,
   intercompanyPostingRefusal,
@@ -355,7 +355,7 @@ async function computeNetting(
   const subsidiaryIds = [...new Set(input.subsidiaryIds)].sort();
   const scope = await loadScope(runner, orgId, subsidiaryIds);
   const bookId = await intercompanyPostingBook(runner, orgId);
-  const periodId = await intercompanyPostingPeriod(runner, orgId, input.asOfDate);
+  const periodId = await intercompanyPostingPeriod(runner, orgId, input.asOfDate, subsidiaryIds[0]!);
 
   const openKeys: { subsidiaryId: string; accountId: string; pairId: string; counterparty: string }[] = [];
   const positionKeys: { subsidiaryId: string; accountId: string; pairId: string; counterparty: string }[] = [];
@@ -933,8 +933,8 @@ export async function postNettingRun(
     if (stored.length === 0) refuse("this netting run has nothing to post", 409);
 
     const modules: ("ar" | "ap" | "banking")[] = ["ar", "ap", ...(run.settle_cash ? ["banking" as const] : [])];
-    await assertIntercompanyPeriodOpen(db, {
-      orgId, periodId: run.period_id, bookId: run.book_id, subsidiaryIds: run.subsidiary_ids, modules,
+    await assertIntercompanyPeriodsOpen(db, {
+      orgId, date: run.as_of_date, bookId: run.book_id, subsidiaryIds: run.subsidiary_ids, modules,
     });
 
     // The proposal must still describe the books exactly.
@@ -1222,9 +1222,9 @@ export async function reverseNettingRun(
     if (run.status === "reversed") return;
     if (run.status !== "posted") refuse(`only a posted netting run can be reversed; this one is ${run.status.replace("_", " ")}`, 409);
     if (input.reversalDate < run.as_of_date) refuse(`the reversal date cannot be before the run date ${run.as_of_date}`);
-    const periodId = await intercompanyPostingPeriod(db, orgId, input.reversalDate);
+    const periodId = await intercompanyPostingPeriod(db, orgId, input.reversalDate, run.subsidiary_ids[0]!);
     const modules: ("ar" | "ap" | "banking")[] = ["ar", "ap", ...(run.settle_cash ? ["banking" as const] : [])];
-    await assertIntercompanyPeriodOpen(db, { orgId, periodId, bookId: run.book_id, subsidiaryIds: run.subsidiary_ids, modules });
+    await assertIntercompanyPeriodsOpen(db, { orgId, date: input.reversalDate, bookId: run.book_id, subsidiaryIds: run.subsidiary_ids, modules });
     // Settlement entries and their realized-exchange entries carry the run.
     const entries = (await db.execute<{ entry_id: string }>(sql`
       select id as entry_id from journal_entries

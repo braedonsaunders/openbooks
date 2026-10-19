@@ -1,5 +1,6 @@
 import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { bomQuantityPolicy, type BomQuantityPolicy } from "./bom-scrap.ts";
+import { kitComponentMovesStock } from "./kits.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { fitsLedgerRange } from "../money/money.ts";
@@ -91,11 +92,37 @@ export async function readBomRecipe(tx: SqlExecutor, orgId: string, assemblyItem
   return { kind: parent.kind, version: await readBomPolicyVersion(tx, orgId, assemblyItemId), lines };
 }
 
-async function validateReferences(tx: SqlExecutor, orgId: string, assemblyItemId: string, lines: BomPolicyLine[]) {
+async function validateReferences(tx: SqlExecutor, orgId: string, assemblyItemId: string, parentKind: string, lines: BomPolicyLine[]) {
   const ids = [...new Set([assemblyItemId, ...lines.map(line => line.componentItemId)])].sort();
-  const valid = await tx.execute(sql`select item.id from items item join item_inventory_profiles profile on profile.org_id=item.org_id and profile.item_id=item.id
-    where item.org_id=${orgId} and item.is_active and item.id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)}) order by item.id for share of item,profile`);
-  if (valid.rows.length !== ids.length) throw new BomPolicyError("Every assembly and component must be an active inventory item with a costing profile in this organization.");
+  const items = await tx.execute<{ id: string; kind: string }>(sql`
+    select id, kind from items
+     where org_id=${orgId} and is_active
+       and id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)})
+     order by id for share`);
+  const byId = new Map(items.rows.map(item => [item.id, item]));
+  if (byId.size !== ids.length) {
+    throw new BomPolicyError(parentKind === "kit"
+      ? "The kit and every component must be active items in this organization."
+      : "Every assembly and component must be an active inventory item with a costing profile in this organization.");
+  }
+  if (parentKind === "kit" && lines.some(line => byId.get(line.componentItemId)?.kind === "kit")) {
+    throw new BomPolicyError("A kit cannot contain another kit; choose a stocked item or a commercial-only component.");
+  }
+  const profileRequiredIds = parentKind === "kit"
+    ? lines.filter(line => kitComponentMovesStock(byId.get(line.componentItemId)!.kind)).map(line => line.componentItemId)
+    : ids;
+  if (profileRequiredIds.length === 0) return;
+  const profiles = await tx.execute<{ itemId: string }>(sql`
+    select item_id as "itemId" from item_inventory_profiles
+     where org_id=${orgId}
+       and item_id in (${sql.join([...new Set(profileRequiredIds)].map(id => sql`${id}::uuid`), sql`, `)})
+     order by item_id for share`);
+  const profiled = new Set(profiles.rows.map(profile => profile.itemId));
+  if ([...new Set(profileRequiredIds)].some(id => !profiled.has(id))) {
+    throw new BomPolicyError(parentKind === "kit"
+      ? "Each inventory or assembly component in a kit needs a costing profile; configure the component profile before saving."
+      : "Every assembly and component must be an active inventory item with a costing profile in this organization.");
+  }
 }
 
 /** Earlier effectivity remains readable after a successor takes effect. A
@@ -224,11 +251,11 @@ export async function saveBomPolicy(tx: SqlExecutor, orgId: string, actorId: str
     if (prior) return {changeId:prior,approvalRequired:true as const};
     if (before.version!==input.expectedVersion) throw new BomPolicyError("This recipe changed after you opened it; reopen it and use its current revision.",409,"bom_revision_changed");
     await preserveHistory(tx,orgId,input.assemblyItemId,before.lines,routed,proposal.effectiveOn);
-    await validateReferences(tx,orgId,input.assemblyItemId,routed);
+    await validateReferences(tx,orgId,input.assemblyItemId,before.kind,routed);
     return {changeId:await proposeFinancialChange(tx,{...proposal,beforeState:before}),approvalRequired:true as const};
   }
   if (before.version!==input.expectedVersion) throw new BomPolicyError("This recipe changed after you opened it; reopen it and use its current revision.",409,"bom_revision_changed");
-  await validateReferences(tx,orgId,input.assemblyItemId,lines);
+  await validateReferences(tx,orgId,input.assemblyItemId,before.kind,lines);
   return replace(tx,orgId,actorId,input,before,lines);
 }
 
@@ -256,7 +283,7 @@ export async function applyApprovedBomRevision(tx: SqlExecutor, orgId: string, a
   const lines = await defaultOperationSequences(tx,orgId,change.subject_id,normalize(input),today);
   if (before.kind==="kit") throw new BomPolicyError("Virtual kit recipes use the inventory editor, not manufacturing revision approval.");
   await preserveHistory(tx,orgId,change.subject_id,before.lines,lines,today);
-  await validateReferences(tx,orgId,change.subject_id,lines);
+  await validateReferences(tx,orgId,change.subject_id,before.kind,lines);
   const result = await replace(tx,orgId,actorId,input,before,lines,change.id);
   await completeFinancialChange(tx,orgId,change.id,actorId,result);
   return result;

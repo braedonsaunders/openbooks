@@ -54,6 +54,165 @@ test(
 );
 
 test(
+  "duplicate BOM rows aggregate before checking component availability",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const updated = await db.execute(sql`
+        update bom_components
+           set quantity_per = '5', operation_seq = 10
+         where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}
+         returning component_item_id`);
+      assert.equal(updated.rows.length, 1, "the fixture BOM line must be present");
+      await db.execute(sql`
+        insert into bom_components
+          (org_id, assembly_item_id, component_item_id, quantity_per, sort_order, operation_seq)
+        values (${org.orgId}, ${org.items.assembly}, ${org.items.component}, '5', 0, 20)`);
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.component,
+        stockLocationId: org.stockLocationId,
+        quantity: "6",
+        unitCost: "1",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      const before = await getOnHand(org.orgId, org.items.component, org.stockLocationId);
+
+      await assert.rejects(
+        buildAssembly(org.orgId, null, {
+          assemblyItemId: org.items.assembly,
+          quantity: "1",
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+        }),
+        /insufficient component .* need 10\.0000, on hand 6\.0000/,
+      );
+      assert.deepEqual(await getOnHand(org.orgId, org.items.component, org.stockLocationId), before);
+      assert.equal(
+        (await db.execute<{ count: number }>(sql`
+          select count(*)::int as count from inventory_movements
+           where org_id = ${org.orgId} and kind = 'assembly_consume'`)).rows[0]!.count,
+        0,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "assembly builds cannot consume stock from a quarantine location",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const quarantineLocationId = randomUUID();
+      await db.execute(sql`
+        insert into stock_locations (id, org_id, location_id, code, kind, is_active)
+        values (${quarantineLocationId}, ${org.orgId}, ${org.locationId}, 'QUARANTINE', 'quarantine', true)`);
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.component,
+        stockLocationId: quarantineLocationId,
+        quantity: "10",
+        unitCost: "1",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+
+      await assert.rejects(
+        buildAssembly(org.orgId, null, {
+          assemblyItemId: org.items.assembly,
+          quantity: "1",
+          stockLocationId: quarantineLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+        }),
+        /Stock is held, unavailable, externally owned, or in vendor custody/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "assembly builds cannot date component consumption before the stock receipt",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.component,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "1",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+
+      await assert.rejects(
+        buildAssembly(org.orgId, null, {
+          assemblyItemId: org.items.assembly,
+          quantity: "1",
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: "2026-07-14",
+        }),
+        /had 0\.0000 on hand on 2026-07-14/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "assembly builds enforce subsidiary restrictions on inventory accounts",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.component,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "1",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      const restrictedSubsidiaryId = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries
+          (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${restrictedSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Restricted entity', 'CAD', 'CA',
+          '{}'::jsonb, false, true, '{}'::jsonb)`);
+      await db.execute(sql`
+        update accounts set subsidiary_id = ${restrictedSubsidiaryId}
+         where org_id = ${org.orgId} and id = ${org.accounts.invAsset}`);
+
+      await assert.rejects(
+        buildAssembly(org.orgId, null, {
+          assemblyItemId: org.items.assembly,
+          quantity: "1",
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+        }),
+        /restricted to another subsidiary/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "an in-flight build waits for a BOM edit, re-reads it, and retains finished-layer provenance",
   { skip: !DB },
   async () => {

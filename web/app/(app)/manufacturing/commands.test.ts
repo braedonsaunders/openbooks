@@ -34,3 +34,20 @@ test("previously reported minutes win over the routing standard", () => {
   assert.equal(fields.get("actualSetupMinutes"), "0.0000");
   assert.equal(fields.get("actualRunMinutes"), "61.5000");
 });
+
+test("confirmed MRP purchase orders expose conversion only to authorized buyers", () => {
+  const run = { id: "mrp-1", status: "complete" } as unknown as ManufacturingRow;
+  const suggestion = { id: "planned-1", status: "confirmed", action: "buy" } as unknown as ManufacturingRow;
+  const mrpOptions = { vendors: [] } as unknown as ManufacturingOptions;
+
+  assert.equal(
+    childCommands("mrp", "suggestions", run, suggestion, mrpOptions, false, false)
+      .some((command) => command.key === "convert"),
+    false,
+  );
+  assert.equal(
+    childCommands("mrp", "suggestions", run, suggestion, mrpOptions, false, true)
+      .some((command) => command.key === "convert"),
+    true,
+  );
+});

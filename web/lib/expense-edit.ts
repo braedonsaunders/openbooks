@@ -545,7 +545,7 @@ export interface ExpenseCorrectionBody extends ExpenseEditBody {
 export async function createExpenseCorrectionDraft(
   sourceId: string,
   body: ExpenseCorrectionBody,
-  ctx: { orgId: string; userId: string },
+  ctx: { orgId: string; userId: string; allowedSubsidiaryIds: ReadonlySet<string> | null },
 ): Promise<{ id: string; documentNumber: string }> {
   const expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
   const reason = validateCorrectionReason(body.amendmentReason)
@@ -620,7 +620,14 @@ export async function createExpenseCorrectionDraft(
         existingCustom: source.custom,
         existingDocumentDate: source.documentDate,
         existingPaymentCardId: source.paymentCardId,
+        reportSubsidiaryId: source.subsidiaryId,
         reportCurrency: source.currency,
+      })
+      await assertReportEmployee(tx, {
+        orgId: ctx.orgId,
+        employeeId: (body.partyId === undefined ? source.partyId : body.partyId) ?? null,
+        reportSubsidiaryId: source.subsidiaryId,
+        allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
       })
       const documentNumber = await nextDocumentNumber(ctx.orgId, 'expense_report', 'EXP-')
       const created = (await tx.execute<{ id: string }>(sql`
