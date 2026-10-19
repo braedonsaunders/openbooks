@@ -367,6 +367,9 @@ test("a credit preserves pre-credit plan periods and must belong to the schedule
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${otherSubsidiaryId}, ${w.org.orgId}, ${w.org.subsidiaryId}, 'Second entity', 'CAD', 'CA')`);
+    await db.execute(sql`
+      insert into party_subsidiaries (org_id, party_id, subsidiary_id)
+      values (${w.org.orgId}, ${w.org.vendorId}, ${otherSubsidiaryId})`);
     const otherEntityCredit = await postSourceDocument(w, {
       kind: "vendor_credit",
       number: "VC-AM-OTHER-ENTITY",
