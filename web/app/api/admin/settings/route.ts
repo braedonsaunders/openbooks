@@ -113,6 +113,7 @@ export const GET = defineRoute({
 export const PUT = defineRoute({
   permission: SETTINGS_WRITE_PERMISSION,
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
 
@@ -120,7 +121,11 @@ export const PUT = defineRoute({
 
 
 
-    const result = await updateCompanySettings(gate.user, body as Record<string, unknown>);
+    const result = await updateCompanySettings({
+      orgId: gate.user.orgId,
+      id: gate.user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    }, body as Record<string, unknown>);
     if (result.status === 404) return notFound("company settings");
     return NextResponse.json(result.body, { status: result.status });
   },

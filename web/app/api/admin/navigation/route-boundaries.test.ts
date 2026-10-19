@@ -6,11 +6,12 @@ import { db } from '@openbooks/engine/platform/db'
 import type { OrgNavConfig } from '../../../../lib/nav/registry'
 
 const guardKey = Symbol.for('openbooks.navigation.boundary.guard')
-const session = { user: { id: 'editor-one', orgId: 'company-one' }, permissions: new Set(['admin.nav.manage']), allowedSubsidiaryIds: null }
+const session: { user: { id: string; orgId: string }; permissions: Set<string>; allowedSubsidiaryIds: Set<string> | null } = { user: { id: 'editor-one', orgId: 'company-one' }, permissions: new Set(['admin.nav.manage']), allowedSubsidiaryIds: null }
 ;(globalThis as unknown as Record<symbol, unknown>)[guardKey] = session
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === '../../../../lib/authz' && context.parentURL?.includes('api/admin/navigation/route.ts')) return { shortCircuit: true, url: 'mock:navigation-boundary-guard' }
+    if (specifier === '@/lib/authz') return { shortCircuit: true, url: 'mock:navigation-boundary-guard' }
     if (context.parentURL === 'mock:navigation-boundary-guard') return next(specifier, { ...context, parentURL: import.meta.url })
     return next(specifier, context)
   },
@@ -21,6 +22,9 @@ registerHooks({
       export async function guardPermission(key) {
         const authz = globalThis[Symbol.for('openbooks.navigation.boundary.guard')];
         return permissionSetCovers(authz.permissions, key) ? authz : NextResponse.json({error: 'missing permission: '+key}, {status:403});
+      }
+      export function guardUnrestrictedScope(authz) {
+        return authz.allowedSubsidiaryIds === null ? null : NextResponse.json({error: 'requires unrestricted subsidiary access'}, {status:403});
       }` }
     return next(url, context)
   },
@@ -56,7 +60,7 @@ db.transaction = (async (callback: (tx: { execute: typeof db.execute }) => Promi
 
 test.after(() => { db.execute = originalExecute; db.transaction = originalTransaction })
 function draft(): OrgNavConfig { return { version: 2, architectureVersion: 1, groups: [{ id: 'work', label: 'Work', items: [{ kind: 'module', moduleKey: 'dashboard' }] }], localNavigation: { payroll: { items: [{ href: '/payroll/runs', label: 'Process wages' }, { href: '/payroll', hidden: true }] } } } }
-function reset() { before = undefined; zeroRows = false; zeroAuditRows = false; queries = []; writes = []; rolledBack = false }
+function reset() { session.allowedSubsidiaryIds = null; before = undefined; zeroRows = false; zeroAuditRows = false; queries = []; writes = []; rolledBack = false }
 function request(config: unknown, expectedUpdatedAt: string | null = null) { return new Request('http://localhost/api/admin/navigation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config, expectedUpdatedAt }) }) }
 
 test('valid local preferences save and audit under the same organization fence', async () => {
@@ -68,6 +72,15 @@ test('valid local preferences save and audit under the same organization fence',
   assert.deepEqual(changes, { before: null, after: config })
   assert.ok(audit.params.includes('editor-one'))
   assert.ok(queries.find((query) => query.sql.includes('from org_nav_configs'))!.sql.includes('for update'))
+})
+
+test('subsidiary-restricted users cannot change organization navigation', async () => {
+  reset(); session.allowedSubsidiaryIds = new Set(['subsidiary-one'])
+  const response = await PUT(request(draft()))
+  assert.equal(response.status, 403)
+  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
+  assert.deepEqual(queries, [])
+  assert.deepEqual(writes, [])
 })
 
 test('unregistered and duplicate local destinations are refused before any write', async () => {

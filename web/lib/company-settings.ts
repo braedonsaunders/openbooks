@@ -31,6 +31,7 @@ import {
   periodDerivationStagingSql,
 } from "./fiscal-periods";
 import { PARTYLESS_CONTROL_POLICIES, parsePartylessControlPolicy, type PartylessControlPolicy } from "@openbooks/engine/ledger/partyless-control-policy";
+import { assertUnrestrictedScope } from "@openbooks/engine/organization/scope";
 
 
 /** Transport-neutral outcome: the HTTP status the route would answer with and
@@ -188,9 +189,10 @@ export async function readCompanySettings(orgId: string): Promise<CompanySetting
  * control-account checks, period derivation, and audit evidence.
  */
 export async function updateCompanySettings(
-  actor: { orgId: string; id: string },
+  actor: { orgId: string; id: string; allowedSubsidiaryIds: ReadonlySet<string> | null },
   rawBody: Record<string, unknown>,
 ): Promise<CompanySettingsResult> {
+  assertUnrestrictedScope(actor.allowedSubsidiaryIds);
   const { orgId } = actor;
   const body = rawBody as {
     name?: unknown;

@@ -91,7 +91,7 @@ test('a retainage-bearing pay application is billable once the receivable contro
     await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${retAcct}, ${org.orgId}, '1210', 'Retainage Receivable', 'asset_receivable', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
     const saved = await withOrgContext(org.orgId, () => updateCompanySettings(
-      { orgId: org.orgId, id: preparer },
+      { orgId: org.orgId, id: preparer, allowedSubsidiaryIds: null },
       { controlAccounts: { retainageReceivable: retAcct } },
     ))
     assert.equal(saved.status, 200, JSON.stringify(saved.body))

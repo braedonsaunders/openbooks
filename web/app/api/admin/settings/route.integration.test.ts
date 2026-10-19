@@ -15,7 +15,7 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
   requestedPermissions: string[];
   deny(permission: string | null): NextResponse;
@@ -37,6 +37,7 @@ const routeState: RouteState = {
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.settings-route-test')]
+  import { NextResponse } from 'next/server'
   export async function guardPermission(permission) {
     state.requestedPermissions.push(permission)
     if (!state.authz) return state.deny(null)
@@ -44,6 +45,9 @@ const mockAuthz = `
       return state.deny(permission)
     }
     return state.authz
+  }
+  export function guardUnrestrictedScope(authz) {
+    return authz.allowedSubsidiaryIds === null ? null : NextResponse.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
   }
 `;
 
@@ -73,6 +77,7 @@ const { db, withBypass, withBypassContext, withOrgContext } =
   await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/testing/fixtures");
+const { updateCompanySettings } = await import("../../../../lib/company-settings");
 
 
 /** Drizzle wraps driver errors, so PostgreSQL messages live on `cause`. */
@@ -134,6 +139,13 @@ function request(body: unknown): Request {
 function put(fixture: Fixture, body: unknown): Promise<Response> {
   return withOrgContext(fixture.orgId, () => PUT(request(body)));
 }
+
+test("the shared settings writer refuses subsidiary-restricted actors", async () => {
+  await assert.rejects(
+    () => updateCompanySettings({ orgId: "company-one", id: "actor-one", allowedSubsidiaryIds: new Set(["subsidiary-one"]) }, { name: "Must Not Change" }),
+    (error: unknown) => (error as { status?: number }).status === 403,
+  );
+});
 
 async function settingsState(orgId: string): Promise<{
   name: string;
@@ -332,6 +344,24 @@ test(
     }
   },
 );
+
+test("subsidiary-restricted setup administrators cannot change company settings", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const before = await settingsState(fixture.orgId);
+    routeState.authz!.allowedSubsidiaryIds = new Set([fixture.subsidiaryId]);
+
+    const response = await put(fixture, { name: "Restricted Change" });
+
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+    assert.deepEqual(await settingsState(fixture.orgId), before);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
 test(
   "audit insertion failure rolls back org, fiscal calendar, periods, and evidence",

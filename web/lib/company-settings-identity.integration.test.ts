@@ -27,7 +27,7 @@ test('legal identity persists canonically, reads back for the assistant, and is 
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-    const me = { orgId: org.orgId, id: actor }
+    const me = { orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }
     const saved = await withBypassContext(() => updateCompanySettings(me, {
       country: 'US',
       address: { line1: '1 Main St', city: 'Austin', region: 'TX', postalCode: '78701', country: 'us' },
@@ -65,7 +65,7 @@ test('malformed numbers, foreign schemes and impossible classifications refuse w
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-    const me = { orgId: org.orgId, id: actor }
+    const me = { orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }
     const before = await orgRow(org.orgId)
 
     const malformed = await withBypassContext(() => updateCompanySettings(me, { country: 'US', taxIds: { us_ein: '12-34' } }))
