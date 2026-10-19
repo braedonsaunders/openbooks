@@ -159,6 +159,15 @@
       "quotesAwaitingAnswer": "Orçamentos aguardando resposta",
       "activeAgreements": "Contratos ativos"
     },
+    "workQueue": "Fila de trabalho de serviços",
+    "directoryTitle": "Área de trabalho",
+    "attentionTitle": "Precisa de atenção",
+    "allClear": "Nenhum trabalho de serviço precisa de atenção.",
+    "attention": {
+      "responseBreaches": "{count, plural, one {# visita ultrapassou a meta de resposta} other {# visitas ultrapassaram a meta de resposta}}",
+      "quotesAwaitingAnswer": "{count, plural, one {# orçamento aguarda resposta} other {# orçamentos aguardam resposta}}",
+      "awaitingReview": "{count, plural, one {# visita aguarda revisão} other {# visitas aguardam revisão}}"
+    },
     "policyMissing": "Nenhuma política de despacho está em vigor.",
     "policyMissingRemedy": "As metas de resposta, as janelas de chegada e a geração de contratos usam a política de despacho. Adicione uma versão em Configuração → Política de despacho de serviços.",
     "openPolicy": "Abrir política de despacho",

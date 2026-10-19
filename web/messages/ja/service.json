@@ -159,6 +159,15 @@
       "quotesAwaitingAnswer": "回答待ちの見積",
       "activeAgreements": "有効な契約"
     },
+    "workQueue": "サービス作業キュー",
+    "directoryTitle": "ワークスペース",
+    "attentionTitle": "要対応",
+    "allClear": "対応が必要なサービス作業はありません。",
+    "attention": {
+      "responseBreaches": "{count, plural, other {# 件の訪問で応答目標を超過}}",
+      "quotesAwaitingAnswer": "{count, plural, other {# 件の見積が回答待ち}}",
+      "awaitingReview": "{count, plural, other {# 件の訪問がレビュー待ち}}"
+    },
     "policyMissing": "有効な手配ポリシーがありません。",
     "policyMissingRemedy": "対応目標、到着時間帯、契約からの訪問生成には手配ポリシーを使用します。設定 → サービス手配ポリシーでバージョンを追加してください。",
     "openPolicy": "手配ポリシーを開く",

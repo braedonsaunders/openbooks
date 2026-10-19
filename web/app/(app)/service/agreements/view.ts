@@ -3,6 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requireServiceArea } from '../../../../lib/service/pages'
+import { serviceWorkspaceTabs } from '../../../../lib/service/workspace-tabs'
 
 /**
  * Service agreements: the universal entity list for `service_agreement` with the
@@ -16,6 +17,7 @@ export interface ServiceAgreementsData {
   currentParams: Record<string, string | string[] | undefined>
   canCreate: boolean
   newLabel: string
+  tabs: ReturnType<typeof serviceWorkspaceTabs>
 }
 
 export async function loadServiceAgreements(sp: Record<string, string | string[] | undefined>): Promise<ServiceAgreementsData> {
@@ -27,6 +29,10 @@ export async function loadServiceAgreements(sp: Record<string, string | string[]
     currentParams: sp,
     canCreate: capabilities.manage,
     newLabel: t('pages.agreements.new'),
+    tabs: serviceWorkspaceTabs('agreements', {
+      overview: t('tabs.overview'), requests: t('tabs.requests'), jobs: t('tabs.jobs'),
+      visits: t('tabs.visits'), agreements: t('tabs.agreements'),
+    }),
   }
 }
 
@@ -40,7 +46,10 @@ export function serviceAgreementsSpec(data: ServiceAgreementsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget('service-new-button', { kind: 'agreement', label: data.newLabel }, f('canCreate'))],
+        actions: [
+          widget('service-new-button', { kind: 'agreement', label: data.newLabel }, f('canCreate')),
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
       }),
     ],
     body: [
