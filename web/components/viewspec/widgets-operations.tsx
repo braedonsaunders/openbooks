@@ -26,6 +26,10 @@ import { SubmissionWithdrawCell } from '../../app/(app)/inbox/SubmissionWithdraw
 import { AccountNameCell, AccountRegisterCell } from '../../app/(app)/accounts/sections'
 import { BlockedBillsSection, ComplianceSetupBanner, ExpiringVendorsSection, ReadinessPanel, WaiversPanel } from '../../app/(app)/compliance/sections'
 import { CloseActionCell, CloseReadinessCell, CloseStatusCell, SingleBookLabel } from '../../app/(app)/close/sections'
+import { PostingPeriodsView } from '../../app/(app)/close/posting-periods/PostingPeriodsView'
+import { ProvisionsWorkspace } from '../../app/(app)/accounting/provisions/workspace'
+import { ReopenRequestsWorkspace } from '../../app/(app)/accounting/reopen-requests/workspace'
+import { AccountingChangesWorkspace } from '../../app/(app)/accounting/changes/workspace'
 import { JournalDraftsPanel } from '../../app/(app)/journal/sections'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
@@ -170,6 +174,26 @@ export const OPERATIONS_WIDGETS = {
   },
   'single-book-label': (props) => (
     <SingleBookLabel label={str(props, 'label') ?? ''} name={str(props, 'name') ?? ''} />
+  ),
+  'close-posting-periods-workspace': (props) => (
+    <PostingPeriodsView key={str(props, 'bookId') || 'no-book'}
+      bookId={str(props, 'bookId') || null}
+      runId={str(props, 'runId') ?? null}
+      canManageBooks={props.canManageBooks === true}
+      manageBooksLabel={str(props, 'manageBooksLabel') ?? ''}
+      canPreview={props.canPreview === true}
+      initialRows={(props.initialRows as ComponentProps<typeof PostingPeriodsView>['initialRows']) ?? null}
+      initialError={str(props, 'initialError') ?? null}
+    />
+  ),
+  'accounting-provisions-workspace': async (props) => (
+    <ProvisionsWorkspace data={props.data as ComponentProps<typeof ProvisionsWorkspace>['data']} />
+  ),
+  'accounting-reopen-requests-workspace': (props) => (
+    <ReopenRequestsWorkspace data={props.data as ComponentProps<typeof ReopenRequestsWorkspace>['data']} />
+  ),
+  'accounting-changes-workspace': async (props) => (
+    <AccountingChangesWorkspace data={props.data as ComponentProps<typeof AccountingChangesWorkspace>['data']} />
   ),
   'close-readiness-cell': (props) => (
     <CloseReadinessCell readiness={num(props, 'readiness') ?? 0} />

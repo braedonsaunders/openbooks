@@ -65,7 +65,8 @@ test("decided inventory and field kinds render labels, never Unknown value", asy
     await act(async () => {
       root.render(
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-          <PostingPeriodsView bookId="b1" runId={null} />
+          <PostingPeriodsView bookId="b1" runId={null} canManageBooks={false} manageBooksLabel="Manage books"
+            canPreview initialRows={rows} initialError={null} />
         </NextIntlClientProvider>,
       );
       await tick();

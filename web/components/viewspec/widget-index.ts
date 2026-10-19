@@ -45,6 +45,9 @@ export const WIDGET_FAMILIES = [
 export type WidgetFamily = (typeof WIDGET_FAMILIES)[number]
 
 export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
+  'accounting-provisions-workspace': 'operations',
+  'accounting-reopen-requests-workspace': 'operations',
+  'accounting-changes-workspace': 'operations',
   'access-control-cell': 'platform',
   'account-drawer': 'operations',
   'account-heading': 'reporting',
@@ -148,6 +151,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'channels-console': 'home',
   'choose-recon-account': 'banking',
   'close-action-cell': 'operations',
+  'close-posting-periods-workspace': 'operations',
   'close-readiness-cell': 'operations',
   'close-status-cell': 'operations',
   'close-wizard': 'setup',

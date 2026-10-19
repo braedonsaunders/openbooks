@@ -5,9 +5,10 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
+import { Button, UrlDrawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import type { ProvisionIdentity, ProvisionEstimate, provisionEditorOptions, readProvisionObligation } from '@openbooks/engine/provisions'
 import { PagedTable } from '@/components/paged-table'
+import { LineGrid, type LineGridColumn } from '@/components/line-grid'
 import { MoneyInput, moneyFieldError } from '@/components/money-input'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useDirtyClose } from '@/lib/use-dirty-close'
@@ -15,6 +16,7 @@ import { readApiErrorMessage } from '@/lib/api-error'
 import { DateField } from '@/components/date-field'
 
 type Choices = Awaited<ReturnType<typeof provisionEditorOptions>>
+type OutcomeRow = Record<string, unknown> & { id: string; amount: string; probability: string }
 
 export function ProvisionAssessmentHistory({ assessments }: { assessments: Awaited<ReturnType<typeof readProvisionObligation>>['assessments'] }) {
   const t = useTranslations('accounting.provisions'), accounting = useTranslations('accounting.lifecycle')
@@ -24,24 +26,37 @@ export function ProvisionAssessmentHistory({ assessments }: { assessments: Await
     { key: 'status', header: t('status'), cell: row => accounting(row.status) },
   ]} searchable />
 }
-/** The asset accounting-change editor's native Drawer, account pickers and
- * dirty-close guard, with a PagedTable for expected-value settlement outcomes. */
-export function ProvisionAssessmentButton({ options, identity }: { options: Choices; identity?: ProvisionIdentity }) {
+/** The assessment editor's URL-addressed drawer and exact-decimal outcome grid. */
+export function ProvisionAssessmentButton({ options, identity, assessmentOpen, openHref, closeHref, stacked = false, showTrigger = true }: {
+  options: Choices
+  identity?: ProvisionIdentity
+  assessmentOpen: boolean
+  openHref: string
+  closeHref: string
+  stacked?: boolean
+  showTrigger?: boolean
+}) {
   const t = useTranslations('accounting.provisions'), common = useTranslations('common')
   const today = useBusinessToday(), router = useRouter()
-  const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null)
   const [values, setValues] = useState<Record<string, string>>({ date: today, method: 'best_estimate' })
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID()), [initialKey, setInitialKey] = useState(requestKey)
   const [obligationId, setObligationId] = useState(() => identity?.id ?? crypto.randomUUID())
-  const [outcomes, setOutcomes] = useState<{ id: string; amount: string; probability: string }[]>([])
+  const [outcomes, setOutcomes] = useState<OutcomeRow[]>([])
   const update = (key: string, value: string) => { setValues(current => ({ ...current, [key]: value })); setRequestKey(crypto.randomUUID()) }
   const updateOutcomes = (rows: typeof outcomes) => { setOutcomes(rows); setRequestKey(crypto.randomUUID()) }
-  const close = () => {
-    setOpen(false); setValues({ date: today, method: 'best_estimate' }); setOutcomes([]); setError(null)
+  const reset = () => {
+    setValues({ date: today, method: 'best_estimate' }); setOutcomes([]); setError(null)
     const next = crypto.randomUUID(); setRequestKey(next); setInitialKey(next); setObligationId(identity?.id ?? crypto.randomUUID())
   }
+  const close = () => { reset(); router.push(closeHref as never) }
   const closeGuard = useDirtyClose({ dirty: requestKey !== initialKey, busy, onClose: close,
     message: common('feedback.unsavedChanges'), confirmLabel: common('confirm.discardChanges') })
+  const beforeClose = async () => {
+    const allowed = await closeGuard.beforeClose()
+    if (allowed) reset()
+    return allowed
+  }
   const construction = Boolean(identity?.projectId || values.project)
   const needsEstimate = !construction && values.obligation === 'yes' && values.outflow === 'probable' && values.estimable === 'yes'
   const moneyInvalid = needsEstimate && (values.method === 'best_estimate'
@@ -68,7 +83,7 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
       }) })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('failed')))
       const result = await response.json() as { id: string }
-      close(); router.push(`/accounting/changes?change=${result.id}`); router.refresh()
+      reset(); router.push(`/accounting/changes?change=${result.id}`); router.refresh()
     } catch (caught) { const message = caught instanceof Error ? caught.message : t('failed'); setError(message); toast.error(message) }
     finally { setBusy(false) }
   }
@@ -79,9 +94,14 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
   const picker = (key: string, rows: { id: string; name: string }[]) => <div className="space-y-1"><Label>{t(key)}</Label>
     <SearchSelect ariaLabel={t(key)} value={values[key] ?? ''} onChange={value => update(key, value)} options={rows.map(row => ({ value: row.id, label: row.name }))} placeholder={t('choose')} />
   </div>
+  const outcomeColumns: LineGridColumn<OutcomeRow>[] = [
+    { key: 'amount', label: t('estimate'), width: 'minmax(140px, 1fr)', type: 'amount', required: true },
+    { key: 'probability', label: t('probability'), width: 'minmax(120px, 1fr)', type: 'decimal', decimalScale: 4, required: true },
+  ]
   return <>
-    <Button onClick={() => setOpen(true)}>{identity ? t('review') : t('new')}</Button>
-    {open ? <Drawer open onClose={closeGuard.close} title={identity ? t('review') : t('new')} size="2xl">
+    {showTrigger ? <Button asChild><Link href={openHref as never}>{identity ? t('review') : t('new')}</Link></Button> : null}
+    <UrlDrawer open={assessmentOpen} openKey={identity?.id ?? 'new'} closeHref={closeHref}
+      beforeClose={beforeClose} stacked={stacked} title={identity ? t('review') : t('new')} size="2xl">
       <div className="space-y-5">
         <p className="text-sm text-muted-foreground">{t('approvalHint')}</p>
         {identity ? <p className="font-medium">{identity.name} · {identity.currency}</p> : <>
@@ -110,13 +130,15 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
             {(options.reportingFramework === 'ifrs' ? ['best_estimate', 'expected_value', 'uniform_range'] : ['best_estimate', 'no_better_estimate_range']).map(value => <option key={value} value={value}>{t(value)}</option>)}
           </Select></div>
           {values.method === 'best_estimate' ? <MoneyInput value={values.amount ?? ''} onChange={value => update('amount', value)} field={t('estimate')} ariaLabel={t('estimate')} required />
-            : values.method === 'expected_value' ? <PagedTable rows={outcomes} rowKey={row => row.id} empty={t('noOutcomes')}
-              toolbarAfter={<Button variant="outline" onClick={() => updateOutcomes([...outcomes, { id: crypto.randomUUID(), amount: '', probability: '' }])}>{t('addOutcome')}</Button>}
-              columns={[
-                { key: 'amount', header: t('estimate'), cell: row => <MoneyInput value={row.amount} field={t('estimate')} ariaLabel={t('estimate')} required onChange={value => updateOutcomes(outcomes.map(current => current.id === row.id ? { ...current, amount: value } : current))} /> },
-                { key: 'probability', header: t('probability'), cell: row => <MoneyInput value={row.probability} field={t('probability')} ariaLabel={t('probability')} required onChange={value => updateOutcomes(outcomes.map(current => current.id === row.id ? { ...current, probability: value } : current))} /> },
-                { key: 'remove', header: common('labels.actions'), cell: row => <Button variant="ghost" onClick={() => updateOutcomes(outcomes.filter(current => current.id !== row.id))}>{common('actions.remove')}</Button> },
-              ]} />
+            : values.method === 'expected_value' ? <LineGrid<OutcomeRow>
+              columns={outcomeColumns}
+              rows={outcomes}
+              onRowsChange={updateOutcomes}
+              emptyRow={() => ({ id: crypto.randomUUID(), amount: '', probability: '' })}
+              getRowKey={row => row.id}
+              addLabel={t('addOutcome')}
+              minRows={0}
+            />
             : <div className="grid gap-3 sm:grid-cols-2">{['minimum', 'maximum'].map(key => <MoneyInput key={key} value={values[key] ?? ''} onChange={value => update(key, value)} field={t(key)} ariaLabel={t(key)} required />)}</div>}
         </> : !construction ? <p className="text-sm text-muted-foreground">{t('unrecognizedHint')}</p> : null}
         <div className="space-y-1"><Label htmlFor="provision-discounting">{t('discounting')}</Label><Select id="provision-discounting" value={values.discounting ?? ''} onChange={event => update('discounting', event.target.value)}>
@@ -131,6 +153,6 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
           || (!identity && (!values.name?.trim() || !values.subsidiary || !values.book || !values.expense || !values.liability))} onClick={() => void save()}>{t('propose')}</Button>
           <Button variant="outline" disabled={busy} onClick={closeGuard.close}>{common('actions.cancel')}</Button></div>
       </div>
-    </Drawer> : null}
+    </UrlDrawer>
   </>
 }

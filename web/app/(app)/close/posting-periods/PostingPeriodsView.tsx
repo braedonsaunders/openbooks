@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { ListPageLayout } from "../../../../components/page-layout";
 import { PagedTable } from "../../../../components/paged-table";
 import { enumLabel } from "@/lib/enum-label";
 import { toast } from "sonner";
 import { readApiErrorMessage } from "@/lib/api-error";
 import { ArrowLeft, Play } from "lucide-react";
-import { Badge, Button, Card, CardContent, PageHeader } from "@openbooks/ui";
+import { Badge, Button, Card, CardContent } from "@openbooks/ui";
+import { PermissionHint } from "../../../../components/permission-hint";
 
 type Candidate = {
   documentId: string;
@@ -33,9 +33,19 @@ type CommitResult = {
 export function PostingPeriodsView({
   bookId,
   runId,
+  canManageBooks,
+  manageBooksLabel,
+  canPreview,
+  initialRows,
+  initialError,
 }: {
   bookId: string | null;
   runId: string | null;
+  canManageBooks: boolean;
+  manageBooksLabel: string;
+  canPreview: boolean;
+  initialRows: Candidate[] | null;
+  initialError: string | null;
 }) {
   const t = useTranslations("close");
   const tc = useTranslations("common");
@@ -72,13 +82,13 @@ export function PostingPeriodsView({
     field_ticket: tc("transactionTypes.fieldTicket"),
     rma: tc("transactionTypes.returnAuthorization"),
   } satisfies Record<string, string>;
-  const [rows, setRows] = useState<Candidate[] | null>(null);
+  const [rows, setRows] = useState<Candidate[] | null>(initialRows);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CommitResult | null>(null);
-  const [previewFailed, setPreviewFailed] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(initialError !== null);
   // The server's named refusal for the failed preview: the toast alone
   // vanishes, so the panel pins it beside Retry until the next load.
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(initialError);
 
   const loadPreview = useCallback(
     async (signal?: AbortSignal) => {
@@ -112,14 +122,6 @@ export function PostingPeriodsView({
     },
     [bookId, t],
   );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void Promise.resolve().then(() => loadPreview(controller.signal));
-    return () => {
-      controller.abort();
-    };
-  }, [loadPreview]);
 
   const assignable = (rows ?? []).filter((row) => !row.blocked);
   const blocked = (rows ?? []).filter((row) => row.blocked);
@@ -197,57 +199,38 @@ export function PostingPeriodsView({
   // normally opened from a close run, which always supplies ?book=.
   if (!bookId) {
     return (
-      <ListPageLayout
-        header={
-          <PageHeader
-            title={t("postingPeriods.title")}
-            description={t("postingPeriods.description")}
-          />
-        }
-      >
-        <Card>
-          <CardContent>
-            <p className="text-sm text-slate-500">
-              {t("postingPeriods.needsBook")}
-            </p>
+      <Card>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-slate-500">{t("postingPeriods.needsBook")}</p>
+          <div className="flex flex-wrap items-center gap-3">
             <Link
-              href="/close"
-              className="mt-2 inline-flex items-center gap-1 text-sm"
+              href={runId ? `/close?run=${encodeURIComponent(runId)}` : "/close"}
+              className="inline-flex items-center gap-1 text-sm"
             >
-              <ArrowLeft size={14} />
-              {t("postingPeriods.backToClose")}
+              <ArrowLeft size={14} />{t("postingPeriods.backToClose")}
             </Link>
-          </CardContent>
-        </Card>
-      </ListPageLayout>
+            {canManageBooks ? (
+              <Link
+                href="/admin/setup/accounting-books"
+                className="inline-flex items-center gap-1 text-sm"
+              >
+                {manageBooksLabel}
+              </Link>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t("postingPeriods.title")}
-          description={t("postingPeriods.description")}
-          actions={
-            runId ? (
-              <Link
-                href={`/close?run=${encodeURIComponent(runId)}`}
-                className="inline-flex items-center gap-1 text-sm"
-              >
-                <ArrowLeft size={14} />
-                {t("postingPeriods.backToClose")}
-              </Link>
-            ) : undefined
-          }
-        />
-      }
-      className="space-y-3"
-    >
+    <div className="space-y-3">
       <p className="text-sm text-slate-500">
         {t("postingPeriods.previewDescription")}
       </p>
-      {previewFailed ? (
+      {!canPreview ? (
+        <PermissionHint permission="close.run" action={t("postingPeriods.title")} />
+      ) : previewFailed ? (
         <div role="alert" className="space-y-2 text-sm text-red-600">
           <p>{previewError ?? t("postingPeriods.previewFailed")}</p>
           <Button variant="outline" onClick={() => void loadPreview()}>
@@ -351,6 +334,6 @@ export function PostingPeriodsView({
           {t("postingPeriods.skippedNote", { count: result.skipped.length })}
         </p>
       ) : null}
-    </ListPageLayout>
+    </div>
   );
 }

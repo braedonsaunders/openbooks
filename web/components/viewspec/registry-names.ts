@@ -17,6 +17,9 @@
  */
 
 export const WIDGET_NAMES: ReadonlySet<string> = new Set([
+  'accounting-provisions-workspace',
+  'accounting-reopen-requests-workspace',
+  'accounting-changes-workspace',
   'access-control-cell',
   'account-drawer',
   'account-heading',
@@ -121,6 +124,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'channel-replay-all',
   'channel-workspace',
   'close-action-cell',
+  'close-posting-periods-workspace',
   'close-readiness-cell',
   'close-status-cell',
   'code-cell',

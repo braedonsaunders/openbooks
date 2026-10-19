@@ -221,7 +221,7 @@ const REOPEN_STATUSES = new Set(["requested", "approved", "rejected", "withdrawn
 /** Reopen requests — same query shape as `list_period_reopen_requests`. Org-wide diagnostics. */
 export async function listPeriodReopenRequests(
   context: ApplicationContext,
-  input: { status?: string; periodId?: string; limit?: number },
+  input: { status?: string; periodId?: string; requestId?: string; limit?: number; offset?: number },
 ) {
   if (!can(context.authz, "close.reopen") && !can(context.authz, "periods.manage")) {
     throw forbidden("close.reopen");
@@ -235,9 +235,11 @@ export async function listPeriodReopenRequests(
     );
   }
   const limit = clamp(input.limit ?? 50, 1, 100);
+  const offset = clamp(input.offset ?? 0, 0, 1_000_000);
   let where = sql`r.org_id = ${context.authz.user.orgId}`;
   if (input.status) where = sql`${where} and r.status = ${input.status}`;
   if (input.periodId) where = sql`${where} and r.period_id = ${input.periodId}`;
+  if (input.requestId) where = sql`${where} and r.id = ${canonicalApplicationUuid(input.requestId, 'requestId')}`;
   const [rows, count] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select r.id, r.modules, r.reason, r.status, r.expires_at, r.reclosed_at, r.created_at, r.requested_by,
@@ -270,7 +272,7 @@ export async function listPeriodReopenRequests(
         left join users app on app.id = r.approved_by
        where ${where}
        order by r.created_at desc
-       limit ${limit}
+       limit ${limit} offset ${offset}
     `),
     db.execute<{ n: string }>(sql`select count(*) as n from close_reopen_requests r where ${where}`),
   ]);
