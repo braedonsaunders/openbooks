@@ -103,7 +103,7 @@ const hooks = registerHooks({
   },
 });
 
-const routeUrl = "../app/api/dunning/route.ts?authz-route-contract";
+const routeUrl: string = "../app/api/dunning/route.ts?authz-route-contract";
 const { GET, POST } = (await import(routeUrl)) as typeof import(
   "../app/api/dunning/route.ts"
 );
@@ -136,7 +136,7 @@ const behavioralHooks = registerHooks({
   },
 });
 
-const behavioralUrl = './authz.ts?behavioral'
+const behavioralUrl: string = './authz.ts?behavioral'
 const {
   can,
   subsidiaryScopeAllows,

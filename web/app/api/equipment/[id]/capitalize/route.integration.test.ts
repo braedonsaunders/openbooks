@@ -82,7 +82,7 @@ const hooks = registerHooks({
   },
 });
 
-const routeUrl = "./route.ts?equipment-capitalization-concurrency-test";
+const routeUrl: string = "./route.ts?equipment-capitalization-concurrency-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, pool } = await import("@openbooks/engine/platform/db");
