@@ -829,7 +829,11 @@ export async function loadCompCycleDetail(
     pacingLabel: t('compensation.pacing'),
     pacingPct: pacing.totalPct,
     pacingOver: pacing.overBudget,
-    pacingNote: pacing.totalPct === null ? t('compensation.pacingNone') : t('compensation.pacingNote', { pct: Math.round(pacing.totalPct) }),
+    pacingNote: pacing.totalPct === null
+      ? pacing.overBudget ? t('compensation.pacingOverNoPct') : t('compensation.pacingNone')
+      : pacing.overBudget
+        ? t('compensation.pacingOverNote', { pct: Math.round(pacing.totalPct) })
+        : t('compensation.pacingNote', { pct: Math.round(pacing.totalPct) }),
     linesTitle: t('compensation.linesTitle'),
     columns: {
       employee: t('compensation.columns.employee'),

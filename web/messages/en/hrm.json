@@ -2134,6 +2134,8 @@
     "pacing": "Budget pacing",
     "pacingNone": "No budget envelope set",
     "pacingNote": "{pct}% of envelope proposed",
+    "pacingOverNote": "Over budget — {pct}% of the most-used envelope proposed",
+    "pacingOverNoPct": "Positive proposals exceed a zero budget envelope",
     "linesTitle": "Team grid",
     "linesEmpty": "No lines — open the cycle to snapshot the team.",
     "totalCost": "Costed total",

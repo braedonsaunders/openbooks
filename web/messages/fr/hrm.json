@@ -2134,6 +2134,8 @@
     "pacing": "Rythme budgétaire",
     "pacingNone": "Aucune enveloppe fixée",
     "pacingNote": "{pct} % de l'enveloppe proposé",
+    "pacingOverNote": "Budget dépassé — {pct} % de l'enveloppe la plus utilisée est proposé",
+    "pacingOverNoPct": "Les propositions positives dépassent une enveloppe budgétaire nulle",
     "linesTitle": "Grille d'équipe",
     "linesEmpty": "Aucune ligne — ouvrez le cycle.",
     "totalCost": "Coût chiffré",

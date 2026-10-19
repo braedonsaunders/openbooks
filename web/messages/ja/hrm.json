@@ -2134,6 +2134,8 @@
     "pacing": "予算進捗",
     "pacingNone": "予算枠が未設定",
     "pacingNote": "枠の{pct}%を提案済み",
+    "pacingOverNote": "予算超過 — 最も使用されている枠の{pct}%を提案済み",
+    "pacingOverNoPct": "正の提案額がゼロの予算枠を超えています",
     "linesTitle": "チーム表",
     "linesEmpty": "明細がありません — サイクルを開いてください。",
     "totalCost": "積算合計",

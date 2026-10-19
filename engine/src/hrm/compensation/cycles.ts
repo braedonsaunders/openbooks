@@ -242,6 +242,9 @@ export async function createCycle(query: CreateCycleQuery): Promise<CompCycleDTO
   if (budgetBasis !== "top_down" && budgetBasis !== "bottom_up" && budgetBasis !== "combined") {
     throw new CompensationError("INVALID_INPUT", "budgetBasis is top_down, bottom_up or combined");
   }
+  if (budgetBasis === "top_down" && query.budgetTotal == null) {
+    throw new CompensationError("INVALID_INPUT", "a top-down cycle needs a total budget — enter the cycle envelope before creating it");
+  }
   return withOrgTransaction(orgId, async () => {
     // The declared employer anchor is the creation's legal-entity claim:
     // a B-anchored round by an A-scoped actor refuses uniformly
@@ -750,7 +753,18 @@ export async function openCycle(query: {
     // reprices these copies on any path.
     const cycleCurrency = String(cycle.currency);
     const pricingDate = String(cycle.effective_on).slice(0, 10);
-    const enveloped = cycle.budget_total !== null;
+    const groupBudgets = (await db.execute<{ currency: string }>(sql`
+      select distinct currency::text as currency from hrm_comp_cycle_budgets
+       where org_id = ${orgId} and cycle_id = ${cycleId}
+    `)).rows;
+    if (groupBudgets.some((budget) => budget.currency.trim() !== cycleCurrency)) {
+      throw new CompensationError(
+        "REFUSED",
+        `department and manager budget currencies must match the cycle currency ${cycleCurrency} — correct the draft budgets before opening; envelope conversion is not configured`,
+      );
+    }
+    const enveloped = (cycle.budget_basis !== "bottom_up" && cycle.budget_total !== null)
+      || (cycle.budget_basis !== "top_down" && groupBudgets.length > 0);
     for (const employment of employments) {
       const review = await latestSharedRating(orgId, employment.employmentId, String(cycle.effective_on).slice(0, 10));
       const resolved = await resolveLineGuideline(orgId, cycle, employment, today, review);
@@ -941,16 +955,28 @@ async function computePacing(orgId: string, cycleId: string, allowed: Set<string
   // pacing a missing round returned the exact shape of a real round with
   // no envelope. Refuse by name (404 at the route) like every other read.
   if (!cycle) throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
-  // budget_total null is absence (no envelope, never over). Zero is a
-  // real envelope and stays in the comparison below. The cycle header
-  // is read only to discriminate legacy rows (which predate frozen
-  // evidence) and legacy identity cases — every new row's pacing math
-  // runs exclusively off its own frozen copies, so a later header,
-  // wage, FX or settings change cannot reinterpret a decided line.
-  // The lens predicate below is unchanged — only the input rows fence,
-  // never the math.
-  if (cycle.budget_total === null) return { totalPct: null, overBudget: false };
+  assertCycleVisible(cycle, allowed);
+  const budgetBasis = String(cycle.budget_basis);
+  if (budgetBasis !== "top_down" && budgetBasis !== "bottom_up" && budgetBasis !== "combined") {
+    throw new CompensationError("REFUSED", `cycle budget basis ${JSON.stringify(budgetBasis)} is not supported — correct the cycle setup before pacing proposals`);
+  }
+  const usesTotal = budgetBasis !== "bottom_up" && cycle.budget_total !== null;
+  const groupBudgets = budgetBasis === "top_down" ? [] : (await db.execute<{
+    department_id: string | null; manager_party_id: string | null; currency: string; amount: string;
+  }>(sql`
+    select department_id, manager_party_id, currency::text as currency, amount::text as amount
+      from hrm_comp_cycle_budgets where org_id = ${orgId} and cycle_id = ${cycleId}
+     order by department_id nulls last, manager_party_id nulls last
+  `)).rows;
   const cycleCurrency = String(cycle.currency);
+  const mismatch = groupBudgets.find((budget) => budget.currency.trim() !== cycleCurrency);
+  if (mismatch) {
+    throw new CompensationError(
+      "REFUSED",
+      `department or manager budget currency ${mismatch.currency.trim()} does not match cycle currency ${cycleCurrency} — correct the budget currency before pacing proposals; envelope conversion is not configured`,
+    );
+  }
+  if (!usesTotal && groupBudgets.length === 0) return { totalPct: null, overBudget: false };
   const rows = (await db.execute<{
     line_id: string;
     current_rate: string;
@@ -963,15 +989,38 @@ async function computePacing(orgId: string, cycleId: string, allowed: Set<string
     budget_envelope: string | null;
     budget_annual_hours: string | null;
     budget_fx_rate: string | null;
+    department_id: string | null;
+    manager_party_id: string | null;
   }>(sql`
     select l.id as line_id, l.current_rate::text as current_rate, l.proposed_rate::text as proposed_rate, l.status,
            l.currency, l.basis,
            l.budget_pricing_date::text as budget_pricing_date, l.budget_cycle_currency,
            l.budget_envelope::text as budget_envelope,
            l.budget_annual_hours::text as budget_annual_hours,
-           l.budget_fx_rate::text as budget_fx_rate
+           l.budget_fx_rate::text as budget_fx_rate,
+           assignment.department_id::text as department_id,
+           manager.manager_party_id::text as manager_party_id
       from hrm_comp_cycle_lines l
       left join worker_employments e on e.org_id = l.org_id and e.id = l.employment_id
+      left join lateral (
+        select aav.department_id from employment_assignment_versions aav
+         where aav.org_id = l.org_id and aav.employment_id = l.employment_id
+           and aav.is_primary and aav.effective_from <= coalesce(${cycle.effective_on}::date, '0001-01-01'::date)
+           and (aav.effective_to is null or aav.effective_to >= coalesce(${cycle.effective_on}::date, '0001-01-01'::date))
+           and aav.recorded_until is null
+         order by aav.effective_from desc, aav.version_no desc limit 1
+      ) assignment on true
+      left join lateral (
+        select manager_employment.worker_party_id as manager_party_id
+          from reporting_relationships rr
+          join worker_employments manager_employment
+            on manager_employment.org_id = rr.org_id and manager_employment.id = rr.manager_employment_id
+         where rr.org_id = l.org_id and rr.employment_id = l.employment_id and rr.kind = 'line'
+           and rr.effective_from <= coalesce(${cycle.effective_on}::date, '0001-01-01'::date)
+           and (rr.effective_to is null or rr.effective_to >= coalesce(${cycle.effective_on}::date, '0001-01-01'::date))
+           and rr.recorded_until is null
+         order by rr.effective_from desc, rr.version_no desc limit 1
+      ) manager on true
      where l.org_id = ${orgId} and l.cycle_id = ${cycleId}
        and l.status in ('proposed', 'approved', 'pushed')
        and l.proposed_rate is not null
@@ -980,7 +1029,8 @@ async function computePacing(orgId: string, cycleId: string, allowed: Set<string
               select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
             ))`)).rows;
   let increase = "0.0000";
-  let envelope: string | null = null;
+  const envelope = usesTotal ? String(cycle.budget_total) : null;
+  const groupIncreases = new Map<string, string>();
   for (const row of rows) {
     const lineId = String(row.line_id);
     const basis = String(row.basis);
@@ -992,15 +1042,12 @@ async function computePacing(orgId: string, cycleId: string, allowed: Set<string
       // identity factor directly; anything needing historical inputs
       // refuses rather than repricing from live data.
       if (basis !== "hourly" && currency === cycleCurrency) {
-        increase = add(increase, delta);
-        envelope = String(cycle.budget_total);
+        if (usesTotal) increase = add(increase, delta);
+        addLineToGroupBudgets(groupIncreases, groupBudgets, row, delta);
         continue;
       }
       throw legacyEvidenceRefusal(lineId, basis, currency);
     }
-    // Frozen row: a null envelope copy means a null-envelope cycle,
-    // which never paces over regardless of decisions.
-    if (row.budget_envelope === null) continue;
     const annual =
       basis === "hourly"
         ? row.budget_annual_hours === null
@@ -1013,26 +1060,59 @@ async function computePacing(orgId: string, cycleId: string, allowed: Set<string
         : row.budget_fx_rate === null
           ? missingFrozen(lineId, basis, currency)
           : mulRate(annual, String(row.budget_fx_rate));
-    increase = add(increase, inEnvelope);
-    envelope = String(row.budget_envelope);
+    if (usesTotal) increase = add(increase, inEnvelope);
+    addLineToGroupBudgets(groupIncreases, groupBudgets, row, inEnvelope);
+  }
+  const groupOverBudget = groupBudgets.some((budget) => cmp(
+    groupIncreases.get(groupBudgetKey(budget)) ?? "0.0000", budget.amount,
+  ) > 0);
+  let maxGroupPct: number | null = null;
+  for (const budget of groupBudgets) {
+    if (cmp(budget.amount, "0") === 0) continue;
+    const pct = displayPct(groupIncreases.get(groupBudgetKey(budget)) ?? "0.0000", budget.amount);
+    if (pct !== null && (maxGroupPct === null || pct > maxGroupPct)) maxGroupPct = pct;
   }
   // No positive decided increase in view: a positive envelope reads
   // 0% (never null — scoped readers see their slice's zero), a zero or
   // null envelope has no defined ratio.
   if (envelope === null) {
-    if (cycle.budget_total !== null && cmp(String(cycle.budget_total), "0") > 0) {
-      return { totalPct: 0, overBudget: false };
-    }
-    return { totalPct: null, overBudget: false };
+    return { totalPct: maxGroupPct, overBudget: groupOverBudget };
   }
   // The exact comparison decides over-budget; the float ratio is display
   // only. A zero envelope has no defined ratio: a zero increase is not
   // over, any positive increase is over with no percentage to name.
   if (cmp(increase, envelope) <= 0) {
-    if (cmp(envelope, "0") === 0) return { totalPct: null, overBudget: false };
-    return { totalPct: displayPct(increase, envelope), overBudget: false };
+    const totalPct = cmp(envelope, "0") === 0 ? null : displayPct(increase, envelope);
+    return { totalPct: highestPacingPct(totalPct, maxGroupPct), overBudget: groupOverBudget };
   }
-  return { totalPct: cmp(envelope, "0") === 0 ? null : displayPct(increase, envelope), overBudget: true };
+  const totalPct = cmp(envelope, "0") === 0 ? null : displayPct(increase, envelope);
+  return { totalPct: highestPacingPct(totalPct, maxGroupPct), overBudget: true };
+}
+
+function highestPacingPct(totalPct: number | null, groupPct: number | null): number | null {
+  if (totalPct === null) return groupPct;
+  if (groupPct === null) return totalPct;
+  return Math.max(totalPct, groupPct);
+}
+
+function groupBudgetKey(budget: { department_id: string | null; manager_party_id: string | null }): string {
+  return budget.department_id !== null ? `department:${budget.department_id}` : `manager:${budget.manager_party_id}`;
+}
+
+function addLineToGroupBudgets(
+  increases: Map<string, string>,
+  budgets: readonly { department_id: string | null; manager_party_id: string | null; currency: string; amount: string }[],
+  line: { department_id: string | null; manager_party_id: string | null },
+  amount: string,
+): void {
+  for (const budget of budgets) {
+    const matches = budget.department_id !== null
+      ? budget.department_id === line.department_id
+      : budget.manager_party_id === line.manager_party_id;
+    if (!matches) continue;
+    const key = groupBudgetKey(budget);
+    increases.set(key, add(increases.get(key) ?? "0.0000", amount));
+  }
 }
 
 export interface ProposeLineQuery {
@@ -1379,17 +1459,17 @@ async function decideLine(
     assertLineDeciderSeparation({
       proposedBy: line.proposed_by,
       proposerPartyId: (await db.execute<{ party_id: string | null }>(sql`
-        select party_id from users where id = ${line.proposed_by}`)).rows[0]?.party_id ?? null,
+        select party_id from users where org_id = ${orgId} and id = ${line.proposed_by}`)).rows[0]?.party_id ?? null,
       deciderUserId: actorId,
       deciderPartyId: (await db.execute<{ party_id: string | null }>(sql`
-        select party_id from users where id = ${actorId}`)).rows[0]?.party_id ?? null,
+        select party_id from users where org_id = ${orgId} and id = ${actorId}`)).rows[0]?.party_id ?? null,
       requireIndependentActor: !selfApprovalAuthorized,
     });
     if (decision === "rejected" && (reason === null || reason.trim().length === 0)) {
       throw new CompensationError("INVALID_INPUT", "a rejection needs its reason — the manager reads it");
     }
     const approverParty = (await db.execute<{ party_id: string | null }>(sql`
-      select party_id from users where id = ${actorId}`)).rows[0]?.party_id ?? null;
+      select party_id from users where org_id = ${orgId} and id = ${actorId}`)).rows[0]?.party_id ?? null;
     const updated = (await db.execute<LineRow>(sql`
       update hrm_comp_cycle_lines as l
          set status = ${decision}, approver_party_id = ${approverParty}, decided_at = now(),
@@ -1740,6 +1820,18 @@ export async function cancelCycle(query: {
         `a ${cycle.status} cycle cannot cancel — cancellation belongs to the live round, never to moved payroll`,
       );
     }
+    if (cycle.status === "in_review" && cycle.flow_run_id !== null) {
+      await db.execute(sql`
+        update flow_gates set status = 'cancelled', updated_at = now()
+         where org_id = ${orgId} and run_id = ${cycle.flow_run_id}
+           and status in ('pending', 'escalated')
+      `);
+      await db.execute(sql`
+        update flow_runs set status = 'cancelled', finished_at = now()
+         where org_id = ${orgId} and id = ${cycle.flow_run_id}
+           and status in ('running', 'waiting')
+      `);
+    }
     const updated = (await db.execute<CycleRow>(sql`
       update hrm_comp_cycles
          set status = 'cancelled', revision = revision + 1,
@@ -1774,6 +1866,9 @@ export async function setCycleBudgets(query: {
         `a ${cycle.status} cycle takes no new budgets — envelopes are set while the round is a draft`,
       );
     }
+    if (query.budgets.length > 0 && cycle.budget_basis === "top_down") {
+      throw new CompensationError("BAD_STATE", "a top-down cycle uses its total envelope — choose bottom-up or combined when creating the cycle to set department or manager budgets");
+    }
     for (const budget of query.budgets) {
       const holders = [budget.departmentId ?? null, budget.managerPartyId ?? null].filter((v) => v !== null);
       if (holders.length !== 1) {
@@ -1781,6 +1876,12 @@ export async function setCycleBudgets(query: {
       }
       if (!/^[A-Z]{3}$/.test(budget.currency)) {
         throw new CompensationError("INVALID_INPUT", "budget currency must be an ISO 4217 code");
+      }
+      if (budget.currency !== cycle.currency) {
+        throw new CompensationError(
+          "INVALID_INPUT",
+          `budget currency ${budget.currency} must match the cycle currency ${cycle.currency} — change the envelope currency; conversion is not configured`,
+        );
       }
       if (canonicalNonNegativeDecimal(budget.amount, 4) === null) {
         throw new CompensationError("INVALID_INPUT", "budget amount must be a non-negative amount with at most 4 decimals");

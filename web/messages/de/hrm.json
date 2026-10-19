@@ -2134,6 +2134,8 @@
     "pacing": "Budgetausschöpfung",
     "pacingNone": "Kein Budgetrahmen gesetzt",
     "pacingNote": "{pct} % des Rahmens vorgeschlagen",
+    "pacingOverNote": "Budget überschritten — {pct} % des am stärksten genutzten Rahmens sind vorgeschlagen",
+    "pacingOverNoPct": "Positive Vorschläge überschreiten einen Budgetrahmen von null",
     "linesTitle": "Teamraster",
     "linesEmpty": "Keine Zeilen — öffnen Sie die Runde.",
     "totalCost": "Kalkulierte Summe",

@@ -63,14 +63,14 @@ export function PlacementBar({
   )
 }
 
-export function PacingBar({ pct, note }: { pct: number | null; note: string }) {
-  if (pct === null) return <span className="text-sm text-slate-500 dark:text-slate-400">{note}</span>
+export function PacingBar({ pct, note, over = false }: { pct: number | null; note: string; over?: boolean }) {
+  if (pct === null) return <span className={`text-sm ${over ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>{note}</span>
   const width = Math.min(100, Math.max(0, pct))
   return (
     <span className="flex min-w-40 flex-col gap-1" role="img" aria-label={note}>
       <span className="relative h-2 w-full rounded-full bg-slate-200 dark:bg-slate-700">
         <span
-          className={`absolute left-0 top-0 h-2 rounded-full ${pct > 100 ? 'bg-red-500' : 'bg-blue-600'}`}
+          className={`absolute left-0 top-0 h-2 rounded-full ${over || pct > 100 ? 'bg-red-500' : 'bg-blue-600'}`}
           style={{ width: `${width}%` }}
         />
       </span>

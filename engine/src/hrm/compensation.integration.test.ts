@@ -378,6 +378,48 @@ test("HR-12 cycle approval runs through Flows and push writes each wage once", {
   });
 });
 
+test("HR-12 cancelling an in-review cycle closes its pending approval run", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
+    const { org } = h;
+    const { level } = await seedArchitecture(org.orgId, h.hrId);
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000");
+    const cycle = await createCycle({
+      orgId: org.orgId, actorId: h.hrId, name: "Cancelled merit 2025", kind: "merit",
+      effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix",
+      guideline: {
+        rows: ["meets"], cols: ["q1", "q2", "q3", "q4"],
+        cells: { meets: { q1: { min: 3, max: 5 }, q2: { min: 2, max: 4 }, q3: { min: 1, max: 3 }, q4: { min: 0, max: 2 } } },
+        unratedRow: "meets",
+      },
+    });
+    await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3", reason: "hr proposes" });
+    const approver = await createScratchUser(org.orgId, "Comp Cycle Approver", "comp_cycle_cancel_approver");
+    await grantPermissions(org.orgId, approver, ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve"]);
+    await linkPerson(org.orgId, approver);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
+      assignees: [{ type: "user", userId: approver }],
+      mode: "any",
+    });
+    const submitted = await submitCycleForApproval({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    assert.equal(submitted.status, "in_review");
+    assert.ok(submitted.flowRunId);
+    const gate = (await db.execute<{ id: string; status: string }>(sql`
+      select id, status from flow_gates where org_id = ${org.orgId} and subject_id = ${cycle.id} order by created_at`)).rows[0]!;
+    assert.ok(["pending", "escalated"].includes(gate.status));
+
+    await cancelCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id, reason: "round withdrawn" });
+
+    assert.equal((await db.execute<{ status: string }>(sql`
+      select status from flow_gates where org_id = ${org.orgId} and id = ${gate.id}`)).rows[0]?.status, "cancelled");
+    assert.equal((await db.execute<{ status: string }>(sql`
+      select status from flow_runs where org_id = ${org.orgId} and id = ${submitted.flowRunId}`)).rows[0]?.status, "cancelled");
+  });
+});
+
 test("HR-12 post-push line actions refuse, and push refuses approved lines with no raise", { skip: !DB }, async () => {
   // F3-38: pushed history is immutable through the service (submit,
   // propose, decide, and reopen all refuse past push), and an approved

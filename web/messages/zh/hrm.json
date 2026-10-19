@@ -2134,6 +2134,8 @@
     "pacing": "预算进度",
     "pacingNone": "未设定预算额度",
     "pacingNote": "已提议额度的{pct}%",
+    "pacingOverNote": "超出预算 — 已提议最常用额度的 {pct}%",
+    "pacingOverNoPct": "正向提案超出零预算额度",
     "linesTitle": "团队表",
     "linesEmpty": "暂无明细 — 请开启周期以快照团队。",
     "totalCost": "测算合计",

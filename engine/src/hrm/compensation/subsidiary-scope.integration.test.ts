@@ -11,7 +11,7 @@ import { NOT_VISIBLE, countRows, refusal, refusesLikeUnknown, scopeMatrix, scope
 import { HrmAuthorizationError } from "../authorization.ts";
 import {
   CompensationError, approvePlan, approvePlanLine, attachStatementPdf, cancelCycle, closeCycle, closePlan, compaRatioFor,
-  computeGapSnapshot, createCycle, createPayBand, createPlan, createPlanLine, fulfilPayInformationRequest, generateStatement,
+  computeGapSnapshot, createCycle, createPayBand, createPlan, createPlanLine, cyclePacing, fulfilPayInformationRequest, generateStatement,
   latestGapSnapshot, listPayBands, listPlanLines, listPlanLinesForPlans, listPlans, listStatements, proposeLine, refusePayInformationRequest,
   renderStatementPdf, requestPayInformation, submitCycleForApproval, submitPlan,
 } from "./index.ts";
@@ -415,7 +415,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "a merit cycle is created only for an entity inside the manager's lens",
-    permissions: [MANAGE],
+    permissions: [MANAGE, READ],
     write: async (w) => {
       const attempt = (sub: string | null) => () => cycle(w, w.scoped, "Round", sub);
       const foreign = await refusesLikeUnknown(attempt(w.subB), attempt(randomUUID()));
@@ -423,6 +423,11 @@ scopeMatrix([
       await refusal(attempt(null)(), HrmAuthorizationError, /across legal entities/);
       assert.equal(await countRows(sql`from hrm_comp_cycles where org_id = ${w.orgId}`), 0, "no refused round was stored");
       assert.ok((await attempt(w.subA)()).id);
+      const hiddenCycle = await cycle(w, w.admin, "Hidden pacing round", w.subB);
+      const hiddenPacing = await refusal(
+        cyclePacing(w.orgId, w.scoped, hiddenCycle.id), CompensationError, NOT_VISIBLE,
+      );
+      assert.equal(hiddenPacing.code, "NOT_FOUND");
     },
   }),
   scopeRow({

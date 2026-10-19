@@ -2134,6 +2134,8 @@
     "pacing": "Ritmo orçamentário",
     "pacingNone": "Sem dotação definida",
     "pacingNote": "{pct}% da dotação proposto",
+    "pacingOverNote": "Orçamento excedido — {pct}% do envelope mais utilizado está proposto",
+    "pacingOverNoPct": "Propostas positivas excedem um envelope orçamentário zerado",
     "linesTitle": "Grade da equipe",
     "linesEmpty": "Sem linhas — abra o ciclo.",
     "totalCost": "Custo calculado",

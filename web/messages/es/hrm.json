@@ -2134,6 +2134,8 @@
     "pacing": "Ritmo presupuestario",
     "pacingNone": "Sin dotación fijada",
     "pacingNote": "{pct} % de la dotación propuesto",
+    "pacingOverNote": "Presupuesto excedido — se propone el {pct} % de la dotación más utilizada",
+    "pacingOverNoPct": "Las propuestas positivas superan una dotación presupuestaria de cero",
     "linesTitle": "Cuadrícula del equipo",
     "linesEmpty": "Sin líneas — abra el ciclo.",
     "totalCost": "Coste calculado",
