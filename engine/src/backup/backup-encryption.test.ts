@@ -13,7 +13,6 @@ import { inspectBackupArchive, peekBackupArchiveKind } from "./restore.ts";
 import {
   BACKUP_DATA_KEY_CHECK_PLAINTEXT,
   BACKUP_FORMAT_VERSION,
-  BACKUP_KEY_ID,
   decodeBackupEnvelopeLine,
 } from "./format.ts";
 import { sealSecret } from "../platform/secrets.ts";
@@ -31,6 +30,29 @@ async function withDataKey<T>(value: string | undefined, fn: () => Promise<T>): 
   } finally {
     if (prev === undefined) delete process.env.OPENBOOKS_DATA_KEY;
     else process.env.OPENBOOKS_DATA_KEY = prev;
+  }
+}
+
+async function withDataKeyRing<T>(fn: () => Promise<T>): Promise<T> {
+  const previous = {
+    key: process.env.OPENBOOKS_DATA_KEY,
+    keys: process.env.OPENBOOKS_DATA_KEYS,
+    active: process.env.OPENBOOKS_DATA_KEY_ACTIVE,
+  };
+  try {
+    delete process.env.OPENBOOKS_DATA_KEY;
+    process.env.OPENBOOKS_DATA_KEYS =
+      "k1=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f," +
+      "k2=101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f";
+    process.env.OPENBOOKS_DATA_KEY_ACTIVE = "k2";
+    return await fn();
+  } finally {
+    if (previous.key === undefined) delete process.env.OPENBOOKS_DATA_KEY;
+    else process.env.OPENBOOKS_DATA_KEY = previous.key;
+    if (previous.keys === undefined) delete process.env.OPENBOOKS_DATA_KEYS;
+    else process.env.OPENBOOKS_DATA_KEYS = previous.keys;
+    if (previous.active === undefined) delete process.env.OPENBOOKS_DATA_KEY_ACTIVE;
+    else process.env.OPENBOOKS_DATA_KEY_ACTIVE = previous.active;
   }
 }
 
@@ -113,7 +135,7 @@ test("encrypted backup bytes are opaque and carry a versioned envelope", async (
     const { envelopeLine } = await writeEncryptedArchive(archive, backupLines(orgId));
     const envelope = decodeBackupEnvelopeLine(envelopeLine);
     assert.equal(envelope?.version, BACKUP_FORMAT_VERSION);
-    assert.equal(envelope?.keyId, BACKUP_KEY_ID);
+    assert.equal(envelope?.keyId, requireBackupDataKey());
     assert.ok(envelope!.nonce.length > 0);
     assert.ok(envelope!.wrappedKey.startsWith("enc:v2:"));
     // No gzip member survives: the file is not readable by zcat.
@@ -170,10 +192,32 @@ test("peek names a legacy plaintext archive as unencrypted", async () => {
 
 test("backup refuses an unset or placeholder data key, naming the remedy", async () => {
   await withDataKey(undefined, async () => {
-    assert.throws(() => requireBackupDataKey(), /OPENBOOKS_DATA_KEY is unset.*secret manager/);
-    assert.throws(() => beginEncryptedBackup(), /OPENBOOKS_DATA_KEY is unset/);
+    assert.throws(() => requireBackupDataKey(), /OPENBOOKS_DATA_KEY is not set/);
+    assert.throws(() => beginEncryptedBackup(), /OPENBOOKS_DATA_KEY is not set/);
   });
   await withDataKey("replace-me", async () => {
-    assert.throws(() => requireBackupDataKey(), /still the \.env\.example placeholder/);
+    assert.throws(() => requireBackupDataKey(), /looks like a placeholder/);
+  });
+});
+
+test("rotated data keys identify and restore encrypted backups", async () => {
+  await withDataKeyRing(async () => {
+    const orgId = randomUUID();
+    const root = await mkdtemp(join(tmpdir(), "openbooks-backup-key-ring-"));
+    try {
+      const archive = join(root, "backup.json.gz");
+      const { sha256, envelopeLine } = await writeEncryptedArchive(archive, backupLines(orgId));
+      assert.equal(decodeBackupEnvelopeLine(envelopeLine)?.keyId, "k2");
+      const inspected = await inspectBackupArchive({
+        archivePath: archive,
+        expectedSha256: sha256,
+        expectedOrgId: orgId,
+        spoolDir: join(root, "spool"),
+      });
+      assert.equal(inspected.encrypted, true);
+      assert.equal(inspected.totalRows, 3);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

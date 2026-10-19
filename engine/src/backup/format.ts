@@ -42,13 +42,14 @@ export const BACKUP_DATA_KEY_CHECK_PLAINTEXT = "openbooks-backup-data-key-check:
 
 /**
  * Encrypted backups wrap the gzip NDJSON stream in AES-256-GCM under a
- * random per-backup content key, itself sealed by OPENBOOKS_DATA_KEY. The
+ * random per-backup content key, itself sealed by the active data key. The
  * file is one plaintext JSON envelope line, the ciphertext, then the 16-byte
  * GCM tag as the trailer. The manifest/ledger SHA-256 continues to cover the
- * whole file. The key id is hard-coded until the key-rotation work adopts
- * real key ids.
+ * whole file. New envelopes identify the active key-ring entry; the legacy
+ * "v1" identifier remains accepted for archives written before that change.
  */
 export const BACKUP_ENCRYPTION = "aes-256-gcm" as const;
+/** Envelope identifier used by archives written before key-ring rotation support. */
 export const BACKUP_KEY_ID = "v1" as const;
 /** GCM authentication tag length in bytes. */
 export const BACKUP_TAG_BYTES = 16 as const;

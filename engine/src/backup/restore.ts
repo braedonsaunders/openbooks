@@ -23,7 +23,7 @@ import {
   type BackupHeaderV2,
   type BackupHeaderV3,
 } from "./format.ts";
-import { unsealSecret } from "../platform/secrets.ts";
+import { loadDataKeyRing, unsealSecret } from "../platform/secrets.ts";
 import { UUID_RE } from "../platform/uuid.ts";
 import {
   unsealLegacyEmailSecret,
@@ -171,9 +171,9 @@ async function decryptBackupArchive(archivePath: string): Promise<{
   const { line, length: headerLength } = await readArchiveFirstLine(archivePath);
   const envelope = decodeBackupEnvelopeLine(line);
   if (!envelope) throw new Error("not an encrypted OpenBooks organization backup");
-  if (envelope.keyId !== BACKUP_KEY_ID) {
+  if (envelope.keyId !== BACKUP_KEY_ID && !loadDataKeyRing().keys.has(envelope.keyId)) {
     throw new Error(
-      `unsupported backup key id ${JSON.stringify(envelope.keyId)}; this build restores key id ${JSON.stringify(BACKUP_KEY_ID)} — upgrade to a release that knows the archiving key`,
+      `backup key id ${JSON.stringify(envelope.keyId)} is not in the configured data key ring — configure the source key in OPENBOOKS_DATA_KEYS before restoring`,
     );
   }
   // The envelope wrap is org-less by nature, sealed under the fixed system
@@ -184,7 +184,7 @@ async function decryptBackupArchive(archivePath: string): Promise<{
     unwrapped = unsealSecret(envelope.wrappedKey, { orgId: "system", purpose: "backup.manifest" });
   } catch {
     throw new Error(
-      "backup content-key unwrap failed: OPENBOOKS_DATA_KEY is not the source deployment key, or the envelope was tampered",
+      "backup content-key unwrap failed: the configured data key or key ring does not include the source deployment key, or the envelope was tampered",
     );
   }
   const contentKey = Buffer.from(unwrapped, "base64");
