@@ -23,6 +23,7 @@ import { resolvePeriod } from '../../../../../../lib/periods'
 import { resolveReport, type ReportKind } from '../../../../../../lib/report-run'
 import { exportDataToPdf, orgBranding, resolveLayout, type Translator } from '../../../../../../lib/report-pdf'
 import { safeName } from '../../../../../../lib/export'
+import { pickStatementEmail } from '../../../../../../lib/statement-batch'
 
 export const runtime = 'nodejs'
 
@@ -60,6 +61,16 @@ async function loadParty(orgId: string, id: string) {
   return rows[0] ?? null
 }
 
+async function statementRecipient(orgId: string, party: { id: string; email: string | null }): Promise<string | null> {
+  const contacts = (await db.execute<{
+    role: string | null; email: string | null; isPrimary: boolean; isActive: boolean
+  }>(sql`
+    select role, email, is_primary as "isPrimary", is_active as "isActive"
+      from contacts where org_id = ${orgId} and party_id = ${party.id}
+  `)).rows
+  return pickStatementEmail(contacts, party.email)
+}
+
 /**
  * The party is the record boundary (null-subsidiary parties are org-wide,
  * like the transaction drawer): an out-of-scope party answers exactly like
@@ -84,7 +95,7 @@ export const GET = defineRoute({
   if (!party || !partyInScope(gate.allowedSubsidiaryIds, party)) {
     return notFound("record")
   }
-  return NextResponse.json({ to: party.email?.trim() || null, partyName: party.display_name })
+  return NextResponse.json({ to: await statementRecipient(gate.user.orgId, party), partyName: party.display_name })
   },
 })
 
@@ -117,9 +128,9 @@ export const POST = defineRoute({
   if (requestedTo !== '' && !isValidEmailAddress(requestedTo)) {
     return NextResponse.json({ error: 'invalid recipient email address' }, { status: 400 })
   }
-  const to = requestedTo || party.email?.trim() || ''
+  const to = requestedTo || await statementRecipient(gate.user.orgId, party) || ''
   if (!to) {
-    return NextResponse.json({ error: 'no recipient email — add an email address to the party first' }, { status: 422 })
+    return NextResponse.json({ error: 'no recipient email — add a billing, statement, primary contact, or party email first' }, { status: 422 })
   }
 
   const delivery = await resolveOrgEmailTransportDetailed(gate.user.orgId)
@@ -131,7 +142,8 @@ export const POST = defineRoute({
   const t = (await getTranslations('reports')) as unknown as Translator
   const stamp = await businessToday(gate.user.orgId)
   const reportParams = new URLSearchParams({ party: id, side })
-  if (typeof body.from === 'string' && body.from) reportParams.set('from', body.from)
+  const fromDate = body.from || body.toDate
+  if (typeof fromDate === 'string' && fromDate) reportParams.set('from', fromDate)
   if (typeof body.toDate === 'string' && body.toDate) reportParams.set('to', body.toDate)
   const query = parseReportQuery(reportParams)
   const period = await resolvePeriod(query.period, { customFrom: query.from, customTo: query.to })
