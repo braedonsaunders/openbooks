@@ -63,6 +63,32 @@ test("an approved dated accrual reverses exactly once and retains the original p
  });}finally{await dropScratchOrg(org.orgId);}
 });
 
+test("scheduled reversals include live allocation entries in secondary books",{skip:!DB},async()=>{
+ const org=await createScratchOrg();const actor=await controller(org);
+ try{await withOrgContext(org.orgId,async()=>{
+  const secondaryBook=randomUUID();
+  await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
+   values(${secondaryBook},${org.orgId},'ALLOC-REV','Allocation reversal book',false,true,true)`);
+  const reverseOn=org.date.slice(0,8)+'16';
+  const id=await journal(org,actor,'monetary',[{account:org.accounts.cogs,amount:'10'},{account:org.accounts.ap,amount:'-10'}],{reverseOn});
+  const sourceEntry=await postDocument(id,controls(org),{audit:{actorId,source:'ui'}});
+  const allocation=await postEntry(db,{orgId:org.orgId,bookId:secondaryBook,subsidiaryId:org.subsidiaryId,
+   entryNumber:`ALLOC-${id}`,postingDate:org.date,periodId:org.periodId,origin:'allocation',sourceDocumentId:id,actorId,
+   lines:[{accountId:org.accounts.cogs,amount:'7'},{accountId:org.accounts.ap,amount:'-7'}]});
+
+  const result=await runScheduledJournalReversals({orgId:org.orgId,actorId,asOf:reverseOn});
+  assert.deepEqual(result,{reversed:1,blocked:[]});
+  const reversals=(await db.execute<{book_id:string;reverses_entry_id:string;period_id:string}>(sql`
+   select book_id,reverses_entry_id,period_id from journal_entries
+    where org_id=${org.orgId} and reverses_entry_id in (${sourceEntry},${allocation.entryId}) and status='posted'
+    order by book_id`)).rows;
+  assert.deepEqual(reversals,[
+   {book_id:org.bookId,reverses_entry_id:sourceEntry,period_id:org.periodId},
+   {book_id:secondaryBook,reverses_entry_id:allocation.entryId,period_id:org.periodId},
+  ]);
+ });}finally{await dropScratchOrg(org.orgId);}
+});
+
 test("named rate types preserve spot lookup and entity posting uses the selected series",{skip:!DB},async()=>{
  const org=await createScratchOrg();const actor=await controller(org);
  try{await withOrgContext(org.orgId,async()=>{

@@ -64,18 +64,18 @@ export async function runScheduledJournalReversals(input: { orgId: string; actor
           await cancelScheduledJournalReversal(db,input.orgId,instruction.document_id,input.actorId ?? null);
           return false;
         }
-        const period = await resolveCoveringPeriod(db,input.orgId,instruction.reverse_on,source.subsidiary_id);
-        if (!period) throw new JournalInstructionError("No accounting period covers the approved reversal date.", "Generate the entity's period, then retry the scheduled reversals.");
-        const liveEntries=(await db.execute<{id:string;entry_number:string;origin:string}>(sql`
-          select id,entry_number,origin from journal_entries where org_id=${input.orgId} and source_document_id=${instruction.document_id}
-            and book_id=${source.book_id} and status='posted' and reverses_entry_id is null -- Live entries only: scheduled reversal must not reverse an already reversed entry.
+        const liveEntries=(await db.execute<{id:string;entry_number:string;origin:string;book_id:string;subsidiary_id:string}>(sql`
+          select id,entry_number,origin,book_id,subsidiary_id from journal_entries where org_id=${input.orgId} and source_document_id=${instruction.document_id}
+            and (book_id=${source.book_id} or origin='allocation') and status='posted' and reverses_entry_id is null -- Live entries only: scheduled reversal must not reverse an already reversed entry.
           order by (id=${instruction.source_entry_id}) desc,id for update`)).rows;
         let primaryReversalId:string|null=null;
         for(const live of liveEntries){
+          const period = await resolveCoveringPeriod(db,input.orgId,instruction.reverse_on,live.subsidiary_id);
+          if (!period) throw new JournalInstructionError("No accounting period covers the approved reversal date.", "Generate the entity's period, then retry the scheduled reversals.");
           const lines=await db.select().from(schema.journalLines).where(and(eq(schema.journalLines.orgId,input.orgId),eq(schema.journalLines.entryId,live.id)));
           const mirrored=reversalJournalLines(lines,{orgId:input.orgId,entryId:''});
           const reversal=await postEntry(db,{
-            orgId:input.orgId,bookId:source.book_id,subsidiaryId:source.subsidiary_id,
+            orgId:input.orgId,bookId:live.book_id,subsidiaryId:live.subsidiary_id,
             entryNumber:await nextFreeEntryNumber(db,input.orgId,`REV-${live.entry_number}`),postingDate:instruction.reverse_on,periodId:period.id,
             origin:live.origin,sourceDocumentId:instruction.document_id,reversesEntryId:live.id,actorId:input.actorId ?? null,
             memo:`Approved automatic reversal of ${live.entry_number}`,allowInactiveAccounts:true,amountBasis:'book',accountBasis:'book',
