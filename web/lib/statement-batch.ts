@@ -35,7 +35,7 @@ export class StatementBatchInputError extends Error {
 /** Distinct customer currencies available to the caller for statement filters. */
 export async function listStatementCustomerCurrencies(
   orgId: string,
-  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<string[]> {
   const rows = await db.execute<{ currency: string }>(sql`
     select distinct cr.currency
