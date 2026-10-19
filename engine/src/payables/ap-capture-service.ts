@@ -10,6 +10,8 @@ import {
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { cmp, fromUnits, sum, toUnits } from "../money/money.ts";
+import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
+import { orderedNetOfCancelledSql } from "../records/order-line-remainders.ts";
 import type { Quantity } from "../money/brands.ts";
 import {
   AZURE_DOCUMENT_INTELLIGENCE_API_VERSION,
@@ -167,6 +169,7 @@ export function matchPurchaseOrderLine(input: {
   invoiceQuantity: string;
   invoiceUnitPrice: string;
   orderedQuantity: string;
+  cancelledQuantity: string;
   billedQuantity: string;
   fulfilledQuantity: string;
   poUnitPrice: string;
@@ -174,20 +177,23 @@ export function matchPurchaseOrderLine(input: {
   itemKind: string | null;
   documentKind?: CaptureDocumentKind;
 }): PurchaseOrderMatchIssue[] {
-  const invoiceQuantity = fromUnits(toUnits(input.invoiceQuantity));
+  const invoiceQuantityUnits = toQuantityUnits(input.invoiceQuantity);
+  const invoiceQuantity = fromQuantityUnits(invoiceQuantityUnits);
   const issues: PurchaseOrderMatchIssue[] = input.documentKind === "vendor_credit"
     ? (() => {
         // A credit releases quantity that a prior bill consumed. It is
         // therefore bounded by the already-billed quantity, not by the
         // remaining ordered/received headroom used by a vendor bill.
-        const billed = fromUnits(toUnits(input.billedQuantity));
-        return toUnits(invoiceQuantity) <= 0n || cmp(invoiceQuantity, billed) > 0
+        const billedUnits = toQuantityUnits(input.billedQuantity);
+        const billed = fromQuantityUnits(billedUnits);
+        return invoiceQuantityUnits <= 0n || invoiceQuantityUnits > billedUnits
           ? [{ code: "po_quantity_exceeded" as const, expected: billed, actual: invoiceQuantity }]
           : [];
       })()
     : validatePurchaseOrderQuantities({
         invoiceQuantity,
         orderedQuantity: input.orderedQuantity,
+        cancelledQuantity: input.cancelledQuantity,
         billedQuantity: input.billedQuantity,
         fulfilledQuantity: input.fulfilledQuantity,
         requiresReceipt: input.itemId !== null && lineRequiresReceipt(input.itemKind),
@@ -212,24 +218,26 @@ export function purchaseOrderBilledQuantityDelta(
   documentKind: CaptureDocumentKind,
   quantity: string,
 ): Quantity {
-  const units = toUnits(quantity);
+  const units = toQuantityUnits(quantity);
   if (units <= 0n) throw new Error("purchase-order capture quantity must be positive");
-  // fromUnits-fixed 4dp sits within quantity scale: a canonical Quantity.
-  return fromUnits(documentKind === "vendor_credit" ? -units : units) as Quantity;
+  return fromQuantityUnits(documentKind === "vendor_credit" ? -units : units) as Quantity;
 }
 
 /** Received-and-unbilled headroom a purchase-order line can still be billed for. */
 export function billableRemainderUnits(input: {
   orderedQuantity: string;
+  cancelledQuantity: string;
   billedQuantity: string;
   fulfilledQuantity: string;
   itemId: string | null;
   itemKind: string | null;
 }): bigint {
-  const remaining = toUnits(input.orderedQuantity) - toUnits(input.billedQuantity);
+  const remaining = toQuantityUnits(input.orderedQuantity)
+    - toQuantityUnits(input.cancelledQuantity)
+    - toQuantityUnits(input.billedQuantity);
   if (remaining <= 0n) return 0n;
   if (input.itemId === null || !lineRequiresReceipt(input.itemKind)) return remaining;
-  const cover = toUnits(input.fulfilledQuantity) - toUnits(input.billedQuantity);
+  const cover = toQuantityUnits(input.fulfilledQuantity) - toQuantityUnits(input.billedQuantity);
   if (cover <= 0n) return 0n;
   return cover < remaining ? cover : remaining;
 }
@@ -241,6 +249,7 @@ type PoLine = {
   item_code: string | null;
   description: string | null;
   quantity: string;
+  quantity_cancelled: string;
   quantity_billed: string;
   quantity_fulfilled: string;
   unit_price: string;
@@ -259,7 +268,7 @@ async function mapLines(
     const source = (await db.execute<PoLine>(sql`
       select dl.id, dl.item_id, coalesce(dl.account_id, i.expense_account_id) as account_id,
              i.code as item_code, dl.description,
-             dl.quantity, dl.quantity_billed, dl.quantity_fulfilled, dl.unit_price,
+             dl.quantity, dl.quantity_cancelled, dl.quantity_billed, dl.quantity_fulfilled, dl.unit_price,
              i.kind as item_kind
         from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
        where dl.org_id = ${orgId} and dl.document_id = ${purchaseOrderId}
@@ -285,12 +294,13 @@ async function mapLines(
       // Refused OCR text cannot be three-way-matched: its exact decimals never
       // entered the capture, so matching would throw instead of refusing.
       // validateNormalizedCapture already reports the named refusal as blocking.
-      const matchable = canonicalDecimal(line.quantity, 4) !== null
+      const matchable = canonicalDecimal(line.quantity, 8) !== null
         && canonicalDecimal(line.unitPrice, 4) !== null;
       for (const matchIssue of (matchable ? matchPurchaseOrderLine({
         invoiceQuantity: line.quantity,
         invoiceUnitPrice: line.unitPrice,
         orderedQuantity: po.quantity,
+        cancelledQuantity: po.quantity_cancelled,
         billedQuantity: po.quantity_billed,
         fulfilledQuantity: po.quantity_fulfilled,
         poUnitPrice: String(po.unit_price),
@@ -929,6 +939,7 @@ export async function materializeCapture(input: {
         (await tx.execute<{
           id: string;
           quantity: string;
+          quantity_cancelled: string;
           quantity_billed: string;
           quantity_fulfilled: string;
           unit_price: string;
@@ -936,7 +947,8 @@ export async function materializeCapture(input: {
           item_kind: string | null;
           stock_location_id: string | null;
         }>(sql`
-          select dl.id, dl.quantity::text as quantity, dl.quantity_billed::text as quantity_billed,
+          select dl.id, dl.quantity::text as quantity, dl.quantity_cancelled::text as quantity_cancelled,
+                 dl.quantity_billed::text as quantity_billed,
                  dl.quantity_fulfilled::text as quantity_fulfilled, dl.unit_price::text as unit_price,
                  dl.item_id, i.kind as item_kind, dl.stock_location_id
             from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
@@ -954,6 +966,7 @@ export async function materializeCapture(input: {
           invoiceQuantity: line.quantity,
           invoiceUnitPrice: line.unitPrice,
           orderedQuantity: po.quantity,
+          cancelledQuantity: po.quantity_cancelled,
           billedQuantity: po.quantity_billed,
           fulfilledQuantity: po.quantity_fulfilled,
           poUnitPrice: po.unit_price,
@@ -1158,7 +1171,7 @@ export async function materializeCapture(input: {
         }
         const billedGuard = item.document_kind === "vendor_credit"
           ? sql`and dl.quantity_billed + ${billedDelta} >= 0`
-          : sql`and dl.quantity_billed + ${billedDelta} <= dl.quantity
+          : sql`and dl.quantity_billed + ${billedDelta} <= ${orderedNetOfCancelledSql("dl")}
              and (dl.item_id is null or exists (
                select 1 from items i
                 where i.id = dl.item_id and i.org_id = ${input.orgId}

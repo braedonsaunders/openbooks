@@ -1,5 +1,5 @@
 import { add, cmp, fromUnits, sum, toUnits } from "../money/money.ts";
-import { toQuantityUnits } from "../money/quantity.ts";
+import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { isIsoCalendarDate } from "../platform/iso-date.ts";
@@ -77,19 +77,25 @@ export type NormalizedCapture = {
 export function validatePurchaseOrderQuantities(input: {
   invoiceQuantity: string;
   orderedQuantity: string;
+  cancelledQuantity: string;
   billedQuantity: string;
   fulfilledQuantity: string;
   requiresReceipt: boolean;
 }): Array<{ code: "po_quantity_exceeded" | "receipt_quantity_shortfall"; expected: string; actual: string }> {
-  const billable = fromUnits(toUnits(input.orderedQuantity) - toUnits(input.billedQuantity));
+  const invoiceUnits = toQuantityUnits(input.invoiceQuantity);
+  const billableUnits = toQuantityUnits(input.orderedQuantity)
+    - toQuantityUnits(input.cancelledQuantity)
+    - toQuantityUnits(input.billedQuantity);
+  const billable = fromQuantityUnits(billableUnits > 0n ? billableUnits : 0n);
   const issues: Array<{ code: "po_quantity_exceeded" | "receipt_quantity_shortfall"; expected: string; actual: string }> = [];
-  if (cmp(input.invoiceQuantity, billable) > 0) {
-    issues.push({ code: "po_quantity_exceeded", expected: billable, actual: input.invoiceQuantity });
+  if (invoiceUnits > billableUnits) {
+    issues.push({ code: "po_quantity_exceeded", expected: billable, actual: fromQuantityUnits(invoiceUnits) });
   }
   if (input.requiresReceipt) {
-    const received = fromUnits(toUnits(input.fulfilledQuantity) - toUnits(input.billedQuantity));
-    if (cmp(input.invoiceQuantity, received) > 0) {
-      issues.push({ code: "receipt_quantity_shortfall", expected: received, actual: input.invoiceQuantity });
+    const receivedUnits = toQuantityUnits(input.fulfilledQuantity) - toQuantityUnits(input.billedQuantity);
+    const received = fromQuantityUnits(receivedUnits > 0n ? receivedUnits : 0n);
+    if (invoiceUnits > receivedUnits) {
+      issues.push({ code: "receipt_quantity_shortfall", expected: received, actual: fromQuantityUnits(invoiceUnits) });
     }
   }
   return issues;
