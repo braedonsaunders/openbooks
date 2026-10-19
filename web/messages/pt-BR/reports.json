@@ -265,6 +265,7 @@
     "exclusionsTitle": "Sem e-mail cadastrado",
     "exclusionFix": "Adicionar e-mail",
     "notAllowed": "Enviar extratos exige o acesso de envio de AR — peça a um administrador para adicioná-lo ao seu papel.",
+    "periodInputError": "O período do extrato é inválido. Corrija as datas: De deve ser anterior ou igual a Até, e ambas devem usar AAAA-MM-DD.",
     "statusQueued": "Na fila",
     "statusSending": "Enviando",
     "statusDone": "Concluído",

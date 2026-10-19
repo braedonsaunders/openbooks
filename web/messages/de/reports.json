@@ -265,6 +265,7 @@
     "exclusionsTitle": "Keine E-Mail hinterlegt",
     "exclusionFix": "E-Mail ergänzen",
     "notAllowed": "Zum Senden brauchen Sie das AR-Senderecht — bitten Sie einen Administrator, es Ihrer Rolle hinzuzufügen.",
+    "periodInputError": "Der Kontoauszugszeitraum ist ungültig. Korrigieren Sie die Daten: Von muss am oder vor Bis liegen; beide müssen JJJJ-MM-TT verwenden.",
     "statusQueued": "Wartend",
     "statusSending": "Läuft",
     "statusDone": "Fertig",

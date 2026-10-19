@@ -13,6 +13,7 @@ import {
 import {
   assembleBatchList,
   loadStatementBatchParties,
+  listStatementCustomerCurrencies,
   partyOverdueMap,
 } from './statement-batch.ts'
 
@@ -118,6 +119,39 @@ test('overdue balances, billing contacts, and no-email exclusions resolve from l
         allowedSubsidiaryIds: null,
       })
       assert.deepEqual(overdueOnly.recipients.map((r) => r.partyId), [org.customerId])
+    })
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('statement currency filters include only customers in the caller’s subsidiary scope', async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const otherSubsidiaryId = randomUUID()
+  const otherCustomerId = randomUUID()
+  try {
+    await withOrg(org.orgId, async () => {
+      await db.execute(sql`
+        insert into customer_roles (org_id, party_id, currency)
+        values (${org.orgId}, ${org.customerId}, 'CAD')
+        on conflict (party_id) do update set currency = excluded.currency
+      `)
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${otherSubsidiaryId}, ${org.orgId}, 'Other subsidiary', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+      `)
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id)
+        values (${otherCustomerId}, ${org.orgId}, 'customer', 'Other subsidiary customer', ${otherSubsidiaryId})
+      `)
+      await db.execute(sql`
+        insert into customer_roles (org_id, party_id, currency)
+        values (${org.orgId}, ${otherCustomerId}, 'JPY')
+      `)
+
+      assert.deepEqual(await listStatementCustomerCurrencies(org.orgId, new Set([org.subsidiaryId])), ['CAD'])
+      assert.deepEqual(await listStatementCustomerCurrencies(org.orgId, new Set([otherSubsidiaryId])), ['JPY'])
+      assert.deepEqual(await listStatementCustomerCurrencies(org.orgId, null), ['CAD', 'JPY'])
     })
   } finally {
     await dropScratchOrg(org.orgId)

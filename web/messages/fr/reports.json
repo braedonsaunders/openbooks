@@ -265,6 +265,7 @@
     "exclusionsTitle": "Aucun e-mail enregistré",
     "exclusionFix": "Ajouter un e-mail",
     "notAllowed": "L’envoi des relevés exige l’accès d’envoi AR — demandez à un administrateur de l’ajouter à votre rôle.",
+    "periodInputError": "La période des relevés est invalide. Corrigez les dates : Début doit précéder ou égaler Fin, au format AAAA-MM-JJ.",
     "statusQueued": "En attente",
     "statusSending": "En cours",
     "statusDone": "Terminé",

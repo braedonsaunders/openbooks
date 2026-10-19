@@ -265,6 +265,7 @@
     "exclusionsTitle": "メール未登録",
     "exclusionFix": "メールを追加",
     "notAllowed": "送信には売掛の送信権限が必要です。管理者にロールの追加を依頼してください。",
+    "periodInputError": "明細書の期間が無効です。日付を修正してください。「開始」は「終了」以前で、両方とも YYYY-MM-DD 形式にしてください。",
     "statusQueued": "待機中",
     "statusSending": "送信中",
     "statusDone": "完了",

@@ -7,6 +7,7 @@ import { dimWhere } from './reports/filters'
 import { statementBookExpr } from './gl-summary'
 import { decimalCmp } from './statement-format'
 import { reportBookSelection } from './report-books'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { resolveSubsidiaryScope } from './consolidation'
 import { partnerBalances } from './reports/statements'
 
@@ -29,6 +30,22 @@ export class StatementBatchInputError extends Error {
     super(message)
     this.name = 'StatementBatchInputError'
   }
+}
+
+/** Distinct customer currencies available to the caller for statement filters. */
+export async function listStatementCustomerCurrencies(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): Promise<string[]> {
+  const rows = await db.execute<{ currency: string }>(sql`
+    select distinct cr.currency
+      from customer_roles cr
+      join parties p on p.org_id = cr.org_id and p.id = cr.party_id
+     where cr.org_id = ${orgId} and cr.currency is not null
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+     order by cr.currency
+  `)
+  return rows.rows.map((row) => row.currency)
 }
 
 export interface StatementBatchFilters {
