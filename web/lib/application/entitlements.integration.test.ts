@@ -17,9 +17,17 @@ const { getV1Entitlements } = await import('./entitlements')
  * serializes — code, message and remedy.
  */
 
-function context(orgId: string, permissions: string[]): ApplicationContext {
+function context(
+  orgId: string,
+  permissions: string[],
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): ApplicationContext {
   return {
-    authz: { user: { orgId } as ApplicationContext['authz']['user'], permissions: new Set(permissions), allowedSubsidiaryIds: null },
+    authz: {
+      user: { orgId } as ApplicationContext['authz']['user'],
+      permissions: new Set(permissions),
+      allowedSubsidiaryIds: allowedSubsidiaryIds === null ? null : new Set(allowedSubsidiaryIds),
+    },
     source: 'api', requestId: randomUUID(), apiKeyId: null,
   }
 }
@@ -102,6 +110,42 @@ test('an unknown customer id refuses with its remedy', async () => {
           && error.code === 'not_found'
           && error.status === 404
           && error.message === `No customer has id ${missing} in this organization.`,
+      );
+    });
+  } finally { await dropScratchOrg(orgId); }
+});
+
+test('a customer outside the caller subsidiary scope is hidden from entitlement lookup', async () => {
+  const { org } = await seedOrg();
+  const orgId = org.orgId;
+  try {
+    await withOrgContext(orgId, async () => {
+      await db.execute(sql`
+        update parties set subsidiary_id = ${org.subsidiaryId}
+         where org_id = ${orgId} and id = ${org.customerId}
+      `);
+      await assert.rejects(
+        getV1Entitlements(context(orgId, ['ar.read'], new Set()), { customer: org.customerId }),
+        (error: unknown) => error instanceof ApplicationError
+          && error.code === 'not_found'
+          && error.status === 404,
+      );
+    });
+  } finally { await dropScratchOrg(orgId); }
+});
+
+test('a usage check requires billing permission before resolving its customer', async () => {
+  const { org } = await seedOrg();
+  const orgId = org.orgId;
+  try {
+    await withOrgContext(orgId, async () => {
+      await assert.rejects(
+        getV1Entitlements(context(orgId, ['ar.read']), {
+          customer: 'Secret Customer Name', feature: 'metered_feature', used: '1',
+        }),
+        (error: unknown) => error instanceof ApplicationError
+          && error.code === 'forbidden'
+          && error.status === 403,
       );
     });
   } finally { await dropScratchOrg(orgId); }

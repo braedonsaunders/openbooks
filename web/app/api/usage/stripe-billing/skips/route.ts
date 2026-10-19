@@ -12,6 +12,7 @@ const Body = z.object({
 export const POST = defineRoute({
   permission: "usage.manage",
   feature: "usageBilling",
+  scope: "unrestricted",
   body: Body,
   handler: async ({ authz, body }) => {
     await skipStripeObject(
@@ -24,6 +25,7 @@ export const POST = defineRoute({
 export const DELETE = defineRoute({
   permission: "usage.manage",
   feature: "usageBilling",
+  scope: "unrestricted",
   body: Body,
   handler: async ({ authz, body }) => {
     await unskipStripeObject(authz.user.orgId, authz.user.id, body.stripeAccount, body.objectType, body.stripeId);

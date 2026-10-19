@@ -10,10 +10,11 @@ import { useMoney } from '../../../../components/money-provider'
 import { Badge, Button, Drawer, EmptyState, Input, Label, SearchSelect } from '@openbooks/ui'
 import { Switch } from '@/components/switch'
 import { ContextMenu, useContextMenu } from '@openbooks/ui'
+import { catalogNativeTable, type CatalogObjectType } from '@/lib/channel-catalog-match'
 
 interface QueueRow {
   id: string
-  objectType: string
+  objectType: CatalogObjectType
   externalId: string
   productTitle: string | null
   title: string
@@ -30,7 +31,7 @@ interface QueueRow {
 }
 
 type Decision =
-  | { kind: 'match'; nativeId: string }
+  | { kind: 'match'; nativeTable: 'items' | 'item_families'; nativeId: string }
   | { kind: 'create_item'; code?: string; name?: string; itemKind?: string }
   | { kind: 'create_family'; code?: string }
   | { kind: 'ignore'; reason: string }
@@ -62,7 +63,7 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<string[]>([])
   const [drawer, setDrawer] = useState<{ row: QueueRow; action: 'match' | 'create_item' | 'create_family' } | null>(null)
-  const [itemOptions, setItemOptions] = useState<{ value: string; label: string }[] | null>(null)
+  const [matchOptions, setMatchOptions] = useState<{ value: string; label: string }[] | null>(null)
   const [itemId, setItemId] = useState('')
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
@@ -100,17 +101,26 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
   useEffect(() => {
     if (!drawer || drawer.action !== 'match') return
     let cancelled = false
-    fetch('/api/forms/options?source=reference&table=items')
+    const optionsUrl = drawer.row.objectType === 'product'
+      ? '/api/item-families'
+      : '/api/forms/options?source=reference&table=items'
+    fetch(optionsUrl)
       .then(async (res) => {
-        if (!res.ok || cancelled) return
+        if (cancelled) return
+        if (!res.ok) {
+          toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
+          return
+        }
         const body = (await res.json()) as { options: { value: string; label: string }[] }
-        if (!cancelled) setItemOptions(body.options)
+        if (!cancelled) setMatchOptions(body.options)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) toast.error(t('toast.loadFailed'))
+      })
     return () => {
       cancelled = true
     }
-  }, [drawer])
+  }, [drawer, t])
 
   useEffect(() => {
     if (!drawer) return
@@ -171,6 +181,7 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
     // decision left behind: initialize here at open time instead of syncing
     // in an effect.
     setItemId('')
+    setMatchOptions(null)
     setCode(row.sku ?? '')
     setName(row.objectType === 'variant' && row.title !== 'Default' ? row.title : (row.productTitle ?? row.title))
     setIncludeSimilar(false)
@@ -192,7 +203,7 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
     }
     if (drawer.action === 'match') {
       if (itemId === '') return
-      await decide(ids, { kind: 'match', nativeId: itemId })
+      await decide(ids, { kind: 'match', nativeTable: catalogNativeTable(drawer.row.objectType), nativeId: itemId })
       return
     }
     if (drawer.action === 'create_item') {
@@ -282,7 +293,7 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
           </Button>
         ))}
         <span className="grow" />
-        <Button
+        {canManage ? <Button
           size="sm"
           variant="outline"
           disabled={busy}
@@ -298,7 +309,7 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
           }}
         >
           {t('actions.reimport')}
-        </Button>
+        </Button> : null}
       </div>
       {selected.length > 0 && canManage ? (
         <div className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
@@ -368,8 +379,8 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
             {drawer.action === 'match' ? (
               <div className="space-y-2">
                 <p className="text-sm text-slate-500">{t('products.matchHint')}</p>
-                {itemOptions ? (
-                  <SearchSelect value={itemId} onChange={setItemId} options={itemOptions} ariaLabel={t('products.itemLabel')} />
+                {matchOptions ? (
+                  <SearchSelect value={itemId} onChange={setItemId} options={matchOptions} ariaLabel={t('products.itemLabel')} />
                 ) : (
                   <p className="text-sm text-slate-500">{t('products.itemLabel')}</p>
                 )}

@@ -5,7 +5,8 @@ import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { ServiceError } from '@openbooks/engine/service/errors'
 import { recordVisitPart, type VisitPartInput } from '@openbooks/engine/service/completion'
 import { jobCurrency } from '@openbooks/engine/service/jobs'
-import { getServiceVisit } from '@openbooks/engine/service/reads'
+import { getServiceVisit, listServiceStockLocations } from '@openbooks/engine/service/reads'
+import type { Authz } from '../authz'
 import { resolveItemPrice } from '../item-pricing'
 
 type PartRequest = Omit<VisitPartInput, 'unitPrice'>
@@ -46,11 +47,8 @@ export async function recordPricedVisitPart(actor: { orgId: string; actorId: str
 export type StockLocationOption = { id: string; code: string; name: string }
 
 /** Active stock locations a part may come from, vans and warehouses alike. */
-export async function serviceStockLocations(orgId: string): Promise<StockLocationOption[]> {
-  return (await db.execute<StockLocationOption>(sql`select sl.id, sl.code, coalesce(l.name, sl.code) as name
-      from stock_locations sl left join locations l on l.org_id = sl.org_id and l.id = sl.location_id
-     where sl.org_id = ${orgId} and sl.is_active and sl.kind <> 'subcontract' and sl.inventory_ownership = 'owned'
-     order by l.name nulls last, sl.code, sl.id`)).rows
+export async function serviceStockLocations(authz: Authz): Promise<StockLocationOption[]> {
+  return listServiceStockLocations(authz.user.orgId, authz.allowedSubsidiaryIds)
 }
 
 export type PartItemOption = { id: string; code: string | null; name: string; kind: string }

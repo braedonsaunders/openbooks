@@ -203,7 +203,8 @@ export async function loadStoredValuePage(
             join stored_value_programs svp on svp.org_id = sva.org_id and svp.id = sva.program_id
             join subsidiaries sub on sub.org_id = sva.org_id and sub.id = sva.subsidiary_id
             left join parties cust on cust.org_id = sva.org_id and cust.id = sva.customer_party_id
-            left join accounts la on la.org_id = sva.org_id and la.id = svp.liability_account_id
+            left join accounts la on la.org_id = sva.org_id
+              and la.id = coalesce(sva.liability_account_id, svp.liability_account_id)
             left join accounts ba on ba.org_id = sva.org_id and ba.id = svp.breakage_income_account_id
            where sva.org_id = ${orgId} and sva.id = ${accountId}
            ${subsidiaryVisibleFilter(sql`sva.subsidiary_id`, scope)}`)
@@ -223,6 +224,7 @@ export async function loadStoredValuePage(
           ? db.execute<{ id: string; name: string }>(sql`
               select id, concat_ws(' · ', number, name) as name from accounts
                where org_id = ${orgId} and is_active and not is_summary
+                 ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope, { orgWideNull: true })}
                order by number nulls last`)
           : { rows: [] as { id: string; name: string }[] },
       ])
@@ -237,14 +239,18 @@ export async function loadStoredValuePage(
         // parties stay inside their entity — no foreign customer names leak
         // into the picker.
         db.execute<{ id: string; name: string }>(sql`
-          select id, display_name as name from parties
-           where org_id = ${orgId} and is_active
-           ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope, { orgWideNull: true })}
-           order by display_name limit 2000`),
+          select p.id, p.display_name as name from parties p
+           where p.org_id = ${orgId} and p.is_active
+             and exists (select 1 from customer_roles cr
+               where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
+           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope, { orgWideNull: true })}
+           order by p.display_name limit 2000`),
         db.execute<{ id: string; name: string }>(sql`
           select id, concat_ws(' · ', number, name) as name from accounts
            where org_id = ${orgId} and is_active and not is_summary
-             and type in ('bank','cash','undeposited') order by number nulls last`),
+             and type in ('asset_bank', 'asset_current_other')
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope, { orgWideNull: true })}
+           order by number nulls last`),
         // The only issuing entities the caller may use: elimination entities
         // never issue, and a restricted caller sees their allowed set alone.
         db.execute<{ id: string; name: string }>(sql`

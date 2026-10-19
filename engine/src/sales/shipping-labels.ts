@@ -304,7 +304,7 @@ export async function connectShippingAccount(
       update shipping_accounts
          set name = ${name}, provider = ${input.provider}, mode = ${input.mode},
              status = 'active', last_error = null,
-             is_default = ${input.makeDefault === true},
+             is_default = coalesce(${input.makeDefault ?? null}::boolean, is_default),
              updated_at = now(), updated_by = ${actorId}`;
     const keyed = input.apiKey
       ? sql`${base}, secrets = ${sealAccountSecrets(orgId, input.apiKey.trim())}`

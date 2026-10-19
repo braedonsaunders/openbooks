@@ -297,6 +297,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   selection,
   cloneRow,
   fixedRows = false,
+  hideRemove = false,
 }: {
   columns: LineGridColumn<Row>[]
   rows: Row[]
@@ -339,6 +340,8 @@ export function LineGrid<Row extends Record<string, unknown>>({
    * removed — skipping happens through the selection, never by deleting.
    */
   fixedRows?: boolean
+  /** Hide row removal when the owning workflow cannot persist deleted rows. */
+  hideRemove?: boolean
   /**
    * Clone a row for duplicate. The default shallow copy preserves a
    * caller-supplied identity field, so callers that pass `getRowKey` must
@@ -573,7 +576,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
       duplicateRow(i)
       return
     }
-    if (mod && e.key === 'Backspace') {
+    if (mod && e.key === 'Backspace' && !hideRemove) {
       e.preventDefault()
       removeRow(i)
       focusCell(Math.max(0, i - 1), colIndex)
@@ -641,8 +644,10 @@ export function LineGrid<Row extends Record<string, unknown>>({
     { key: 'insert-below', label: t('insertBelow'), icon: ArrowDown, onSelect: () => insertRow(menuIndex + 1) },
     { key: 'duplicate', label: tCommon('actions.duplicate'), icon: Copy, onSelect: () => duplicateRow(menuIndex) },
     ...(distMenuItems.length > 0 ? [{ key: 'distribution-separator', separator: true } as const, ...distMenuItems] : []),
-    { key: 'remove-separator', separator: true },
-    { key: 'remove', label: rows.length > minRows ? t('removeLine') : t('clearLine'), icon: Trash2, danger: true, onSelect: () => removeRow(menuIndex) },
+    ...(!hideRemove ? [
+      { key: 'remove-separator', separator: true } as const,
+      { key: 'remove', label: rows.length > minRows ? t('removeLine') : t('clearLine'), icon: Trash2, danger: true, onSelect: () => removeRow(menuIndex) },
+    ] : []),
   ]
 
   const cellBase =
@@ -800,7 +805,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
         )}
         {footer}
       </div>
-      {!readOnly ? (
+      {!readOnly && !fixedRows && !hideRemove ? (
         <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
           {t('keyboardHint')}
         </p>

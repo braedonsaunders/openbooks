@@ -39,6 +39,7 @@ export const POST = defineRoute({
     try {
       const policy = await setPostingPolicy(gate.user.orgId, gate.user.id, {
         channelId: id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         mode: body.mode,
         unpaidCreatesSalesOrder: body.unpaidCreatesSalesOrder,
         guestCustomerPartyId: body.guestCustomerPartyId,

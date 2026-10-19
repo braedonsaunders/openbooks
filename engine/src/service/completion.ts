@@ -50,8 +50,8 @@ function activeForWork(visit: StoredVisit): void {
 export async function recordVisitPart(actor: ServiceActor & { visitId: string; expectedRevision: number; part: VisitPartInput }): Promise<{ partId: string; visitRevision: number }> {
   return withOrgTransaction(actor.orgId, async () => {
     const visit = await lockVisit(actor.orgId, actor.visitId);
-    checkVisitRevision(visit, actor.expectedRevision);
     await visitFieldAuthority(actor, visit);
+    checkVisitRevision(visit, actor.expectedRevision);
     activeForWork(visit);
     const item = await requireActiveItem(actor.orgId, actor.part.itemId, "Part");
     const quantity = requireQuantity(actor.part.quantity, "Quantity");
@@ -60,7 +60,11 @@ export async function recordVisitPart(actor: ServiceActor & { visitId: string; e
     if (typeof actor.part.billable !== "boolean") throw new ServiceError("Say whether the part is billed to the customer.", { code: "service_invalid" });
     const stockLocationId = requireUuid(actor.part.stockLocationId, "Stock location");
     if (item.inventoryProfiled) await lockDependentFeature(actor.orgId, "inventory", "Inventory");
-    const location = (await db.execute(sql`select 1 from stock_locations where org_id = ${actor.orgId} and id = ${stockLocationId} and is_active`)).rows[0];
+    const location = (await db.execute(sql`select 1 from stock_locations sl
+      join locations l on l.org_id = sl.org_id and l.id = sl.location_id
+      where sl.org_id = ${actor.orgId} and sl.id = ${stockLocationId} and sl.is_active
+        and sl.kind <> 'subcontract' and sl.inventory_ownership = 'owned'
+        and (l.subsidiary_id is null or l.subsidiary_id = ${visit.subsidiaryId})`)).rows[0];
     if (!location) throw new ServiceError("The stock location is not active.", { code: "service_invalid", remedy: "Choose the van or warehouse the part came from." });
     const lotId = optionalUuid(actor.part.lotId, "Lot");
     const serialId = optionalUuid(actor.part.serialId, "Serial number");

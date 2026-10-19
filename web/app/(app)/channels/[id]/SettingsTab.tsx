@@ -23,7 +23,7 @@ interface ChannelSettings {
  * accounts live in the Setup sections above; this form only tunes how
  * the connector behaves.
  */
-export function SettingsTab({ channelId }: { channelId: string }) {
+export function SettingsTab({ channelId, canManage }: { channelId: string; canManage: boolean }) {
   const t = useTranslations('channels')
   const tc = useTranslations('common')
   const [settings, setSettings] = useState<ChannelSettings | null>(null)
@@ -60,7 +60,7 @@ export function SettingsTab({ channelId }: { channelId: string }) {
   }, [load])
 
   async function saveSettings() {
-    if (!settings) return
+    if (!settings || !canManage) return
     setSaving(true)
     try {
       const res = await fetch(`/api/channels/${channelId}`, {
@@ -87,21 +87,21 @@ export function SettingsTab({ channelId }: { channelId: string }) {
       <section className="space-y-4">
         <h2 className="text-base font-medium">{t('settings.title')}</h2>
         <label className="flex items-start gap-2">
-          <Switch on={settings.autoImportProducts} onToggle={() => setSettings((prev) => (prev ? { ...prev, autoImportProducts: !prev.autoImportProducts } : prev))} disabled={saving} label={t('settings.autoImport')} />
+          <Switch on={settings.autoImportProducts} onToggle={() => setSettings((prev) => (prev ? { ...prev, autoImportProducts: !prev.autoImportProducts } : prev))} disabled={!canManage || saving} label={t('settings.autoImport')} />
           <span>
             <span className="block text-sm font-medium">{t('settings.autoImport')}</span>
             <span className="block text-sm text-slate-500">{t('settings.autoImportHint')}</span>
           </span>
         </label>
         <label className="flex items-start gap-2">
-          <Switch on={settings.syncInventory} onToggle={() => setSettings((prev) => (prev ? { ...prev, syncInventory: !prev.syncInventory } : prev))} disabled={saving} label={t('settings.syncInventory')} />
+          <Switch on={settings.syncInventory} onToggle={() => setSettings((prev) => (prev ? { ...prev, syncInventory: !prev.syncInventory } : prev))} disabled={!canManage || saving} label={t('settings.syncInventory')} />
           <span>
             <span className="block text-sm font-medium">{t('settings.syncInventory')}</span>
             <span className="block text-sm text-slate-500">{t('settings.syncInventoryHint')}</span>
           </span>
         </label>
         <label className="flex items-start gap-2">
-          <Switch on={settings.pushCatalog} onToggle={() => setSettings((prev) => (prev ? { ...prev, pushCatalog: !prev.pushCatalog } : prev))} disabled={saving} label={t('settings.push')} />
+          <Switch on={settings.pushCatalog} onToggle={() => setSettings((prev) => (prev ? { ...prev, pushCatalog: !prev.pushCatalog } : prev))} disabled={!canManage || saving} label={t('settings.push')} />
           <span>
             <span className="block text-sm font-medium">{t('settings.push')}</span>
             <span className="block text-sm text-slate-500">{t('settings.pushHint')}</span>
@@ -112,7 +112,7 @@ export function SettingsTab({ channelId }: { channelId: string }) {
         <div className="space-y-4 pt-2">
           <div className="space-y-2">
             <Label htmlFor="channel-api-version">{t('settings.apiVersion')}</Label>
-            <Input id="channel-api-version" value={settings.apiVersion} onChange={(event) => setSettings((prev) => (prev ? { ...prev, apiVersion: event.target.value } : prev))} />
+            <Input id="channel-api-version" value={settings.apiVersion} onChange={(event) => setSettings((prev) => (prev ? { ...prev, apiVersion: event.target.value } : prev))} disabled={!canManage || saving} />
             <p className="text-sm text-slate-500">{t('settings.apiVersionHint')}</p>
           </div>
           <div className="space-y-2">
@@ -123,6 +123,7 @@ export function SettingsTab({ channelId }: { channelId: string }) {
               min={1}
               value={settings.rateLimitBudget}
               onChange={(event) => setSettings((prev) => (prev ? { ...prev, rateLimitBudget: Number(event.target.value) } : prev))}
+              disabled={!canManage || saving}
             />
             <p className="text-sm text-slate-500">{t('settings.rateLimitHint')}</p>
           </div>
@@ -144,7 +145,7 @@ export function SettingsTab({ channelId }: { channelId: string }) {
         </div>
       </DisclosureSection>
       <div className="flex justify-end">
-        <Button disabled={saving} onClick={saveSettings}>
+        <Button disabled={!canManage || saving || advancedInvalid} onClick={saveSettings}>
           {t('settings.saveSettings')}
         </Button>
       </div>

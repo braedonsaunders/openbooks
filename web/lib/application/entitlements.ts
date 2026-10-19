@@ -2,7 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { isUuid } from "@openbooks/engine/platform/identifiers";
 import { db, withOrgContext } from "@openbooks/engine/platform/database";
-import { ScopeNotFoundError } from "@openbooks/engine/organization/authority";
+import { ScopeNotFoundError, subsidiaryVisibleFilter } from "@openbooks/engine/organization/authority";
 import {
   EntitlementError,
   checkEntitlement,
@@ -56,6 +56,7 @@ function mapEntitlementError(error: unknown, resource: string): never {
 async function resolveCustomerId(
   orgId: string,
   query: Pick<V1EntitlementsQuery, "customer" | "externalRef">,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ id: string; displayName: string }> {
   if (query.externalRef !== undefined) {
     const ref = query.externalRef.trim();
@@ -71,7 +72,8 @@ async function resolveCustomerId(
         join parties p on p.org_id = l.org_id and p.id = l.native_id::uuid
        where l.org_id = ${orgId} and l.provider = ${provider}
          and l.object_type = 'customer' and l.external_id = ${externalId}
-         and l.native_table = 'parties'`)).rows;
+         and l.native_table = 'parties'
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows;
     if (matches.length === 0) {
       throw new ApplicationError(
         "not_found",
@@ -95,7 +97,8 @@ async function resolveCustomerId(
   if (isUuid(raw)) {
     const party = (await db.execute<{ id: string; displayName: string }>(sql`
       select id, display_name as "displayName" from parties
-       where org_id = ${orgId} and id = ${raw}::uuid`)).rows[0];
+       where org_id = ${orgId} and id = ${raw}::uuid
+         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
     if (!party) {
       throw new ApplicationError(
         "not_found",
@@ -108,7 +111,8 @@ async function resolveCustomerId(
   }
   const matches = (await db.execute<{ id: string; displayName: string }>(sql`
     select id, display_name as "displayName" from parties
-     where org_id = ${orgId} and display_name = ${raw}`)).rows;
+     where org_id = ${orgId} and display_name = ${raw}
+       ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows;
   if (matches.length === 0) {
     throw new ApplicationError(
       "not_found",
@@ -133,15 +137,17 @@ export async function getV1Entitlements(
   query: V1EntitlementsQuery,
 ): Promise<V1EntitlementsResult> {
   assertApplicationPermission(context, "ar.read");
+  if (query.feature !== undefined) assertApplicationPermission(context, "usage.bill");
   const orgId = context.authz.user.orgId;
   // Token routes gate apiAccess in the wrapper; entitlements additionally
   // need the advanced-subscriptions surface, refused without existence leak.
   if (!(await isFeatureEnabled(orgId, "advancedSubscriptions"))) throw notFound("record");
-  const customer = await withOrgContext(orgId, () => resolveCustomerId(orgId, query));
+  const allowedSubsidiaryIds = context.authz.allowedSubsidiaryIds;
+  const customer = await withOrgContext(orgId, () => resolveCustomerId(orgId, query, allowedSubsidiaryIds));
   if (query.feature === undefined) {
     try {
       const subscriptions = await withOrgContext(orgId, () =>
-        resolveEntitlements(orgId, { customerId: customer.id }, query.at));
+        resolveEntitlements(orgId, { customerId: customer.id }, { at: query.at, allowedSubsidiaryIds }));
       return { customer, subscriptions, check: null };
     } catch (error) {
       mapEntitlementError(error, "customer");
@@ -149,10 +155,9 @@ export async function getV1Entitlements(
   }
   // A usage check can bill overage into rating, so it carries the billing
   // permission rather than riding the read.
-  assertApplicationPermission(context, "usage.bill");
   try {
     const subscriptions = await withOrgContext(orgId, () =>
-      resolveEntitlements(orgId, { customerId: customer.id }, query.at));
+        resolveEntitlements(orgId, { customerId: customer.id }, { at: query.at, allowedSubsidiaryIds }));
     if (subscriptions.length === 0) {
       throw new ApplicationError(
         "not_found",
@@ -185,6 +190,7 @@ export async function getV1Entitlements(
     const check = await withOrgContext(orgId, () =>
       checkEntitlement(orgId, context.authz.user.id, {
         subscriptionId: target.subscriptionId,
+        allowedSubsidiaryIds,
         featureKey: query.feature ?? "",
         used: query.used,
         occurredOn: query.at,

@@ -3,10 +3,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../../platform/db.ts";
+import { ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../../testing/fixtures.ts";
 import { createUsageMeter, ingestUsageRecords } from "./records.ts";
 import { createSubscriptionUsageLink, createUsageRatingPlan, createUsageRatingPlanVersion, publishUsagePlanVersion, replaceUsageRatingBands } from "./rating-plans.ts";
-import { runDueUsageRating } from "./rating-schedule.ts";
+import { listUsageRatingSettings, runDueUsageRating, saveUsageRatingSchedule } from "./rating-schedule.ts";
 
 const DB = { skip: !process.env.OPENBOOKS_DB_URL };
 
@@ -136,5 +137,55 @@ test("a paused schedule never rates its closed periods", DB, async () => {
     assert.equal(due.rated, 0);
     assert.deepEqual(await ratingRuns(org.orgId, link.id), []);
     assert.equal(await watermark(org.orgId, link.id), null);
+  });
+});
+
+test("rating schedules honor subsidiary visibility and protect the organization default", DB, async () => {
+  await fixture(async (org, actor) => {
+    const { link } = await closedJulyLink(org, actor);
+    const savedDefault = await saveUsageRatingSchedule(org.orgId, actor, {
+      linkId: null, cadence: "monthly",
+    }, null);
+    assert.equal(savedDefault.linkId, null, "the unrestricted operator can save the organization default");
+    const savedLink = await saveUsageRatingSchedule(org.orgId, actor, {
+      linkId: link.id, cadence: "billing_period",
+    }, null);
+    assert.equal(savedLink.linkId, link.id, "the fixture has a link-specific schedule to scope");
+
+    const otherSubsidiaryId = randomUUID();
+    await withOrgContext(org.orgId, async () => {
+      const subsidiary = await db.execute(sql`
+        insert into subsidiaries
+          (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values
+          (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Usage schedule subsidiary', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+        returning id`);
+      assert.equal(subsidiary.rows.length, 1, "the fixture subsidiary is created");
+      const customer = await db.execute(sql`
+        update parties set subsidiary_id = ${otherSubsidiaryId}
+         where org_id = ${org.orgId} and id = ${org.customerId}
+         returning id`);
+      assert.equal(customer.rows.length, 1, "the customer is moved to the fixture subsidiary");
+    });
+
+    const firstSubsidiaryOnly = new Set([org.subsidiaryId]);
+    assert.deepEqual(await listUsageRatingSettings(org.orgId, firstSubsidiaryOnly), [], "a caller outside the customer's subsidiary sees no link schedule");
+    await assert.rejects(
+      saveUsageRatingSchedule(org.orgId, actor, { linkId: link.id, cadence: "monthly" }, firstSubsidiaryOnly),
+      ScopeNotFoundError,
+    );
+    await assert.rejects(
+      saveUsageRatingSchedule(org.orgId, actor, { linkId: null, cadence: "monthly" }, new Set([otherSubsidiaryId])),
+      ScopeNotFoundError,
+    );
+
+    const visible = await listUsageRatingSettings(org.orgId, new Set([otherSubsidiaryId]));
+    assert.equal(visible.length, 1, "the customer subsidiary sees its link schedule");
+    assert.equal(visible[0]?.linkId, link.id, "the visible schedule belongs to the customer's link");
+    assert.equal(visible[0]?.customerName, "Acme Customer", "the visible schedule resolves its customer name");
+    const updated = await saveUsageRatingSchedule(
+      org.orgId, actor, { linkId: link.id, cadence: "monthly" }, new Set([otherSubsidiaryId]),
+    );
+    assert.equal(updated.customerName, "Acme Customer", "the scoped update returns the visible customer");
   });
 });

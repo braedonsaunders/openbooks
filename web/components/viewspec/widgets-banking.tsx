@@ -240,6 +240,7 @@ export const BANKING_WIDGETS = {
    *  with banking.reconcile; readers see the same drawer without decisions. */
   'psp-dispute-review-drawer': (props) => (
     <PspDisputeReviewDrawer
+      key={(props.review as ComponentProps<typeof PspDisputeReviewDrawer>['review']).id}
       review={props.review as ComponentProps<typeof PspDisputeReviewDrawer>['review']}
     />
   ),
@@ -247,6 +248,7 @@ export const BANKING_WIDGETS = {
    *  drawer proposes the native document with evidence and links it. */
   'psp-settlement-line-drawer': (props) => (
     <PayoutLineDrawer
+      key={(props.line as ComponentProps<typeof PayoutLineDrawer>['line']).id}
       line={props.line as ComponentProps<typeof PayoutLineDrawer>['line']}
     />
   ),

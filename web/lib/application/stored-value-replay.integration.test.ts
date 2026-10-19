@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
-const { redeemStoredValueForInvoice } = await import('./stored-value.ts')
+const { lookupStoredValueBalance, redeemStoredValueForInvoice } = await import('./stored-value.ts')
 const { ApplicationError } = await import('./errors.ts')
 const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedPostingAccount } = await import(
@@ -100,7 +100,7 @@ async function seedReplayOrg(): Promise<ReplayFixture> {
   const rootActor = await withBypass(() => createScratchUser(org.orgId, 'SV App Root', 'sv_app_root'))
   await withBypass(() =>
     db.execute(sql`
-      update app_roles set permissions = '["stored_value.read","stored_value.manage"]'::jsonb,
+      update app_roles set permissions = '["stored_value.read","stored_value.manage","ar.pay"]'::jsonb,
         subsidiary_restriction = ${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
        where org_id = ${org.orgId} and key = 'sv_app_root'`),
   )
@@ -168,7 +168,7 @@ async function appContext(fx: ReplayFixture, userId: string) {
         homeUserId: userId,
         homeOrgId: fx.orgId,
       },
-      permissions: new Set(['stored_value.read', 'stored_value.manage']),
+      permissions: new Set(['stored_value.read', 'stored_value.manage', 'ar.pay']),
       allowedSubsidiaryIds: scope,
     },
     source: 'api' as const,
@@ -176,6 +176,43 @@ async function appContext(fx: ReplayFixture, userId: string) {
     apiKeyId: null,
   }
 }
+
+test('stored-value API balances use money units and honor feature and payment permissions', { skip: !DB }, async () => {
+  const fx = await seedReplayOrg()
+  try {
+    const ctx = await appContext(fx, fx.rootActor)
+    const balance = await lookupStoredValueBalance(ctx, { code: fx.codeA })
+    assert.equal(balance.balance, '100.0000')
+
+    const noPayPermission = {
+      ...ctx,
+      authz: { ...ctx.authz, permissions: new Set(['stored_value.read', 'stored_value.manage']) },
+    }
+    await assert.rejects(
+      redeemStoredValueForInvoice(noPayPermission, {
+        code: fx.codeA, amount: '1', invoiceId: randomUUID(), idempotencyKey: `no-ar-pay-${randomUUID()}`,
+      }),
+      (error: unknown) => error instanceof ApplicationError && error.status === 403,
+    );
+
+    await withBypass(() => db.execute(sql`
+      update orgs set settings = settings
+        || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb) || '{"storedValue":false}'::jsonb)
+       where id = ${fx.orgId}`))
+    await assert.rejects(
+      lookupStoredValueBalance(ctx, { code: fx.codeA }),
+      (error: unknown) => error instanceof ApplicationError && error.status === 404,
+    )
+    await assert.rejects(
+      redeemStoredValueForInvoice(ctx, {
+        code: fx.codeA, amount: '1', invoiceId: randomUUID(), idempotencyKey: `feature-off-${randomUUID()}`,
+      }),
+      (error: unknown) => error instanceof ApplicationError && error.status === 404,
+    )
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId))
+  }
+})
 
 test('an identical retry replays the stored receipt', { skip: !DB }, async () => {
   const fx = await seedReplayOrg()

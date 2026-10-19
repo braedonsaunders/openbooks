@@ -188,11 +188,12 @@ export async function invoiceServiceWork(actor: ServiceActor & { jobId: string; 
     await serviceAuthority(actor, "service.manage", job.subsidiaryId);
     await lockActorCommandAuthority(db, actor.orgId, actor.actorId, job.subsidiaryId, "ar.create");
     const visitId = actor.visitId ? requireUuid(actor.visitId, "Visit") : null;
+    await releaseVoidedBillings(actor, job.id);
     const attempt = await attemptNumber(actor.orgId, job.id, visitId);
     const key = serviceInvoiceKey(actor.orgId, visitId ? `visit:${visitId}` : `job:${job.id}`, attempt);
     const existing = (await db.execute<{ id: string; documentNumber: string }>(sql`select d.id, d.document_number as "documentNumber" from service_billings b
       join documents d on d.org_id = b.org_id and d.id = b.invoice_document_id
-      where b.org_id = ${actor.orgId} and b.invoice_document_id = ${key} and b.released_at is null`)).rows[0];
+      where b.org_id = ${actor.orgId} and b.invoice_document_id = ${key} and b.released_at is null and d.status <> 'voided'`)).rows[0];
     if (existing) return { invoiceId: existing.id, documentNumber: existing.documentNumber, replayed: true };
     const plan = await planInvoice(actor, job, visitId);
     if (!plan.lines.length) throw new ServiceError("There is nothing to invoice.", { code: "service_nothing_to_bill", remedy: "Add scope lines to the job or billable parts and labor to its visits." });

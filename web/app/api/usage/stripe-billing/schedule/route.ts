@@ -9,6 +9,7 @@ const Body = z.object({
 export const PUT = defineRoute({
   permission: "usage.manage",
   feature: "usageBilling",
+  scope: "unrestricted",
   body: Body,
   handler: async ({ authz, body }) => Response.json({
     cadence: await saveStripeBillingSchedule(authz.user.orgId, authz.user.id, body.cadence),

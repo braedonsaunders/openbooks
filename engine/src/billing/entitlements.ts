@@ -7,7 +7,7 @@ import {
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
 } from "../organization/org-feature-lock.ts";
-import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { ScopeNotFoundError, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { db, withOrg } from "../platform/db.ts";
 import { emitEntitlementChanged } from "../webhooks/emit.ts";
@@ -620,6 +620,7 @@ const OVERRIDE_COLUMNS = sql`
 
 export interface SaveSubscriptionOverrideInput {
   subscriptionId: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   featureKey: string;
   enabled?: boolean | null;
   limit?: unknown;
@@ -637,11 +638,19 @@ type SubscriptionHead = {
   status: string;
 };
 
-async function loadSubscriptionHead(orgId: string, subscriptionId: string): Promise<SubscriptionHead> {
+async function loadSubscriptionHead(
+  orgId: string,
+  subscriptionId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<SubscriptionHead> {
   const safeId = uuidText(subscriptionId, "subscription_id");
   const sub = (await db.execute<SubscriptionHead>(sql`
-    select id, customer_id as "customerId", plan_id as "planId", status
-      from subscriptions where org_id = ${orgId} and id = ${safeId}::uuid`)).rows[0];
+    select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.status
+      from subscriptions s
+      join parties p on p.org_id = s.org_id and p.id = s.customer_id
+     where s.org_id = ${orgId} and s.id = ${safeId}::uuid
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+     for share of s, p`)).rows[0];
   if (!sub) {
     refuse("entitlement_subscription_not_found", "The subscription does not exist in this organization.", "Choose a subscription from this organization.", "subscription_id", 404);
   }
@@ -655,7 +664,7 @@ export async function saveSubscriptionOverride(
 ): Promise<SubscriptionEntitlementOverride> {
   return withOrg(orgId, async () => {
     await lockAndRequireEntitlements(orgId);
-    const sub = await loadSubscriptionHead(orgId, input.subscriptionId);
+    const sub = await loadSubscriptionHead(orgId, input.subscriptionId, input.allowedSubsidiaryIds);
     const feature = await loadActiveFeature(orgId, input.featureKey);
     const enabled = input.enabled ?? null;
     const limitQty = input.limit === undefined || input.limit === null ? null : quantityText(input.limit, "limit");
@@ -729,11 +738,16 @@ export async function saveSubscriptionOverride(
 export async function expireSubscriptionOverride(
   orgId: string,
   actor: string,
-  input: { subscriptionId: string; featureKey: string; effectiveTo?: string },
+  input: {
+    subscriptionId: string;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+    featureKey: string;
+    effectiveTo?: string;
+  },
 ): Promise<SubscriptionEntitlementOverride> {
   return withOrg(orgId, async () => {
     await lockAndRequireEntitlements(orgId);
-    const sub = await loadSubscriptionHead(orgId, input.subscriptionId);
+    const sub = await loadSubscriptionHead(orgId, input.subscriptionId, input.allowedSubsidiaryIds);
     const key = featureKeyText(input.featureKey, "feature_key");
     const today = await businessToday(orgId);
     const effectiveTo = input.effectiveTo === undefined ? today : dateText(input.effectiveTo, "effective_to");
@@ -796,12 +810,12 @@ export async function expireSubscriptionOverride(
 export async function listSubscriptionOverrides(
   orgId: string,
   subscriptionId: string,
-  at?: string,
+  options: { allowedSubsidiaryIds: ReadonlySet<string> | null; at?: string },
 ): Promise<SubscriptionEntitlementOverride[]> {
   return withOrg(orgId, async () => {
     await requireEntitlementsRead(orgId);
-    const sub = await loadSubscriptionHead(orgId, subscriptionId);
-    const asOf = at === undefined ? await businessToday(orgId) : dateText(at, "at");
+    const sub = await loadSubscriptionHead(orgId, subscriptionId, options.allowedSubsidiaryIds);
+    const asOf = options.at === undefined ? await businessToday(orgId) : dateText(options.at, "at");
     const rows = (await db.execute<SubscriptionEntitlementOverride>(sql`
       select ${OVERRIDE_COLUMNS}
         from subscription_entitlement_overrides o
@@ -967,22 +981,28 @@ async function resolveSubscription(
 export async function resolveEntitlements(
   orgId: string,
   subject: { subscriptionId: string } | { customerId: string },
-  at?: string,
+  options: { allowedSubsidiaryIds: ReadonlySet<string> | null; at?: string },
 ): Promise<ResolvedSubscriptionEntitlements[]> {
   return withOrg(orgId, async () => {
     await requireEntitlementsRead(orgId);
-    const asOf = at === undefined ? await businessToday(orgId) : dateText(at, "at");
+    const asOf = options.at === undefined ? await businessToday(orgId) : dateText(options.at, "at");
     let subs: SubscriptionHead[];
     if ("subscriptionId" in subject) {
-      subs = [await loadSubscriptionHead(orgId, subject.subscriptionId)];
+      subs = [await loadSubscriptionHead(orgId, subject.subscriptionId, options.allowedSubsidiaryIds)];
     } else {
       const customerId = uuidText(subject.customerId, "customer_id");
       const customer = (await db.execute<{ id: string }>(sql`
-        select id from parties where org_id = ${orgId} and id = ${customerId}::uuid`)).rows[0];
+        select id from parties
+         where org_id = ${orgId} and id = ${customerId}::uuid
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, options.allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
       if (!customer) throw new ScopeNotFoundError();
       subs = (await db.execute<SubscriptionHead>(sql`
-        select id, customer_id as "customerId", plan_id as "planId", status
-          from subscriptions where org_id = ${orgId} and customer_id = ${customerId}::uuid order by id`)).rows;
+        select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.status
+          from subscriptions s
+          join parties p on p.org_id = s.org_id and p.id = s.customer_id
+         where s.org_id = ${orgId} and s.customer_id = ${customerId}::uuid
+           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, options.allowedSubsidiaryIds, { orgWideNull: true })}
+         order by s.id`)).rows;
     }
     const out: ResolvedSubscriptionEntitlements[] = [];
     for (const sub of subs) {
@@ -1010,7 +1030,7 @@ export async function refreshEntitlementSnapshot(
 ): Promise<EntitlementSnapshot> {
   return withOrg(orgId, async () => {
     await requireEntitlementsRead(orgId);
-    const sub = await loadSubscriptionHead(orgId, subscriptionId);
+    const sub = await loadSubscriptionHead(orgId, subscriptionId, null);
     const asOf = await businessToday(orgId);
     const { resolved, sourceHash } = await resolveSubscription(orgId, sub, asOf);
     const stored = (await db.execute<{ snapshot: ResolvedEntitlement[]; sourceHash: string; resolvedAt: string }>(sql`
@@ -1040,13 +1060,13 @@ export async function refreshEntitlementSnapshot(
 export async function getEntitlementSnapshot(
   orgId: string,
   subscriptionId: string,
-  at?: string,
+  options: { allowedSubsidiaryIds: ReadonlySet<string> | null; at?: string },
 ): Promise<EntitlementSnapshot> {
   return withOrg(orgId, async () => {
     await requireEntitlementsRead(orgId);
-    const sub = await loadSubscriptionHead(orgId, subscriptionId);
-    if (at !== undefined) {
-      const asOf = dateText(at, "at");
+    const sub = await loadSubscriptionHead(orgId, subscriptionId, options.allowedSubsidiaryIds);
+    if (options.at !== undefined) {
+      const asOf = dateText(options.at, "at");
       const { resolved, sourceHash } = await resolveSubscription(orgId, sub, asOf);
       return {
         subscriptionId: sub.id,
@@ -1081,6 +1101,7 @@ export async function getEntitlementSnapshot(
 
 export interface CheckEntitlementInput {
   subscriptionId: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   featureKey: string;
   used?: unknown;
   occurredOn?: string;
@@ -1267,7 +1288,7 @@ export async function checkEntitlement(
 ): Promise<EntitlementVerdict> {
   return withOrg(orgId, async () => {
     await requireEntitlementsRead(orgId);
-    const sub = await loadSubscriptionHead(orgId, input.subscriptionId);
+    const sub = await loadSubscriptionHead(orgId, input.subscriptionId, input.allowedSubsidiaryIds);
     const occurredOn = input.occurredOn === undefined ? await businessToday(orgId) : dateText(input.occurredOn, "occurred_on");
     const { resolved } = await resolveSubscription(orgId, sub, occurredOn);
     const key = featureKeyText(input.featureKey, "feature_key");

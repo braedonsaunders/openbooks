@@ -252,7 +252,7 @@ async function WorkspaceSettings({
           hideHeader={false}
         />
       ) : (
-        <SettingsTab channelId={channelId} />
+        <SettingsTab channelId={channelId} canManage={canManage} />
       )}
     </div>
   );

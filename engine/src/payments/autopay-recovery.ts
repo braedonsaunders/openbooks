@@ -8,6 +8,7 @@ import { postPaymentWithApplications } from "./payment-posting.ts";
 import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { AutopayError } from "./autopay-policy.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 
 /** Autopay recovery metrics and the posting of collected receipts through the hosted-payment draft, apply and post path. */
 
@@ -51,31 +52,41 @@ function recoveryRate(recoveredInvoices: number, invoices: number): number | nul
 export async function getRecoveryMetrics(
   orgId: string,
   window: { from: string; to: string },
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<RecoveryMetrics> {
   return withOrg(orgId, async () => {
+    const scopedAttempts = sql`
+      select a.*
+        from collection_attempts a
+        join documents d on d.org_id = a.org_id and d.id = a.invoice_id
+        join parties p on p.org_id = d.org_id and p.id = d.party_id
+       where a.org_id = ${orgId}
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+    `;
     const totals = (await db.execute<{
       attempts: number;
       invoices: number;
       recovered: number;
       amount: string | null;
     }>(sql`
-      with failed as (
+      with scoped_attempts as (${scopedAttempts}),
+      failed as (
         select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position
-          from collection_attempts a
-         where a.org_id = ${orgId} and a.status = 'failed'
+          from scoped_attempts a
+         where a.status = 'failed'
            and a.created_at >= ${window.from}::timestamptz and a.created_at < ${window.to}::timestamptz
          order by a.invoice_id, a.retry_position
       ),
       recovered as (
         select distinct on (a.invoice_id) a.invoice_id, a.amount
-          from collection_attempts a
+          from scoped_attempts a
           join failed f on f.invoice_id = a.invoice_id
-         where a.org_id = ${orgId} and a.status = 'succeeded' and a.retry_position > f.failed_position
+         where a.status = 'succeeded' and a.retry_position > f.failed_position
          order by a.invoice_id, a.retry_position
       )
-      select (select count(*)::integer from collection_attempts
-               where org_id = ${orgId}
-                 and created_at >= ${window.from}::timestamptz and created_at < ${window.to}::timestamptz) as attempts,
+      select (select count(*)::integer from scoped_attempts
+               where created_at >= ${window.from}::timestamptz and created_at < ${window.to}::timestamptz) as attempts,
              (select count(*)::integer from failed) as invoices,
              (select count(*)::integer from recovered) as recovered,
              (select coalesce(sum(amount), 0)::text from recovered) as amount
@@ -88,19 +99,20 @@ export async function getRecoveryMetrics(
       recovered: number;
       amount: string | null;
     }>(sql`
-      with failed as (
+      with scoped_attempts as (${scopedAttempts}),
+      failed as (
         select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position,
                coalesce(a.decline_kind, 'soft') as decline_kind
-          from collection_attempts a
-         where a.org_id = ${orgId} and a.status = 'failed'
+          from scoped_attempts a
+         where a.status = 'failed'
            and a.created_at >= ${window.from}::timestamptz and a.created_at < ${window.to}::timestamptz
          order by a.invoice_id, a.retry_position
       ),
       recovered as (
         select distinct on (a.invoice_id) a.invoice_id, a.amount
-          from collection_attempts a
+          from scoped_attempts a
           join failed f on f.invoice_id = a.invoice_id
-         where a.org_id = ${orgId} and a.status = 'succeeded' and a.retry_position > f.failed_position
+         where a.status = 'succeeded' and a.retry_position > f.failed_position
          order by a.invoice_id, a.retry_position
       )
       select f.decline_kind as "declineClass",
@@ -120,18 +132,19 @@ export async function getRecoveryMetrics(
       recovered: number;
       amount: string | null;
     }>(sql`
-      with failed as (
+      with scoped_attempts as (${scopedAttempts}),
+      failed as (
         select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position, a.provider
-          from collection_attempts a
-         where a.org_id = ${orgId} and a.status = 'failed'
+          from scoped_attempts a
+         where a.status = 'failed'
            and a.created_at >= ${window.from}::timestamptz and a.created_at < ${window.to}::timestamptz
          order by a.invoice_id, a.retry_position
       ),
       recovered as (
         select distinct on (a.invoice_id) a.invoice_id, a.amount
-          from collection_attempts a
+          from scoped_attempts a
           join failed f on f.invoice_id = a.invoice_id
-         where a.org_id = ${orgId} and a.status = 'succeeded' and a.retry_position > f.failed_position
+         where a.status = 'succeeded' and a.retry_position > f.failed_position
          order by a.invoice_id, a.retry_position
       )
       select f.provider,
@@ -145,18 +158,19 @@ export async function getRecoveryMetrics(
        order by f.provider
     `)).rows;
     const byCurrency = (await db.execute<{ currency: string; amount: string | null }>(sql`
-      with failed as (
+      with scoped_attempts as (${scopedAttempts}),
+      failed as (
         select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position
-          from collection_attempts a
-         where a.org_id = ${orgId} and a.status = 'failed'
+          from scoped_attempts a
+         where a.status = 'failed'
            and a.created_at >= ${window.from}::timestamptz and a.created_at < ${window.to}::timestamptz
          order by a.invoice_id, a.retry_position
       ),
       recovered as (
         select distinct on (a.invoice_id) a.invoice_id, a.amount, a.currency
-          from collection_attempts a
+          from scoped_attempts a
           join failed f on f.invoice_id = a.invoice_id
-         where a.org_id = ${orgId} and a.status = 'succeeded' and a.retry_position > f.failed_position
+         where a.status = 'succeeded' and a.retry_position > f.failed_position
          order by a.invoice_id, a.retry_position
       )
       select r.currency, coalesce(sum(r.amount), 0)::text as amount
@@ -165,14 +179,18 @@ export async function getRecoveryMetrics(
        order by r.currency
     `)).rows;
     const churn = (await db.execute<{ n: number }>(sql`
-      select count(*)::integer as n from audit_log
-       where org_id = ${orgId} and table_name = 'subscriptions'
-         and changes ->> 'event' = 'autopay_reactivated'
-         and at >= ${window.from}::timestamptz and at < ${window.to}::timestamptz
+      select count(*)::integer as n from audit_log al
+        join subscriptions s on s.org_id = al.org_id and s.id = al.row_id
+        join parties p on p.org_id = s.org_id and p.id = s.customer_id
+       where al.org_id = ${orgId} and al.table_name = 'subscriptions'
+         and al.changes ->> 'event' = 'autopay_reactivated'
+         and al.at >= ${window.from}::timestamptz and al.at < ${window.to}::timestamptz
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
     `)).rows[0]?.n ?? 0;
     const awaiting = (await db.execute<{ n: number }>(sql`
-      select count(*)::integer as n from collection_attempts
-       where org_id = ${orgId} and status = 'failed'
+      with scoped_attempts as (${scopedAttempts})
+      select count(*)::integer as n from scoped_attempts
+       where status = 'failed'
          and decline_kind = 'needs_authentication' and next_retry_on is null
     `)).rows[0]?.n ?? 0;
     return {

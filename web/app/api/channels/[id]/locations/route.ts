@@ -72,6 +72,7 @@ export const POST = defineRoute({
       }
       const location = await upsertChannelLocation(gate.user.orgId, gate.user.id, {
         channelId: id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         externalLocationId: body.externalLocationId,
         externalName: body.externalName,
         stockLocationId: body.stockLocationId ?? null,

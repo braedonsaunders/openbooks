@@ -14,6 +14,7 @@ import { sealJson } from "../platform/secrets.ts";
 import { reverseProjectGlEntryWithinTransaction } from "../journal/origin-entry.ts";
 import {
   buyShipmentLabel,
+  connectShippingAccount,
   getShipmentRates,
   handleTrackerDelivery,
   importBillingAdjustments,
@@ -161,6 +162,35 @@ async function seedAccount(org: ScratchOrg, relaySecret: string | null): Promise
       carrier_payable_account_id = excluded.carrier_payable_account_id, default_account_id = excluded.default_account_id`));
   return accountId;
 }
+
+test("reconnecting a carrier account preserves its default unless the operator changes it", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await enableShipping(org.orgId);
+    const actorId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Carrier administrator"));
+    const accountId = await seedAccount(org, null);
+    const reconnect = (makeDefault?: boolean) => withOrg(org.orgId, () => db.transaction((tx) =>
+      connectShippingAccount(tx, org.orgId, actorId, {
+        accountId,
+        name: "Updated carrier",
+        provider: "easypost",
+        mode: "test",
+        ...(makeDefault === undefined ? {} : { makeDefault }),
+      })));
+
+    await reconnect();
+    const keptDefault = await withBypassContext(() => db.execute<{ is_default: boolean }>(sql`
+      select is_default from shipping_accounts where org_id = ${org.orgId} and id = ${accountId}`));
+    assert.equal(keptDefault.rows[0]?.is_default, true);
+
+    await reconnect(false);
+    const clearedDefault = await withBypassContext(() => db.execute<{ is_default: boolean }>(sql`
+      select is_default from shipping_accounts where org_id = ${org.orgId} and id = ${accountId}`));
+    assert.equal(clearedDefault.rows[0]?.is_default, false);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
 
 function sealRelayForTest(orgId: string, plain: string): string {
   return sealJson({ relaySecret: plain }, { orgId, purpose: "shipping.account.secrets" });

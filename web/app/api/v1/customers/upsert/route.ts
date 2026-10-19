@@ -23,6 +23,7 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
       id: body.id as string | undefined,
       externalRef: body.externalRef as string | undefined,
       externalSource: body.externalSource as string | undefined,
+      subsidiaryId: body.subsidiaryId as string | null | undefined,
       email: body.email as string | undefined,
       name: body.name as string | undefined,
       kind: body.kind as string | undefined,

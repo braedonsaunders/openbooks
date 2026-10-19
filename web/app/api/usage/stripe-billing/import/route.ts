@@ -10,6 +10,7 @@ const Body = z.object({
 export const POST = defineRoute({
   permission: "usage.manage",
   feature: "usageBilling",
+  scope: "unrestricted",
   body: Body,
   handler: async ({ authz, body }) => Response.json(await importStripeBilling(
     authz.user.orgId,

@@ -509,6 +509,7 @@ async function mapV1OrderLines(
 async function resolveFullOrderCustomer(
   context: ApplicationContext,
   customer: FullOrderCustomerInput,
+  subsidiaryId: string | null | undefined,
 ): Promise<string> {
   const orgId = context.authz.user.orgId;
   if (!customer || typeof customer !== "object") {
@@ -532,6 +533,7 @@ async function resolveFullOrderCustomer(
   const { id } = await upsertApplicationCustomer(context, {
     externalRef: customer.externalRef,
     externalSource: customer.externalSource,
+    subsidiaryId,
     email: customer.email,
     name: customer.name,
     kind: customer.kind,
@@ -591,7 +593,7 @@ export async function createFullApplicationOrder(
       );
     }
   }
-  const partyId = await resolveFullOrderCustomer(context, input.customer);
+  const partyId = await resolveFullOrderCustomer(context, input.customer, input.subsidiaryId);
   const mapped = await mapV1OrderLines(orgId, input.lines, input.shippingLines);
   const draft = await createApplicationOrder(context, {
     kind: "sales_order",

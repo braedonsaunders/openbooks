@@ -6,6 +6,7 @@ import {
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
 import { db, withOrg } from "../platform/db.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 
 const FEATURE_REMEDY = "Enable Sales Channels in Company Settings → Features.";
 
@@ -24,6 +25,7 @@ export interface ChannelLocationRow {
 
 export interface UpsertChannelLocationInput {
   channelId: string;
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
   externalLocationId: string;
   externalName: string;
   stockLocationId?: string | null;
@@ -77,9 +79,9 @@ function cleanBuffer(value: string | null): string {
   return buffer;
 }
 
-async function requireChannel(orgId: string, channelId: string): Promise<void> {
-  const row = (await db.execute<{ id: string }>(sql`
-    select id from sales_channels where org_id = ${orgId} and id = ${channelId}`)).rows[0];
+async function requireChannel(orgId: string, channelId: string): Promise<{ subsidiaryId: string | null }> {
+  const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId} for share`)).rows[0];
   if (!row) {
     refuse(
       "channel_not_found",
@@ -88,6 +90,7 @@ async function requireChannel(orgId: string, channelId: string): Promise<void> {
       "channelId",
     );
   }
+  return { subsidiaryId: row.subsidiary_id };
 }
 
 interface LocationDbRow extends Record<string, unknown> {
@@ -153,15 +156,30 @@ export async function upsertChannelLocation(
   return withOrg(orgId, async () => {
     await acquireOrgFeatureGateLock(db, orgId);
     await requireFeature(orgId);
-    await requireChannel(orgId, input.channelId);
+    const channel = await requireChannel(orgId, input.channelId);
+    if (input.allowedSubsidiaryIds !== undefined && !subsidiaryScopeAllows(input.allowedSubsidiaryIds, channel.subsidiaryId)) {
+      refuse(
+        "channel_not_found",
+        "The sales channel does not belong to a subsidiary available to this role.",
+        "Choose a channel in one of your subsidiaries, or ask an administrator with access to that subsidiary.",
+        "channelId",
+      );
+    }
     if (input.stockLocationId) {
-      const stock = (await db.execute<{ id: string }>(sql`
-        select id from stock_locations where org_id = ${orgId} and id = ${input.stockLocationId}`)).rows[0];
-      if (!stock) {
+      const stock = (await db.execute<{ subsidiary_id: string | null }>(sql`
+        select l.subsidiary_id
+          from stock_locations sl
+          join locations l on l.org_id = sl.org_id and l.id = sl.location_id
+         where sl.org_id = ${orgId} and sl.id = ${input.stockLocationId}
+         for share of sl, l`)).rows[0];
+      const sameChannelEntity = stock && (stock.subsidiary_id === null || stock.subsidiary_id === channel.subsidiaryId);
+      const inCallerScope = stock && (input.allowedSubsidiaryIds === undefined
+        || subsidiaryScopeAllows(input.allowedSubsidiaryIds, stock.subsidiary_id, { orgWideNull: true }));
+      if (!stock || !sameChannelEntity || !inCallerScope) {
         refuse(
           "channel_location_stock_unavailable",
-          "The stock location does not belong to this organization.",
-          "Choose a stock location in this organization, or create one from the location row.",
+          "The stock location is unavailable to this channel or role.",
+          "Choose an organization-wide stock location or one assigned to the channel's subsidiary that your role can access.",
           "stockLocationId",
         );
       }

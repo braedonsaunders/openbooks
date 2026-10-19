@@ -70,9 +70,13 @@ export const GET = defineRoute({
     }
     try {
       if (features !== null) {
+        const scopeDenied = guardUnrestrictedScope(authz);
+        if (scopeDenied) return scopeDenied;
         return NextResponse.json({ ok: true, features: await listSaasFeatures(authz.user.orgId) });
       }
       if (planVersionId !== null) {
+        const scopeDenied = guardUnrestrictedScope(authz);
+        if (scopeDenied) return scopeDenied;
         const entitlements = await listPlanVersionEntitlements(
           authz.user.orgId,
           planVersionId,
@@ -83,7 +87,7 @@ export const GET = defineRoute({
       const snapshot = await getEntitlementSnapshot(
         authz.user.orgId,
         subscriptionId as string,
-        at ?? undefined,
+        { at: at ?? undefined, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
       );
       return NextResponse.json({ ok: true, snapshot });
     } catch (error) {
@@ -128,6 +132,7 @@ export const POST = defineRoute({
         case "saveOverride": {
           const saved = await saveSubscriptionOverride(authz.user.orgId, authz.user.id, {
             subscriptionId: body.subscriptionId,
+            allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
             featureKey: body.featureKey,
             enabled: body.enabled ?? undefined,
             limit: body.limit ?? undefined,
@@ -142,6 +147,7 @@ export const POST = defineRoute({
         case "expireOverride": {
           const closed = await expireSubscriptionOverride(authz.user.orgId, authz.user.id, {
             subscriptionId: body.subscriptionId,
+            allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
             featureKey: body.featureKey,
             effectiveTo: body.effectiveTo ?? undefined,
           });

@@ -27,6 +27,7 @@ const policyBody = z.strictObject({
 export const GET = defineRoute({
   permission: 'admin.setup.manage',
   feature: 'serviceDispatch',
+  scope: 'unrestricted',
   handler: async ({ authz }) => NextResponse.json({ policies: await listPolicies(authz.user.orgId) }),
 })
 
@@ -37,6 +38,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: 'admin.setup.manage',
   feature: 'serviceDispatch',
+  scope: 'unrestricted',
   body: policyBody,
   handler: async ({ authz, body }) => {
     const policy = await savePolicyVersion({

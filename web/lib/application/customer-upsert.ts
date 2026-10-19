@@ -2,9 +2,10 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/database";
 import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/authority";
 import { ensurePartyRoleRow } from "../party-roles";
 import type { ApplicationContext } from "./context";
-import { assertApplicationPermission } from "./context";
+import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { conflict, invalidInput } from "./errors";
 
 export interface CustomerUpsertAddress {
@@ -22,6 +23,8 @@ export interface CustomerUpsertInput {
   /** Storefront/integrator identity: both or neither, like documents. */
   externalRef?: string;
   externalSource?: string;
+  /** Entity to assign when this call creates a new customer. */
+  subsidiaryId?: string | null;
   email?: string;
   name?: string;
   kind?: string;
@@ -49,12 +52,27 @@ export async function upsertApplicationCustomer(
   const orgId = context.authz.user.orgId;
   const actorId = context.authz.user.id;
 
+  if (input.subsidiaryId !== undefined && input.subsidiaryId !== null) {
+    if (!isUuid(input.subsidiaryId)) throw invalidInput("subsidiaryId must be a UUID");
+    assertSubsidiaryAccess(context, input.subsidiaryId);
+    const subsidiary = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries
+       where id = ${input.subsidiaryId} and org_id = ${orgId} and is_active
+       limit 1`)).rows[0];
+    if (!subsidiary) throw invalidInput(`subsidiary "${input.subsidiaryId}" not found in this organization`);
+  } else if (input.subsidiaryId === null && context.authz.allowedSubsidiaryIds !== null) {
+    assertSubsidiaryAccess(context, null);
+  }
+
   if (input.id !== undefined) {
     if (!isUuid(input.id)) throw invalidInput("id must be a UUID");
     const row = (await db.execute<{ id: string }>(sql`
-      select id from parties where id = ${input.id} and org_id = ${orgId}`)).rows[0];
+      select p.id from parties p
+       where p.id = ${input.id} and p.org_id = ${orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, context.authz.allowedSubsidiaryIds, { orgWideNull: true })}
+         and exists (select 1 from customer_roles cr
+                      where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`)).rows[0];
     if (!row) throw invalidInput(`customer "${input.id}" not found in this organization`);
-    await ensurePartyRoleRow(db, { orgId, partyId: row.id, kind: "customer", actorId });
     return { id: row.id, created: false };
   }
 
@@ -86,14 +104,22 @@ export async function upsertApplicationCustomer(
 
   // Strongest key first: the external identity is unique per org and source.
   if (ref && source) {
-    const row = (await db.execute<{ id: string }>(sql`
-      select id from parties
-       where org_id = ${orgId}
-         and custom->'source'->>'system' = ${source}
-         and custom->'source'->>'externalId' = ${ref}
+    const row = (await db.execute<{ id: string; isCustomer: boolean }>(sql`
+      select p.id,
+             exists (select 1 from customer_roles cr
+                      where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active) as "isCustomer"
+        from parties p
+       where p.org_id = ${orgId}
+         and p.custom->'source'->>'system' = ${source}
+         and p.custom->'source'->>'externalId' = ${ref}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, context.authz.allowedSubsidiaryIds, { orgWideNull: true })}
        limit 1`)).rows[0];
     if (row) {
+      if (!row.isCustomer) {
+        throw conflict(`externalRef "${ref}" from "${source}" belongs to a party that is not an active customer — resolve the party's customer role before importing it`);
+      }
       await updateUpsertedParty(orgId, actorId, row.id, {
+        allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
         ...(input.email !== undefined ? { email } : {}),
         ...(input.name !== undefined ? { name } : {}),
         ...(input.phone !== undefined ? { phone: text(input.phone) } : {}),
@@ -103,10 +129,14 @@ export async function upsertApplicationCustomer(
     }
   }
   if (email) {
-    const rows = (await db.execute<{ id: string }>(sql`
-      select id from parties
-       where org_id = ${orgId} and lower(email) = lower(${email})
-       order by id limit 3`)).rows;
+    const rows = (await db.execute<{ id: string; isCustomer: boolean }>(sql`
+      select p.id,
+             exists (select 1 from customer_roles cr
+                      where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active) as "isCustomer"
+        from parties p
+       where p.org_id = ${orgId} and lower(p.email) = lower(${email})
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, context.authz.allowedSubsidiaryIds, { orgWideNull: true })}
+       order by p.id limit 3`)).rows;
     if (rows.length > 1) {
       throw conflict(
         `email "${email}" matches ${rows.length} parties — match by externalRef instead, or merge the duplicates in the customers list`,
@@ -114,7 +144,11 @@ export async function upsertApplicationCustomer(
     }
     const row = rows[0];
     if (row) {
+      if (!row.isCustomer) {
+        throw conflict(`email "${email}" belongs to a party that is not an active customer — resolve the party's customer role before importing it`);
+      }
       await updateUpsertedParty(orgId, actorId, row.id, {
+        allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
         ...(input.name !== undefined ? { name } : {}),
         ...(input.phone !== undefined ? { phone: text(input.phone) } : {}),
         address: input.address,
@@ -125,10 +159,14 @@ export async function upsertApplicationCustomer(
   }
   // Weakest key last: a bare name may only resolve when it is unambiguous.
   if (name && !ref && !email) {
-    const rows = (await db.execute<{ id: string }>(sql`
-      select id from parties
-       where org_id = ${orgId} and display_name = ${name}
-       order by id limit 3`)).rows;
+    const rows = (await db.execute<{ id: string; isCustomer: boolean }>(sql`
+      select p.id,
+             exists (select 1 from customer_roles cr
+                      where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active) as "isCustomer"
+        from parties p
+       where p.org_id = ${orgId} and p.display_name = ${name}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, context.authz.allowedSubsidiaryIds, { orgWideNull: true })}
+       order by p.id limit 3`)).rows;
     if (rows.length > 1) {
       throw conflict(
         `"${name}" matches ${rows.length} parties — match by email or externalRef instead, or merge the duplicates in the customers list`,
@@ -136,7 +174,11 @@ export async function upsertApplicationCustomer(
     }
     const row = rows[0];
     if (row) {
+      if (!row.isCustomer) {
+        throw conflict(`"${name}" belongs to a party that is not an active customer — use email or externalRef to match the customer`);
+      }
       await updateUpsertedParty(orgId, actorId, row.id, {
+        allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
         phone: input.phone ?? undefined,
         address: input.address,
       });
@@ -148,11 +190,15 @@ export async function upsertApplicationCustomer(
       "no customer matched — send a name to create one, or match by id, email, or externalRef",
     );
   }
+  const subsidiaryId = input.subsidiaryId ?? null;
+  if (context.authz.allowedSubsidiaryIds !== null && subsidiaryId === null) {
+    assertSubsidiaryAccess(context, null);
+  }
   let insertedId: string | null = null;
   try {
     const inserted = (await db.execute<{ id: string }>(sql`
-      insert into parties (org_id, kind, display_name, email, phone, is_active, custom, created_by, updated_by)
-      values (${orgId}, ${kind}, ${name}, ${email}, ${text(input.phone) ?? null}, true,
+      insert into parties (org_id, kind, display_name, email, phone, subsidiary_id, is_active, custom, created_by, updated_by)
+      values (${orgId}, ${kind}, ${name}, ${email}, ${text(input.phone) ?? null}, ${subsidiaryId}, true,
               ${ref && source ? JSON.stringify({ source: { system: source, externalId: ref } }) : "{}"}::jsonb,
               ${actorId}, ${actorId})
       returning id`)).rows[0];
@@ -160,23 +206,13 @@ export async function upsertApplicationCustomer(
     insertedId = inserted?.id ?? null;
   } catch (error) {
     // A concurrent import claimed the same external identity between the
-    // lookup and this insert: name the winner instead of a bare violation.
+    // lookup and this insert: return an actionable conflict without exposing
+    // the winning party's id outside the caller's subsidiary scope.
     let cursor: unknown = error;
     for (let depth = 0; depth < 4 && cursor !== null && typeof cursor === "object"; depth++) {
       const node = cursor as { code?: unknown; constraint?: unknown };
       if (node.code === "23505" && node.constraint === "parties_org_source_identity" && ref && source) {
-        const winner = (await db.execute<{ id: string }>(sql`
-          select id from parties
-           where org_id = ${orgId}
-             and custom->'source'->>'system' = ${source}
-             and custom->'source'->>'externalId' = ${ref}
-           limit 1`)).rows[0];
-        throw conflict(
-          winner
-            ? `externalRef "${ref}" from "${source}" was just claimed by another customer — match that customer by id instead`
-            : `externalRef "${ref}" from "${source}" is already in use — match by id instead`,
-          winner ? { existingId: winner.id } : undefined,
-        );
+        throw conflict(`externalRef "${ref}" from "${source}" is already in use — resolve the existing customer within your subsidiary access, or choose a new reference`);
       }
       cursor = (cursor as { cause?: unknown }).cause;
     }
@@ -194,6 +230,7 @@ async function updateUpsertedParty(
   actorId: string,
   partyId: string,
   patch: {
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
     email?: string | null;
     name?: string | null;
     phone?: string | null;
@@ -204,8 +241,8 @@ async function updateUpsertedParty(
   // Attaching an external identity the index already gives to another party
   // would die as a bare unique violation: refuse naming the collision.
   if (patch.source) {
-    const holder = (await db.execute<{ id: string }>(sql`
-      select id from parties
+    const holder = (await db.execute<{ one: number }>(sql`
+      select 1 as one from parties
        where org_id = ${orgId}
          and custom->'source'->>'system' = ${patch.source.system}
          and custom->'source'->>'externalId' = ${patch.source.externalId}
@@ -213,8 +250,7 @@ async function updateUpsertedParty(
        limit 1`)).rows[0];
     if (holder) {
       throw conflict(
-        `externalRef "${patch.source.externalId}" from "${patch.source.system}" already belongs to another customer — match that customer by id instead`,
-        { existingId: holder.id },
+        `externalRef "${patch.source.externalId}" from "${patch.source.system}" is already in use — resolve the existing customer within your subsidiary access, or choose a new reference`,
       );
     }
   }
@@ -227,10 +263,12 @@ async function updateUpsertedParty(
         custom = ${patch.source ? sql`coalesce(custom, '{}'::jsonb) || ${JSON.stringify({ source: patch.source })}::jsonb` : sql`custom`},
         updated_at = now(), updated_by = ${actorId}
        where id = ${partyId} and org_id = ${orgId}
+         ${subsidiaryVisibleFilter(sql`parties.subsidiary_id`, patch.allowedSubsidiaryIds, { orgWideNull: true })}
+         and exists (select 1 from customer_roles cr
+                      where cr.org_id = parties.org_id and cr.party_id = parties.id and cr.is_active)
        returning id`)).rows[0];
     if (!updated) throw invalidInput("the customer could not be updated — try again");
   }
-  await ensurePartyRoleRow(db, { orgId, partyId, kind: "customer", actorId });
   if (patch.address) await upsertDefaultBillingAddress(orgId, actorId, partyId, patch.address);
 }
 

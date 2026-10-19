@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
-import { businessToday } from "../platform/business-date.ts";
+import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { type AcceptanceProvider } from "./acceptance.ts";
 import { AutopayError, parseExpiryNoticeDays, resolveAutopayPolicy, requireAutopayFeature, auditAutopay } from "./autopay-policy.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 
 /** Autopay enrollment lifecycle (enroll, pause, resume, cancel) and the expiring-card outreach scan. */
 
@@ -151,7 +152,7 @@ export interface ExpiringCard {
  */
 export async function findCardsExpiringSoon(
   orgId: string,
-  opts?: { asOf?: string; withinDays?: number },
+  opts: { allowedSubsidiaryIds: ReadonlySet<string> | null; asOf?: string; withinDays?: number },
 ): Promise<ExpiringCard[]> {
   return withOrg(orgId, async () => {
     const asOf = opts?.asOf ?? (await businessToday(orgId));
@@ -175,6 +176,7 @@ export async function findCardsExpiringSoon(
         from customer_payment_methods m
         join parties p on p.id = m.party_id and p.org_id = m.org_id
        where m.org_id = ${orgId} and m.status = 'active'
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, opts.allowedSubsidiaryIds, { orgWideNull: true })}
          and m.exp_month is not null and m.exp_year is not null
          and m.expiry_notified_on is null
          and (make_date(m.exp_year, m.exp_month, 1) + interval '1 month' - interval '1 day')::date
@@ -205,18 +207,23 @@ export async function markExpiryOutreachSent(
   orgId: string,
   methodIds: string[],
   sentOn: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
   actorId: string | null = null,
 ): Promise<void> {
+  if (!isIsoCalendarDate(sentOn)) throw new AutopayError("outreach date must be a valid calendar date in YYYY-MM-DD format");
   if (methodIds.length === 0) throw new AutopayError("no cards were selected; pick the expiring cards first");
   return withOrg(orgId, async () => {
     await requireAutopayFeature(orgId);
     let stamped = 0;
     for (const methodId of methodIds) {
       const row = (await db.execute<{ id: string }>(sql`
-        update customer_payment_methods
+        update customer_payment_methods m
            set expiry_notified_on = ${sentOn}::date, updated_at = now(), updated_by = ${actorId}
-         where id = ${methodId} and org_id = ${orgId} and status = 'active' and expiry_notified_on is null
-         returning id
+          from parties p
+         where m.id = ${methodId} and m.org_id = ${orgId} and m.status = 'active' and m.expiry_notified_on is null
+           and p.org_id = m.org_id and p.id = m.party_id
+           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+         returning m.id
       `));
       stamped += row.rows.length;
     }

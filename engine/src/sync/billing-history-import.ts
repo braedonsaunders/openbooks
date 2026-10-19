@@ -120,6 +120,39 @@ export interface BillingImportConfig {
   sealedCredentials: string | null;
 }
 
+export interface BillingImportMappingOptions {
+  plans: { value: string; label: string }[];
+  customers: { value: string; label: string }[];
+  incomeAccounts: { value: string; label: string }[];
+  clearingAccounts: { value: string; label: string }[];
+  taxCodes: { value: string; label: string }[];
+}
+
+/** Read the organization-owned records offered by the billing import mapping controls. */
+export async function listBillingImportMappingOptions(orgId: string): Promise<BillingImportMappingOptions> {
+  return withOrg(orgId, async () => {
+    const [plans, customers, incomeAccounts, clearingAccounts, taxCodes] = await Promise.all([
+      db.execute<{ value: string; label: string }>(sql`select id as value, name as label from subscription_plans
+        where org_id = ${orgId} order by name, id`),
+      db.execute<{ value: string; label: string }>(sql`select p.id as value, p.display_name as label from parties p
+        where p.org_id = ${orgId} and p.kind = 'customer' order by p.display_name, p.id`),
+      db.execute<{ value: string; label: string }>(sql`select id as value, concat_ws(' · ', nullif(number, ''), name) as label from accounts
+        where org_id = ${orgId} and is_active and not is_summary and type in ('income', 'income_other') order by number nulls last, name, id`),
+      db.execute<{ value: string; label: string }>(sql`select id as value, concat_ws(' · ', nullif(number, ''), name) as label from accounts
+        where org_id = ${orgId} and is_active and not is_summary and type in ('asset_bank', 'asset_current_other') order by number nulls last, name, id`),
+      db.execute<{ value: string; label: string }>(sql`select id as value, concat_ws(' · ', nullif(code, ''), name) as label from tax_codes
+        where org_id = ${orgId} and is_active order by code nulls last, name, id`),
+    ]);
+    return {
+      plans: plans.rows,
+      customers: customers.rows,
+      incomeAccounts: incomeAccounts.rows,
+      clearingAccounts: clearingAccounts.rows,
+      taxCodes: taxCodes.rows,
+    };
+  });
+}
+
 export interface BillingImportOptions {
   orgId: string;
   actorId: string;

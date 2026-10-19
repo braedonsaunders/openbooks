@@ -6,7 +6,7 @@ import { db } from "../platform/db.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { endOfMonth } from "../platform/civil-date.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { enrollAutopay } from "./autopay-enrollment.ts";
+import { enrollAutopay, findCardsExpiringSoon, markExpiryOutreachSent } from "./autopay-enrollment.ts";
 import { getRecoveryMetrics } from "./autopay-recovery.ts";
 import { recordCardUpdaterEvent } from "./autopay-methods.ts";
 import { retryAttemptNow } from "./autopay-attempts.ts";
@@ -14,6 +14,7 @@ import { runAutopayCollectionForOrg } from "./autopay.ts";
 import { type ChargeFn } from "./autopay-policy.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { AutopayError } from "./autopay-policy.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
@@ -319,7 +320,8 @@ test("recovery metrics come from stored attempts", { skip: !DB }, async () => {
 
     // Attempts are stamped with the real clock while the collection schedule
     // runs on business dates, so the window spans the schedule into today.
-    const metrics = await getRecoveryMetrics(org.orgId, { from: "2026-07-01", to: "2026-12-31" });
+    const window = { from: "2026-07-01", to: "2026-12-31" };
+    const metrics = await getRecoveryMetrics(org.orgId, window, null);
     assert.equal(metrics.attempts, 5);
     assert.equal(metrics.invoicesWithFailures, 3);
     assert.equal(metrics.recoveredInvoices, 2);
@@ -339,6 +341,53 @@ test("recovery metrics come from stored attempts", { skip: !DB }, async () => {
     assert.equal(metrics.byProvider[0]!.recoveredInvoices, 2);
     assert.equal(metrics.awaitingAuthentication, 1);
     assert.equal(metrics.churnPrevented, 0);
+    const hiddenMetrics = await getRecoveryMetrics(org.orgId, window, new Set());
+    assert.equal(hiddenMetrics.attempts, 0);
+    assert.equal(hiddenMetrics.invoicesWithFailures, 0);
+    assert.deepEqual(hiddenMetrics.recoveredByCurrency, []);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("expiring card reads and outreach writes enforce subsidiary visibility", { skip: !DB }, async () => {
+  const fixture = await seedRecoveryOrg();
+  const { org, userId } = fixture;
+  try {
+    await db.execute(sql`update parties set subsidiary_id = ${org.subsidiaryId} where org_id = ${org.orgId} and id = ${org.customerId}`);
+    const methodId = await seedMethod(fixture);
+    await db.execute(sql`update customer_payment_methods set exp_month = 7, exp_year = 2026 where org_id = ${org.orgId} and id = ${methodId}`);
+
+    const unrestricted = await findCardsExpiringSoon(org.orgId, {
+      asOf: "2026-06-01", withinDays: 60, allowedSubsidiaryIds: null,
+    });
+    assert.equal(unrestricted.some((card) => card.methodId === methodId), true);
+    const restricted = await findCardsExpiringSoon(org.orgId, {
+      asOf: "2026-06-01", withinDays: 60, allowedSubsidiaryIds: new Set(),
+    });
+    assert.equal(restricted.some((card) => card.methodId === methodId), false);
+
+    await assert.rejects(
+      markExpiryOutreachSent(org.orgId, [methodId], "2026-06-01", new Set(), userId),
+      AutopayError,
+    );
+    const untouched = (await db.execute<{ expiry_notified_on: string | null }>(sql`
+      select expiry_notified_on::text as expiry_notified_on from customer_payment_methods
+       where org_id = ${org.orgId} and id = ${methodId}
+    `)).rows[0];
+    assert.equal(untouched?.expiry_notified_on, null);
+
+    await assert.rejects(
+      markExpiryOutreachSent(org.orgId, [methodId], "2026-02-30", new Set([org.subsidiaryId]), userId),
+      AutopayError,
+    );
+
+    await markExpiryOutreachSent(org.orgId, [methodId], "2026-06-01", new Set([org.subsidiaryId]), userId);
+    const stamped = (await db.execute<{ expiry_notified_on: string | null }>(sql`
+      select expiry_notified_on::text as expiry_notified_on from customer_payment_methods
+       where org_id = ${org.orgId} and id = ${methodId}
+    `)).rows[0];
+    assert.equal(stamped?.expiry_notified_on, "2026-06-01");
   } finally {
     await dropScratchOrg(org.orgId);
   }

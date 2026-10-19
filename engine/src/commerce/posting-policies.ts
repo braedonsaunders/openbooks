@@ -5,7 +5,8 @@ import {
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
 import { db, withOrg } from "../platform/db.ts";
-import { isIsoCalendarDate } from "../platform/civil-date.ts";
+import { addCalendarDays, isIsoCalendarDate } from "../platform/civil-date.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 
 const FEATURE_REMEDY = "Enable Sales Channels in Company Settings → Features.";
 
@@ -27,6 +28,7 @@ export interface ChannelPostingPolicy {
 
 export interface SetPostingPolicyInput {
   channelId: string;
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
   mode: string;
   unpaidCreatesSalesOrder?: boolean;
   guestCustomerPartyId?: string | null;
@@ -162,8 +164,8 @@ export async function setPostingPolicy(
     if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
       refuse("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
     }
-    const channel = (await db.execute<{ id: string }>(sql`
-      select id from sales_channels where org_id = ${orgId} and id = ${input.channelId}`)).rows[0];
+    const channel = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+      select id, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${input.channelId} for share`)).rows[0];
     if (!channel) {
       refuse(
         "channel_not_found",
@@ -172,17 +174,30 @@ export async function setPostingPolicy(
         "channelId",
       );
     }
+    if (input.allowedSubsidiaryIds !== undefined
+        && !subsidiaryScopeAllows(input.allowedSubsidiaryIds, channel.subsidiary_id)) {
+      refuse(
+        "channel_not_found",
+        "The sales channel does not belong to a subsidiary available to this role.",
+        "Choose a channel in one of your subsidiaries, or ask an administrator with access to that subsidiary.",
+        "channelId",
+      );
+    }
     if (input.guestCustomerPartyId) {
-      const guest = (await db.execute<{ id: string }>(sql`
-        select p.id from parties p
+      const guest = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+        select p.id, p.subsidiary_id from parties p
          where p.org_id = ${orgId} and p.id = ${input.guestCustomerPartyId} and p.is_active
            and exists (select 1 from customer_roles cr
-             where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`)).rows[0];
-      if (!guest) {
+             where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
+         for share`)).rows[0];
+      const sameChannelEntity = guest && (guest.subsidiary_id === null || guest.subsidiary_id === channel.subsidiary_id);
+      const inCallerScope = guest && (input.allowedSubsidiaryIds === undefined
+        || subsidiaryScopeAllows(input.allowedSubsidiaryIds, guest.subsidiary_id, { orgWideNull: true }));
+      if (!guest || !sameChannelEntity || !inCallerScope) {
         refuse(
           "channel_policy_guest_unavailable",
-          "The walk-in customer does not belong to this organization, or is not an active customer.",
-          "Choose an active customer party to post guest orders against, or leave it blank to create customers per order.",
+          "The walk-in customer is not an active customer available to this channel and role.",
+          "Choose an active customer assigned to the channel's subsidiary or an organization-wide customer your role can access, or leave it blank to create customers per order.",
           "guestCustomerPartyId",
         );
       }
@@ -230,7 +245,7 @@ export async function setPostingPolicy(
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'sales_channel_posting_policies', ${prior.id}, 'update',
-          ${JSON.stringify({ before: toPolicy(prior), after: { ...toPolicy(prior), effectiveTo: input.effectiveFrom }, reason: "Superseded by a new effective-dated policy" })}::jsonb, ${actor})`);
+          ${JSON.stringify({ before: toPolicy(prior), after: { ...toPolicy(prior), effectiveTo: addCalendarDays(input.effectiveFrom, -1) }, reason: "Superseded by a new effective-dated policy" })}::jsonb, ${actor})`);
     }
     let id: string;
     try {

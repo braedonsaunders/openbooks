@@ -257,7 +257,10 @@ function AdjustForm({ accountId, currency, liabilityAccountName, offsetAccounts 
       </div>
       {valid && (
         <p className="rounded-lg border border-border bg-slate-50 p-3 text-sm dark:bg-slate-900">
-          {t('labels.debitAccount')}: {offsetName} · {t('labels.liabilityAccount')}: {liabilityAccountName ?? '—'} · {t('labels.amount')}: {amount.trim()} {currency}
+          {amount.trim().startsWith('-')
+            ? <>{t('labels.liabilityAccount')}: {liabilityAccountName ?? '—'} · {t('labels.offsetAccount')}: {offsetName}</>
+            : <>{t('labels.debitAccount')}: {offsetName} · {t('labels.liabilityAccount')}: {liabilityAccountName ?? '—'}</>}
+          {' · '}{t('labels.amount')}: {amount.trim()} {currency}
         </p>
       )}
       <Button onClick={submit} disabled={!valid || busy}>{busy ? common('actions.saving') : t('drawer.adjust')}</Button>

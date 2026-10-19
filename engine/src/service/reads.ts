@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
-import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { ScopeNotFoundError, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { holdsServicePermission, lockServiceFeature, requireDate, requireUuid, serviceAuthority, technicianParty, type ServiceActor } from "./common.ts";
 import { serviceDatabaseRefusal } from "./errors.ts";
 import { nextVisitStatuses, type VisitStatus } from "./status.ts";
@@ -28,6 +28,20 @@ export type VisitTechnician = {
   readonly startsAt: string;
   readonly endsAt: string;
 };
+
+export type ServiceStockLocationOption = { id: string; code: string; name: string };
+
+/** Active owned stock locations visible to the caller's legal entities. */
+export async function listServiceStockLocations(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<ServiceStockLocationOption[]> {
+  return (await db.execute<ServiceStockLocationOption>(sql`select sl.id, sl.code, coalesce(l.name, sl.code) as name
+      from stock_locations sl join locations l on l.org_id = sl.org_id and l.id = sl.location_id
+     where sl.org_id = ${orgId} and sl.is_active and sl.kind <> 'subcontract' and sl.inventory_ownership = 'owned'
+       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+     order by l.name nulls last, sl.code, sl.id`)).rows;
+}
 
 export type VisitSummary = {
   readonly id: string;

@@ -36,7 +36,7 @@ export {
   type VariantRecord,
   type ItemFamilyDetail,
 } from "./item-family-model.ts";
-export { getItemFamily } from "./item-family-store.ts";
+export { getItemFamily, listItemFamilies } from "./item-family-store.ts";
 export {
   createItemFamily,
   updateItemFamily,
