@@ -325,6 +325,25 @@ test('create returns the plaintext once and commits the key with its audit evide
   assert.equal(audit.includes(payload.plaintext), false, 'audit evidence never contains the secret')
 })
 
+test('create and update accept digit strings and blank unlimited rate limits', async () => {
+  reset()
+  const created = await post({ name: 'rate limited key', scopes: ['gl.read'], rateLimitPerMin: '120' })
+  assert.equal(created.status, 201, await created.clone().text())
+  assert.ok(state.committed.some((text) => text.includes('insert into api_keys')), 'a digit string passes create validation')
+
+  reset()
+  state.keyRow = ownedKeyRow(['gl.read'])
+  const updated = await patchKey({ id: KEY_ID, rateLimitPerMin: '90' })
+  assert.equal(updated.status, 200, await updated.clone().text())
+  assert.ok(state.committed.some((text) => text.includes('update api_keys')), 'a digit string passes update validation')
+
+  reset()
+  state.keyRow = ownedKeyRow(['gl.read'])
+  const unlimited = await patchKey({ id: KEY_ID, rateLimitPerMin: '' })
+  assert.equal(unlimited.status, 200, await unlimited.clone().text())
+  assert.ok(state.committed.some((text) => text.includes('update api_keys')), 'blank remains the supported unlimited value')
+})
+
 test('create rejects omitted or empty scopes before opening a transaction', async () => {
   for (const body of [{ name: 'omitted scopes' }, { name: 'empty scopes', scopes: [] }]) {
     reset()

@@ -35,7 +35,7 @@ const createApiKeyBodySchema = z.object({
   scopes: z.array(z.string().trim().min(1), { error: "at least one scope is required" }).min(1, { error: "at least one scope is required" }),
   description: z.string().nullable().optional(),
   expiresAt: apiKeyExpirySchema,
-  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\\d+$/)]).nullable().optional(),
+  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\d*$/)]).nullable().optional(),
 });
 
 const updateApiKeyBodySchema = z.object({
@@ -44,7 +44,7 @@ const updateApiKeyBodySchema = z.object({
   expiresAt: apiKeyExpirySchema,
   isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
   name: z.string().trim().min(1).optional(),
-  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\\d+$/)]).nullable().optional(),
+  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\d*$/)]).nullable().optional(),
   scopes: z.array(z.string().trim().min(1), { error: "at least one scope is required" }).min(1, { error: "at least one scope is required" }).optional(),
 });
 
