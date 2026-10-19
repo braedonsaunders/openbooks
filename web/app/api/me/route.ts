@@ -3,10 +3,11 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
+import { db, withBypass } from "@openbooks/engine/platform/db";
 import { getAuthz } from "../../../lib/authz";
 import { isLocale } from "../../../i18n/config";
 import { isNavMode } from "../../../lib/nav-mode";
+import { preferenceUserIdentity } from "../../../lib/user-preference-identity";
 
 const requestBodySchema = z.object({
   locale: z.string().refine(isLocale, "unsupported locale").nullable().optional(),
@@ -33,6 +34,7 @@ export const PATCH = defineRoute({
     const authz = await getAuthz();
     if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;
+    const preferenceUser = preferenceUserIdentity(user);
 
 
 
@@ -62,15 +64,21 @@ export const PATCH = defineRoute({
       changes.navMode = navMode;
     }
 
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`
+    // bypass: identity-bootstrap — a switched production user owns preferences
+    // in the home organization while this request is scoped to the active one.
+    const updated = await withBypass(async () => {
+      const result = await db.execute<{ id: string }>(sql`
         update users set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
-         where id = ${user.id} and org_id = ${user.orgId}`);
-      await tx.execute(sql`
+         where id = ${preferenceUser.id} and org_id = ${preferenceUser.orgId}
+         returning id`);
+      if (result.rows.length !== 1) return false;
+      await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'users', ${user.id}, 'update',
+        values (${preferenceUser.orgId}, 'users', ${preferenceUser.id}, 'update',
                 ${JSON.stringify(changes)}, ${user.id})`);
+      return true;
     });
+    if (!updated) return NextResponse.json({ error: "user_not_found" }, { status: 404 });
 
     return NextResponse.json({ ok: true, ...changes });
   },

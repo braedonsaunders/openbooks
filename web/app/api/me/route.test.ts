@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 
@@ -7,6 +9,8 @@ import test from "node:test";
 // writes issued through a transaction pending until the callback succeeds;
 // an audit failure therefore proves whether the user row was rolled back.
 const stateKey = Symbol.for("openbooks.me-route-test");
+const ORG_ID = "00000000-0000-4000-8000-00000000a001";
+const USER_ID = "00000000-0000-4000-8000-00000000a002";
 interface PendingWrite {
   kind: "user" | "audit";
   preference?: { locale: string | null; navMode: string | null };
@@ -18,6 +22,8 @@ interface RouteState {
   pending: PendingWrite[];
   inTx: boolean;
   failOnText?: string;
+  updateMatches: boolean;
+  authzUser: { id: string; orgId: string; envKind: "production" | "sandbox" | "preview"; homeUserId: string; homeOrgId: string };
   userPreference: { locale: string | null; navMode: string | null };
   requestedPreference: { locale: string | null; navMode: string | null };
 }
@@ -28,6 +34,8 @@ const state: RouteState = {
   committed: [],
   pending: [],
   inTx: false,
+  updateMatches: true,
+  authzUser: { id: USER_ID, orgId: ORG_ID, envKind: "production", homeUserId: USER_ID, homeOrgId: ORG_ID },
   userPreference: { locale: "en", navMode: "topbar" },
   requestedPreference: { locale: "en", navMode: "topbar" },
 };
@@ -50,9 +58,6 @@ function sqlText(query: unknown): string {
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextMe = sqlText;
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksMeSqlText = sqlText;
 
-const ORG_ID = "00000000-0000-4000-8000-00000000a001";
-const USER_ID = "00000000-0000-4000-8000-00000000a002";
-
 stubModules({
   navigation: false,
   intl: false,
@@ -72,21 +77,20 @@ stubModules({
         }
         const kind = classify(text)
         if (kind) {
-          const write = { kind }
-          if (kind === 'user') write.preference = state.requestedPreference
-          ;(state.inTx ? state.pending : state.committed).push(write)
-          if (!state.inTx && kind === 'user') state.userPreference = write.preference
+          if (kind !== 'user' || state.updateMatches) {
+            const write = { kind }
+            if (kind === 'user') write.preference = state.requestedPreference
+            ;(state.inTx ? state.pending : state.committed).push(write)
+            if (!state.inTx && kind === 'user') state.userPreference = write.preference
+          }
         }
-        return { rows: [] }
+        return kind === 'user' ? { rows: state.updateMatches ? [{ id: state.authzUser.id }] : [] } : { rows: [] }
       }
-      export const db = {
-        execute,
-        transaction: async (work) => {
+      const transaction = async (work) => {
           state.inTx = true
           state.pending = []
-          const tx = { execute }
           try {
-            const result = await work(tx)
+            const result = await work()
             state.committed.push(...state.pending)
             for (const write of state.pending) {
               if (write.kind === 'user') state.userPreference = write.preference
@@ -99,7 +103,11 @@ stubModules({
             state.inTx = false
             state.pending = []
           }
-        },
+        }
+      export async function withBypass(work) { return transaction(work) }
+      export const db = {
+        execute,
+        transaction: async (work) => transaction(() => work({ execute })),
       }
       export const schema = {}
       export const pool = {}
@@ -108,12 +116,12 @@ stubModules({
     `,
     "../../../lib/authz": `
       export async function getAuthz() {
-        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
+        return { user: globalThis[Symbol.for('openbooks.me-route-test')].authzUser }
       }
     `,
     "@/lib/authz": `
       export async function getAuthz() {
-        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
+        return { user: globalThis[Symbol.for('openbooks.me-route-test')].authzUser }
       }
     `,
   },
@@ -128,6 +136,8 @@ function reset(): void {
   state.committed = [];
   state.pending = [];
   state.inTx = false;
+  state.updateMatches = true;
+  state.authzUser = { id: USER_ID, orgId: ORG_ID, envKind: "production", homeUserId: USER_ID, homeOrgId: ORG_ID };
   state.failOnText = undefined;
   state.userPreference = { locale: "en", navMode: "topbar" };
   state.requestedPreference = { locale: "en", navMode: "topbar" };
@@ -207,4 +217,28 @@ test("profile PATCH joins every requested preference fragment in the user update
   assert.match(update, /update users set/);
   assert.match(update, /locale/);
   assert.match(update, /nav_mode/);
+});
+
+test("a switched production super-admin updates and audits the home preference row", async () => {
+  reset();
+  const targetOrgId = "00000000-0000-4000-8000-00000000a099";
+  state.authzUser = { id: USER_ID, orgId: targetOrgId, envKind: "production", homeUserId: USER_ID, homeOrgId: ORG_ID };
+
+  const response = await patch({ locale: "fr" });
+
+  assert.equal(response.status, 200);
+  const dialect = new PgDialect();
+  assert.deepEqual(dialect.sqlToQuery(state.queries[0] as SQL).params, ["fr", USER_ID, USER_ID, ORG_ID]);
+  assert.deepEqual(dialect.sqlToQuery(state.queries[1] as SQL).params, [ORG_ID, USER_ID, JSON.stringify({ locale: "fr" }), USER_ID]);
+});
+
+test("a missing preference row refuses without writing audit evidence", async () => {
+  reset();
+  state.updateMatches = false;
+
+  const response = await patch({ locale: "fr" });
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(state.committed, []);
+  assert.equal(state.executed.some((text) => text.includes("insert into audit_log")), false);
 });

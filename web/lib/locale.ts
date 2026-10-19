@@ -2,8 +2,9 @@ import "server-only";
 import { cache } from "react";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
-import { currentSession, currentUser } from "./auth";
+import { currentUser } from "./auth";
 import { requestAuthzContext } from "./authz-context";
+import { preferenceUserIdentity } from "./user-preference-identity";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
 import { canonicalTimeZone } from "@openbooks/engine/platform/time-zone";
 
@@ -49,12 +50,13 @@ async function readLocale(): Promise<Locale> {
   // Off-request requestUser() is null (see above), so this stays anonymous.
   const activeUser = requestAuthzContext()?.user ?? await requestUser();
   if (activeUser) {
+    const preferenceUser = preferenceUserIdentity(activeUser);
     // bypass: user-keyed-lookup — the viewer's own locale preference, read outside the request's organization scope.
     const r = await withBypassContext(async () => (await db.execute(sql`
         select u.locale as user_locale, o.settings ->> 'defaultLocale' as org_default
           from users u
-          join orgs o on o.id = u.org_id
-         where u.id = ${activeUser.id} and u.org_id = ${activeUser.orgId} and o.id = ${activeUser.orgId} and u.is_active
+          left join orgs o on o.id = ${activeUser.orgId}
+         where u.id = ${preferenceUser.id} and u.org_id = ${preferenceUser.orgId} and u.is_active
       `)));
     const row = r.rows[0];
     if (row) {
@@ -76,11 +78,12 @@ export function resolveLocale(): Promise<Locale> {
  * for preference UIs that need to distinguish "chose English" from "inherits".
  */
 export const userLocalePreference = cache(async (): Promise<Locale | null> => {
-  const uid = (await currentSession())?.userId;
-  if (!uid) return null;
-  // bypass: user-keyed-lookup — the signed-in identity's locale preference, keyed by the session's user id alone.
+  const activeUser = requestAuthzContext()?.user ?? await requestUser();
+  if (!activeUser) return null;
+  const preferenceUser = preferenceUserIdentity(activeUser);
+  // bypass: user-keyed-lookup — the verified acting identity's personal preference is organization-qualified.
   const r = await withBypassContext(async () => (await db.execute(
-      sql`select locale from users where id = ${uid} and is_active`,
+      sql`select locale from users where id = ${preferenceUser.id} and org_id = ${preferenceUser.orgId} and is_active`,
     )));
   const v = r.rows[0]?.locale;
   return isLocale(v) ? v : null;

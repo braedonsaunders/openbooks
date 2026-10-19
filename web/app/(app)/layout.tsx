@@ -35,8 +35,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // for the slowest one rather than their sum.
   const [localePreference, navMode, navModePreference, environments, org, today, featureState, feedbackConfigured, jar, groups, localNavigation] = await Promise.all([
     userLocalePreference(),
-    resolveNavMode(authz.user.id, authz.user.orgId),
-    userNavModePreference(authz.user.id, authz.user.orgId),
+    resolveNavMode(authz.user),
+    userNavModePreference(authz.user),
     shellEnvironments(authz),
     orgInfo(authz.user.orgId),
     businessToday(authz.user.orgId),
