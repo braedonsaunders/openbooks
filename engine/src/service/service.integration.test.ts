@@ -19,7 +19,7 @@ import { completeVisit, recordVisitPart } from "./completion.ts";
 import { assignVisit, dispatchVisit, loadDispatchDay, moveVisitBooking } from "./dispatch.ts";
 import { ServiceError } from "./errors.ts";
 import { completeServiceJob, createServiceJob, reopenServiceJob } from "./jobs.ts";
-import { getServiceVisit, listMyVisits } from "./reads.ts";
+import { getServiceVisit, listMyVisits, listServiceStockLocations } from "./reads.ts";
 import { createPortalServiceRequest, createServiceRequest, listPortalServiceRequests } from "./requests.ts";
 import { cancelVisit, setVisitFieldStatus } from "./visits.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
@@ -146,6 +146,26 @@ test("a job is dispatched, worked, completed with a stock part and labor, and in
   assert.deepEqual(enRoute.notices.map((notice) => notice.kind), ["en_route"]);
   const onSite = await setVisitFieldStatus({ ...tech, visitId: visitId!, expectedRevision: enRoute.revision, to: "on_site" });
 
+  const otherSubsidiaryId = randomUUID();
+  const otherLocationId = randomUUID();
+  const otherStockLocationId = randomUUID();
+  await withBypassContext(async () => {
+    await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${otherSubsidiaryId}, ${f.org.orgId}, ${f.org.subsidiaryId}, 'Other service entity', 'CAD', 'CA')`);
+    await db.execute(sql`insert into locations (id, org_id, name, subsidiary_id)
+      values (${otherLocationId}, ${f.org.orgId}, 'Other service warehouse', ${otherSubsidiaryId})`);
+    await db.execute(sql`insert into stock_locations (id, org_id, location_id, code, kind, inventory_ownership, is_active)
+      values (${otherStockLocationId}, ${f.org.orgId}, ${otherLocationId}, 'OTHER', 'warehouse', 'owned', true)`);
+  });
+  const visibleLocations = await listServiceStockLocations(f.org.orgId, new Set([f.org.subsidiaryId]));
+  assert.ok(visibleLocations.some((location) => location.id === f.org.stockLocationId));
+  assert.ok(!visibleLocations.some((location) => location.id === otherStockLocationId), "a scoped picker hides another subsidiary's warehouse");
+  const allLocations = await listServiceStockLocations(f.org.orgId, null);
+  assert.ok(allLocations.some((location) => location.id === otherStockLocationId), "an unrestricted picker can see the warehouse");
+  await assert.rejects(recordVisitPart({ ...tech, visitId: visitId!, expectedRevision: onSite.revision, part: {
+    itemId: f.org.items.fifo, stockLocationId: otherStockLocationId, quantity: "1", unitPrice: "15.00", billable: false,
+  } }), (error: unknown) => error instanceof ServiceError && error.code === "service_invalid");
+
   await withBypassContext(() => receiveInventory(f.org.orgId, f.dispatcher, { itemId: f.org.items.fifo, stockLocationId: f.org.stockLocationId, quantity: "10", unitCost: "5.00",
     subsidiaryId: f.org.subsidiaryId, offsetAccountId: f.org.accounts.clearing, date: f.today, idempotencyKey: `van-stock:${randomUUID()}` }));
   const part = await recordVisitPart({ ...tech, visitId: visitId!, expectedRevision: onSite.revision, part: {
@@ -258,6 +278,19 @@ test("voiding a per-job invoice releases its billing link before reopening the j
     assert.equal(voided.status, "voided");
   });
 
+  const replacement = await invoiceServiceWork({ ...as(f, f.dispatcher), jobId: job.id });
+  assert.notEqual(replacement.invoiceId, invoice.invoiceId, "retrying after a void creates a replacement invoice");
+  assert.equal(replacement.replayed, false);
+  await withBypassContext(async () => {
+    await submitAndReleaseIfUngated("customer_invoice", replacement.invoiceId, f.dispatcher);
+    await postDocument(replacement.invoiceId, await controlDeps(f.org.orgId), { audit: { actorId: f.dispatcher, source: "api" } });
+    const voided = await requestDocumentVoid({
+      documentId: replacement.invoiceId, orgId: f.org.orgId, actorId: f.dispatcher,
+      reason: "Correct the replacement service invoice", reversalDate: f.today, source: "api",
+    });
+    assert.equal(voided.status, "voided");
+  });
+
   const reopened = await reopenServiceJob({ ...as(f, f.dispatcher), jobId: job.id, expectedRevision: completedJob.revision, reason: "Correct the completed scope" });
   assert.equal(reopened.status, "open");
   const released = (await withBypassContext(() => db.execute<{ releasedAt: string | null; reason: string | null }>(sql`
@@ -265,6 +298,9 @@ test("voiding a per-job invoice releases its billing link before reopening the j
      where org_id = ${f.org.orgId} and job_id = ${job.id} and invoice_document_id = ${invoice.invoiceId}`))).rows[0]!;
   assert.ok(released.releasedAt);
   assert.equal(released.reason, "The invoice was voided");
+  const releasedCount = (await withBypassContext(() => db.execute<{ count: number }>(sql`select count(*)::int as count from service_billings
+    where org_id = ${f.org.orgId} and job_id = ${job.id} and released_at is not null`))).rows[0]!.count;
+  assert.equal(releasedCount, 2, "both voided billing links are released");
 }));
 
 test("rejecting a completion removes submitted labor from a later invoice", enabled, async () => fixture(async (f) => {

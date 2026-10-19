@@ -21,7 +21,7 @@ export const GET = defineRoute({
     const query = (search.get('q') ?? '').slice(0, 100)
     const orgId = authz.user.orgId
     if (kind === 'part-items') return NextResponse.json({ options: await servicePartItems(orgId, query) })
-    if (kind === 'stock-locations') return NextResponse.json({ options: await serviceStockLocations(orgId) })
+    if (kind === 'stock-locations') return NextResponse.json({ options: await serviceStockLocations(authz) })
     if (!canAny(authz, SERVICE_STAFF_PERMISSIONS)) return NextResponse.json({ error: 'missing permission: service.read' }, { status: 403 })
     if (kind === 'customers') return NextResponse.json({ options: await customerOptions(authz, query) })
     if (kind === 'items') return NextResponse.json({ options: await itemOptions(orgId, query) })
