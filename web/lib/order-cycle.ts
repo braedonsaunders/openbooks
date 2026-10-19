@@ -44,7 +44,11 @@ export {
 } from './order-cycle-draft'
 export { fulfillSalesOrder, fulfillSalesOrderInTx } from './order-cycle-fulfill'
 export type { SalesFulfillmentInput } from './order-cycle-fulfill'
-export { receivePurchaseOrder, receivePurchaseOrderInTx } from './order-cycle-receive'
+export {
+  receivePurchaseOrder,
+  receivePurchaseOrderInTx,
+  receivePurchaseOrderRemainder,
+} from './order-cycle-receive'
 export type { PurchaseReceiptInput, PurchaseReceiptLineInput } from './order-cycle-receive'
 export { assignOrderLineWarehouse } from './order-cycle-warehouse-assignment'
 export type { AssignOrderLineWarehouseInput } from './order-cycle-warehouse-assignment'

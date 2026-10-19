@@ -233,7 +233,7 @@ test("receiving subtracts cancelled quantity and accumulates same-line lot reque
           { sourceLineId, quantity: "2", lotId: lotIds[1] },
         ],
       })),
-      (error: unknown) => error instanceof ConversionError && /only 4 remaining/.test(error.message),
+      (error: unknown) => error instanceof ConversionError && /only 4\.0000 remaining/.test(error.message),
     );
     await assert.rejects(
       withOrg(org.orgId, () => receivePurchaseOrder(org.orgId, userId, orderId, {
@@ -241,7 +241,7 @@ test("receiving subtracts cancelled quantity and accumulates same-line lot reque
         idempotencyKey: `receipt-${randomUUID()}`,
         lines: [{ sourceLineId, quantity: "5", lotId: lotIds[0] }],
       })),
-      (error: unknown) => error instanceof ConversionError && /only 4 remaining/.test(error.message),
+      (error: unknown) => error instanceof ConversionError && /only 4\.0000 remaining/.test(error.message),
     );
     const facts = await withOrgContext(org.orgId, () => db.execute<{ received: string; receipts: number }>(sql`
       select (select quantity_fulfilled::text from document_lines where id = ${sourceLineId}) as received,
