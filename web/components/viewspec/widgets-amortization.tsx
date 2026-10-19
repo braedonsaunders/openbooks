@@ -39,10 +39,9 @@ export const AMORTIZATION_WIDGETS = {
       templatesHref={str(props, 'templatesHref') ?? '/admin/setup/expense-amortization-templates'}
     />
   ),
-  /** No remount key: the drawer resets through its close navigation, like the contract cost drawer. */
   'amortization-schedule-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof ScheduleDrawer> | null
     if (!drawer) return null
-    return <ScheduleDrawer {...drawer} />
+    return <ScheduleDrawer key={drawer.detail.schedule.id} {...drawer} />
   },
 } satisfies Record<string, WidgetRenderer>

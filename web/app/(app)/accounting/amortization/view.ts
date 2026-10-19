@@ -12,6 +12,7 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
 import { loadAccounts } from '../../../../lib/setup/ref-options'
 import { builtInReportDefinitionId } from '../../../../lib/custom-reports'
+import { amortizationSourceHref } from '../../../../lib/amortization-source-link'
 
 /**
  * Accounting → Amortization: prepaid and deferred expense schedules.
@@ -112,14 +113,6 @@ function subsidiaryFilter(column: SQL, allowed: ReadonlySet<string> | null) {
   return sql`and ${column} = any(${`{${[...allowed].join(',')}}`}::uuid[])`
 }
 
-function sourceHref(kind: string | null, documentId: string | null): string | null {
-  if (!kind || !documentId) return null
-  if (kind === 'vendor_bill') return `/ap/bills?doc=${documentId}`
-  if (kind === 'journal') return `/journal?doc=${documentId}`
-  if (kind === 'expense_report') return `/expenses?doc=${documentId}`
-  return null
-}
-
 export async function loadAmortization(sp: Record<string, string | string[] | undefined>): Promise<AmortizationData> {
   const t = await getTranslations('amortization')
   const authz = await requirePermission('amortization.read')
@@ -176,7 +169,7 @@ export async function loadAmortization(sp: Record<string, string | string[] | un
       number: row.schedule_number,
       status: row.status,
       source: row.document_number ? `${t(`sourceKind.${row.source_kind}`)} ${row.document_number}` : t(`sourceKind.${row.source_kind}`),
-      sourceHref: sourceHref(row.source_kind, row.source_document_id),
+      sourceHref: amortizationSourceHref(row.source_kind, row.source_document_id),
       template: row.template_code,
       subsidiary: row.subsidiary_name ?? '—',
       currency: row.currency,
