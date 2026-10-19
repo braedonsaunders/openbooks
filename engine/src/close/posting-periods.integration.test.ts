@@ -87,7 +87,7 @@ test("assign-posting-period resolves the document's effective subsidiary calenda
         from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`);
     await db.execute(sql`insert into subsidiary_accounting_preferences
       (org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason)
-      values (${org.orgId},${org.subsidiaryId},${org.date},${calendarId},'Use entity posting calendar')`);
+      values (${org.orgId},${org.subsidiaryId},'2026-07-01',${calendarId},'Use entity posting calendar')`);
     const documentId = await seedOrder(org.orgId, org.subsidiaryId, 'vendor_bill', org.date);
 
     const preview = await previewPostingPeriodAssignment(org.orgId, { bookId: org.bookId, documentIds: [documentId] });
