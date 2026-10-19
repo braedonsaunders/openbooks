@@ -1,13 +1,15 @@
 import { sql } from 'drizzle-orm'
 import { setupReadSource } from './read-shape'
 import { db } from '@openbooks/engine/platform/db'
+import { loadSubsidiaryContext, recordOwnerSubsidiary, restrictionAdmits } from '@openbooks/engine/organization/subsidiaries'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake, type SetupEntity, type SetupRefSource } from './registry'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
+import { setupEntitySubsidiaryFilter } from './subsidiary-scope'
 import { setupReferenceSources } from './types'
 
-export type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string; minorUnits?: number }
+export type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string; minorUnits?: number; subsidiaryIds?: string[] }
 
 /** Distinct ref sources declared anywhere in this entity's columns or fields. */
 export function refSources(entity: SetupEntity): SetupRefSource[] {
@@ -15,16 +17,25 @@ export function refSources(entity: SetupEntity): SetupRefSource[] {
 }
 
 /** Postable accounts for the org, matching the company-settings pickers. */
-export async function loadAccounts(orgId: string): Promise<RefOption[]> {
+export async function loadAccounts(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<RefOption[]> {
   const r = await db.execute(sql`
-    select id, number, name, type from accounts
+    select id, number, name, type, subsidiary_id as "subsidiaryId",
+      subsidiary_include_children as "includeChildren" from accounts
      where org_id = ${orgId} and not is_summary and is_active
      order by number nulls last, name`);
-  return r.rows.map((a) => ({
-    value: a.id as string,
-    label: `${a.number ? `${a.number} · ` : ''}${a.name}`,
-    accountType: a.type as string,
-  }))
+  const ctx = await loadSubsidiaryContext(db, orgId)
+  const targets = [...ctx.byId.values()].filter((subsidiary) => subsidiary.isActive && !subsidiary.isElimination
+    && (allowedSubsidiaryIds === null || allowedSubsidiaryIds.has(subsidiary.id)))
+  return r.rows.map((account) => ({
+    value: account.id as string,
+    label: `${account.number ? `${account.number} · ` : ''}${account.name}`,
+    accountType: account.type as string,
+    subsidiaryIds: targets.filter((target) => restrictionAdmits(ctx, account.subsidiaryId as string | null,
+      account.includeChildren as boolean, target.id)).map((target) => target.id),
+  })).filter((account) => account.subsidiaryIds!.length > 0)
 }
 
 /**
@@ -145,7 +156,7 @@ export async function loadEntityOptions(
     // reference list like `trades`: the channel picker in map/location forms.
     const channels = await db.execute(sql`
       select id as value, name as label from sales_channels
-       where org_id = ${orgId} order by name`);
+       where org_id = ${orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by name`);
     return channels.rows as RefOption[]
   }
   // `vendors` names the parties+vendor_roles picker, not a registry entity:
@@ -177,7 +188,9 @@ export async function loadEntityOptions(
     const customers = await db.execute(sql`
       select p.id as value, p.display_name as label from parties p
        join customer_roles c on c.party_id = p.id and c.org_id = p.org_id and c.is_active
-       where p.org_id = ${orgId} and p.is_active order by p.display_name`);
+       where p.org_id = ${orgId} and p.is_active
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       order by p.display_name`);
     return customers.rows as RefOption[]
   }
   if (source === 'einvoice-customers') {
@@ -262,8 +275,11 @@ export async function loadEntityOptions(
   }
   if (source === 'projects') {
     const projects = await db.execute(sql`
-      select id as value, case when coalesce(code,'') <> '' then code || ' · ' || name else name end as label
-        from projects where org_id = ${orgId} and is_active order by code nulls last, name`);
+      select project.id as value, case when coalesce(project.code,'') <> '' then project.code || ' · ' || project.name else project.name end as label
+        from (select id,code,name,is_active,${recordOwnerSubsidiary(orgId, sql`subsidiary_id`)} as owner_subsidiary_id
+                from projects where org_id = ${orgId}) project
+       where project.is_active ${subsidiaryVisibleFilter(sql`project.owner_subsidiary_id`, allowedSubsidiaryIds)}
+       order by project.code nulls last, project.name`);
     return projects.rows as RefOption[]
   }
   if (source === 'funds') {
@@ -332,6 +348,7 @@ export async function loadEntityOptions(
   // target may not carry. The option value is the refValue column (the
   // natural key) when referencing rows store it instead of the row id.
   const { valueCol, labelCols, orderCol } = refTargetPicker(target)
+  const subsidiaryFilter = setupEntitySubsidiaryFilter(target, allowedSubsidiaryIds)
   const labelExpr =
     labelCols.length === 2
       ? sql.raw(
@@ -340,7 +357,7 @@ export async function loadEntityOptions(
       : sql.raw(labelCols[0]!)
   const r = await db.execute(sql`
     select ${sql.raw(valueCol)} as value, ${labelExpr} as label
-      from ${setupReadSource(target)}${orgFilter}${customSegmentFilter}
+      from ${setupReadSource(target)}${orgFilter}${customSegmentFilter}${subsidiaryFilter}
      order by ${sql.raw(orderCol)}`);
   return r.rows as RefOption[]
 }
@@ -354,7 +371,7 @@ export async function loadRefOptions(
   const out: Record<string, RefOption[]> = {}
   for (const source of refSources(entity)) {
     out[source] = source === 'accounts'
-      ? await loadAccounts(orgId)
+      ? await loadAccounts(orgId, allowedSubsidiaryIds)
       : await loadEntityOptions(source, orgId, allowedSubsidiaryIds)
   }
   return out

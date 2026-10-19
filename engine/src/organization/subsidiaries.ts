@@ -4,6 +4,8 @@ import { add, fromUnits, isZero, mulRate, normalizeDecimal, roundDiv, toUnits } 
 import { addMoney, mulMoneyRate, negMoney, type Money } from "../money/brands.ts";
 import { isUuid } from "../platform/uuid.ts";
 
+export { recordOwnerSubsidiary } from "./record-owner.ts";
+
 /**
  * Subsidiary context for the posting engine (a multi-entity model inside
  * one tenant). Loads the org's subsidiary tree once per posting, resolves

@@ -43,7 +43,20 @@ export function ProvisionAssessmentButton({ options, identity, assessmentOpen, o
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID()), [initialKey, setInitialKey] = useState(requestKey)
   const [obligationId, setObligationId] = useState(() => identity?.id ?? crypto.randomUUID())
   const [outcomes, setOutcomes] = useState<OutcomeRow[]>([])
-  const update = (key: string, value: string) => { setValues(current => ({ ...current, [key]: value })); setRequestKey(crypto.randomUUID()) }
+  const update = (key: string, value: string) => {
+    setValues(current => {
+      const next = { ...current, [key]: value }
+      if (key === 'subsidiary') {
+        if (options.projects.some(row => row.id === current.project && row.subsidiaryId !== value)) delete next.project
+        for (const accountKey of ['expense', 'liability']) {
+          const selected = options.accounts.find(row => row.id === current[accountKey])
+          if (selected && !selected.subsidiaryIds.includes(value)) delete next[accountKey]
+        }
+      }
+      return next
+    })
+    setRequestKey(crypto.randomUUID())
+  }
   const updateOutcomes = (rows: typeof outcomes) => { setOutcomes(rows); setRequestKey(crypto.randomUUID()) }
   const reset = () => {
     setValues({ date: today, method: 'best_estimate' }); setOutcomes([]); setError(null)
@@ -108,8 +121,8 @@ export function ProvisionAssessmentButton({ options, identity, assessmentOpen, o
           <div className="space-y-1"><Label htmlFor="provision-name">{t('name')}</Label><Input id="provision-name" value={values.name ?? ''} onChange={event => update('name', event.target.value)} maxLength={200} /></div>
           {options.projects.length ? <>{picker('project',options.projects.filter(row=>!values.subsidiary || row.subsidiaryId===values.subsidiary))}<p className="text-sm text-muted-foreground">{t('projectHint')}</p></> : null}
           <div className="grid gap-3 sm:grid-cols-2">{picker('subsidiary', options.subsidiaries)}{picker('book', options.books)}
-            {picker('expense', options.accounts.filter(row => ['expense', 'expense_other'].includes(row.type)))}
-            {picker('liability', options.accounts.filter(row => ['liability_current_other', 'liability_long_term'].includes(row.type)))}</div>
+            {picker('expense', options.accounts.filter(row => ['expense', 'expense_other'].includes(row.type) && row.subsidiaryIds.includes(values.subsidiary ?? '')))}
+            {picker('liability', options.accounts.filter(row => ['liability_current_other', 'liability_long_term'].includes(row.type) && row.subsidiaryIds.includes(values.subsidiary ?? '')))}</div>
         </>}
         <div className="space-y-1"><Label htmlFor="provision-date">{t('date')}</Label><DateField id="provision-date" value={values.date ?? ''} onChange={value => update('date', value)} /></div>
         <div className="grid gap-3 sm:grid-cols-2">{yesNo('obligation')}{yesNo('estimable')}

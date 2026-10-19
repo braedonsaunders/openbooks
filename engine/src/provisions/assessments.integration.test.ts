@@ -7,7 +7,7 @@ import { db, withBypassContext, withOrgContext } from '../platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow } from '../testing/fixtures.ts'
 import { submitFinancialChange } from '../flows/financial-changes-adapter.ts'
 import { decideGate } from '../flows/gates.ts'
-import { proposeProvisionAssessment, applyProvisionAssessment, type ProvisionProposal } from './assessments.ts'
+import { proposeProvisionAssessment, applyProvisionAssessment, provisionEditorOptions, type ProvisionProposal } from './assessments.ts'
 import { measureProvision } from './measurement.ts'
 
 const RUNTIME_DB = process.env.OPENBOOKS_RUNTIME_DB_URL
@@ -106,6 +106,40 @@ test('independent provision assessments recognize and remeasure one tenant liabi
           await probe.end().catch(() => {})
         }
       }
+    })
+  } finally { await dropScratchOrg(org.orgId) }
+})
+
+test('provision accounts are limited to subsidiaries admitted by their account restriction', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  try {
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId))
+    const subA = randomUUID(), subB = randomUUID(), expense = randomUUID(), liability = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings=settings || '{"reportingFramework":"ifrs"}'::jsonb where id=${org.orgId}`)
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active) values
+        (${subA},${org.orgId},${org.subsidiaryId},'Provision A','CAD','CA',true),
+        (${subB},${org.orgId},${org.subsidiaryId},'Provision B','CAD','CA',true)`)
+      await db.execute(sql`insert into accounts(id,org_id,number,name,type,subsidiary_id,subsidiary_include_children) values
+        (${expense},${org.orgId},'PROV-SCOPED-EXP','Restricted provision expense','expense',${subB},false),
+        (${liability},${org.orgId},'PROV-SCOPED-LIAB','Shared provision liability','liability_current_other',null,true)`)
+      await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values
+        (${org.orgId},${actors.submitterId},'gl.manage','grant')`)
+    })
+    await withOrgContext(org.orgId, async () => {
+      const choices = await provisionEditorOptions(org.orgId, actors.submitterId)
+      const restricted = choices.accounts.find(account => account.id === expense)
+      assert.ok(restricted, 'an account assigned to a visible subsidiary remains available')
+      assert.deepEqual(restricted.subsidiaryIds, [subB], 'the option declares only the legal entity admitted by the account restriction')
+      const input: ProvisionProposal = {
+        obligation: { id: randomUUID(), subsidiaryId: subA, bookId: org.bookId, name: 'Cross-subsidiary claim', currency: 'CAD', expenseAccountId: expense, liabilityAccountId: liability },
+        effectiveOn: org.date, reason: 'Record a supported legal settlement obligation', idempotencyKey: randomUUID(),
+        assessment: { presentObligation: true, outflow: 'probable', reliablyEstimable: true,
+          evidence: 'Counsel confirms a present legal obligation and probable settlement.',
+          discounting: 'immaterial', discountEvidence: 'The expected settlement date is near.',
+          estimate: { method: 'best_estimate', amount: '50000' } },
+      }
+      await assert.rejects(proposeProvisionAssessment(org.orgId, actors.submitterId, input), /available to the selected legal entity/)
     })
   } finally { await dropScratchOrg(org.orgId) }
 })

@@ -68,14 +68,14 @@ export interface AmortizationScheduleDrawerData {
   detail: ScheduleDetail
   canManage: boolean
   closeHref: string
-  destinationAccounts: { value: string; label: string }[]
+  destinationAccounts: { value: string; label: string; subsidiaryIds: string[] }[]
 }
 
 export interface AmortizationNewScheduleData {
   books: { id: string; label: string; currencies: Record<string, string> }[]
   templates: { id: string; label: string }[]
   subsidiaries: { id: string; label: string }[]
-  destinationAccounts: { value: string; label: string }[]
+  destinationAccounts: { value: string; label: string; subsidiaryIds: string[] }[]
 }
 
 export interface AmortizationData {
@@ -188,10 +188,10 @@ export async function loadAmortization(sp: Record<string, string | string[] | un
   })
 
   let drawer: AmortizationScheduleDrawerData | null = null
-  const accounts = canManage ? await loadAccounts(orgId) : []
+  const accounts = canManage ? await loadAccounts(orgId, allowed) : []
   const destinationAccounts = accounts
     .filter((account) => account.accountType && DESTINATION_TYPES.has(account.accountType))
-    .map((account) => ({ value: account.value, label: account.label }))
+    .map((account) => ({ value: account.value, label: account.label, subsidiaryIds: account.subsidiaryIds ?? [] }))
   if (scheduleParam && isUuid(scheduleParam)) {
     try {
       const detail = await loadScheduleDetail(db, orgId, scheduleParam)

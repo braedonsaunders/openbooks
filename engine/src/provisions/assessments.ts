@@ -6,6 +6,7 @@ import { actorHasPermission } from '../organization/actor-permissions.ts'
 import { lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts'
 import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts'
 import { recordOwnerSubsidiary } from '../organization/record-owner.ts'
+import { loadSubsidiaryContext, restrictionAdmits } from '../organization/subsidiaries.ts'
 import { isIsoCalendarDate } from '../platform/business-date.ts'
 import { orgReportingFramework, type ReportingFramework } from '../platform/reporting-framework.ts'
 import { existingFinancialChange, proposeFinancialChange, loadFinancialChange, assertFinancialChangeApproved, completeFinancialChange } from '../platform/financial-changes.ts'
@@ -54,11 +55,18 @@ export async function provisionEditorOptions(orgId: string, actorId: string) {
     const books = (await db.execute<{ id: string; name: string }>(sql`
       select id,name from accounting_books where org_id=${orgId} and is_active and posts_gl order by name,id
     `)).rows
-    const accounts = (await db.execute<{ id: string; name: string; type: string }>(sql`
-      select id,concat_ws(' — ',number,name) as name,type from accounts where org_id=${orgId}
+    const ctx = await loadSubsidiaryContext(db, orgId)
+    const accounts = (await db.execute<{ id: string; name: string; type: string; subsidiaryId: string | null; includeChildren: boolean }>(sql`
+      select id,concat_ws(' — ',number,name) as name,type,subsidiary_id as "subsidiaryId",
+        subsidiary_include_children as "includeChildren" from accounts where org_id=${orgId}
         and is_active and not is_summary and type in ('expense','expense_other','liability_current_other','liability_long_term')
         order by number,name,id
-    `)).rows
+    `)).rows.map(account => ({
+      id: account.id,
+      name: account.name,
+      type: account.type,
+      subsidiaryIds: subsidiaries.filter(subsidiary => restrictionAdmits(ctx, account.subsidiaryId, account.includeChildren, subsidiary.id)).map(subsidiary => subsidiary.id),
+    })).filter(account => account.subsidiaryIds.length > 0)
     const projects = await actorHasPermission(db,orgId,actorId,'projects.read') && await lockAndCheckOrgFeature(db,orgId,'projects')
       ? (await db.execute<{id:string;name:string;subsidiaryId:string}>(sql`select id,name,owner_id as "subsidiaryId" from (
           select id,code,concat_ws(' — ',code,name) as name,${recordOwnerSubsidiary(orgId, sql`subsidiary_id`)} as owner_id from projects
@@ -104,25 +112,30 @@ async function lockIdentity(tx: SqlExecutor, orgId: string, actorId: string, ide
   if (prior) {
     if (Object.keys(prior).some(key => (prior[key as keyof ProvisionIdentity] ?? null) !== (identity[key as keyof ProvisionIdentity] ?? null)))
       throw new ProvisionError('The provision accounting identity differs from the original obligation — use its existing identity or create a separate obligation')
-    return prior
   }
-  if (!create) throw new ScopeNotFoundError()
-  if (!identity.name.trim() || identity.name.length > 200)
+  if (!prior && !create) throw new ScopeNotFoundError()
+  if (!prior && (!identity.name.trim() || identity.name.length > 200))
     throw new ProvisionError('Name the provision obligation using 1–200 characters')
-  const entity = (await tx.execute<{ currency: string }>(sql`select base_currency as currency from subsidiaries
-    where org_id=${orgId} and id=${identity.subsidiaryId} and is_active and not is_elimination for share`)).rows[0]
-  if (!entity || entity.currency !== identity.currency)
-    throw new ProvisionError('Use the active legal entity and its functional currency for this provision')
-  const book = (await tx.execute(sql`select id from accounting_books where org_id=${orgId} and id=${identity.bookId}
-    and is_active and posts_gl for share`)).rows[0]
-  if (!book) throw new ProvisionError('Choose an active posting accounting book for this provision')
-  const accounts = (await tx.execute<{ id: string; type: string }>(sql`
-    select id,type from accounts where org_id=${orgId}
+  if (!prior) {
+    const entity = (await tx.execute<{ currency: string }>(sql`select base_currency as currency from subsidiaries
+      where org_id=${orgId} and id=${identity.subsidiaryId} and is_active and not is_elimination for share`)).rows[0]
+    if (!entity || entity.currency !== identity.currency)
+      throw new ProvisionError('Use the active legal entity and its functional currency for this provision')
+    const book = (await tx.execute(sql`select id from accounting_books where org_id=${orgId} and id=${identity.bookId}
+      and is_active and posts_gl for share`)).rows[0]
+    if (!book) throw new ProvisionError('Choose an active posting accounting book for this provision')
+  }
+  const accounts = (await tx.execute<{ id: string; type: string; name: string; subsidiaryId: string | null; includeChildren: boolean }>(sql`
+    select id,type,name,subsidiary_id as "subsidiaryId",subsidiary_include_children as "includeChildren" from accounts where org_id=${orgId}
       and id in (${identity.expenseAccountId},${identity.liabilityAccountId}) and is_active and not is_summary order by id for share
   `)).rows
   if (accounts.length !== 2 || !['expense', 'expense_other'].includes(accounts.find(a => a.id === identity.expenseAccountId)?.type ?? '')
       || !['liability_current_other', 'liability_long_term'].includes(accounts.find(a => a.id === identity.liabilityAccountId)?.type ?? ''))
     throw new ProvisionError('Choose distinct active posting expense and liability accounts for the provision')
+  const ctx = await loadSubsidiaryContext(tx, orgId)
+  if (accounts.some(account => !restrictionAdmits(ctx, account.subsidiaryId, account.includeChildren, identity.subsidiaryId)))
+    throw new ProvisionError('Choose posting accounts that are available to the selected legal entity')
+  if (prior) return prior
   const inserted = await tx.execute(sql`insert into provision_obligations
     (id,org_id,subsidiary_id,book_id,name,currency,expense_account_id,liability_account_id,created_by,project_id)
     values (${identity.id},${orgId},${identity.subsidiaryId},${identity.bookId},${identity.name},${identity.currency},

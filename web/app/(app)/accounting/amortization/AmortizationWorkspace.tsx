@@ -270,7 +270,12 @@ export function AmortizationNewScheduleButton({ data, templatesHref }: { data: A
     serviceStartOn: '', serviceEndOn: '', amortizeFromPeriod: '', destinationAccountId: '', memo: '', reason: '',
   })
   if (!data) return null
-  const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }))
+  const set = (key: keyof typeof form) => (value: string) => setForm((current) => {
+    const next = { ...current, [key]: value }
+    if (key === 'subsidiaryId' && !data.destinationAccounts.find((account) => account.value === current.destinationAccountId)?.subsidiaryIds.includes(value))
+      next.destinationAccountId = ''
+    return next
+  })
 
   async function submit() {
     setBusy(true)
@@ -344,7 +349,7 @@ export function AmortizationNewScheduleButton({ data, templatesHref }: { data: A
                   </Field>
                 </div>
                 <Field label={t('newSchedule.destinationAccount')}>
-                  <SearchSelect value={form.destinationAccountId} options={data.destinationAccounts} onChange={(v) => set('destinationAccountId')(v ?? '')} ariaLabel={t('newSchedule.destinationAccount')} clearable />
+                  <SearchSelect value={form.destinationAccountId} options={data.destinationAccounts.filter((account) => account.subsidiaryIds.includes(form.subsidiaryId))} onChange={(v) => set('destinationAccountId')(v ?? '')} ariaLabel={t('newSchedule.destinationAccount')} clearable />
                 </Field>
                 <Field label={t('newSchedule.memo')}>
                   <Input value={form.memo} onChange={(e) => set('memo')(e.target.value)} />

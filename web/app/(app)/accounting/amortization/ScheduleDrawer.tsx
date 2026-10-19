@@ -176,7 +176,7 @@ export function ScheduleDrawer({ detail, canManage, closeHref, destinationAccoun
               scheduleId={s.id}
               revision={s.revision}
               actions={actions}
-              destinationAccounts={destinationAccounts}
+              destinationAccounts={destinationAccounts.filter((account) => account.subsidiaryIds.includes(s.subsidiaryId))}
             />
           </div>
         )}
@@ -204,7 +204,7 @@ function ScheduleChangeForm({
   scheduleId: string
   revision: number
   actions: ActionKey[]
-  destinationAccounts: { value: string; label: string }[]
+  destinationAccounts: { value: string; label: string; subsidiaryIds: string[] }[]
 }) {
   const t = useTranslations('amortization')
   const router = useRouter()
