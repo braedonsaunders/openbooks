@@ -1,0 +1,113 @@
+{
+  "title": "リベート",
+  "description": "顧客・仕入先のリベート契約、発生済み請求、承認済み決済を管理します。",
+  "classAgreement": "分類契約",
+  "searchPlaceholder": "契約、請求、取引先を検索",
+  "actions": {
+    "newAgreement": "契約を新規作成",
+    "agreementSettings": "契約設定",
+    "reports": "リベートレポート"
+  },
+  "tabs": {
+    "agreements": "契約",
+    "claims": "請求"
+  },
+  "filters": {
+    "all": "すべて",
+    "side": "区分",
+    "status": "状態"
+  },
+  "sides": {
+    "customer": "顧客",
+    "vendor": "仕入先"
+  },
+  "statuses": {
+    "draft": "下書き",
+    "approved": "承認済み",
+    "document_pending": "伝票待ち",
+    "settled": "決済済み",
+    "cancelled": "取消済み",
+    "unknown": "不明な状態"
+  },
+  "activities": {
+    "sale": "販売",
+    "purchase": "仕入れ",
+    "downstream_sale": "下流販売"
+  },
+  "methods": {
+    "percent": "割合によるリベート",
+    "per_unit": "単位ごとの金額",
+    "fixed_cost": "保証単価",
+    "guaranteed_margin": "保証利益率"
+  },
+  "tierBasis": {
+    "amount": "対象金額",
+    "quantity": "対象数量"
+  },
+  "stacking": {
+    "stack": "適用可能な契約と併用",
+    "best": "明細ごとの最良条件"
+  },
+  "columns": {
+    "agreement": "契約",
+    "counterparty": "取引先",
+    "side": "区分",
+    "status": "状態",
+    "amount": "請求額"
+  },
+  "empty": {
+    "agreements": {
+      "title": "リベート契約がありません",
+      "description": "設定で契約を作成し、適用条件と有効期間を定義してください。"
+    },
+    "claims": {
+      "title": "リベート請求がありません",
+      "description": "承認済み契約に基づいて対象取引を評価すると、請求がここに表示されます。"
+    }
+  },
+  "drawer": {
+    "claimTitle": "リベート請求",
+    "reviewReason": "確認理由",
+    "postingOrCutoffDate": "転記日または締め日",
+    "claimEarnedThrough": "{date} までに発生しています。決済により記録済みの見越額が相殺されます。",
+    "approveClaim": "請求を承認",
+    "settlementMethod": "決済方法",
+    "creditDocument": "標準のクレジットまたは回収伝票",
+    "paymentOrReceipt": "銀行支払または入金",
+    "prepareDocument": "{kind}伝票を準備",
+    "credit": "クレジット",
+    "recovery": "回収",
+    "bankAccount": "銀行口座",
+    "settlementFxRate": "決済為替レート（{from} から {to}）",
+    "fxRateField": "決済為替レート",
+    "recordBankSettlement": "銀行決済を記録",
+    "cancelClaim": "請求を取消",
+    "openSettlementDocument": "決済伝票を開く",
+    "reverseBankSettlement": "銀行決済を取消",
+    "termsTab": "条件",
+    "generateClaimTab": "請求を作成",
+    "costEvidenceTab": "原価証憑",
+    "agreementDetails": "契約詳細",
+    "eligiblePeriod": "対象となる{activity}：{start}から{end}まで、通貨 {currency}。",
+    "methodLine": "計算方法：{method}。段階は{basis}に基づきます。",
+    "stackingPolicy": "{policy}、グループ {group}。",
+    "viewAgreementSettings": "契約設定を表示",
+    "approveAgreement": "契約を承認",
+    "customerOrVendor": "顧客または仕入先",
+    "generateEarnedClaim": "発生済み請求を作成",
+    "stockCostExplanation": "在庫原価には転記済み在庫証憑を使用します。他の品目は、元の取引を転記または再評価する前に、証憑付き原価を記録してください。",
+    "sourceDocumentLine": "元伝票の明細",
+    "costInCurrency": "原価（{currency}）",
+    "costField": "原価",
+    "downstreamResale": "証憑付き下流販売額",
+    "resaleField": "販売額",
+    "costEvidence": "原価証憑",
+    "recordCostEvidence": "原価証憑を記録",
+    "postedSourceTransaction": "転記済み元取引",
+    "reassessEarnedRebates": "発生済みリベートを再評価",
+    "line": "明細",
+    "errors": {
+      "actionFailed": "リベート処理を完了できませんでした"
+    }
+  }
+}

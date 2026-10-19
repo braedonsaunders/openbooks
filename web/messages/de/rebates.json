@@ -1,0 +1,113 @@
+{
+  "title": "Rückvergütungen",
+  "description": "Verwalten Sie Kunden- und Lieferantenvereinbarungen, erworbene Ansprüche und geregelte Abrechnungen.",
+  "classAgreement": "Vereinbarung für eine Klasse",
+  "searchPlaceholder": "Vereinbarungen, Ansprüche oder Geschäftspartner suchen",
+  "actions": {
+    "newAgreement": "Neue Vereinbarung",
+    "agreementSettings": "Vereinbarungseinstellungen",
+    "reports": "Rückvergütungsberichte"
+  },
+  "tabs": {
+    "agreements": "Vereinbarungen",
+    "claims": "Ansprüche"
+  },
+  "filters": {
+    "all": "Alle",
+    "side": "Seite",
+    "status": "Bearbeitungsstand"
+  },
+  "sides": {
+    "customer": "Kunde",
+    "vendor": "Lieferant"
+  },
+  "statuses": {
+    "draft": "Entwurf",
+    "approved": "Genehmigt",
+    "document_pending": "Beleg ausstehend",
+    "settled": "Abgerechnet",
+    "cancelled": "Storniert",
+    "unknown": "Unbekannter Status"
+  },
+  "activities": {
+    "sale": "Verkäufe",
+    "purchase": "Einkäufe",
+    "downstream_sale": "Weiterverkäufe"
+  },
+  "methods": {
+    "percent": "Prozentuale Rückvergütung",
+    "per_unit": "Betrag je Einheit",
+    "fixed_cost": "Garantierter Stückpreis",
+    "guaranteed_margin": "Garantierte Marge"
+  },
+  "tierBasis": {
+    "amount": "zulässiger Betrag",
+    "quantity": "zulässige Menge"
+  },
+  "stacking": {
+    "stack": "Mit geeigneten Vereinbarungen kombinieren",
+    "best": "Bestes Angebot je Position"
+  },
+  "columns": {
+    "agreement": "Vereinbarung",
+    "counterparty": "Geschäftspartner",
+    "side": "Seite",
+    "status": "Bearbeitungsstand",
+    "amount": "Anspruchsbetrag"
+  },
+  "empty": {
+    "agreements": {
+      "title": "Keine Rückvergütungsvereinbarungen",
+      "description": "Erstellen Sie in den Einstellungen eine Vereinbarung mit zulässigen Bedingungen und Gültigkeitsdaten."
+    },
+    "claims": {
+      "title": "Keine Rückvergütungsansprüche",
+      "description": "Ansprüche erscheinen hier, nachdem eine genehmigte Vereinbarung die zulässigen Aktivitäten bewertet hat."
+    }
+  },
+  "drawer": {
+    "claimTitle": "Rückvergütungsanspruch",
+    "reviewReason": "Begründung der Prüfung",
+    "postingOrCutoffDate": "Buchungs- oder Stichtag",
+    "claimEarnedThrough": "Erworben bis zum {date}. Die Abrechnung gleicht die erfasste Abgrenzung aus.",
+    "approveClaim": "Anspruch genehmigen",
+    "settlementMethod": "Abrechnungsmethode",
+    "creditDocument": "Systemischer Gutschrifts- oder Rückforderungsbeleg",
+    "paymentOrReceipt": "Bankzahlung oder Zahlungseingang",
+    "prepareDocument": "{kind} vorbereiten",
+    "credit": "Gutschrift",
+    "recovery": "Rückforderung",
+    "bankAccount": "Bankkonto",
+    "settlementFxRate": "Abrechnungskurs ({from} zu {to})",
+    "fxRateField": "Abrechnungskurs",
+    "recordBankSettlement": "Bankabrechnung erfassen",
+    "cancelClaim": "Anspruch stornieren",
+    "openSettlementDocument": "Abrechnungsbeleg öffnen",
+    "reverseBankSettlement": "Bankabrechnung stornieren",
+    "termsTab": "Bedingungen",
+    "generateClaimTab": "Anspruch erstellen",
+    "costEvidenceTab": "Kostennachweise",
+    "agreementDetails": "Vereinbarungsdetails",
+    "eligiblePeriod": "Zulässige {activity} vom {start} bis {end}; {currency}.",
+    "methodLine": "Berechnung: {method}. Die Stufen richten sich nach dem {basis}.",
+    "stackingPolicy": "{policy}; Gruppe {group}.",
+    "viewAgreementSettings": "Vereinbarungseinstellungen anzeigen",
+    "approveAgreement": "Vereinbarung genehmigen",
+    "customerOrVendor": "Kunde oder Lieferant",
+    "generateEarnedClaim": "Erworbenen Anspruch erstellen",
+    "stockCostExplanation": "Lagerkosten verwenden gebuchte Bestandsnachweise. Erfassen Sie bei anderen Artikeln dokumentierte Kosten, bevor Sie den Quellvorgang buchen oder neu bewerten.",
+    "sourceDocumentLine": "Quellbelegposition",
+    "costInCurrency": "Kosten in {currency}",
+    "costField": "Kosten",
+    "downstreamResale": "Dokumentierter Weiterverkaufspreis",
+    "resaleField": "Weiterverkaufspreis",
+    "costEvidence": "Kostennachweis",
+    "recordCostEvidence": "Kostennachweis erfassen",
+    "postedSourceTransaction": "Gebuchter Quellvorgang",
+    "reassessEarnedRebates": "Erworbene Rückvergütungen neu bewerten",
+    "line": "Position",
+    "errors": {
+      "actionFailed": "Die Rückvergütungsaktion konnte nicht abgeschlossen werden"
+    }
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "title": "Bonificações",
+  "description": "Gerencie acordos de bonificação com clientes e fornecedores, reivindicações apuradas e liquidações controladas.",
+  "classAgreement": "Acordo por classe",
+  "searchPlaceholder": "Buscar acordos, reivindicações ou contrapartes",
+  "actions": {
+    "newAgreement": "Novo acordo",
+    "agreementSettings": "Configurações de acordos",
+    "reports": "Relatórios de bonificações"
+  },
+  "tabs": {
+    "agreements": "Acordos",
+    "claims": "Reivindicações"
+  },
+  "filters": {
+    "all": "Todas",
+    "side": "Parte",
+    "status": "Situação"
+  },
+  "sides": {
+    "customer": "Cliente",
+    "vendor": "Fornecedor"
+  },
+  "statuses": {
+    "draft": "Rascunho",
+    "approved": "Aprovada",
+    "document_pending": "Documento pendente",
+    "settled": "Liquidada",
+    "cancelled": "Cancelada",
+    "unknown": "Status desconhecido"
+  },
+  "activities": {
+    "sale": "vendas",
+    "purchase": "compras",
+    "downstream_sale": "revendas posteriores"
+  },
+  "methods": {
+    "percent": "Bonificação percentual",
+    "per_unit": "Valor por unidade",
+    "fixed_cost": "Custo unitário garantido",
+    "guaranteed_margin": "Margem garantida"
+  },
+  "tierBasis": {
+    "amount": "valor elegível",
+    "quantity": "quantidade elegível"
+  },
+  "stacking": {
+    "stack": "Acumular com acordos elegíveis",
+    "best": "Melhor condição por item"
+  },
+  "columns": {
+    "agreement": "Acordo",
+    "counterparty": "Contraparte",
+    "side": "Parte",
+    "status": "Situação",
+    "amount": "Valor reivindicado"
+  },
+  "empty": {
+    "agreements": {
+      "title": "Nenhum acordo de bonificação",
+      "description": "Crie um acordo nas configurações para definir os termos elegíveis e o período de vigência."
+    },
+    "claims": {
+      "title": "Nenhuma reivindicação de bonificação",
+      "description": "As reivindicações aparecem aqui depois que a atividade elegível é apurada por um acordo aprovado."
+    }
+  },
+  "drawer": {
+    "claimTitle": "Reivindicação de bonificação",
+    "reviewReason": "Motivo da análise",
+    "postingOrCutoffDate": "Data de lançamento ou corte",
+    "claimEarnedThrough": "Apurada até {date}. A liquidação compensa o acréscimo registrado.",
+    "approveClaim": "Aprovar reivindicação",
+    "settlementMethod": "Forma de liquidação",
+    "creditDocument": "Documento nativo de crédito ou recuperação",
+    "paymentOrReceipt": "Pagamento ou recebimento bancário",
+    "prepareDocument": "Preparar documento de {kind}",
+    "credit": "crédito",
+    "recovery": "recuperação",
+    "bankAccount": "Conta bancária",
+    "settlementFxRate": "Câmbio da liquidação ({from} para {to})",
+    "fxRateField": "Câmbio da liquidação",
+    "recordBankSettlement": "Registrar liquidação bancária",
+    "cancelClaim": "Cancelar reivindicação",
+    "openSettlementDocument": "Abrir documento de liquidação",
+    "reverseBankSettlement": "Reverter liquidação bancária",
+    "termsTab": "Termos",
+    "generateClaimTab": "Gerar reivindicação",
+    "costEvidenceTab": "Comprovantes de custo",
+    "agreementDetails": "Detalhes do acordo",
+    "eligiblePeriod": "{activity} elegíveis de {start} a {end}; {currency}.",
+    "methodLine": "Cálculo: {method}. As faixas usam o {basis}.",
+    "stackingPolicy": "{policy}; grupo {group}.",
+    "viewAgreementSettings": "Ver configurações do acordo",
+    "approveAgreement": "Aprovar acordo",
+    "customerOrVendor": "Cliente ou fornecedor",
+    "generateEarnedClaim": "Gerar reivindicação apurada",
+    "stockCostExplanation": "Custos de estoque usam evidências de inventário lançadas. Para outros itens, registre o custo documentado antes de lançar ou reavaliar a transação de origem.",
+    "sourceDocumentLine": "Linha do documento de origem",
+    "costInCurrency": "Custo em {currency}",
+    "costField": "Custo",
+    "downstreamResale": "Valor documentado de revenda posterior",
+    "resaleField": "Valor de revenda",
+    "costEvidence": "Comprovante de custo",
+    "recordCostEvidence": "Registrar comprovante de custo",
+    "postedSourceTransaction": "Transação de origem lançada",
+    "reassessEarnedRebates": "Reavaliar bonificações apuradas",
+    "line": "Linha",
+    "errors": {
+      "actionFailed": "Não foi possível concluir a ação de bonificação"
+    }
+  }
+}
