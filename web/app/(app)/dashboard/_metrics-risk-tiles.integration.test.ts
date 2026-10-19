@@ -102,7 +102,8 @@ test("risk widget reader returns the dashboard's own figures", { skip: !env.OPEN
     assert.equal(risk.value.flagged, data.summary.flaggedCount);
     assert.equal(risk.value.value, data.summary.totalAtRisk);
     assert.equal(risk.value.currency, data.meta.presentationCurrency);
-    assert.equal(risk.value.periodLabel, P.label);
+    // The window reads as the dashboard presents it: a custom window shows its localized bounds.
+    assert.equal(risk.value.periodLabel, "Jul 1, 2026 – Jul 31, 2026");
     assert.deepEqual(risk.value.excluded, data.summary.excludedDetectors);
     const dup = metrics.duplicatePayments;
     assert.ok(dup !== null && dup !== undefined && dup.available);

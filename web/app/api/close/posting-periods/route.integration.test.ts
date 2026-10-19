@@ -39,6 +39,9 @@ registerHooks({
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
+    if (specifier === "next-intl/server") {
+      return { url: "mock:next-intl-server", shortCircuit: true };
+    }
 
     const engineUrl = resolveEngineSpecifier(specifier);
     if (engineUrl) return nextResolve(engineUrl, context);
@@ -47,6 +50,13 @@ registerHooks({
   load(url, context, nextLoad) {
     if (url === "mock:authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
+    }
+    if (url === "mock:next-intl-server") {
+      return {
+        format: "module",
+        source: "export async function getLocale() { return 'en' }\nexport async function getTranslations() { return (key) => key }",
+        shortCircuit: true,
+      };
     }
     return nextLoad(url, context);
   },
@@ -84,10 +94,12 @@ test("posting-periods route previews then commits idempotently", async () => {
     );
     assert.equal(previewRes.status, 200);
     const preview = (await previewRes.json()) as {
-      rows: { documentId: string; periodId: string | null; blocked: boolean }[];
+      rows: { documentId: string; periodId: string | null; periodName: string | null; blocked: boolean }[];
     };
     assert.equal(preview.rows.length, 1);
     assert.equal(preview.rows[0]?.documentId, doc);
+    // The derived period reads with its label in the viewer's locale, not its stored "2026-07".
+    assert.equal(preview.rows[0]?.periodName, "P07 FY2026 · Jul 2026");
     assert.equal(preview.rows[0]?.blocked, false);
     assert.equal(preview.rows[0]?.periodId, org.periodId);
 
