@@ -34,6 +34,7 @@ import { capturePayRunCalculationEvidence, recordPayRunCalculationEvent } from "
 import { employerEmployeeCount } from "./run-calculation-support.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
 import { consumeLeavePayrollInputs, releaseLeavePayrollInputs } from "./leave-payroll-inputs.ts";
+import { consumeAllowancePayrollInputs, releaseAllowancePayrollInputs } from "./allowance-payroll-inputs.ts";
 import {
   assertPeriodSequence, assertSupplementalSupported, listPeriodSiblings, loadPeriodPriors,
   periodRunIdentity, supplementalTaxMethodForOrg, type PayPeriodPriors,
@@ -466,6 +467,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
 
     if (PERIODIC_RUN_TYPES.has(runType) && !input.simulate) {
       await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
+      await releaseAllowancePayrollInputs(tx, { orgId, runDocumentId: documentId });
     }
 
     for (const emp of employees.rows) {
@@ -525,6 +527,14 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
                 simulate: input.simulate === true,
               })
             : [];
+          const allowancePayrollInputs = PERIODIC_RUN_TYPES.has(runType)
+            ? await consumeAllowancePayrollInputs(tx, {
+                orgId, runDocumentId: documentId,
+                periodStart: run.period_start!, periodEnd: run.period_end!,
+                employeePartyId: emp.party_id!, payCurrency: runContext.currency,
+                simulate: input.simulate === true,
+              })
+            : [];
           return calculateStub(tx, {
           orgId, actorId, documentId, run, emp, runContext, jurisdiction,
           periodsPerYear: P, employerEmployeeCount: employerCount, need, components: components.rows,
@@ -539,6 +549,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           periodPriors: periodPriorsByEmployee.get(emp.party_id!),
           supplementalTaxMethod,
           leavePayrollInputs,
+          allowancePayrollInputs,
           onBonusIncomeReference: source => { bonusIncomeReferences.push(source); },
         });
         });

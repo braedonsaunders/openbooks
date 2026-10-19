@@ -24,6 +24,7 @@ import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
 import { assertPeriodSequence, periodRunIdentity } from "./period-priors.ts";
 import { lockPayrollAnomalyReview, payrollAnomalyFinalizeCheck } from "./anomaly-finalize-gate.ts";
 import { leavePayrollInputProblems } from "./leave-payroll-inputs.ts";
+import { allowancePayrollInputProblem } from "./allowance-payroll-inputs.ts";
 import { type PayRunGlLeg, payRunGlLegCustom, payRunGlLegs } from "./run-gl-legs.ts";
 export { payRunGlLegCustom, payRunGlCodingKey, payRunGlLegs } from "./run-gl-legs.ts";
 export type { PayRunGlLegKind, EntitlementReliefBasis, EntitlementReliefLine, PayRunGlLeg, FrozenPayRunGlBasis, PayRunGlRelief } from "./run-gl-legs.ts";
@@ -335,6 +336,14 @@ export async function commitPayRun(input: {
         employeePartyIds: parties,
       });
       if (leaveProblem) throw new PayrollError(leaveProblem.message);
+      const allowanceProblem = await allowancePayrollInputProblem(tx, {
+        orgId,
+        runDocumentId: documentId,
+        periodStart,
+        periodEnd,
+        employeePartyIds: parties,
+      });
+      if (allowanceProblem) throw new PayrollError(allowanceProblem.message);
     }
     const changes = payRunCalculationSourceChanges(storedSource, currentSource);
     if (changes.holidayObligations) throw new PayrollError("Approved holiday entitlements, their dated wages or payment claims changed since calculation; recalculate this editable pay run before committing.");

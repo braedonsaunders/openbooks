@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   applyReciprocity,
   applyWeeklyRule,
+  allocateDailyPerDiem,
   compRuleMatches,
   evaluateRatio,
   perDiemAmountForDay,
@@ -27,6 +28,25 @@ test("scope precedence is project over location over department over subsidiary 
     scopeScore({ project_ids: ["p1"] }, target) > scopeScore({ location_ids: ["l1"] }, target),
   );
   assert.ok(scopeScore({ department_id: "d1" }, { ...target, departmentId: "d1" }) > scopeScore({ employer_subsidiary_id: "s1" }, target));
+});
+
+test("one daily per-diem is priced on total date hours and split exactly across projects", () => {
+  const hoursThreshold = perDiemAmountForDay(
+    "hours_threshold", { min_hours: 8, amount_for_hours: "60.0000" }, { hours: "8.0000" },
+  );
+  const split = allocateDailyPerDiem(hoursThreshold, [
+    { projectId: "project-a", hours: "4.0000" },
+    { projectId: "project-b", hours: "4.0000" },
+  ]);
+  assert.deepEqual(split.map((row) => row.amount), ["30.0000", "30.0000"]);
+  assert.equal(split.reduce((total, row) => total + BigInt(row.amount.replace(".", "")), 0n), 600000n);
+
+  const residual = allocateDailyPerDiem("0.0001", [
+    { projectId: "project-a", hours: "1.0000" },
+    { projectId: "project-b", hours: "1.0000" },
+    { projectId: "project-c", hours: "1.0000" },
+  ]);
+  assert.deepEqual(residual.map((row) => row.amount), ["0.0000", "0.0000", "0.0001"]);
 });
 
 test("reciprocity: home, jobsite, and higher-of price from the named line", () => {

@@ -28,6 +28,7 @@ import { DownstreamConsumptionError, InventoryError } from "../inventory/contrac
 import { reverseInventoryJournal, reverseInventoryMovement } from "../inventory/reversal.ts";
 import { listReceiptVoidBlockers } from "../inventory/receipt-void-dependents.ts";
 import { releaseLeavePayrollInputs } from "../payroll/leave-payroll-inputs.ts";
+import { releaseAllowancePayrollInputs } from "../payroll/allowance-payroll-inputs.ts";
 import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
 import { crossSubsidiaryFulfillmentHandler, crossSubsidiaryShipment } from "../inventory/cross-subsidiary.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
@@ -2168,6 +2169,7 @@ async function releaseVoidedPayRun(
   }
 
   await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
+  await releaseAllowancePayrollInputs(tx, { orgId, runDocumentId: documentId });
 
   const run = (await tx.execute<{ document_id: string }>(sql`
     update pay_runs

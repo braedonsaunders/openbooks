@@ -1,5 +1,6 @@
 import { HrmConstructionError } from "./errors.ts";
 import { compareDecimal as compareExactDecimals, parseExactDecimal } from "../../money/exact-decimal.ts";
+import { add, mulRatio, neg, toUnits } from "../../money/money.ts";
 
 /**
  * Pure construction-compliance decisions (HR-13): scope precedence,
@@ -183,6 +184,28 @@ export function applyWeeklyRule(
   const extra = weeklyRule.paid_days - dailyAmounts.length;
   const last = dailyAmounts[dailyAmounts.length - 1]!;
   return [...dailyAmounts, ...Array<string>(extra).fill(last)];
+}
+
+/** Allocate one daily per-diem amount across that date's project hours. */
+export function allocateDailyPerDiem(
+  amount: string,
+  rows: readonly { projectId: string | null; hours: string }[],
+): readonly { projectId: string | null; hours: string; amount: string }[] {
+  if (rows.length === 0) return [];
+  const hours = rows.map((row) => {
+    const units = toUnits(row.hours);
+    if (units <= 0n) throw new HrmConstructionError("Approved project-day hours must be positive before allocating a daily per-diem.");
+    return units;
+  });
+  const totalHours = hours.reduce((total, units) => total + units, 0n);
+  let allocated = "0.0000";
+  return rows.map((row, index) => {
+    const share = index === rows.length - 1
+      ? add(amount, neg(allocated))
+      : mulRatio(amount, hours[index]!, totalHours);
+    allocated = add(allocated, share);
+    return { ...row, amount: share };
+  });
 }
 
 export interface CompMatch {

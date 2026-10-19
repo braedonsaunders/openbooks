@@ -19,6 +19,7 @@ import { PAYROLL_COUNTRY_PACKS } from "./pack-registry.ts";
 import { hourlyPayRate, isPayRateBasis } from "../projects/pay-rate-basis.ts";
 import { isDeclaredVacationAccrualInput } from "./run-vacation-accrual-input.ts";
 import { lockLeavePayrollInputSources } from "./leave-payroll-inputs.ts";
+import { lockAllowancePayrollInputSources } from "./allowance-payroll-inputs.ts";
 
 export type OpeningEmployerAuthoritySource = {
   id: string; openingBalanceId: string; employeePartyId: string; taxYear: number; subsidiaryId: string;
@@ -596,6 +597,7 @@ export async function lockCalculationInputSources(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<void> {
   await lockLeavePayrollInputSources(executor, orgId, documentId);
+  await lockAllowancePayrollInputSources(executor, orgId, documentId);
   await lockStatutoryTreatmentSources(executor, orgId, documentId, allowedSubsidiaryIds);
   await executor.execute(sql`
     select adjustment.id

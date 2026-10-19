@@ -18,6 +18,7 @@ import { loadWageTimeEntries, sumWageHoursByEmployee } from "./wage-hours.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { parsePayRunCalculationSource, payRunCalculationSource, payRunCalculationSourceChanges, payRunCalculationSourceDigest } from "./run-calculation-evidence.ts";
 import { leavePayrollInputProblems } from "./leave-payroll-inputs.ts";
+import { allowancePayrollInputProblem } from "./allowance-payroll-inputs.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
 import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
@@ -729,6 +730,19 @@ export async function payRunReadiness(
       flag("blocker", `payroll.${problem.code.toLowerCase()}`, people, {
         detail: problem.message,
         href: "/admin/setup/leave-types?setupTab=leave-payroll-entitlement-mappings",
+      });
+    }
+    const allowanceProblem = await allowancePayrollInputProblem(db, {
+      orgId,
+      runDocumentId: documentId,
+      periodStart: run.period_start,
+      periodEnd: run.period_end,
+      employeePartyIds: people.map((person) => person.employee_party_id),
+    });
+    if (allowanceProblem) {
+      flag("blocker", `payroll.${allowanceProblem.code.toLowerCase()}`, people, {
+        detail: allowanceProblem.message,
+        href: "/hrm/compliance",
       });
     }
   }
@@ -1863,6 +1877,7 @@ export async function payRunStaleness(
   let exactLevyAdjustmentsChanged = false;
   let exactDeclaredVacationAccrualsChanged = false;
   let exactLeaveInputsChanged = false;
+  let exactAllowanceInputsChanged = false;
   if (PERIODIC_RUN_TYPES.has(row.run_type)) {
     const parties = (await executor.execute<{ party_id: string }>(sql`
       select distinct employee_party_id::text as party_id
@@ -1884,6 +1899,14 @@ export async function payRunStaleness(
       employeePartyIds: parties,
     });
     exactLeaveInputsChanged = problem !== null;
+    const allowanceProblem = await allowancePayrollInputProblem(executor, {
+      orgId,
+      runDocumentId: documentId,
+      periodStart: row.period_start,
+      periodEnd: row.period_end,
+      employeePartyIds: parties,
+    });
+    exactAllowanceInputsChanged = allowanceProblem !== null;
   }
   const storedSource = parsePayRunCalculationSource(row.calculation_source_snapshot);
   // Legacy calculated rows predate migration 0040. Keep their informational
@@ -1920,7 +1943,7 @@ export async function payRunStaleness(
   }
   const reasons = [
     selectionChanged ? "selection" : null,
-    row.adjustments_changed || row.assertions_changed || exactIncomeTaxOverridesChanged || exactBankCashInputsChanged || exactDeclaredVacationAccrualsChanged || exactLevyAdjustmentsChanged ? "adjustments" : null,
+    row.adjustments_changed || row.assertions_changed || exactIncomeTaxOverridesChanged || exactBankCashInputsChanged || exactDeclaredVacationAccrualsChanged || exactLevyAdjustmentsChanged || exactAllowanceInputsChanged ? "adjustments" : null,
     row.time_changed || exactTimeChanged ? "time" : null,
     row.wages_changed || exactWagesChanged ? "wages" : null,
     row.schedule_changed ? "schedule" : null,
