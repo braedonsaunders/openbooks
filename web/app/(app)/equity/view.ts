@@ -8,7 +8,6 @@ import { POINT_IN_TIME_PERIOD_PRESETS } from '@openbooks/reports'
 import {
   CONSIDERATION_ACCOUNT_TYPES,
   EquityError,
-  equityError,
   listCompensationRuns,
   listEquityEntities,
   listInterestRuns,
@@ -615,7 +614,7 @@ async function loadEquityPage(sp: Record<string, string | string[] | undefined>)
     const missing = async (): Promise<SecurityDrawerRefusal> => ({
       securityId: securityParam,
       closeHref: keep({ security: undefined }),
-      refusal: await readerRefusal(equityError('securityUnknown')),
+      refusal: await readerRefusal(new EquityError('securityUnknown')),
     })
     if (!isUuid(securityParam)) return missing()
     try {
