@@ -73,12 +73,13 @@ function eachDay(startsOn: string, endsOn: string): string[] {
 async function activeChannels(
   orgId: string,
   subsidiaryIds: string[],
+  fallbackSubsidiaryId: string,
 ): Promise<ChannelRow[]> {
   const rows = (
     await db.execute<ChannelRow & { subsidiary_id: string | null }>(sql`
-      select id, name, kind, currency from sales_channels
-       where org_id = ${orgId} and status = 'active'
-         and (${subsidiaryIds.length === 0} or subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))`)
+      select c.id, c.name, c.kind, c.currency from sales_channels c
+       where c.org_id = ${orgId} and c.status = 'active'
+         and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))`)
   ).rows;
   return rows.map((row) => ({ id: row.id, name: row.name, kind: row.kind, currency: row.currency }));
 }
@@ -91,7 +92,11 @@ type IngestedDayRow = {
   gross_minor: string;
 };
 
-async function ingestedDayTotals(orgId: string, scope: CommerceCloseScope): Promise<IngestedDayRow[]> {
+async function ingestedDayTotals(
+  orgId: string,
+  scope: CommerceCloseScope,
+  fallbackSubsidiaryId: string,
+): Promise<IngestedDayRow[]> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
   return (
     await db.execute<IngestedDayRow>(sql`
@@ -105,7 +110,7 @@ async function ingestedDayTotals(orgId: string, scope: CommerceCloseScope): Prom
        where o.org_id = ${orgId}
          and (o.ordered_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
          and o.posting_status <> 'excluded'
-         and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+         and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
        group by o.channel_id, ((o.ordered_at at time zone 'UTC')::date), o.shop_currency`)
   ).rows;
 }
@@ -115,7 +120,11 @@ type UnpostedRow = {
   pending_events: string;
 };
 
-async function unpostedCounts(orgId: string, scope: CommerceCloseScope): Promise<UnpostedRow> {
+async function unpostedCounts(
+  orgId: string,
+  scope: CommerceCloseScope,
+  fallbackSubsidiaryId: string,
+): Promise<UnpostedRow> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
   const rows = (
     await db.execute<UnpostedRow>(sql`
@@ -124,12 +133,12 @@ async function unpostedCounts(orgId: string, scope: CommerceCloseScope): Promise
            join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
            where o.org_id = ${orgId} and o.posting_status = 'pending'
              and (o.ordered_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
-             and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) as pending_orders,
+             and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) as pending_orders,
         (select count(*)::text from channel_order_events e
            join sales_channels c on c.org_id = e.org_id and c.id = e.channel_id
            where e.org_id = ${orgId} and e.posting_status = 'pending'
              and (e.occurred_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
-             and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) as pending_events`)
+             and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) as pending_events`)
   ).rows;
   return rows[0] ?? { pending_orders: "0", pending_events: "0" };
 }
@@ -153,9 +162,10 @@ async function orderCompletenessCheck(
   scope: CommerceCloseScope,
   provider: StorefrontTotalsProvider,
 ): Promise<{ check: CommerceCloseCheck; unreachable: CommerceCloseCheck }> {
-  const channels = await activeChannels(orgId, scope.subsidiaryIds ?? []);
-  const ingested = await ingestedDayTotals(orgId, scope);
-  const unposted = await unpostedCounts(orgId, scope);
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
+  const channels = await activeChannels(orgId, scope.subsidiaryIds ?? [], fallbackSubsidiaryId);
+  const ingested = await ingestedDayTotals(orgId, scope, fallbackSubsidiaryId);
+  const unposted = await unpostedCounts(orgId, scope, fallbackSubsidiaryId);
   const byChannelDay = new Map<string, { count: number; gross: bigint; currency: string }>();
   for (const row of ingested) {
     const key = `${row.channel_id}|${row.day}|${row.shop_currency}`;
