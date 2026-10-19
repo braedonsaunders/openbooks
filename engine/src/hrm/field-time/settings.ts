@@ -53,7 +53,7 @@ export function validateFieldTimeSettings(raw: unknown): FieldTimeSettings {
       "Rounding is not declared — set rounding to none, 6 or 15 minutes in Timesheets setup before anyone clocks in",
     );
   }
-  const mode = rec.roundingMode ?? "nearest";
+  const mode = rec.roundingMode;
   if (mode !== "nearest" && mode !== "up" && mode !== "down") {
     throw new FieldTimeError(
       "rounding_not_declared",
@@ -75,19 +75,27 @@ export function validateFieldTimeSettings(raw: unknown): FieldTimeSettings {
     );
   }
   const tol = rec.equipmentToleranceHours;
-  if (tol !== undefined && (typeof tol !== "string" || canonicalNonNegativeDecimal(tol, 4) === null)) {
+  if (typeof tol !== "string" || canonicalNonNegativeDecimal(tol, 4) === null) {
     throw new FieldTimeError(
       "equipment_tolerance_not_declared",
       "Equipment tolerance is not a valid hours value — set it in Timesheets setup before posting equipment time",
     );
   }
+  if (typeof rec.signatureRequired !== "boolean") {
+    throw new FieldTimeError("signature_rule_not_declared",
+      "The signature rule is not declared — choose whether signatures are required in Timesheets setup before submitting crew time");
+  }
+  if (typeof rec.photoRequired !== "boolean") {
+    throw new FieldTimeError("photo_rule_not_declared",
+      "The photo rule is not declared — choose whether photos are required in Timesheets setup before anyone clocks in");
+  }
   return {
     rounding: { incrementMinutes: increment, mode },
     unpaidBreakMinutes: unpaid,
     autoCloseHours: autoClose,
-    signatureRequired: rec.signatureRequired !== false,
-    equipmentToleranceHours: typeof tol === "string" ? tol : "0.5000",
-    photoRequired: rec.photoRequired === true,
+    signatureRequired: rec.signatureRequired,
+    equipmentToleranceHours: tol,
+    photoRequired: rec.photoRequired,
   };
 }
 

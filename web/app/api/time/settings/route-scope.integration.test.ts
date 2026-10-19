@@ -137,3 +137,22 @@ test("an unrestricted caller writes them; restricted callers still read them", a
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("cleared policy rules refuse without replacing the stored declaration", async () => {
+  const { org } = await fixture();
+  try {
+    state.allowedSubsidiaryIds = null;
+    assert.equal((await put(RULES)).status, 200);
+    for (const key of Object.keys(RULES)) {
+      for (const value of [null, undefined]) {
+        const response = await put({ ...RULES, [key]: value });
+        assert.equal(response.status, 422, `${key} must remain undeclared`);
+        assert.match((await response.json()).error, /Timesheets setup/);
+        assert.deepEqual(await storedRules(org.orgId), RULES, `${key} refusal stores no policy change`);
+      }
+    }
+  } finally {
+    state.allowedSubsidiaryIds = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});

@@ -1,7 +1,4 @@
-// P7: a saved full rule set persists through the route's store shape and
-// loads back through the clock gate (no field_time_not_configured). Lives
-// here — not in settings-body.test.ts — because the DB partition only runs
-// *.integration.test.ts, and a DB test anywhere else is skipped forever.
+// A saved full rule set resolves through the same native clock gate.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -50,6 +47,12 @@ test('a saved full rule set loads back through the clock gate', async () => {
       assert.equal(loaded.rounding.mode, 'nearest')
       assert.equal(loaded.unpaidBreakMinutes, 30)
       assert.equal(loaded.autoCloseHours, 16)
+      for (const key of ['roundingMode', 'equipmentToleranceHours', 'signatureRequired', 'photoRequired']) {
+        const incomplete = { ...parsed.data } as Record<string, unknown>
+        delete incomplete[key]
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{fieldTime}',${JSON.stringify(incomplete)}::jsonb) where id=${org.orgId}`)
+        await assert.rejects(loadFieldTimeSettings(org.orgId), /Timesheets setup/)
+      }
     } finally {
       await dropScratchOrg(org.orgId)
     }

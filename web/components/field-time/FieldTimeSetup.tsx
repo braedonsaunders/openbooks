@@ -14,9 +14,9 @@ export interface FieldTimeRuleSettings {
   roundingMode: string | null
   unpaidBreakMinutes: number | null
   autoCloseHours: number | null
-  signatureRequired: boolean
+  signatureRequired: boolean | null
   equipmentToleranceHours: string | null
-  photoRequired: boolean
+  photoRequired: boolean | null
 }
 
 export interface KioskRow {
@@ -45,30 +45,27 @@ interface EmployeeOption {
 export function FieldTimeSetup({
   initialSettings,
   kiosks,
-  employees = [],
+  employees,
   kioskLinkBase,
-  // Optional for direct renders (which stay fully editable, as before);
-  // the widget adapter resolves a missing flag to false, so only an
-  // explicit loader grant opens these sections in production.
-  canManageKiosks = true,
-  canEditPolicy = true,
+  canManageKiosks,
+  canEditPolicy,
 }: {
   initialSettings: FieldTimeRuleSettings
   kiosks: KioskRow[]
-  employees?: EmployeeOption[]
+  employees: EmployeeOption[]
   kioskLinkBase: string
   /**
    * Loader-resolved from the kiosks API's own authority (time.kiosk.manage
    * plus the fieldTime feature): without it the kiosk section hides
    * instead of offering register/revoke calls that would only 403.
    */
-  canManageKiosks?: boolean
+  canManageKiosks: boolean
   /**
    * Loader-resolved from subsidiary scope: the settings PUT needs
    * unrestricted scope, so a restricted manager reads the policy
    * with disabled forms instead of failing saves.
    */
-  canEditPolicy?: boolean
+  canEditPolicy: boolean
 }) {
   const t = useTranslations('timesheets')
   const common = useTranslations('common')
@@ -94,11 +91,11 @@ export function FieldTimeSetup({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           roundingIncrement: settings.roundingIncrement,
-          roundingMode: settings.roundingMode ?? 'nearest',
+          roundingMode: settings.roundingMode,
           unpaidBreakMinutes: settings.unpaidBreakMinutes,
           autoCloseHours: settings.autoCloseHours,
           signatureRequired: settings.signatureRequired,
-          equipmentToleranceHours: settings.equipmentToleranceHours ?? '0.5000',
+          equipmentToleranceHours: settings.equipmentToleranceHours,
           photoRequired: settings.photoRequired,
         }),
       })
@@ -239,7 +236,8 @@ export function FieldTimeSetup({
             </Select>
           </Field>
           <Field label={t('field.roundingMode')}>
-            <Select value={settings.roundingMode ?? 'nearest'} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, roundingMode: event.target.value }))}>
+            <Select value={settings.roundingMode ?? ''} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, roundingMode: event.target.value || null }))}>
+              <option value="">{t('field.notDeclared')}</option>
               <option value="nearest">{t('field.roundNearest')}</option>
               <option value="up">{t('field.roundUp')}</option>
               <option value="down">{t('field.roundDown')}</option>
@@ -255,14 +253,22 @@ export function FieldTimeSetup({
             <Input value={settings.equipmentToleranceHours ?? ''} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, equipmentToleranceHours: event.target.value.trim() || null }))} inputMode="decimal" placeholder="0.5" />
           </Field>
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={settings.signatureRequired} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, signatureRequired: event.target.checked }))} />
-          {t('field.signatureRequired')}
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={settings.photoRequired} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, photoRequired: event.target.checked }))} />
-          {t('field.photoRequiredSetting')}
-        </label>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label={t('field.signatureRequired')}>
+            <Select value={settings.signatureRequired === null ? '' : String(settings.signatureRequired)} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, signatureRequired: event.target.value === '' ? null : event.target.value === 'true' }))}>
+              <option value="">{t('field.notDeclared')}</option>
+              <option value="true">{common('labels.yes')}</option>
+              <option value="false">{common('labels.no')}</option>
+            </Select>
+          </Field>
+          <Field label={t('field.photoRequiredSetting')}>
+            <Select value={settings.photoRequired === null ? '' : String(settings.photoRequired)} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, photoRequired: event.target.value === '' ? null : event.target.value === 'true' }))}>
+              <option value="">{t('field.notDeclared')}</option>
+              <option value="true">{common('labels.yes')}</option>
+              <option value="false">{common('labels.no')}</option>
+            </Select>
+          </Field>
+        </div>
         {canEditPolicy ? (
           <Button disabled={busy} onClick={saveSettings}>
             {busy ? t('field.working') : t('field.saveRules')}

@@ -51,7 +51,7 @@ async function fixture() {
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
     features: { projects: false, timeTracking: true, fieldTime: true },
     timesheets: { requireApproval: true },
-    fieldTime: { roundingIncrement: 0, roundingMode: 'nearest', unpaidBreakMinutes: 0, autoCloseHours: 12, signatureRequired: false },
+    fieldTime: { roundingIncrement: 0, roundingMode: 'nearest', unpaidBreakMinutes: 0, autoCloseHours: 12, signatureRequired: false, equipmentToleranceHours: '0.5', photoRequired: false },
   })}::jsonb where id=${org.orgId}`)
   const own = randomUUID(), mate = randomUUID(), project = randomUUID()
   await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)

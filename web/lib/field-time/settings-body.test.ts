@@ -1,10 +1,4 @@
-// Run with:  TSX_TSCONFIG_PATH="$PWD/web/tsconfig.json" node --import tsx --test web/lib/field-time/settings-body.test.ts   (from repo root)
-//
-// P7: PUT /api/time/settings rejected an explicit null with an unnamed 400
-// ("Invalid input: expected number, received null") before the domain
-// validator could name the missing rule. The transport schema now accepts
-// null (null == absent) and validateFieldTimeSettings refuses each missing
-// required rule by name with its remedy.
+// Cleared rules reach domain validation and retain their named refusal and remedy.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -37,12 +31,16 @@ test('a complete rule set parses and validates', () => {
 })
 
 for (const [key, code, remedy] of [
+  ['roundingMode', 'rounding_not_declared', /Rounding mode is not declared.*Timesheets setup/],
+  ['equipmentToleranceHours', 'equipment_tolerance_not_declared', /Equipment tolerance.*Timesheets setup/],
+  ['signatureRequired', 'signature_rule_not_declared', /signature rule is not declared.*Timesheets setup/],
+  ['photoRequired', 'photo_rule_not_declared', /photo rule is not declared.*Timesheets setup/],
   ['roundingIncrement', 'rounding_not_declared', /Rounding is not declared.*Timesheets setup/],
   ['unpaidBreakMinutes', 'break_rule_not_declared', /unpaid break rule is not declared.*Timesheets setup/],
   ['autoCloseHours', 'auto_close_not_declared', /Auto-close is not declared.*Timesheets setup/],
 ] as const) {
-  test(`an explicit null ${key} is refused by name with a remedy, not an unnamed type error`, () => {
-    const parsed = fieldTimeSettingsBody.safeParse({ ...fullRules, [key]: null })
+  for (const value of [null, undefined]) test(`an undeclared ${key} (${value}) retains its named refusal and remedy`, () => {
+    const parsed = fieldTimeSettingsBody.safeParse({ ...fullRules, [key]: value })
     assert.equal(parsed.success, true, 'null must pass the transport schema to the validator')
     assert.throws(
       () => validateFieldTimeSettings(normalizeFieldTimeSettingsBody(parsed.data)),
@@ -52,16 +50,12 @@ for (const [key, code, remedy] of [
   })
 }
 
-test('null mode and tolerance fall through to the documented defaults', () => {
-  const parsed = fieldTimeSettingsBody.safeParse({
-    ...fullRules,
-    roundingMode: null,
-    equipmentToleranceHours: null,
-  })
-  assert.equal(parsed.success, true)
-  const settings = validateFieldTimeSettings(normalizeFieldTimeSettingsBody(parsed.data))
-  assert.equal(settings.rounding.mode, 'nearest')
-  assert.equal(settings.equipmentToleranceHours, '0.5000')
+test('explicit zero tolerance and disabled evidence rules remain declared', () => {
+  const settings = validateFieldTimeSettings({ ...fullRules, equipmentToleranceHours: '0',
+    signatureRequired: false, photoRequired: false })
+  assert.equal(settings.equipmentToleranceHours, '0')
+  assert.equal(settings.signatureRequired, false)
+  assert.equal(settings.photoRequired, false)
 })
 
 test('a wrong-typed key still fails at the boundary carrying its field path', () => {

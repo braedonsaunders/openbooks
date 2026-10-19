@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
-// P7: the /time/setup rules form must carry every visible choice into the
-// PUT /api/time/settings payload — a control whose selection never reaches
-// state saves a null, which the route used to refuse as an unnamed 400.
-// This drives the real component through the full visible rule set
-// (rounding 15, break 30, auto-close 16, tolerance 0.5, signature on) and
-// asserts the captured request body carries every rule.
+// The rules form submits declared choices and preserves missing policy values.
 
 // jsdom first: the ui Select/SearchSelect read browser globals at render.
 await bootJsdomEnvironment({ url: "http://localhost:4800/time/setup", matchMediaMatches: false });
@@ -45,6 +40,17 @@ function buttons(): HTMLButtonElement[] {
   return [...document.querySelectorAll("button")] as HTMLButtonElement[];
 }
 
+async function pickRule(host: HTMLElement, labelText: string, choice: string) {
+  const label = [...host.querySelectorAll('label')].find(node => node.textContent === labelText);
+  assert.ok(label, `the ${labelText} label renders`);
+  const trigger = [...host.querySelectorAll('button')].find(node => node.getAttribute('aria-labelledby')?.split(' ').includes(label.id));
+  assert.ok(trigger, `the ${labelText} control is labelled`);
+  await act(async () => { trigger.click(); await tick(); await tick(); });
+  const option = [...document.querySelectorAll('button[role="option"]')].find(node => node.textContent?.trim() === choice) as HTMLButtonElement | undefined;
+  assert.ok(option, `the ${choice} option renders`);
+  await act(async () => { option.click(); await tick(); });
+}
+
 test("filling every visible rule sends the complete rule set", async () => {
   const seen: { url: unknown; body: unknown }[] = [];
   const prior = globalThis.fetch;
@@ -69,6 +75,9 @@ test("filling every visible rule sends the complete rule set", async () => {
               equipmentToleranceHours: null,
               photoRequired: false,
             }}
+            employees={[]}
+            canManageKiosks={true}
+            canEditPolicy={true}
             kiosks={[]}
             kioskLinkBase="/kiosk"
           />
@@ -116,15 +125,8 @@ test("filling every visible rule sends the complete rule set", async () => {
     await setInput("16", "16");
     await setInput("0.5", "0.5");
 
-    // Signature on.
-    const signature = [...document.querySelectorAll('input[type="checkbox"]')].find((el) =>
-      el.closest("label")?.textContent?.includes(msg("signatureRequired")),
-    ) as HTMLInputElement;
-    assert.ok(signature, "the signature checkbox must render");
-    await act(async () => {
-      signature.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await tick();
-    });
+    await pickRule(host, msg('roundingMode'), msg('roundNearest'));
+    await pickRule(host, msg('signatureRequired'), messages.common.labels.yes);
 
     const save = buttons().find((b) => b.textContent?.trim() === msg("saveRules"));
     assert.ok(save, "the save button must render");
@@ -174,6 +176,8 @@ test("worker PIN selection posts the selected employee and kiosk rows can be ret
               equipmentToleranceHours: null,
               photoRequired: false,
             }}
+            canManageKiosks={true}
+            canEditPolicy={true}
             kiosks={[{
               id: "kiosk-1",
               name: "West gate",
@@ -235,5 +239,72 @@ test("worker PIN selection posts the selected employee and kiosk rows can be ret
     await act(async () => root.unmount());
   } finally {
     globalThis.fetch = prior;
+  }
+});
+
+test("a blank policy stays undeclared through save and shows the native remedy", async () => {
+  const { validateFieldTimeSettings } = await import('@openbooks/engine/hrm/field-time/settings');
+  const seen: Record<string, unknown>[] = [];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    seen.push(body);
+    try {
+      validateFieldTimeSettings(body);
+      return new Response('{}', { status: 200 });
+    } catch (error) {
+      assert.ok(error instanceof Error);
+      return new Response(JSON.stringify({ error: error.message }), { status: 422, headers: { 'content-type': 'application/json' } });
+    }
+  }) as typeof fetch;
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <FieldTimeSetup initialSettings={{ roundingIncrement: 15, roundingMode: null,
+          unpaidBreakMinutes: 0, autoCloseHours: 16, signatureRequired: null,
+          equipmentToleranceHours: null, photoRequired: null }}
+          kiosks={[]} employees={[]} kioskLinkBase="/kiosk" canManageKiosks={false} canEditPolicy={true} />
+      </NextIntlClientProvider>);
+      await tick();
+    });
+    const save = [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === msg('saveRules'));
+    assert.ok(save);
+    await act(async () => { save.click(); await tick(); await tick(); });
+    assert.equal(seen.length, 1);
+    for (const key of ['roundingMode', 'equipmentToleranceHours', 'signatureRequired', 'photoRequired']) assert.equal(seen[0]?.[key], null);
+    assert.match(host.querySelector('[role="alert"]')?.textContent ?? '', /Rounding mode is not declared.*Timesheets setup/);
+    assert.equal(host.textContent?.includes(msg('rulesSaved')), false);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    globalThis.fetch = prior;
+  }
+});
+
+test("a reader receives disabled rules and no kiosk management controls", async () => {
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <FieldTimeSetup initialSettings={{ roundingIncrement: 15, roundingMode: 'nearest',
+          unpaidBreakMinutes: 0, autoCloseHours: 16, signatureRequired: false,
+          equipmentToleranceHours: '0', photoRequired: false }}
+          kiosks={[]} employees={[]} kioskLinkBase="/kiosk" canManageKiosks={false} canEditPolicy={false} />
+      </NextIntlClientProvider>);
+      await tick();
+    });
+    assert.equal(host.textContent?.includes(msg('saveRules')), false);
+    assert.equal(host.textContent?.includes(msg('registerKiosk')), false);
+    assert.equal(host.textContent?.includes(msg('setPin')), false);
+    for (const input of host.querySelectorAll('input')) assert.ok(input.disabled);
+    for (const button of host.querySelectorAll('button[aria-haspopup="listbox"]')) assert.equal(button.getAttribute('disabled'), '');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
   }
 });

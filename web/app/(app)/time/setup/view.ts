@@ -33,9 +33,9 @@ export interface FieldSetupData {
     roundingMode: string | null
     unpaidBreakMinutes: number | null
     autoCloseHours: number | null
-    signatureRequired: boolean
+    signatureRequired: boolean | null
     equipmentToleranceHours: string | null
-    photoRequired: boolean
+    photoRequired: boolean | null
   }
   kiosks: {
     id: string
@@ -109,9 +109,9 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
       roundingMode: typeof settings?.roundingMode === 'string' ? (settings.roundingMode as string) : null,
       unpaidBreakMinutes: typeof settings?.unpaidBreakMinutes === 'number' ? (settings.unpaidBreakMinutes as number) : null,
       autoCloseHours: typeof settings?.autoCloseHours === 'number' ? (settings.autoCloseHours as number) : null,
-      signatureRequired: settings?.signatureRequired !== false,
+      signatureRequired: typeof settings?.signatureRequired === 'boolean' ? settings.signatureRequired : null,
       equipmentToleranceHours: typeof settings?.equipmentToleranceHours === 'string' ? (settings.equipmentToleranceHours as string) : null,
-      photoRequired: settings?.photoRequired === true,
+      photoRequired: typeof settings?.photoRequired === 'boolean' ? settings.photoRequired : null,
     },
     kiosks,
     kioskLinkBase: '/kiosk',

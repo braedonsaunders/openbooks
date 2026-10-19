@@ -22,11 +22,9 @@ export const fieldTimeSettingsBody = z.object({
 export type FieldTimeSettingsBody = z.output<typeof fieldTimeSettingsBody>
 
 /**
- * Normalize explicit nulls to absent before domain validation. Defaulted
- * rules (rounding mode, equipment tolerance) fall through to the
- * validator's documented defaults; required rules stay missing so the
- * validator refuses each by name with its remedy instead of this layer
- * guessing. A cleared rule therefore behaves exactly like a never-set one.
+ * Normalize explicit nulls to absent before domain validation. Every rule
+ * stays undeclared until supplied; a cleared rule receives the same named
+ * refusal and remedy as a never-set rule.
  */
 export function normalizeFieldTimeSettingsBody(body: FieldTimeSettingsBody): Record<string, unknown> {
   return Object.fromEntries(
