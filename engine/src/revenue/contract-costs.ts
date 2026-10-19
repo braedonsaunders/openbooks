@@ -36,7 +36,7 @@ import {
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
 } from "../organization/org-feature-lock.ts";
-import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
+import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { arePeriodModulesOpen } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
@@ -97,15 +97,16 @@ async function requireCostAuthority(
   actorId: string,
   subsidiaryId: string | null,
   permission: "contract_costs.manage" | "contract_costs.approve",
-): Promise<void> {
-  let allowed = false;
+): Promise<ReadonlySet<string> | null> {
+  let allowed: ReadonlySet<string> | null = null;
+  let granted = false;
   try {
-    await lockActorCommandAuthority(runner, orgId, actorId, subsidiaryId, permission);
-    allowed = true;
+    allowed = await lockActorCommandAuthority(runner, orgId, actorId, subsidiaryId, permission);
+    granted = true;
   } catch {
-    allowed = false;
+    granted = false;
   }
-  if (!allowed) {
+  if (!granted) {
     throw new ContractCostError(
       `This action requires the ${permission} permission.`,
       {
@@ -115,6 +116,7 @@ async function requireCostAuthority(
       },
     );
   }
+  return allowed;
 }
 
 interface ContractCostPolicy {
@@ -341,8 +343,72 @@ async function postingBookId(runner: SqlExecutor, orgId: string): Promise<string
   return id;
 }
 
-async function postingSubsidiaryId(runner: SqlExecutor, orgId: string): Promise<string> {
-  return defaultPostingSubsidiaryId(await loadSubsidiaryContext(runner, orgId));
+async function postingSubsidiaryId(
+  runner: SqlExecutor,
+  orgId: string,
+  context: { revenueContractId?: string | null; customerPartyId?: string | null; repPartyId?: string | null },
+): Promise<string> {
+  let subsidiaryId: string | null | undefined;
+  if (context.revenueContractId) {
+    const contract = (await runner.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from revenue_contracts
+       where org_id = ${orgId} and id = ${context.revenueContractId}
+       for share`)).rows[0];
+    if (!contract) {
+      throw new ContractCostError("The revenue contract does not exist in this organization.", {
+        code: "contract_cost_contract_unknown",
+        remedy: "Select a revenue contract from this organization, then submit the cost again.",
+      });
+    }
+    subsidiaryId = contract.subsidiary_id;
+  } else {
+    const partyId = context.customerPartyId ?? context.repPartyId;
+    if (!partyId) {
+      throw new ContractCostError("The cost has no customer or sales representative to determine its legal entity.", {
+        code: "contract_cost_subsidiary_missing",
+        remedy: "Select the customer or sales representative before recording an unlinked cost.",
+      });
+    }
+    const party = (await runner.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from parties
+       where org_id = ${orgId} and id = ${partyId}
+       for share`)).rows[0];
+    if (!party) {
+      throw new ContractCostError("The customer or sales representative does not exist in this organization.", {
+        code: "contract_cost_party_unknown",
+        remedy: "Select a customer or sales representative from this organization, then submit the cost again.",
+      });
+    }
+    subsidiaryId = party.subsidiary_id;
+  }
+  return subsidiaryId ?? (await loadSubsidiaryContext(runner, orgId)).rootId;
+}
+
+async function assetPostingSubsidiaryId(
+  runner: SqlExecutor,
+  orgId: string,
+  assetId: string,
+): Promise<string> {
+  const asset = (await runner.execute<{
+    revenue_contract_id: string | null;
+    customer_party_id: string | null;
+    rep_party_id: string | null;
+  }>(sql`
+    select revenue_contract_id, customer_party_id, rep_party_id
+      from contract_cost_assets
+     where org_id = ${orgId} and id = ${assetId}
+     for update`)).rows[0];
+  if (!asset) {
+    throw new ContractCostError("The contract cost asset does not exist in this organization.", {
+      code: "contract_cost_asset_unknown",
+      remedy: "Open the asset from Contract costs; it may belong to another organization.",
+    });
+  }
+  return postingSubsidiaryId(runner, orgId, {
+    revenueContractId: asset.revenue_contract_id,
+    customerPartyId: asset.customer_party_id,
+    repPartyId: asset.rep_party_id,
+  });
 }
 
 async function coveringPeriodId(runner: SqlExecutor, orgId: string, date: string): Promise<string> {
@@ -626,7 +692,8 @@ export async function capitalizeContractCost(
   validateCapitalizeInput(input);
   return withOrgTransaction(orgId, async () => {
     await assertFeatureOn(db, orgId);
-    const subsidiaryId = await postingSubsidiaryId(db, orgId);
+    await requireCostAuthority(db, orgId, actorId, null, "contract_costs.manage");
+    const subsidiaryId = await postingSubsidiaryId(db, orgId, input);
     await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.manage");
     return capitalizeOnRunner(db, orgId, actorId, subsidiaryId, input);
   });
@@ -1031,8 +1098,7 @@ export async function runContractCostAmortization(input: {
   const { orgId, actorId, periodId } = input;
   return withOrgTransaction(orgId, async () => {
     await assertFeatureOn(db, orgId);
-    const subsidiaryId = await postingSubsidiaryId(db, orgId);
-    await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.manage");
+    const allowedSubsidiaryIds = await requireCostAuthority(db, orgId, actorId, null, "contract_costs.manage");
     const period = (await db.execute<{
       starts_on: string;
       ends_on: string;
@@ -1046,15 +1112,22 @@ export async function runContractCostAmortization(input: {
       });
     }
     const bookId = await postingBookId(db, orgId);
+    const rootId = (await loadSubsidiaryContext(db, orgId)).rootId;
     const result: RunAmortizationResult = { posted: 0, skipped: 0, totalMinor: "0", entries: [], problems: [] };
     let total = 0n;
-    const candidates = (await db.execute<{ id: string }>(sql`
-      select id from contract_cost_assets
-       where org_id = ${orgId} and status = 'active'
-         and revenue_contract_id is not null
-         and amort_start_on <= ${period.ends_on} and amort_end_on >= ${period.starts_on}`)).rows;
-    for (const { id: assetId } of candidates) {
+    const candidates = (await db.execute<{ id: string; revenue_contract_id: string }>(sql`
+      select asset.id, asset.revenue_contract_id
+        from contract_cost_assets asset
+        join revenue_contracts contract
+          on contract.org_id = asset.org_id and contract.id = asset.revenue_contract_id
+       where asset.org_id = ${orgId} and asset.status = 'active'
+         and asset.amort_start_on <= ${period.ends_on} and asset.amort_end_on >= ${period.starts_on}
+         ${subsidiaryVisibleFilter(sql`coalesce(contract.subsidiary_id, ${rootId}::uuid)`, allowedSubsidiaryIds)}
+       for update of asset`)).rows;
+    for (const { id: assetId, revenue_contract_id: revenueContractId } of candidates) {
       try {
+        const subsidiaryId = await postingSubsidiaryId(db, orgId, { revenueContractId });
+        await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.manage");
         const posted = await amortizeAssetInPeriod(
           db, orgId, actorId, assetId, periodId, period.starts_on, bookId, subsidiaryId,
         );
@@ -1076,8 +1149,20 @@ export async function runContractCostAmortization(input: {
       }
     }
     const unlinked = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from contract_cost_assets
-       where org_id = ${orgId} and status = 'active' and revenue_contract_id is null`)).rows[0];
+      select count(*)::text as n
+        from contract_cost_assets asset
+        left join parties customer
+          on customer.org_id = asset.org_id and customer.id = asset.customer_party_id
+        left join parties rep
+          on rep.org_id = asset.org_id and rep.id = asset.rep_party_id
+       where asset.org_id = ${orgId} and asset.status = 'active' and asset.revenue_contract_id is null
+         ${allowedSubsidiaryIds === null ? sql`` : sql`
+         and (customer.id is not null or rep.id is not null)
+         and case when customer.id is not null
+                  then coalesce(customer.subsidiary_id, ${rootId}::uuid)
+                  else coalesce(rep.subsidiary_id, ${rootId}::uuid)
+             end = any(${`{${[...allowedSubsidiaryIds].join(",")}}`}::uuid[])
+         `}`)).rows[0];
     if (unlinked && unlinked.n !== "0") {
       result.problems.push(
         `${unlinked.n} capitalized cost(s) are not linked to a revenue contract and were not amortized — link them from Contract costs → Needs attention.`,
@@ -1240,7 +1325,8 @@ export async function recognizeContractCostImpairment(input: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertFeatureOn(db, orgId);
-    const subsidiaryId = await postingSubsidiaryId(db, orgId);
+    await requireCostAuthority(db, orgId, actorId, null, "contract_costs.approve");
+    const subsidiaryId = await assetPostingSubsidiaryId(db, orgId, assetId);
     await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.approve");
     const locked = (await db.execute<{ id: string }>(sql`
       select id from contract_cost_assets
@@ -1363,7 +1449,10 @@ export async function linkContractCostAsset(input: {
   const { orgId, actorId, assetId, revenueContractId } = input;
   return withOrgTransaction(orgId, async () => {
     await assertFeatureOn(db, orgId);
-    const subsidiaryId = await postingSubsidiaryId(db, orgId);
+    await requireCostAuthority(db, orgId, actorId, null, "contract_costs.manage");
+    const sourceSubsidiaryId = await assetPostingSubsidiaryId(db, orgId, assetId);
+    await requireCostAuthority(db, orgId, actorId, sourceSubsidiaryId, "contract_costs.manage");
+    const subsidiaryId = await postingSubsidiaryId(db, orgId, { revenueContractId });
     await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.manage");
     const locked = (await db.execute<{
       status: string;
@@ -1582,8 +1671,7 @@ export async function importCommissionCosts(input: {
   const { orgId, actorId, rows } = input;
   return withOrgTransaction(orgId, async () => {
     await assertFeatureOn(db, orgId);
-    const subsidiaryId = await postingSubsidiaryId(db, orgId);
-    await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.manage");
+    await requireCostAuthority(db, orgId, actorId, null, "contract_costs.manage");
     const out: CommissionImportResult[] = [];
     for (const row of rows) {
       try {
@@ -1595,6 +1683,12 @@ export async function importCommissionCosts(input: {
                where org_id = ${orgId} and contract_number = ${row.contractNumber}`)).rows[0];
             contractId = found?.id ?? null;
           }
+          const subsidiaryId = await postingSubsidiaryId(db, orgId, {
+            revenueContractId: contractId,
+            customerPartyId: row.customerPartyId,
+            repPartyId: row.repPartyId,
+          });
+          await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.manage");
           // Unknown or missing contract references become unlinked queue
           // assets inside the shared path — never a dropped row.
           return capitalizeOnRunner(db, orgId, actorId, subsidiaryId, {

@@ -16,6 +16,7 @@ import {
   assetCarryingMinor,
   capitalizeContractCost,
   contractCostAttentionItems,
+  ContractCostError,
   importCommissionCosts,
   linkContractCostAsset,
   projectAmortizationSchedule,
@@ -163,6 +164,80 @@ async function entryBalance(entryId: string): Promise<{ lines: number; balanced:
        and je.status in ('posted', 'reversed')`)).rows[0]!;
   return { lines: Number(rows.lines), balanced: rows.balanced };
 }
+
+test("contract-cost capitalization and amortization authorize and post in the contract subsidiary", { skip: !DB }, async () => {
+  const world = await setupCostWorld();
+  try {
+    const subsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${subsidiaryId}, ${world.org.orgId}, ${world.org.subsidiaryId}, 'Contract Cost Branch', 'CAD', 'CA')
+    `);
+    const contractId = await seedContract(world, {
+      number: "C-ENTITY-COST",
+      startsOn: "2026-07-01",
+      endsOn: "2026-09-30",
+    });
+    await db.execute(sql`
+      update revenue_contracts set subsidiary_id = ${subsidiaryId}
+       where org_id = ${world.org.orgId} and id = ${contractId}
+    `);
+    await db.execute(sql`
+      update app_roles
+         set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [world.org.subsidiaryId] })}::jsonb
+       where org_id = ${world.org.orgId} and key = 'cc_manager'
+    `);
+
+    const input = {
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      revenueContractId: contractId,
+      repPartyId: world.repPartyId,
+      customerPartyId: world.org.customerId,
+      costType: "commission" as const,
+      amountMinor: 90000n,
+      currency: "CAD",
+      capitalizedOn: "2026-07-15",
+      method: "straight_line" as const,
+      originalExpenseAccountId: world.commissionExpenseAccountId,
+      source: { kind: "manual" as const },
+    };
+    await assert.rejects(capitalizeContractCost(input), (error: unknown) => {
+      assert.ok(error instanceof ContractCostError);
+      assert.equal(error.status, 403);
+      assert.equal(error.code, "contract_cost_forbidden");
+      return true;
+    });
+
+    await db.execute(sql`
+      update app_roles
+         set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [subsidiaryId] })}::jsonb
+       where org_id = ${world.org.orgId} and key = 'cc_manager'
+    `);
+    const capitalized = await capitalizeContractCost(input);
+    assert.ok(capitalized.capitalizeEntryId);
+    const capitalization = (await db.execute<{ subsidiary_id: string }>(sql`
+      select subsidiary_id from journal_entries where org_id = ${world.org.orgId} and id = ${capitalized.capitalizeEntryId}
+    `)).rows[0];
+    assert.equal(capitalization?.subsidiary_id, subsidiaryId);
+
+    const periods = await seedPeriods(world.org.orgId, ["2026-07"]);
+    const amortization = await runContractCostAmortization({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      periodId: periods.get("2026-07")!,
+    });
+    assert.equal(amortization.posted, 1);
+    const posted = (await db.execute<{ subsidiary_id: string }>(sql`
+      select subsidiary_id
+        from journal_entries
+       where org_id = ${world.org.orgId} and id = ${amortization.entries[0]!.entryId}
+    `)).rows[0];
+    assert.equal(posted?.subsidiary_id, subsidiaryId);
+  } finally {
+    await dropScratchOrgReporting(world.org.orgId);
+  }
+});
 
 test(
   "contract cost carrying uses the primary book and unlinked assets retain their source amount",
