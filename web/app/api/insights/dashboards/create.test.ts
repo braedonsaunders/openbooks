@@ -188,6 +188,7 @@ const mockSources = new Map<string, string>([
     // A faithful editor gate: real gates always carry the effective
     // permission set the visibility predicate reads.
     `export async function getAuthz() { return null }
+     export function can(authz, permission) { return authz.permissions?.has('*') || authz.permissions?.has(permission) || false }
      export async function guardPermission(permission) {
        if (permission === 'insights.create') return {
          user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
@@ -198,10 +199,16 @@ const mockSources = new Map<string, string>([
      }`,
   ],
   ['mock:get-authz', `export async function getAuthz() { return null }`],
+  ['mock:features', `
+    export async function isFeatureEnabled() { return true }
+    export async function orgFeatureState() { return {} }
+    export function featureEnabled() { return true }
+  `],
 ])
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@/lib/features', 'mock:features'],
   ['../../../../lib/authz', 'mock:authz'],
   ['@/lib/authz', 'mock:authz'],
 ])

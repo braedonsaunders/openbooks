@@ -14,6 +14,7 @@ const authzState: AuthzState = { authz: null }
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.insights-home-resolver-test')]
   export async function getAuthz() { return state.authz }
+  export function can(authz, permission) { return authz?.permissions?.has('*') || authz?.permissions?.has(permission) || false }
 `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

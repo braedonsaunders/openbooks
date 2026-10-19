@@ -173,8 +173,9 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `export async function getAuthz() { return null }
+     export function can(authz, permission) { return authz.permissions?.has('*') || authz.permissions?.has(permission) || false }
      export async function guardPermission(permission) {
-       if (permission === 'insights.create') return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
+       if (permission === 'insights.create') return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, permissions: new Set(['insights.create']) }
        return new Response(null, { status: 403 })
      }`,
   ],
@@ -279,6 +280,16 @@ test('card create validates viz type and query before inserting', async () => {
   assert.deepEqual([badQuery.status, ((await badQuery.json()) as { issues?: { path: string }[] }).issues?.[0]?.path], [400, 'query'])
 
   assert.equal(state.rows.size, 0, 'validation failures must not insert')
+})
+
+test('card create refuses a payroll source without payroll access before inserting', async () => {
+  reset()
+  const response = await post('00000000-0000-4000-8000-00000000d013', {
+    ...BODY,
+    query: { source: 'pay_stubs', measures: [], dimensions: [] },
+  })
+  assert.equal(response.status, 403)
+  assert.equal(state.transactionQueries.length, 0, 'source authorization precedes card persistence')
 })
 
 test('card creation replays only the exact request for an idempotency key', async () => {

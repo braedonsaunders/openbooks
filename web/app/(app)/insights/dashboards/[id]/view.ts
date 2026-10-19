@@ -7,7 +7,7 @@ import { db } from '@openbooks/engine/platform/db'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { loadDashboardEmbed } from '../../../../api/insights/_lib'
+import { insightSourceFilter, loadDashboardEmbed, visibleInsightSourceKeys } from '../../../../api/insights/_lib'
 import type { DashboardBuilder } from './DashboardBuilder'
 
 /**
@@ -52,6 +52,7 @@ export async function loadInsightsDashboard(id: string): Promise<InsightsDashboa
   if (!embed) notFound()
 
   // Published cards available to drop onto the board.
+  const sourceFilter = insightSourceFilter(await visibleInsightSourceKeys(authz))
   const available = await db.execute<{
     id: string
     name: string
@@ -61,6 +62,7 @@ export async function loadInsightsDashboard(id: string): Promise<InsightsDashboa
     select id, name, description, viz_type
       from insight_cards
      where org_id = ${orgId} and status = 'published' and ${insightVisibilitySql(authz)}
+       and ${sourceFilter}
      order by name asc
   `)
 
