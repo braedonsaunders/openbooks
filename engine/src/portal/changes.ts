@@ -391,7 +391,7 @@ export async function acceptSaveOffer(
       select id, document_number
         from documents
        where org_id = ${orgId} and party_id = ${partyId} and status = 'draft'
-         and kind in ('customer_invoice', 'sales_order', 'estimate')
+         and kind in ('customer_invoice', 'sales_order', 'quote')
        order by created_at desc
        limit 1
       for update

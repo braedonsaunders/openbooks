@@ -140,13 +140,17 @@ test('pause, resume and cancel guard the subscription lifecycle', { skip: !DB },
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
 
-async function seedDraftInvoice(org: ScratchOrg, status = 'draft'): Promise<string> {
+async function seedDraftInvoice(
+  org: ScratchOrg,
+  status = 'draft',
+  kind: 'customer_invoice' | 'quote' = 'customer_invoice',
+): Promise<string> {
   const documentId = randomUUID()
   const lineId = randomUUID()
   await withBypassContext(() => db.execute(sql`
     insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
                            currency, status, subtotal, tax_total, total, custom)
-    values (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-${documentId.slice(0, 8)}`}, ${org.customerId},
+    values (${documentId}, ${org.orgId}, ${kind}, ${`${kind === 'quote' ? 'EST' : 'INV'}-${documentId.slice(0, 8)}`}, ${org.customerId},
             ${org.subsidiaryId}, ${org.date}, 'CAD', ${status}, '200', '0', '200', '{}'::jsonb)`))
   await withBypassContext(() => db.execute(sql`
     insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price,
@@ -156,7 +160,7 @@ async function seedDraftInvoice(org: ScratchOrg, status = 'draft'): Promise<stri
   return documentId
 }
 
-test('cancel save offer applies the promotion to the open draft', { skip: !DB }, async () => {
+test('cancel save offer applies the promotion to an open draft quote', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const { subscriptionId, linkId } = await seedSubscription(org)
@@ -172,7 +176,7 @@ test('cancel save offer applies the promotion to the open draft', { skip: !DB },
     }))
     await assert.rejects(acceptSaveOffer(org.orgId, org.customerId, linkId, { subscriptionId, offerId: 'keep-20' }),
       (error: unknown) => error instanceof PortalRefusal && error.code === 'no_draft_invoice' && error.status === 409)
-    const draftId = await seedDraftInvoice(org)
+    const draftId = await seedDraftInvoice(org, 'draft', 'quote')
     const accepted = await acceptSaveOffer(org.orgId, org.customerId, linkId, { subscriptionId, offerId: 'keep-20' })
     assert.equal(accepted.kind, 'discount')
     assert.equal(accepted.promotionCode, 'SAVE20')
