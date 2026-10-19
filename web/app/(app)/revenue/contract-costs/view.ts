@@ -207,16 +207,12 @@ async function loadAssetPayload(
       amortEndOn: row.amort_end_on,
       method: row.method,
       status: row.status,
-<<<<<<< HEAD
       carrying: minorUnitsToCanonical(
         row.contract_id === null && row.capitalize_entry_id === null
           ? BigInt(row.amount_minor)
-          : await assetCarryingMinor(db, orgId, assetId),
+          : await assetCarryingMinor(db, orgId, assetId, allowedSubsidiaryIds),
         exponent,
       ),
-=======
-      carrying: minorUnitsToCanonical(await assetCarryingMinor(db, orgId, assetId, allowedSubsidiaryIds), exponent),
->>>>>>> a46171893a (Scope accounting pickers and history to visible subsidiaries)
       capitalizeEntryId: row.capitalize_entry_id,
     },
     schedule: schedule.map((line) => ({

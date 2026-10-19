@@ -394,16 +394,10 @@ export async function assetCarryingMinor(
      where jl.org_id = ${orgId}
        and jl.contributor_kind = 'contract_cost_asset'
        and jl.contributor_ref = ${assetId}
-<<<<<<< HEAD
        and jl.currency = ${asset.currency}
-       and je.status in ('posted', 'reversed')`)).rows[0];
-  return BigInt(row?.carrying ?? "0");
-=======
-       and je.book_id = ${bookId}
        and je.status in ('posted', 'reversed')
        ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, allowedSubsidiaryIds)}`)).rows[0];
-  return toUnits(row?.carrying ?? "0") / 10n ** BigInt(4 - exponent);
->>>>>>> a46171893a (Scope accounting pickers and history to visible subsidiaries)
+  return BigInt(row?.carrying ?? "0");
 }
 
 async function writeAudit(
@@ -1711,16 +1705,12 @@ export async function contractCostAttentionItems(
     if (!row.revenue_contract_id) {
       const carrying = !row.capitalize_entry_id
         ? BigInt(row.amount_minor)
-        : await assetCarryingMinor(runner, orgId, row.id);
+        : await assetCarryingMinor(runner, orgId, row.id, allowedSubsidiaryIds);
       out.push({
         assetId: row.id,
         kind: "unlinked",
         contractNumber: null,
-<<<<<<< HEAD
         carryingMinor: carrying.toString(),
-=======
-        carryingMinor: (await assetCarryingMinor(runner, orgId, row.id, allowedSubsidiaryIds)).toString(),
->>>>>>> a46171893a (Scope accounting pickers and history to visible subsidiaries)
         capitalizedOn: row.capitalized_on,
       });
     } else if (row.contract_status === "cancelled") {
