@@ -32,7 +32,7 @@ import type {
   ReportRunLabels,
   ReportSummaryItem,
 } from '@openbooks/reports'
-import { resolveReportLayout } from '@openbooks/reports'
+import { perShareFractionDigits, resolveReportLayout } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { resolveLocale } from './locale'
 import { pdfMoney } from './report-pdf-detail'
@@ -134,7 +134,7 @@ export function pdfQuantity(v: string, locale: string, format: ReportNumberForma
   const text = v.trim()
   const match = EXACT_QUANTITY_TEXT.exec(text)
   if (!match) return v
-  const places = match[1]?.length ?? 0
+  const places = format === 'per_share' ? perShareFractionDigits(text) : match[1]?.length ?? 0
   return format === 'percent'
     ? formatExactPercent(text, locale, places)
     : formatDecimal(locale, text, { minimumFractionDigits: places, maximumFractionDigits: places })

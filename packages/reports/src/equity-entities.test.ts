@@ -5,7 +5,7 @@ import { REPORT_ENTITY_MAP } from './entities'
 import { BUILT_IN_REPORT_DEFINITION_MAP } from './built-ins'
 import { validateCustomQuery } from './validate'
 import { compileCustomQuery } from './custom-query'
-import { runCustomQuery } from './run'
+import { reportResultToCsv, runCustomQuery } from './run'
 
 const ORG = '00000000-0000-4000-8000-000000000001'
 
@@ -136,4 +136,19 @@ test('the securities register shows each security\'s status and outstanding quan
   assert.match(compiled.text, /r\.kind = 'reverse'/, 'reversed events no longer count')
   const status = entity.columns.find((column) => column.key === 'status')!
   assert.deepEqual(status.options, ['outstanding', 'exercised', 'settled', 'converted', 'transferred', 'forfeited', 'expired', 'cancelled', 'repurchased', 'repaid', 'void'])
+})
+
+test('the securities register types prices per share for the per-share rule, while CSV keeps the exact stored value', async () => {
+  const register = BUILT_IN_REPORT_DEFINITION_MAP['equity-securities-register']!
+  const plan = validateCustomQuery({ ...register.query, columns: ['security_number', 'quantity_issued', 'price_per_share', 'fair_value_per_unit'], asOf: '2025-10-01' })
+  const rows = [
+    { security_number: 'CS-0001', quantity_issued: '4500000', price_per_share: '0.0001000000', fair_value_per_unit: null },
+    { security_number: 'QAA2-0004', quantity_issued: '21092', price_per_share: '2.8446389082', fair_value_per_unit: '1.8814382581' },
+  ]
+  const result = await runCustomQuery({ query: async () => ({ rows }) }, plan, { orgId: ORG, entityMap: REPORT_ENTITY_MAP, asOf: '2025-10-01' })
+  const group = result.groups[0]!
+  assert.deepEqual(group.numberFormats, [null, 'number', 'per_share', 'per_share'])
+  assert.equal(group.rows[1]![2], '2.8446389082', 'the run keeps the exact price for every renderer')
+  const csv = reportResultToCsv(result)
+  assert.ok(csv.includes('2.8446389082') && csv.includes('1.8814382581'), 'CSV stays machine-readable at the stored precision')
 })

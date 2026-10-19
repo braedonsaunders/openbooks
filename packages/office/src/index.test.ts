@@ -8,6 +8,7 @@ import {
   SheetReadError,
   statementSheetToXlsx,
   xlsxMoneyCell,
+  xlsxQuantityCell,
   XlsxMoneyRefusal,
 } from './index'
 
@@ -284,4 +285,11 @@ test('report XLSX stores typed quantities as numeric cells in both writers, and 
     assert.equal(ws.getCell(5, 5).numFmt, '[$USD] #,##0.00;([$USD] #,##0.00)', `${name} money format`)
     assert.equal(ws.getCell(6, 6).value, '-12.5', `${name} untyped`)
   }
+})
+
+test('a per-share column reads under the per-share rule while its cell keeps the exact value', () => {
+  assert.deepEqual(xlsxQuantityCell('1.8814382581', 'per_share'), { value: 1.8814382581, numFmt: '#,##0.0000' })
+  assert.deepEqual(xlsxQuantityCell('0.0500000000', 'per_share'), { value: 0.05, numFmt: '#,##0.0000' })
+  assert.deepEqual(xlsxQuantityCell('0.0000100000', 'per_share'), { value: 0.00001, numFmt: '#,##0.00000' }, 'a par value four places would hide keeps the places it needs')
+  assert.deepEqual(xlsxQuantityCell('2.8446389082', 'number'), { value: 2.8446389082, numFmt: '#,##0.0000000000' }, 'other quantities keep their own places')
 })

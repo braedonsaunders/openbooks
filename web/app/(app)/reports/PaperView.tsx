@@ -6,7 +6,7 @@ import { useMoney } from '@/components/money-provider'
 import { formatExactPercent } from '@/lib/format'
 import { formatDecimal } from '@/lib/money-format'
 import { cn } from '@openbooks/ui'
-import type { ReportCellLink, ReportNumberFormat } from '@openbooks/reports'
+import { perShareFractionDigits, type ReportCellLink, type ReportNumberFormat } from '@openbooks/reports'
 import { ReportPaper } from './ReportPaper'
 import { ReportDrillLink } from './ReportDrillLink'
 import { TxnLink } from './TxnLink'
@@ -91,7 +91,7 @@ export function paperQuantity(value: PaperCell, locale: string, format: ReportNu
   const text = String(value).trim()
   const match = EXACT_QUANTITY.exec(text)
   if (!match) return null
-  const places = match[1]?.length ?? 0
+  const places = format === 'per_share' ? perShareFractionDigits(text) : match[1]?.length ?? 0
   return format === 'percent'
     ? formatExactPercent(text, locale, places)
     : formatDecimal(locale, text, { minimumFractionDigits: places, maximumFractionDigits: places })

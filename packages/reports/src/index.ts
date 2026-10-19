@@ -1,4 +1,5 @@
 export * from './types'
+export * from './per-share'
 export * from './csv-guard'
 export * from './aggregate-sql'
 export * from './fiscal-calendar'

@@ -56,3 +56,15 @@ test('the report paper prints quantity columns in the viewer locale and leaves u
   assert.match(german, />4\.500\.000</)
   assert.match(german, />42,4528\s%</)
 })
+
+test('per-share report cells read under the per-share rule on screen and in print', async () => {
+  const { paperQuantity } = await import('./PaperView')
+  const { pdfQuantity } = await import('../../../lib/report-pdf')
+  for (const render of [(value: string, locale: string) => paperQuantity(value, locale, 'per_share'), (value: string, locale: string) => pdfQuantity(value, locale, 'per_share')]) {
+    assert.equal(render('1.8814382581', 'en'), '1.8814')
+    assert.equal(render('0.0500000000', 'en'), '0.0500')
+    assert.equal(render('0.0001000000', 'en'), '0.0001')
+    assert.equal(render('0.0000100000', 'de'), '0,00001')
+    assert.equal(render('2.8446389082', 'de'), '2,8446')
+  }
+})

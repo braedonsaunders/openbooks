@@ -12,6 +12,7 @@ import {
   guardCsvCell,
   reportResultToCsv as _reportResultToCsv,
   type ReportMoneyCurrency,
+  perShareFractionDigits,
   type ReportNumberFormat,
   type ReportRunResult,
 } from '@openbooks/reports'
@@ -239,7 +240,8 @@ export function xlsxQuantityCell(
   const fraction = match[3] ?? ''
   const significant = `${match[2]}${fraction}`.replace(/^0+/, '').replace(/0+$/, '')
   if (significant.length > XLSX_SIGNIFICANT_DIGITS) return null
-  const places = fraction.length
+  // A per-share value reads under the per-share rule; the cell keeps the exact value.
+  const places = format === 'per_share' ? perShareFractionDigits(text.replace(/^\+/, '')) : fraction.length
   const pattern = `#,##0${places > 0 ? `.${'0'.repeat(places)}` : ''}`
   const value = Number(text)
   return { value: Object.is(value, -0) ? 0 : value, numFmt: format === 'percent' ? `${pattern}"%"` : pattern }

@@ -1299,7 +1299,8 @@ function formatBreakoutValue(v: unknown, bin?: ReportTemporalBin, fiscalStartMon
  *  identifiers such as a tax year or line number) read as numbers. */
 function columnNumberFormat(entity: ReportEntity, column: string): ReportNumberFormat | null {
   const meta = entityColumn(entity, column)
-  return meta?.kind === 'number' && meta.identifier !== true ? 'number' : null
+  if (meta?.kind !== 'number' || meta.identifier === true) return null
+  return meta.perShare === true ? 'per_share' : 'number'
 }
 
 /** A summarize measure's quantity typing. Counts and aggregates of measuring

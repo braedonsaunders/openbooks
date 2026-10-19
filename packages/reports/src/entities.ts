@@ -137,6 +137,12 @@ export type ReportEntityColumn = {
    * thousands separators, and spreadsheets keep it as written.
    */
   identifier?: boolean
+  /**
+   * True on a number column holding a price or value per share or unit: it
+   * reads under the per-share precision rule (per-share.ts) wherever it is
+   * shown, while CSV keeps the exact stored value.
+   */
+  perShare?: boolean
 }
 
 /** Server-owned normalization metadata for governed metric rows. The

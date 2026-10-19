@@ -250,7 +250,8 @@ export type ReportGroup = {
   /** Per-column quantity typing for the columns that are not money: 'number'
    *  cells are exact decimal strings (or numbers) that viewers and print
    *  format per locale and spreadsheets store as numeric cells; 'percent'
-   *  cells are percentage points (47.25 is 47.25%). Text in such a column (an
+   *  cells are percentage points (47.25 is 47.25%); 'per_share' cells are
+   *  exact decimals read under the per-share rule. Text in such a column (an
    *  undefined-formula explanation) stays text. CSV keeps the exact,
    *  machine-readable value. */
   numberFormats?: (ReportNumberFormat | null)[]
@@ -292,8 +293,12 @@ export type ReportRowScopeRule =
  */
 export type ReportMoneyCurrency = string | { column: number } | 'unstated'
 
-/** How a non-money quantity column reads; see ReportGroup.numberFormats. */
-export type ReportNumberFormat = 'number' | 'percent'
+/**
+ * How a non-money quantity column reads; see ReportGroup.numberFormats.
+ * 'per_share' columns (prices and values per share or unit) read under the
+ * per-share precision rule (per-share.ts) in viewers, print and spreadsheets.
+ */
+export type ReportNumberFormat = 'number' | 'percent' | 'per_share'
 
 /** One summary-band figure. `money` values format as currency; `number`
  *  values are exact decimal quantities formatted per locale. */
