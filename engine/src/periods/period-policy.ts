@@ -1,21 +1,31 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
+import { civilDateLabel, civilDateLabelSql } from "../platform/civil-date-labels.ts";
 
 export class CloseError extends Error {}
 
 /**
- * Canonical display label for an accounting period.
+ * Display label for an accounting period.
  *
- * Stored period names are free text: generated calendars write this label, but
- * periods created by an earlier seed or a custom calendar may carry other
- * names. Lists therefore label every period from its fiscal year and period
- * number and show the stored name alongside when it differs, so one fiscal
- * calendar reads in one format. Stored names are never rewritten.
+ * Every period reads as its canonical fiscal label followed by the calendar
+ * month (or months) its dates cover, formatted for the viewer's locale:
+ * `P12 FY2026 · Dec 2026`. Both parts derive from the period's own fiscal
+ * year, number and dates, so one calendar reads in one format across every
+ * fiscal year regardless of the free-text name a period was stored with
+ * (an earlier seed, a custom calendar or a rename). Stored names are never
+ * rewritten and remain searchable.
  */
 export interface PeriodLabelInput {
   fiscalYear: number;
   periodNumber: number;
   adjustment: boolean;
+}
+
+export interface PeriodDisplayInput extends PeriodLabelInput {
+  /** First civil day of the period, `YYYY-MM-DD`. */
+  startsOn: string;
+  /** Last civil day of the period, `YYYY-MM-DD`. */
+  endsOn: string;
 }
 
 /** `P05 FY2026` for a regular period, `FY2026 adjustment` for the adjustment period. */
@@ -25,35 +35,38 @@ export function canonicalPeriodLabel(input: PeriodLabelInput): string {
     : `P${String(input.periodNumber).padStart(2, "0")} FY${input.fiscalYear}`;
 }
 
-export interface PeriodDisplayName {
-  /** The canonical label every period in the list shares. */
-  label: string;
-  /** The stored name when it differs from the canonical label, else null. */
-  storedName: string | null;
+/** Separates the fiscal label from the month span. */
+const LABEL_SEPARATOR = " · ";
+/** Joins the first and last month of a period that spans calendar months. */
+const SPAN_SEPARATOR = " – ";
+
+/** `Dec 2026`, or `Dec 2025 – Jan 2026` for a period spanning calendar months. */
+export function periodMonthSpan(input: Pick<PeriodDisplayInput, "startsOn" | "endsOn">, locale: string): string {
+  const first = civilDateLabel(input.startsOn, locale, "monthYear");
+  const last = civilDateLabel(input.endsOn, locale, "monthYear");
+  return first === last ? first : `${first}${SPAN_SEPARATOR}${last}`;
 }
 
-export function periodDisplayName(input: PeriodLabelInput & { name: string }): PeriodDisplayName {
-  const label = canonicalPeriodLabel(input);
-  const stored = input.name.trim();
-  return { label, storedName: stored && stored !== label ? stored : null };
+/** The list text for a period: `P12 FY2026 · Dec 2026`. */
+export function periodDisplayLabel(input: PeriodDisplayInput, locale: string): string {
+  return `${canonicalPeriodLabel(input)}${LABEL_SEPARATOR}${periodMonthSpan(input, locale)}`;
 }
 
 /**
- * SQL form of canonicalPeriodLabel over an `accounting_periods` row aliased
- * `p`, so a label search matches what the list shows as well as the stored name.
+ * SQL form of periodDisplayLabel over an `accounting_periods` row aliased
+ * `p`, rendered from the same locale templates, so a label search matches
+ * the text the list shows in the viewer's locale.
  */
-export function canonicalPeriodLabelSql(): SQL {
-  return sql`(case when p.is_adjustment
+export function periodDisplayLabelSql(locale: string): SQL {
+  const first = civilDateLabelSql(sql`p.starts_on`, locale, "monthYear");
+  const last = civilDateLabelSql(sql`p.ends_on`, locale, "monthYear");
+  const canonical = sql`(case when p.is_adjustment
     then concat('FY', p.fiscal_year, ' adjustment')
     else concat('P', lpad(p.period_number::text, 2, '0'), ' FY', p.fiscal_year::text) end)`;
+  return sql`concat(${canonical}, ${LABEL_SEPARATOR}::text, case
+    when date_trunc('month', p.starts_on) = date_trunc('month', p.ends_on) then ${first}
+    else concat(${first}, ${SPAN_SEPARATOR}::text, ${last}) end)`;
 }
-
-/** The list text for a period: the canonical label, then the stored name when it differs. */
-export function periodDisplayLabel(input: PeriodLabelInput & { name: string }): string {
-  const { label, storedName } = periodDisplayName(input);
-  return storedName ? `${label} (${storedName})` : label;
-}
-
 
 /**
  * Typed details carried by every refusal to post into a closed

@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { formatCivilDate } from "@/lib/format";
 import { confirmDialog } from "@/lib/confirm";
 import {
   Alert,
@@ -423,6 +424,7 @@ function Metric({
 
 function ScopeStage(props: Props) {
   const t = useTranslations("close");
+  const locale = useLocale();
   const subsidiaryIds = props.run.scope?.subsidiaryIds ?? [];
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_.8fr]">
@@ -434,7 +436,7 @@ function ScopeStage(props: Props) {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Detail
             label={t("scope.period")}
-            value={`${props.run.period_name} · ${props.run.starts_on} → ${props.run.ends_on}`}
+            value={`${props.run.period_name} · ${formatCivilDate(props.run.starts_on, locale)} → ${formatCivilDate(props.run.ends_on, locale)}`}
           />
           <Detail label={t("scope.book")} value={props.run.book_name} />
           <Detail

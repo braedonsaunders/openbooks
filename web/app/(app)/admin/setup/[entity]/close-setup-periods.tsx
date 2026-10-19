@@ -15,7 +15,7 @@ import { BASE, EmptyList, Field, MODULES, SectionHeading, dataText, drawerHref }
 import type { Props } from "./close-setup-types";
 
 export function PeriodsTab(props: Props) {
-  const { number } = useViewerFormat();
+  const { number, civilDate } = useViewerFormat();
   const t = useTranslations("close.setup");
   const td = useTranslations("close");
   const router = useRouter();
@@ -145,7 +145,7 @@ export function PeriodsTab(props: Props) {
                       </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-slate-500">
-                      {item.starts_on} → {item.ends_on}
+                      {civilDate(item.starts_on)} → {civilDate(item.ends_on)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {number(Number(item.entries))}

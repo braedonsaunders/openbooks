@@ -144,6 +144,7 @@
     "./crm/sales/contracts": "./src/crm/public-sales-contracts.ts",
     "./reports/definitions": "./src/reports/public-definitions.ts",
     "./platform/civil-date": "./src/platform/civil-date.ts",
+    "./platform/civil-date-labels": "./src/platform/civil-date-labels.ts",
     "./platform/business-date": "./src/platform/public-business-date.ts",
     "./hrm/performance": "./src/hrm/public-performance.ts",
     "./hrm/benefits": "./src/hrm/public-benefits.ts",

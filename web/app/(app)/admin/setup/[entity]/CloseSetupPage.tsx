@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "../../../../../lib/authz";
 import { guardCloseScope } from "../../../../../lib/close-scope";
 import { sql } from "drizzle-orm";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@openbooks/engine/platform/db";
 import {
   BUILT_IN_REPORT_DEFINITIONS,
@@ -31,7 +31,7 @@ import type {
   SetupUserRow,
 } from "./CloseSetupWorkspace";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { canonicalPeriodLabelSql, periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
+import { periodDisplayLabel, periodDisplayLabelSql } from "@openbooks/engine/periods/period-policy";
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../../lib/features";
 
 const PER_PAGE = 20;
@@ -98,6 +98,7 @@ export async function CloseSetupPage({
   const packageList = configListParams(searchParams, "package");
   const reopenList = configListParams(searchParams, "reopen");
   const closeT = await getTranslations("close");
+  const locale = await getLocale();
   const translatedMatch = (query: string | undefined, key: string) =>
     Boolean(
       query &&
@@ -237,14 +238,14 @@ export async function CloseSetupPage({
           select count(*) as entries from journal_entries e where e.period_id = p.id and e.org_id = p.org_id
         ) j on true
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear}
-         ${q ? sql`and (p.name ilike ${`%${q}%`} or ${canonicalPeriodLabelSql()} ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}
+         ${q ? sql`and (p.name ilike ${`%${q}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}
        group by p.id, c.name, j.entries
        order by p.period_number
        limit ${PER_PAGE} offset ${offset}`),
     db.execute(sql`
       select count(*) as count from accounting_periods p join fiscal_calendars c on c.id = p.fiscal_calendar_id and c.org_id = p.org_id
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear}
-         ${q ? sql`and (p.name ilike ${`%${q}%`} or ${canonicalPeriodLabelSql()} ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}`),
+         ${q ? sql`and (p.name ilike ${`%${q}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}`),
     db.execute<BlueprintRow>(sql`
       select * from close_blueprints
        where org_id = ${orgId}
@@ -416,13 +417,17 @@ export async function CloseSetupPage({
       configPerPage={CONFIG_PER_PAGE}
       periods={periods.rows.map((row) => ({
         ...row,
-        // Every period of the calendar reads in one label format; the stored name stays beside it.
-        name: periodDisplayLabel({
-          name: row.name,
-          fiscalYear: row.fiscal_year,
-          periodNumber: row.period_number,
-          adjustment: row.is_adjustment,
-        }),
+        // Every period of the calendar reads in one label format derived from its fiscal position and dates.
+        name: periodDisplayLabel(
+          {
+            fiscalYear: row.fiscal_year,
+            periodNumber: row.period_number,
+            adjustment: row.is_adjustment,
+            startsOn: row.starts_on,
+            endsOn: row.ends_on,
+          },
+          locale,
+        ),
       }))}
       books={books.rows}
       selectedBookId={selectedBookId}

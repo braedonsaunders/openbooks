@@ -13,7 +13,7 @@ import type { BankingReconAccount, PeriodRow, Props } from "./close-setup-types"
 
 /** Drawer state and close/reopen commands for one fiscal period. */
 export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
-  const { date } = useViewerFormat();
+  const { date, civilDate } = useViewerFormat();
   const t = useTranslations("close.setup");
   const td = useTranslations("close");
   const router = useRouter();
@@ -413,6 +413,7 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
   }
   return {
     date,
+    civilDate,
     t,
     td,
     router,

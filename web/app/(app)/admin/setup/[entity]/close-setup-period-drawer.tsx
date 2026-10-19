@@ -99,6 +99,7 @@ export function BankingReconPanel({
 export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
   const {
     date,
+    civilDate,
     t,
     td,
     router,
@@ -225,7 +226,7 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
       closeHref={closeHref}
       size="lg"
       title={row.name}
-      description={`${row.starts_on} → ${row.ends_on} · ${selectedBook?.name ?? ""}`}
+      description={`${civilDate(row.starts_on)} → ${civilDate(row.ends_on)} · ${selectedBook?.name ?? ""}`}
     >
       <div className="space-y-5 p-1">
         {actionError ? (

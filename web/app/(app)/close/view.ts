@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { getFormatter, getTranslations } from 'next-intl/server'
+import { getFormatter, getLocale, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { db } from '@openbooks/engine/platform/db'
 import { registeredListTable } from '../../../lib/list/prepared-spec'
@@ -22,7 +22,8 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { guardCloseScope } from '../../../lib/close-scope'
 import { parseLockDates, periodCloser } from '../../../lib/close/period-attribution'
-import { canonicalPeriodLabelSql, periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
+import { periodDisplayLabel, periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
+import { formatCivilDate } from '../../../lib/format'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { currentFiscalYear } from '../../../lib/fiscal'
@@ -202,7 +203,7 @@ async function loadCloseWizard(
   const [runRes, tasksRes, exceptionsRes, evidenceRes, signoffsRes, eventsRes, locksRes, historyRes] =
     await Promise.all([
       db.execute<CloseRunRow>(sql`
-        select r.*, p.name as period_name, p.starts_on, p.ends_on, p.fiscal_year,
+        select r.*, p.name as period_name, p.starts_on, p.ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
                b.name as book_name, b.code as book_code,
                bp.name as blueprint_name, bp.version as blueprint_version,
                pkg.name as package_name, pkg.reports as package_reports,
@@ -253,8 +254,22 @@ async function loadCloseWizard(
          group by t.key`),
     ])
 
-  const run = runRes.rows[0]
-  if (!run) return null
+  const storedRun = runRes.rows[0]
+  if (!storedRun) return null
+  // The run reads with the same period label as the close list that opened it.
+  const run: CloseRunRow = {
+    ...storedRun,
+    period_name: periodDisplayLabel(
+      {
+        fiscalYear: storedRun.fiscal_year,
+        periodNumber: Number(storedRun.period_number),
+        adjustment: Boolean(storedRun.is_adjustment),
+        startsOn: storedRun.starts_on,
+        endsOn: storedRun.ends_on,
+      },
+      await getLocale(),
+    ),
+  }
 
   const history = new Map(
     historyRes.rows.map((row) => [row.key, Number(row.average_days)]),
@@ -358,10 +373,12 @@ export async function loadClose(
     : (books.rows.find((book) => book.is_primary)?.id ??
       books.rows[0]?.id ??
       '')
-  // Search matches the label the list shows as well as the stored name, so a
-  // period listed as "P11 FY2025" is found by typing "P11".
+  // Search matches the label the list shows in the viewer's locale as well as
+  // the stored name, so a period listed as "P11 FY2025 · Nov 2025" is found by
+  // typing "P11" or "Nov 2025".
+  const locale = await getLocale()
   const periodSearch = q
-    ? sql`and (p.name ilike ${`%${q}%`} or ${canonicalPeriodLabelSql()} ilike ${`%${q}%`})`
+    ? sql`and (p.name ilike ${`%${q}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${q}%`})`
     : sql``
   const [periods, count, fys] = ((await Promise.all([
     db.execute<ClosePeriodDbRow>(sql`
@@ -451,17 +468,21 @@ export async function loadClose(
         lockCloserName: period.lock_closer_name,
         lockClosedOn: period.lock_closed_on,
       })
-      // One label rule for every period of the calendar; a stored name that
-      // differs (a seeded or custom name) is kept visible beside it.
+      // One label rule for every period of the calendar, derived from its
+      // fiscal year, number and dates rather than its free-text stored name.
       return {
       id: period.id,
-      name: periodDisplayLabel({
-        name: period.name,
-        fiscalYear: period.fiscal_year,
-        periodNumber: period.period_number,
-        adjustment: period.is_adjustment,
-      }),
-      range: `${period.starts_on} → ${period.ends_on}`,
+      name: periodDisplayLabel(
+        {
+          fiscalYear: period.fiscal_year,
+          periodNumber: period.period_number,
+          adjustment: period.is_adjustment,
+          startsOn: period.starts_on,
+          endsOn: period.ends_on,
+        },
+        locale,
+      ),
+      range: `${formatCivilDate(period.starts_on, locale)} → ${formatCivilDate(period.ends_on, locale)}`,
       statusLabel: t(`runStatus.${period.status ?? 'not_started'}`),
       statusVariant: (
         period.status === 'published' || period.status === 'closed'
