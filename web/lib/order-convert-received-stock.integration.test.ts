@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { businessToday, endOfMonth, startOfMonth } from "@openbooks/engine/platform/business-date";
+import { businessToday } from "@openbooks/engine/platform/business-date";
+import { endOfMonth, startOfMonth } from "@openbooks/engine/platform/civil-date";
 
 // A vendor bill converted from a purchase order's received stock. Its lines
 // keep the purchase-order line provenance that posting reads, and carry the
