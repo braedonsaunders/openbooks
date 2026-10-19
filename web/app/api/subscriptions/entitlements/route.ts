@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
+import { isUuid, uuidString } from '@openbooks/engine/platform/identifiers';
+import { db } from '@openbooks/engine/platform/db';
+import { sql } from 'drizzle-orm';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
@@ -12,7 +14,7 @@ import {
   savePlanVersionEntitlements,
   saveSubscriptionOverride,
 } from "@openbooks/engine/billing";
-import { guardUnrestrictedScope } from "../../../../lib/authz";
+import { guardSubsidiaryScope, guardUnrestrictedScope, type Authz } from "../../../../lib/authz";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const entitlementRowSchema = z.object({
@@ -52,6 +54,17 @@ const POSTBodySchema = z.discriminatedUnion('action', [
 
 export const runtime = "nodejs";
 
+async function guardSubscriptionScope(authz: Authz, subscriptionId: string) {
+  if (!isUuid(subscriptionId)) return null;
+  const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select p.subsidiary_id as "subsidiaryId"
+      from subscriptions s
+      join parties p on p.org_id = s.org_id and p.id = s.customer_id
+     where s.org_id = ${authz.user.orgId} and s.id = ${subscriptionId}::uuid`)).rows[0];
+  if (!row) return null;
+  return guardSubsidiaryScope(authz, row.subsidiaryId, { orgWideNull: true });
+}
+
 export const GET = defineRoute({
   permission: 'ar.read',
   feature: 'advancedSubscriptions',
@@ -80,10 +93,12 @@ export const GET = defineRoute({
         );
         return NextResponse.json({ ok: true, entitlements });
       }
+      const scopeDenied = await guardSubscriptionScope(authz, subscriptionId as string);
+      if (scopeDenied) return scopeDenied;
       const snapshot = await getEntitlementSnapshot(
         authz.user.orgId,
         subscriptionId as string,
-        at ?? undefined,
+        { at: at ?? undefined, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
       );
       return NextResponse.json({ ok: true, snapshot });
     } catch (error) {
@@ -126,8 +141,11 @@ export const POST = defineRoute({
           return NextResponse.json({ ok: true, entitlements: saved }, { status: 201 });
         }
         case "saveOverride": {
+          const scopeDenied = await guardSubscriptionScope(authz, body.subscriptionId);
+          if (scopeDenied) return scopeDenied;
           const saved = await saveSubscriptionOverride(authz.user.orgId, authz.user.id, {
             subscriptionId: body.subscriptionId,
+            allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
             featureKey: body.featureKey,
             enabled: body.enabled ?? undefined,
             limit: body.limit ?? undefined,
@@ -140,8 +158,11 @@ export const POST = defineRoute({
           return NextResponse.json({ ok: true, override: saved }, { status: 201 });
         }
         case "expireOverride": {
+          const scopeDenied = await guardSubscriptionScope(authz, body.subscriptionId);
+          if (scopeDenied) return scopeDenied;
           const closed = await expireSubscriptionOverride(authz.user.orgId, authz.user.id, {
             subscriptionId: body.subscriptionId,
+            allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
             featureKey: body.featureKey,
             effectiveTo: body.effectiveTo ?? undefined,
           });

@@ -20,6 +20,7 @@ import {
   saveSubscriptionOverride,
 } from "./entitlements.ts";
 import { createUsageMeter } from "./usage/records.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import {
   createSubscriptionUsageLink,
   createUsageRatingPlan,
@@ -147,8 +148,8 @@ test("plan grants resolve by effective date, and history survives the change", {
     rows: [{ featureKey: "seats_included", limit: "200" }],
   });
   await publishPlanVersion(org.orgId, actor, versionId, null);
-  const [early] = await resolveEntitlements(org.orgId, { subscriptionId }, "2026-05-15");
-  const [late] = await resolveEntitlements(org.orgId, { subscriptionId }, "2026-07-01");
+  const [early] = await resolveEntitlements(org.orgId, { subscriptionId }, { at: "2026-05-15", allowedSubsidiaryIds: null });
+  const [late] = await resolveEntitlements(org.orgId, { subscriptionId }, { at: "2026-07-01", allowedSubsidiaryIds: null });
   assert.equal(early?.features.find((f) => f.featureKey === "seats_included")?.limit, "100");
   assert.equal(late?.features.find((f) => f.featureKey === "seats_included")?.limit, "200");
   const history = await listPlanVersionEntitlements(org.orgId, versionId, "2026-07-01");
@@ -196,7 +197,7 @@ test("a lifecycle pins its version: newer published versions do not move it", { 
     rows: [{ featureKey: "seats_included", limit: "50" }],
   });
   await publishPlanVersion(org.orgId, actor, version2, null);
-  const [pinned] = await resolveEntitlements(org.orgId, { subscriptionId }, "2026-08-01");
+  const [pinned] = await resolveEntitlements(org.orgId, { subscriptionId }, { at: "2026-08-01", allowedSubsidiaryIds: null });
   assert.equal(pinned?.planVersionId, versionId);
   assert.equal(pinned?.grandfathered, true);
   assert.equal(pinned?.features.find((f) => f.featureKey === "seats_included")?.limit, "100");
@@ -209,7 +210,7 @@ test("a lifecycle pins its version: newer published versions do not move it", { 
     values (${followerId}, ${org.orgId}, ${org.customerId}, ${planId}, '1', 'active',
             '2026-08-01', '2026-08-01', false, ${actor})
   `);
-  const [follower] = await resolveEntitlements(org.orgId, { subscriptionId: followerId }, "2026-08-01");
+  const [follower] = await resolveEntitlements(org.orgId, { subscriptionId: followerId }, { at: "2026-08-01", allowedSubsidiaryIds: null });
   assert.equal(follower?.planVersionId, version2);
   assert.equal(follower?.grandfathered, false);
   assert.equal(follower?.features.find((f) => f.featureKey === "seats_included")?.limit, "50");
@@ -231,12 +232,13 @@ test("overrides win field by field, and expiry restores the plan grant", { skip:
   await publishPlanVersion(org.orgId, actor, versionId, null);
   await saveSubscriptionOverride(org.orgId, actor, {
     subscriptionId,
+    allowedSubsidiaryIds: null,
     featureKey: "seats_included",
     limit: "500",
     reason: "Enterprise negotiation, order form EO-117.",
     effectiveFrom: "2026-05-01",
   });
-  const [overridden] = await resolveEntitlements(org.orgId, { subscriptionId }, "2026-07-01");
+  const [overridden] = await resolveEntitlements(org.orgId, { subscriptionId }, { at: "2026-07-01", allowedSubsidiaryIds: null });
   const seats = overridden?.features.find((f) => f.featureKey === "seats_included");
   assert.equal(seats?.limit, "500");
   assert.equal(seats?.source, "override");
@@ -251,12 +253,12 @@ test("overrides win field by field, and expiry restores the plan grant", { skip:
      where org_id = ${org.orgId} and event_type = 'entitlement.changed'`)).rows;
   assert.ok(events.some((e) => e.subscriptionId === subscriptionId && e.featureKey === "seats_included"));
   await expireSubscriptionOverride(org.orgId, actor, {
-    subscriptionId, featureKey: "seats_included", effectiveTo: "2026-07-15",
+    subscriptionId, allowedSubsidiaryIds: null, featureKey: "seats_included", effectiveTo: "2026-07-15",
   });
   // History keeps the override while it was open; the plan returns after.
-  const [covered] = await resolveEntitlements(org.orgId, { subscriptionId }, "2026-07-01");
+  const [covered] = await resolveEntitlements(org.orgId, { subscriptionId }, { at: "2026-07-01", allowedSubsidiaryIds: null });
   assert.equal(covered?.features.find((f) => f.featureKey === "seats_included")?.limit, "500");
-  const [restored] = await resolveEntitlements(org.orgId, { subscriptionId }, "2026-08-01");
+  const [restored] = await resolveEntitlements(org.orgId, { subscriptionId }, { at: "2026-08-01", allowedSubsidiaryIds: null });
   assert.equal(restored?.features.find((f) => f.featureKey === "seats_included")?.limit, "100");
   assert.equal(restored?.features.find((f) => f.featureKey === "seats_included")?.source, "plan");
 });
@@ -273,6 +275,7 @@ test("block refuses over the limit with the limit attached, and writes nothing",
   await publishPlanVersion(org.orgId, actor, versionId, null);
   const verdict = await checkEntitlement(org.orgId, actor, {
     subscriptionId,
+    allowedSubsidiaryIds: null,
     featureKey: "seats_included",
     used: "125",
     occurredOn: org.date,
@@ -300,7 +303,7 @@ test("allow_and_bill records the overage for rating, exactly once per reading", 
   await publishPlanVersion(org.orgId, actor, versionId, null);
   const ref = `entitlement-overage:${subscriptionId}:api_calls:2026-07`;
   const first = await checkEntitlement(org.orgId, actor, {
-    subscriptionId, featureKey: "api_calls", used: "1200", occurredOn: org.date,
+    subscriptionId, allowedSubsidiaryIds: null, featureKey: "api_calls", used: "1200", occurredOn: org.date,
   });
   assert.equal(first.allowed, true);
   assert.equal(first.overage, "200");
@@ -308,13 +311,13 @@ test("allow_and_bill records the overage for rating, exactly once per reading", 
   assert.equal(first.replayed, false);
   // The identical reading replays the same usage row instead of billing twice.
   const replay = await checkEntitlement(org.orgId, actor, {
-    subscriptionId, featureKey: "api_calls", used: "1200", occurredOn: org.date,
+    subscriptionId, allowedSubsidiaryIds: null, featureKey: "api_calls", used: "1200", occurredOn: org.date,
   });
   assert.equal(replay.usageRecordId, first.usageRecordId);
   assert.equal(replay.replayed, true);
   // A higher reading supersedes: the old row is reversed, the new row bills.
   const higher = await checkEntitlement(org.orgId, actor, {
-    subscriptionId, featureKey: "api_calls", used: "1300", occurredOn: org.date,
+    subscriptionId, allowedSubsidiaryIds: null, featureKey: "api_calls", used: "1300", occurredOn: org.date,
   });
   assert.equal(higher.overage, "300");
   assert.notEqual(higher.usageRecordId, first.usageRecordId);
@@ -336,7 +339,7 @@ test("alert allows the usage and notifies billing operators once", { skip: !DB }
   });
   await publishPlanVersion(org.orgId, actor, versionId, null);
   const verdict = await checkEntitlement(org.orgId, actor, {
-    subscriptionId, featureKey: "seats_included", used: "140", occurredOn: org.date,
+    subscriptionId, allowedSubsidiaryIds: null, featureKey: "seats_included", used: "140", occurredOn: org.date,
   });
   assert.equal(verdict.allowed, true);
   assert.equal(verdict.overage, "40");
@@ -349,7 +352,7 @@ test("alert allows the usage and notifies billing operators once", { skip: !DB }
   assert.match(notices[0]!.body, /override/);
   // A second overage while the notice is unread does not stack another.
   await checkEntitlement(org.orgId, actor, {
-    subscriptionId, featureKey: "seats_included", used: "150", occurredOn: org.date,
+    subscriptionId, allowedSubsidiaryIds: null, featureKey: "seats_included", used: "150", occurredOn: org.date,
   });
   const again = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from notifications
@@ -368,35 +371,66 @@ test("the snapshot serves the fast path and refreshes on change", { skip: !DB },
     rows: [{ featureKey: "seats_included", limit: "100" }],
   });
   await publishPlanVersion(org.orgId, actor, versionId, null);
-  const first = await getEntitlementSnapshot(org.orgId, subscriptionId);
+  const first = await getEntitlementSnapshot(org.orgId, subscriptionId, { allowedSubsidiaryIds: null });
   assert.equal(first.features.find((f) => f.featureKey === "seats_included")?.limit, "100");
-  const second = await getEntitlementSnapshot(org.orgId, subscriptionId);
+  const second = await getEntitlementSnapshot(org.orgId, subscriptionId, { allowedSubsidiaryIds: null });
   assert.equal(second.resolvedAt, first.resolvedAt);
   assert.equal(second.sourceHash, first.sourceHash);
   await saveSubscriptionOverride(org.orgId, actor, {
-    subscriptionId, featureKey: "seats_included", limit: "250", reason: "Capacity uplift for launch week.",
+    subscriptionId, allowedSubsidiaryIds: null, featureKey: "seats_included", limit: "250", reason: "Capacity uplift for launch week.",
   });
-  const third = await getEntitlementSnapshot(org.orgId, subscriptionId);
+  const third = await getEntitlementSnapshot(org.orgId, subscriptionId, { allowedSubsidiaryIds: null });
   assert.equal(third.features.find((f) => f.featureKey === "seats_included")?.limit, "250");
   assert.notEqual(third.sourceHash, first.sourceHash);
+});
+
+test("subscription entitlement reads and overrides refuse customers outside subsidiary scope", { skip: !DB }, async () => {
+  const seed = await seedEntitlementOrg();
+  const { org, actor, subscriptionId } = seed;
+  await db.execute(sql`
+    update parties set subsidiary_id = ${org.subsidiaryId}
+     where org_id = ${org.orgId} and id = ${org.customerId}
+  `);
+  const restricted = new Set<string>();
+  await assert.rejects(
+    getEntitlementSnapshot(org.orgId, subscriptionId, { allowedSubsidiaryIds: restricted }),
+    (error: unknown) => error instanceof EntitlementError && error.code === "entitlement_subscription_not_found",
+  );
+  await assert.rejects(
+    saveSubscriptionOverride(org.orgId, actor, {
+      subscriptionId, allowedSubsidiaryIds: restricted,
+      featureKey: "seats_included", enabled: false, reason: "Scope refusal regression.",
+    }),
+    (error: unknown) => error instanceof EntitlementError && error.code === "entitlement_subscription_not_found",
+  );
+  await assert.rejects(
+    expireSubscriptionOverride(org.orgId, actor, {
+      subscriptionId, allowedSubsidiaryIds: restricted, featureKey: "seats_included",
+    }),
+    (error: unknown) => error instanceof EntitlementError && error.code === "entitlement_subscription_not_found",
+  );
+  await assert.rejects(
+    resolveEntitlements(org.orgId, { customerId: org.customerId }, { allowedSubsidiaryIds: restricted }),
+    (error: unknown) => error instanceof ScopeNotFoundError,
+  );
 });
 
 test("unknown features and empty overrides refuse by name", { skip: !DB }, async () => {
   const seed = await seedEntitlementOrg();
   const { org, actor, subscriptionId } = seed;
   await assert.rejects(
-    checkEntitlement(org.orgId, actor, { subscriptionId, featureKey: "nope", used: "1", occurredOn: org.date }),
+    checkEntitlement(org.orgId, actor, { subscriptionId, allowedSubsidiaryIds: null, featureKey: "nope", used: "1", occurredOn: org.date }),
     (error: unknown) => error instanceof EntitlementError && error.code === "entitlement_feature_not_found",
   );
   await createSaasFeature(org.orgId, actor, { key: "seats_included", name: "Seats", type: "quantity", unit: "seats" });
   await assert.rejects(
     saveSubscriptionOverride(org.orgId, actor, {
-      subscriptionId, featureKey: "seats_included", reason: "Nothing actually changed.",
+      subscriptionId, allowedSubsidiaryIds: null, featureKey: "seats_included", reason: "Nothing actually changed.",
     }),
     (error: unknown) => error instanceof EntitlementError && error.code === "entitlement_override_empty",
   );
   await assert.rejects(
-    expireSubscriptionOverride(org.orgId, actor, { subscriptionId, featureKey: "seats_included" }),
+    expireSubscriptionOverride(org.orgId, actor, { subscriptionId, allowedSubsidiaryIds: null, featureKey: "seats_included" }),
     (error: unknown) => error instanceof EntitlementError && error.code === "entitlement_override_not_found",
   );
 });

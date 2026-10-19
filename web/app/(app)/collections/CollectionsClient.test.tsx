@@ -235,6 +235,42 @@ for (const kind of ['plan', 'subscription'] as const) test(`${kind} entitlement 
   if (kind === 'plan') assert.ok(findButton('Add feature'), 'editing becomes available after the successful read')
 })
 
+test('plan entitlement rows cannot be removed when the save contract only upserts grants', async (t) => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (input: unknown) => {
+    const url = String(input)
+    if (url.includes('features=1')) return Response.json({ features: [{ key: 'seats_included', name: 'Seats', featureType: 'quantity', isActive: true }] })
+    if (url.includes('planVersionId=')) return Response.json({ entitlements: [{
+      featureKey: 'seats_included', enabled: true, limitQty: '100', customValue: null,
+      overagePolicy: 'block', meterKey: null,
+    }] })
+    throw new Error(`unexpected entitlement read ${url}`)
+  }) as typeof fetch
+  const host = document.createElement('div'); document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+    globalThis.fetch = prior
+  })
+  await act(async () => {
+    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <BusinessDateProvider today="2026-10-05"><PlanVersionEntitlementsDrawer
+        versionId="00000000-0000-4000-8000-000000000001" versionName="Annual support" open onClose={() => {}}
+      /></BusinessDateProvider>
+    </NextIntlClientProvider>)
+    await tick(); await tick()
+  })
+  const trigger = document.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')
+  assert.ok(trigger, 'the populated grid keeps its other row actions')
+  await click(trigger)
+  const menuItems = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim())
+  assert.ok(menuItems.includes('Duplicate'), 'grant rows remain editable')
+  assert.ok(!menuItems.includes('Remove line') && !menuItems.includes('Clear line'), 'the UI does not offer an unpersistable removal')
+  assert.ok(findButton('Add feature'), 'new grants can still be added')
+  assert.equal(findButton('Save grants (0)')?.disabled, true, 'the unchanged baseline stays clean')
+})
+
 const SNOW_PLAN = {
   id: 'plan-snow',
   name: 'Snow season monthly 2025-26',

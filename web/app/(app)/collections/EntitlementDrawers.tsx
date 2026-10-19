@@ -339,6 +339,7 @@ export function PlanVersionEntitlementsDrawer({
           emptyRow={() => ({ feature: "", type: "", enabled: "true", limit: "", custom: "", overage: "block", meter: "" })}
           addLabel={et("addGrant")}
           readOnly={loading}
+          hideRemove
         />
       </> : null}
     </Drawer>

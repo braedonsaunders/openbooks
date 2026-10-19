@@ -59,7 +59,7 @@ test("editable cells are named by their column header and line number", async (t
   }
 });
 
-function Probe({ initial, compact = false, readOnly = false, withDistribution = false }: { initial: TestRow[]; compact?: boolean; readOnly?: boolean; withDistribution?: boolean }) {
+function Probe({ initial, compact = false, readOnly = false, withDistribution = false, hideRemove = false }: { initial: TestRow[]; compact?: boolean; readOnly?: boolean; withDistribution?: boolean; hideRemove?: boolean }) {
   const [rows, setRows] = useState(initial);
   const apply = (next: TestRow[]) => {
     store.rows = next;
@@ -95,6 +95,7 @@ function Probe({ initial, compact = false, readOnly = false, withDistribution = 
         columns={columns}
         rows={rows}
         readOnly={readOnly}
+        hideRemove={hideRemove}
         getRowKey={(row) => row.clientKey}
         cloneRow={(row) => ({ ...row, clientKey: `copy-${row.clientKey}` })}
         distribution={withDistribution ? {
@@ -110,14 +111,14 @@ function Probe({ initial, compact = false, readOnly = false, withDistribution = 
   );
 }
 
-async function mount(initial: TestRow[], compact = false, readOnly = false, withDistribution = false) {
+async function mount(initial: TestRow[], compact = false, readOnly = false, withDistribution = false, hideRemove = false) {
   store.rows = initial;
   store.splitIndex = null;
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => {
-    root.render(<Probe initial={initial} compact={compact} readOnly={readOnly} withDistribution={withDistribution} />);
+    root.render(<Probe initial={initial} compact={compact} readOnly={readOnly} withDistribution={withDistribution} hideRemove={hideRemove} />);
     await tick();
   });
   await tick();
@@ -211,6 +212,19 @@ test('right-click opens line actions on an editable cell and the last line can b
   assert.equal(store.rows.length, 1, 'the minimum row remains');
   assert.equal(store.rows[0]!.description, '');
   assert.equal(store.rows[0]!.quantity, '');
+});
+
+test('hideRemove preserves editable lines without offering menu or keyboard deletion', async (t) => {
+  const { host, done } = await mount([line('a', '1'), line('b', '2')], false, false, false, true);
+  t.after(done);
+  const input = cellInput(host, 0, 0);
+  await keydown(input, { key: 'Backspace', ctrlKey: true });
+  assert.deepEqual(store.rows.map((row) => row.clientKey), ['a', 'b']);
+  const trigger = host.querySelector<HTMLButtonElement>('button[aria-label="Line 1 actions"]')!;
+  await act(async () => { trigger.click(); await tick(); });
+  assert.ok(menuAction('Insert above'), 'other line actions remain available');
+  assert.equal([...document.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent?.trim() === 'Remove line'), false);
+  assert.deepEqual(store.rows.map((row) => row.clientKey), ['a', 'b']);
 });
 
 test('a keyboard context menu keeps its target when the line is reordered', async (t) => {
