@@ -310,7 +310,7 @@ test("one forfeiture, cancellation or repurchase is undone by a reversal; depend
     const cancel = await recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "cancel", effectiveOn: "2026-07-20", quantity: "100", reason: "Partial cancellation" });
     await assert.rejects(
       recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-21", reversesEventId: second.eventId, reason: "Forfeiture in error" }),
-      (error: unknown) => refusal("equity_reversal_has_dependents")(error) && (error as EquityError).remedy.includes("cancel on 2026-07-20 (100)"),
+      (error: unknown) => refusal("equity_reversal_has_dependents")(error) && (error as EquityError).remedy.includes("cancellation of Jul 20, 2026"),
     );
     await recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-21", reversesEventId: cancel.eventId, reason: "Cancellation in error" });
     await recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-22", reversesEventId: second.eventId, reason: "Forfeiture in error" });

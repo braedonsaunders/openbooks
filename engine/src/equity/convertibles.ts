@@ -16,7 +16,7 @@
  *   and the shares are the converted amount divided by that recorded price,
  *   rounded down, so every conversion is reproducible from its stored row.
  */
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import { noteInterest } from "./interest.ts";
 import {
   addRational,
@@ -64,7 +64,7 @@ export function accruedInterest(terms: ConvertibleTerms, asOf: string): Rational
 
 /** The amount that converts on `asOf`: purchase amount, or principal plus accrued interest. */
 export function convertingAmount(terms: ConvertibleTerms, asOf: string): Rational {
-  return addRational(parseMoney(terms.principal, "the principal"), accruedInterest(terms, asOf));
+  return addRational(parseMoney(terms.principal, "principal"), accruedInterest(terms, asOf));
 }
 
 export interface ConvertingInstrument {
@@ -92,12 +92,12 @@ const isPostMoney = (terms: ConvertibleTerms): boolean => terms.kind === "safe" 
 
 function capOf(instrument: ConvertingInstrument): Rational | null {
   if (instrument.cap !== undefined) return instrument.cap;
-  return instrument.terms.valuationCap ? parseMoney(instrument.terms.valuationCap, "the valuation cap") : null;
+  return instrument.terms.valuationCap ? parseMoney(instrument.terms.valuationCap, "valuationCap") : null;
 }
 
 function discountedPrice(terms: ConvertibleTerms, roundPrice: Rational): Rational | null {
   if (!terms.discountPercent) return null;
-  return multiplyRational(roundPrice, subtractRational(ONE, parsePercent(terms.discountPercent, "the discount")));
+  return multiplyRational(roundPrice, subtractRational(ONE, parsePercent(terms.discountPercent, "discountPercent")));
 }
 
 /** Combined ownership the capped post-money SAFEs promise (amount / cap, summed). */
@@ -129,10 +129,7 @@ export function companyCapitalization(
 ): Rational {
   const claim = postMoneyClaim(instruments);
   if (compareRational(claim, MAX_POST_MONEY_CLAIM) >= 0) {
-    throw new EquityError("The capped post-money SAFEs claim 95% or more of the company, so the conversion has no meaningful solution.", {
-      code: "equity_post_money_overclaim",
-      remedy: "Check the purchase amounts and valuation caps of the post-money SAFEs; a cap entered in the wrong unit is the usual cause.",
-    });
+    throw equityError("postMoneyOverclaim", { limit: fig.percent("95"), principal: fig.term("principal"), cap: fig.term("valuationCap") });
   }
   const preRound = rational(preRoundFullyDiluted);
   const binding = new Set<string>();
@@ -159,10 +156,7 @@ export function companyCapitalization(
     }
     if (!grew) return capitalization;
   }
-  throw new EquityError("The post-money conversion did not settle.", {
-    code: "equity_conversion_unsettled",
-    remedy: "Review the valuation caps of the converting SAFEs.",
-  });
+  throw equityError("postMoneyUnsettled", { cap: fig.term("valuationCap") });
 }
 
 /** Exact (unrounded) shares every instrument converts into at a round price: the capitalization less the pre-round count. */
@@ -188,10 +182,7 @@ function preRoundPrice(instrument: ConvertingInstrument, roundPrice: Rational, p
 function recordedPrice(price: Rational): Rational {
   const units = quantize(price, PRICE_SCALE, "half_up");
   if (units <= 0n) {
-    throw new EquityError("The conversion price rounds to zero.", {
-      code: "equity_conversion_price_zero",
-      remedy: "Check the round price, valuation caps and discounts.",
-    });
+    throw equityError("conversionPriceZero", { cap: fig.term("valuationCap"), discount: fig.term("discountPercent") });
   }
   return rational(units, 10n ** BigInt(PRICE_SCALE));
 }
@@ -206,7 +197,7 @@ export function convertAtRound(
   preRoundFullyDiluted: bigint,
 ): { conversions: ConversionResult[]; companyCapitalization: Rational } {
   if (roundPrice.numerator <= 0n) {
-    throw new EquityError("The round price must be greater than zero.", { code: "equity_round_price_invalid", remedy: "Enter the round price per share." });
+    throw equityError("conversionRoundPriceNotPositive");
   }
   const capitalization = companyCapitalization(instruments, roundPrice, preRoundFullyDiluted);
   const preRound = rational(preRoundFullyDiluted);

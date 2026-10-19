@@ -24,7 +24,7 @@ function preferred(overrides: Partial<WaterfallClass> & Pick<WaterfallClass, "sh
 }
 
 function run(exit: string, classes: WaterfallClass[], awards: WaterfallAward[] = [], convertibles: WaterfallConvertible[] = []) {
-  return runWaterfall({ exitValue: parseMoney(exit, "exit"), classes, awards, convertibles, minorUnitScale: 2 });
+  return runWaterfall({ exitValue: parseMoney(exit, "price"), classes, awards, convertibles, minorUnitScale: 2 });
 }
 
 const amountOf = (result: ReturnType<typeof run>, holder: string) => result.holders.find((row) => row.holderPartyId === holder)?.amount;
@@ -90,8 +90,8 @@ test("options share the residual only while in the money, net of their exercise 
 
 test("notes are paid first as debt and SAFEs rank with the most junior preference", () => {
   const convertibles: WaterfallConvertible[] = [
-    { securityId: "n-1", holderPartyId: "lender", kind: "note", amount: parseMoney("500000", "n") },
-    { securityId: "safe-1", holderPartyId: "angel", kind: "safe", amount: parseMoney("1000000", "s") },
+    { securityId: "n-1", holderPartyId: "lender", kind: "note", amount: parseMoney("500000", "price") },
+    { securityId: "safe-1", holderPartyId: "angel", kind: "safe", amount: parseMoney("1000000", "price") },
   ];
   const result = run("1500000", [common(4_000_000n), preferred({ shareClassId: "a" }, 1_000_000n, "fund")], [], convertibles);
   assert.equal(amountOf(result, "lender"), "500000.0000");
@@ -112,7 +112,7 @@ test("a negative exit refuses", () => {
 
 test("a capped SAFE takes the greater of its cash-out amount and its conversion amount", () => {
   const safe: WaterfallConvertible = {
-    securityId: "safe", holderPartyId: "angel", kind: "safe", amount: parseMoney("1000000", "amount"), cap: parseMoney("10000000", "cap"), postMoney: true,
+    securityId: "safe", holderPartyId: "angel", kind: "safe", amount: parseMoney("1000000", "price"), cap: parseMoney("10000000", "price"), postMoney: true,
   };
   // Converting, the post-money SAFE owns 1,000,000 / 10,000,000 of a 10,000,000-share liquidity capitalization.
   const low = run("5000000", [common(9_000_000n)], [], [safe]);
@@ -131,7 +131,7 @@ test("a capped SAFE takes the greater of its cash-out amount and its conversion 
 
 test("a pre-money SAFE converting at liquidity prices its shares on the capitalization before it", () => {
   const safe: WaterfallConvertible = {
-    securityId: "safe", holderPartyId: "angel", kind: "safe", amount: parseMoney("1000000", "amount"), cap: parseMoney("9000000", "cap"), postMoney: false,
+    securityId: "safe", holderPartyId: "angel", kind: "safe", amount: parseMoney("1000000", "price"), cap: parseMoney("9000000", "price"), postMoney: false,
   };
   // Liquidity price 9,000,000 / 9,000,000 = 1.00: 1,000,000 shares beside the founder's 9,000,000.
   const result = run("100000000", [common(9_000_000n)], [], [safe]);

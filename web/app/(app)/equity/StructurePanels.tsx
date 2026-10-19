@@ -176,7 +176,7 @@ function ClassActionDrawer({ shareClass, context, closeHref, commonClasses }: {
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('fields.effectiveOn')}><DateField value={form.effectiveOn} onChange={(value) => set('effectiveOn')(value)} /></Field>
           {mode === 'authorized_shares' && (
-            <Field label={t('fields.authorizedShares')} hint={t('classActions.currentAuthorized', { value: shares(shareClass.authorized) })}>
+            <Field label={t('fields.authorizedShares')} hint={t('classActions.currentAuthorized', { value: shares(shareClass.authorized), valueCount: Number(shareClass.authorized) })}>
               <Input inputMode="numeric" value={form.value} onChange={(e) => set('value')(e.target.value)} />
             </Field>
           )}

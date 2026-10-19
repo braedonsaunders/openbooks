@@ -13,7 +13,7 @@
  * A sale at or above the conversion price changes nothing. The new price is
  * rounded half up to ten decimal places, the stored scale.
  */
-import { EquityError } from "./errors.ts";
+import { equityError } from "./errors.ts";
 import {
   addRational,
   compareRational,
@@ -44,10 +44,7 @@ export function adjustedConversionPriceExact(inputs: AntiDilutionInputs): Ration
   if (method === "full_ratchet") return newIssuePrice;
   const base = rational(method === "broad_based" ? inputs.fullyDilutedBefore : inputs.outstandingBefore);
   if (base.numerator <= 0n) {
-    throw new EquityError("The weighted-average adjustment needs the shares outstanding before the round.", {
-      code: "equity_anti_dilution_base_missing",
-      remedy: "Record the company's outstanding shares before modelling the round.",
-    });
+    throw equityError("antiDilutionBaseMissing");
   }
   const wouldHaveBought = divideRational(inputs.newMoney, conversionPrice);
   return multiplyRational(conversionPrice, divideRational(addRational(base, wouldHaveBought), addRational(base, inputs.newShares)));

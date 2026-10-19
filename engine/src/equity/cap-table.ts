@@ -29,7 +29,7 @@
  * the price is divided by the split ratio, so the as-converted count follows
  * the common shares.
  */
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import { accruedInterest, type ConvertibleTerms } from "./convertibles.ts";
 import {
   addRational,
@@ -149,7 +149,7 @@ const EMPTY_CONSUMED = (): HoldingState["consumed"] => ({
 export function holdingState(book: Pick<EquityBook, "events" | "splits">, security: SecurityRecord, asOf: string): HoldingState {
   const classId = security.shareClassId;
   if (security.quantity === null || classId === null) {
-    throw new EquityError(`Security ${security.securityNumber} is not share-based.`, { code: "equity_not_share_based", remedy: "Use the convertible view for SAFEs and notes." });
+    throw equityError("securityNotShareBased", { security: fig.text(security.securityNumber) });
   }
   const factor = splitFactor(book.splits, classId, security.issueDate, asOf);
   if (asOf < security.issueDate) {
@@ -183,7 +183,7 @@ export function holdingState(book: Pick<EquityBook, "events" | "splits">, securi
       break;
     }
     if (event.quantity === null) {
-      throw new EquityError(`Event on ${security.securityNumber} has no quantity.`, { code: "equity_event_invalid", remedy: "Record the event's quantity." });
+      throw equityError("holdingEventQuantityMissing", { security: fig.text(security.securityNumber) });
     }
     const issueUnits = divideRational(rational(event.quantity), splitFactor(book.splits, classId, security.issueDate, event.effectiveOn));
     const live = subtractRational(total, tailRemoved);
@@ -192,10 +192,11 @@ export function holdingState(book: Pick<EquityBook, "events" | "splits">, securi
     const unvested = subtractRational(subtractRational(live, vestedUsed), vestedAvailable);
     const over = (available: Rational): void => {
       if (compareRational(issueUnits, available) > 0) {
-        throw new EquityError(`The ${event.kind} of ${event.quantity} on ${event.effectiveOn} exceeds what ${security.securityNumber} held.`, {
-          status: 409,
-          code: "equity_event_exceeds_holding",
-          remedy: "Review the security's history; the recorded quantities cannot be replayed.",
+        throw equityError("holdingEventExceeded", {
+          kind: fig.choice(event.kind),
+          quantity: fig.shares(event.quantity!),
+          date: fig.date(event.effectiveOn),
+          security: fig.text(security.securityNumber),
         });
       }
     };
@@ -324,12 +325,12 @@ export function conversionSplitFactor(book: Pick<EquityBook, "amendments" | "spl
  */
 export function conversionPrice(book: Pick<EquityBook, "amendments" | "splits">, shareClass: ShareClassRecord, asOf: string): Rational | null {
   if (shareClass.kind !== "preferred" || !shareClass.initialConversionPrice) return null;
-  let price = parsePrice(shareClass.initialConversionPrice, "the conversion price");
+  let price = parsePrice(shareClass.initialConversionPrice, "conversionPrice");
   let statedOn = shareClass.effectiveOn;
   for (const amendment of book.amendments) {
     if (amendment.shareClassId !== shareClass.id || amendment.kind !== "conversion_price" || amendment.effectiveOn > asOf) continue;
     if (amendment.effectiveOn >= statedOn && amendment.conversionPrice) {
-      price = parsePrice(amendment.conversionPrice, "the conversion price");
+      price = parsePrice(amendment.conversionPrice, "conversionPrice");
       statedOn = amendment.effectiveOn;
     }
   }
@@ -339,7 +340,7 @@ export function conversionPrice(book: Pick<EquityBook, "amendments" | "splits">,
 /** Original issue price of a preferred class on `asOf`, restated through its splits. */
 export function originalIssuePrice(book: Pick<EquityBook, "splits">, shareClass: ShareClassRecord, asOf: string): Rational | null {
   if (!shareClass.originalIssuePrice) return null;
-  return restatePrice(book.splits, shareClass.id, parsePrice(shareClass.originalIssuePrice, "the original issue price"), shareClass.effectiveOn, asOf);
+  return restatePrice(book.splits, shareClass.id, parsePrice(shareClass.originalIssuePrice, "originalIssuePrice"), shareClass.effectiveOn, asOf);
 }
 
 /** Common shares one share of the class converts into on `asOf` (1 for common). */
@@ -348,9 +349,10 @@ export function conversionRatio(book: Pick<EquityBook, "amendments" | "splits">,
   const issue = originalIssuePrice(book, shareClass, asOf);
   const price = conversionPrice(book, shareClass, asOf);
   if (!issue || !price || price.numerator <= 0n) {
-    throw new EquityError(`Class ${shareClass.code} has no conversion terms.`, {
-      code: "equity_class_terms_missing",
-      remedy: "Record the class's original issue price and conversion price.",
+    throw equityError("classConversionTermsMissing", {
+      code: fig.text(shareClass.code),
+      issuePrice: fig.term("originalIssuePrice"),
+      conversionPrice: fig.term("conversionPrice"),
     });
   }
   return divideRational(issue, price);
@@ -453,7 +455,7 @@ export interface ConvertibleState {
 /** A SAFE's or note's terms as issued. */
 export function convertibleTerms(security: SecurityRecord): ConvertibleTerms {
   if (security.kind !== "safe" && security.kind !== "note") {
-    throw new EquityError(`Security ${security.securityNumber} is not a convertible instrument.`, { code: "equity_not_convertible", remedy: "Choose a SAFE or a convertible note." });
+    throw equityError("securityNotConvertible", { security: fig.text(security.securityNumber) });
   }
   return {
     id: security.id,
@@ -521,7 +523,7 @@ export function electionOnVoidedSource(
   const voided = book.events.find((event) => event.kind === "void" && event.securityId === election.sourceSecurityId && event.effectiveOn <= asOf);
   if (!voided) return null;
   const { terms: standing } = effectiveConvertibleTerms(book, security, on);
-  const same = (a: string | null, b: string | null) => (a === null || b === null ? a === b : compareRational(parseMoney(a, "the term"), parseMoney(b, "the term")) === 0);
+  const same = (a: string | null, b: string | null) => (a === null || b === null ? a === b : compareRational(parseMoney(a, "convertibleTerm"), parseMoney(b, "convertibleTerm")) === 0);
   if (same(standing.valuationCap, election.valuationCap) && same(standing.discountPercent, election.discountPercent) && (standing.safeType ?? "pre_money") === election.safeType) return null;
   return { election, sourceVoidedOn: voided.effectiveOn };
 }
@@ -550,15 +552,17 @@ export function conversionOnVoidedTerms(
 /**
  * The terms in force on `asOf`: an MFN SAFE carries the cap, discount and
  * SAFE type of its election in force then (see electionInForce); otherwise
- * the terms as issued.
+ * the terms as issued. `includeVoidedSources` reads the terms as recorded,
+ * an election adopting a since-voided instrument's terms included.
  */
 export function effectiveConvertibleTerms(
   book: Pick<EquityBook, "securityAmendments" | "events">,
   security: SecurityRecord,
   asOf: string,
+  options: { includeVoidedSources?: boolean } = {},
 ): { terms: ConvertibleTerms; electionId: string | null } {
   const terms = convertibleTerms(security);
-  const election = electionInForce(book, security, asOf);
+  const election = electionInForce(book, security, asOf, options);
   if (!election) return { terms, electionId: null };
   return {
     terms: { ...terms, valuationCap: election.valuationCap, discountPercent: election.discountPercent, safeType: election.safeType },
@@ -576,7 +580,7 @@ const CONVERTIBLE_ENDINGS: Readonly<Partial<Record<SecurityEventKind, Convertibl
 
 export function convertibleState(book: Pick<EquityBook, "events" | "securityAmendments">, security: SecurityRecord, asOf: string): ConvertibleState {
   const { terms, electionId } = effectiveConvertibleTerms(book, security, asOf);
-  const principal = parseMoney(terms.principal, "the principal");
+  const principal = parseMoney(terms.principal, "principal");
   if (asOf < security.issueDate) {
     return {
       security, status: "not_issued", principal: formatMoney(principal), accruedInterest: "0.0000", convertingAmount: formatMoney(principal),
@@ -728,7 +732,7 @@ export function buildCapTable(book: EquityBook, asOf: string): CapTable {
     let ratio = ratios.get(classId);
     if (!ratio) {
       const shareClass = classById.get(classId);
-      if (!shareClass) throw new EquityError("A security references an unknown share class.", { code: "equity_class_unknown", remedy: "Reload the cap table." });
+      if (!shareClass) throw equityError("classReferenceUnknown", {}, { status: 422 });
       ratio = conversionRatio(book, shareClass, asOf);
       ratios.set(classId, ratio);
     }
@@ -772,7 +776,7 @@ export function buildCapTable(book: EquityBook, asOf: string): CapTable {
     const classId = security.shareClassId!;
     const asConverted = floorShares(multiplyRational(rational(state.outstanding), ratioOf(classId)));
     const exercisePrice = (security.kind === "option" || security.kind === "warrant") && security.pricePerShare
-      ? formatPrice(restatePrice(book.splits, classId, parsePrice(security.pricePerShare, "the exercise price"), security.issueDate, asOf))
+      ? formatPrice(restatePrice(book.splits, classId, parsePrice(security.pricePerShare, "exercisePrice"), security.issueDate, asOf))
       : null;
     holdings.push({
       securityId: security.id, securityNumber: security.securityNumber, kind: security.kind, holderPartyId: security.holderPartyId,
@@ -838,7 +842,7 @@ export function buildCapTable(book: EquityBook, asOf: string): CapTable {
         outstanding: row.outstanding.toString(), asConvertedOutstanding: row.asConverted.toString(),
         awardsOutstanding: row.awards.toString(), poolAvailable: pool.toString(), fullyDiluted: fullyDiluted.toString(),
         conversionRatio: formatPrice(ratioOf(shareClass.id)),
-        parValue: formatPrice(restatePrice(book.splits, shareClass.id, parsePrice(shareClass.parValue, "the par value"), shareClass.effectiveOn, asOf)),
+        parValue: formatPrice(restatePrice(book.splits, shareClass.id, parsePrice(shareClass.parValue, "parValue"), shareClass.effectiveOn, asOf)),
         originalIssuePrice: issue ? formatPrice(issue) : null,
         conversionPrice: price ? formatPrice(price) : null,
         outstandingPercent: percentOf(row.asConverted, asConvertedTotal),

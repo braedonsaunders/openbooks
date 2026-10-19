@@ -74,6 +74,7 @@ import query from './query.json'
 import rebates from './rebates.json'
 import receipts from './receipts.json'
 import records from './records.json'
+import refusals from './refusals.json'
 import reports from './reports.json'
 import resourcing from './resourcing.json'
 import returns from './returns.json'
@@ -163,6 +164,7 @@ export default {
   rebates,
   receipts,
   records,
+  refusals,
   reports,
   resourcing,
   returns,

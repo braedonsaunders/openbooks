@@ -20,15 +20,16 @@
  */
 import { sql } from "drizzle-orm";
 import { toUnits } from "../money/money.ts";
+import type { CatalogRefusal } from "../platform/catalog-refusal.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { convertibleState } from "./cap-table.ts";
 import type { GovernedRunResult } from "./compensation-run.ts";
-import { EquityError } from "./errors.ts";
+import { EquityError, equityError, fig } from "./errors.ts";
 import { governEquityAction } from "./governance.ts";
 import { functionalUnits, spotRate } from "./fx.ts";
 import { noteInterest } from "./interest.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, writeEquityAudit } from "./internal.ts";
-import { assertRunPeriodPostable, instrumentBalance, nextRunPeriodAfter, postEquityEntry, requirePolicyAccount, resolveAccountPolicy, runBlocked, type EquityLeg, type RunPeriodAfter } from "./posting.ts";
+import { assertRunPeriodPostable, instrumentBalance, nextRunPeriodAfter, postEquityEntry, requirePolicyAccount, resolveAccountPolicy, runBlocked, runPeriodsToGenerate, type EquityLeg, type RunPeriodAfter } from "./posting.ts";
 import { ledgerUnits } from "./quantities.ts";
 import { formatLedger, newEquityId } from "./securities.ts";
 import { loadEquityBook } from "./store.ts";
@@ -60,15 +61,16 @@ export interface InterestPreview {
   /** Whether a run through the date would accrue anything. */
   due: boolean;
   /** Why the run cannot be posted through the date yet (its period has not ended, or is closed). */
-  blocked: { code: string; message: string; remedy: string } | null;
+  blocked: CatalogRefusal | null;
 }
 
 type MeasuredLine = InterestLine & { units: { cumulative: bigint; previous: bigint; period: bigint; functional: bigint }; legs: EquityLeg[] };
 
-async function lastRun(orgId: string, subsidiaryId: string): Promise<{ id: string; through_date: string } | undefined> {
+async function lastRun(orgId: string, subsidiaryId: string, onOrBefore?: string): Promise<{ id: string; through_date: string } | undefined> {
   return (await db.execute<{ id: string; through_date: string }>(sql`
     select id, through_date::text as through_date from equity_interest_runs
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
+       ${onOrBefore ? sql`and through_date <= ${onOrBefore}::date` : sql``}
      order by through_date desc limit 1`)).rows[0];
 }
 
@@ -142,11 +144,7 @@ async function measure(
         legs.push({ accountId: accounts.expense(), units: functionalPeriod });
       }
     } else {
-      throw new EquityError(`Interest on ${note.securityNumber} through ${throughDate} is below what is already accrued.`, {
-        status: 409,
-        code: "equity_interest_unreconciled",
-        remedy: "Review the note's interest entries and settlements in the journal; accrued interest only falls when a note is voided.",
-      });
+      throw equityError("interestBelowAccrued", { security: fig.text(note.securityNumber), date: fig.date(throughDate) });
     }
     total += functionalPeriod;
     lines.push({
@@ -162,12 +160,7 @@ async function measure(
 /** A run dated before the latest posted run refuses: earlier periods are already accrued. */
 function backdated(last: { through_date: string } | undefined, throughDate: string): EquityError | null {
   if (!last || throughDate >= last.through_date) return null;
-  return new EquityError(`An interest run through ${last.through_date} is already posted.`, {
-    status: 409,
-    code: "equity_interest_run_backdated",
-    remedy: `Run through a date after ${last.through_date}; earlier periods are already accrued.`,
-    field: "throughDate",
-  });
+  return equityError("interestRunBackdated", { last: fig.date(last.through_date) }, { field: "throughDate" });
 }
 
 /**
@@ -176,7 +169,7 @@ function backdated(last: { through_date: string } | undefined, throughDate: stri
  * itself would.
  */
 export async function previewInterestRun(input: { orgId: string; actorId: string; subsidiaryId: string; throughDate: string }): Promise<InterestPreview> {
-  const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
+  const throughDate = requireDate(input.throughDate, "throughDate", "runDate");
   await assertEquityReadable(input.orgId);
   return withOrgTransaction(input.orgId, async () => {
     await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
@@ -190,7 +183,7 @@ export async function previewInterestRun(input: { orgId: string; actorId: string
       subsidiaryId: input.subsidiaryId, throughDate, currency: entity.currency, lastRunThrough: last?.through_date ?? null,
       total: formatLedger(total), lines: lines.map(({ units: _units, legs: _legs, ...line }) => line),
       due: last?.through_date !== throughDate && lines.length > 0,
-      blocked: last?.through_date === throughDate ? null : await runBlocked(input.orgId, input.subsidiaryId, throughDate, "note interest run"),
+      blocked: last?.through_date === throughDate ? null : await runBlocked(input.orgId, input.subsidiaryId, throughDate, "interest"),
     };
   }, { isolationLevel: "REPEATABLE READ", readOnly: true });
 }
@@ -229,24 +222,30 @@ export async function interestRunChange(orgId: string, subsidiaryId: string, thr
 }
 
 /**
- * Note interest accrued through the last posted run that no run has
- * accrued: a note issued, or a settlement recorded, after the run for the
- * periods it measured. The next run, through the end of the period after
- * the last one, accrues it as a catch-up; until then it is due here with
- * its amount. Null when there is no run yet or nothing to catch up. A
- * missing exchange rate refuses as the run itself would.
+ * Note interest accrued through a posted run that no run has accrued: a
+ * note issued, or a settlement recorded, after the run for the periods it
+ * measured. The next run, through the end of the period after the last one,
+ * accrues it as a catch-up; until then it is due here with its amount. As
+ * of a date, it is measured through the latest run on or before that date,
+ * so nothing is due for a note before it is issued. Null when there is no
+ * run yet or nothing to catch up. A missing exchange rate refuses as the run
+ * itself would.
  */
-export async function interestCatchUp(orgId: string, subsidiaryId: string): Promise<{ recognizedThrough: string; total: string; lines: number; currency: string; postsWith: RunPeriodAfter | null } | null> {
+export async function interestCatchUp(orgId: string, subsidiaryId: string, asOf?: string): Promise<{
+  recognizedThrough: string; total: string; lines: number; currency: string; postsWith: RunPeriodAfter | null; generatePeriods: { calendarId: string; fiscalYear: number } | null;
+} | null> {
   return withOrgTransaction(orgId, async () => {
-    const last = await lastRun(orgId, subsidiaryId);
-    if (!last) return null;
+    const latest = await lastRun(orgId, subsidiaryId);
+    const last = latest && asOf && asOf < latest.through_date ? await lastRun(orgId, subsidiaryId, asOf) : latest;
+    if (!latest || !last) return null;
     const entity = await loadLegalEntity(db, orgId, subsidiaryId);
     const book = await loadEquityBook(db, orgId, subsidiaryId);
     const { lines, total } = await measure(orgId, subsidiaryId, book, last.through_date, entity.currency, null, await accrued(orgId, subsidiaryId, last.through_date));
     if (lines.length === 0) return null;
+    const postsWith = await nextRunPeriodAfter(db, orgId, subsidiaryId, latest.through_date);
     return {
       recognizedThrough: last.through_date, total: formatLedger(total), lines: lines.length, currency: entity.currency,
-      postsWith: await nextRunPeriodAfter(db, orgId, subsidiaryId, last.through_date),
+      postsWith, generatePeriods: postsWith ? null : await runPeriodsToGenerate(db, orgId, latest.through_date),
     };
   });
 }
@@ -265,14 +264,14 @@ export interface InterestRunResult {
  * action an Equity action Flow may require approval for).
  */
 export async function postInterestRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<GovernedRunResult<InterestRunResult>> {
-  const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
+  const throughDate = requireDate(input.throughDate, "throughDate", "runDate");
   // A run already posted for the date is returned as it stands; nothing is submitted again.
   const posted = await withOrgTransaction(input.orgId, async () => (await db.execute<{ id: string }>(sql`
     select id from equity_interest_runs
      where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`)).rows.length > 0);
   if (posted) return { ...(await applyInterestRun(input)), status: "applied", requestId: null };
   // A date whose period has not ended or is closed refuses before anything is submitted for approval.
-  await withOrgTransaction(input.orgId, () => assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "note interest run"));
+  await withOrgTransaction(input.orgId, () => assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "interest"));
   const outcome = await governEquityAction({
     orgId: input.orgId, actorId: input.actorId, subsidiaryId: input.subsidiaryId, action: "interest_run",
     subjectId: null, subjectLabel: `Note interest through ${throughDate}`, effectiveOn: throughDate, reason: null,
@@ -285,7 +284,7 @@ export async function postInterestRun(input: EquityCommand & { subsidiaryId: str
 
 /** Apply the note interest run: the command its approval releases. */
 export async function applyInterestRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<InterestRunResult> {
-  const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
+  const throughDate = requireDate(input.throughDate, "throughDate", "runDate");
   return inEquityCommand(input, "equity.manage", async ({ book, currency, entityName }) => {
     const existing = (await db.execute<{ id: string; total_amount: string; journal_entry_id: string | null; lines: number }>(sql`
       select r.id, r.total_amount::text as total_amount, r.journal_entry_id,
@@ -298,16 +297,13 @@ export async function applyInterestRun(input: EquityCommand & { subsidiaryId: st
     const last = await lastRun(input.orgId, input.subsidiaryId);
     const refusal = backdated(last, throughDate);
     if (refusal) throw refusal;
-    await assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "note interest run");
+    await assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "interest");
     const previous = await accrued(input.orgId, input.subsidiaryId);
     const probe = await measure(input.orgId, input.subsidiaryId, book, throughDate, currency, null, previous);
     if (probe.lines.length === 0) {
-      throw new EquityError(`No note interest is due through ${throughDate}${last ? ` beyond the run through ${last.through_date}` : ""}.`, {
-        status: 409,
-        code: "equity_run_nothing_due",
-        remedy: "No note accrues interest in this period; run through a later period end while a note is outstanding.",
-        field: "throughDate",
-      });
+      throw last
+        ? equityError("interestNothingDueSince", { date: fig.date(throughDate), last: fig.date(last.through_date) }, { field: "throughDate" })
+        : equityError("interestNothingDue", { date: fig.date(throughDate) }, { field: "throughDate" });
     }
     const policy = await resolveAccountPolicy(db, input.orgId, input.subsidiaryId, throughDate);
     const accounts = { expense: () => requirePolicyAccount(policy, "interestExpenseAccountId"), accrued: () => requirePolicyAccount(policy, "accruedInterestAccountId") };
@@ -327,7 +323,7 @@ export async function applyInterestRun(input: EquityCommand & { subsidiaryId: st
       insert into equity_interest_runs (id, org_id, subsidiary_id, through_date, currency, total_amount, journal_entry_id, created_by)
       values (${runId}, ${input.orgId}, ${input.subsidiaryId}, ${throughDate}::date, ${currency}, ${formatLedger(total)}::numeric, ${journalEntryId}, ${input.actorId})
       returning id`)).rows;
-    if (inserted.length !== 1) throw new EquityError("The interest run was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+    if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("interestRun") });
     if (lines.length > 0) {
       const values = lines.map((line) => sql`(${input.orgId}, ${input.subsidiaryId}, ${runId}, ${line.securityId}, ${line.currency},
         ${line.cumulative}::numeric, ${line.previous}::numeric, ${line.period}::numeric, ${line.fxRate}::numeric, ${line.functional}::numeric)`);
@@ -336,7 +332,7 @@ export async function applyInterestRun(input: EquityCommand & { subsidiaryId: st
         values ${sql.join(values, sql`, `)}
         returning id`)).rows;
       if (written.length !== lines.length) {
-        throw new EquityError("The interest run lines were not stored completely; nothing was saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+        throw equityError("notStoredCompletely", { record: fig.choice("interestLines") });
       }
     }
     await writeEquityAudit(db, {

@@ -12,6 +12,7 @@ export function withReportBookColumn(data: ExportData, book: { label: string; va
       moneyCurrencies: [null, ...group.moneyCurrencies.map((spec) => (spec && typeof spec === 'object' ? { column: spec.column + 1 } : spec))],
     } : {}),
     ...(group.numberFormats ? { numberFormats: [null, ...group.numberFormats] } : {}),
+    ...(group.dates ? { dates: [false, ...group.dates] } : {}),
     ...(group.align ? { align: ['left' as const, ...group.align] } : {}),
   })) }
 }

@@ -28,8 +28,9 @@ import {
   type HoldingState,
 } from "./cap-table.ts";
 import { cumulativeCompensation, isCompensatory, totalCompensation } from "./compensation.ts";
-import { conversionOnVoidedTermsAsRecorded } from "./conversion-review.ts";
-import { EquityError } from "./errors.ts";
+import { reviewRecordedConversion, roundConversionDrift, type ConversionDrift } from "./conversion-review.ts";
+import type { RoundPricing } from "./round-conversion.ts";
+import { equityError } from "./errors.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, type LegalEntity } from "./internal.ts";
 import { restate, spotRate } from "./fx.ts";
 import { mfnCandidates, type MfnCandidate } from "./mfn.ts";
@@ -200,6 +201,13 @@ export interface SecurityDetail {
      * is corrected by voiding the certificate it produced and converting again.
      */
     invalidConversionTerms: { electionId: string; sourceSecurityId: string; sourceSecurityNumber: string; sourceVoidedOn: string } | null;
+    /**
+     * A conversion on the terms that stand whose recorded price differs from
+     * the price the round now gives them: activity recorded later and dated
+     * before the round changed the count the conversion divided by. The
+     * conversion stands as recorded; the round reports the same drift.
+     */
+    conversionDrift: (ConversionDrift & { roundName: string; currency: string; resultingSecurityNumber: string | null }) | null;
   } | null;
   vesting: { date: string; quantity: string; cumulative: string }[];
   /**
@@ -208,7 +216,8 @@ export interface SecurityDetail {
    * what is recognized through the date and what runs through it posted.
    */
   compensation: { grantDateValue: string; expectedAfterForfeitures: string; recognized: string; posted: string } | null;
-  events: Record<string, unknown>[];
+  /** Events as recorded; one whose resulting security was voided names that void (it is undone from then). */
+  events: (Record<string, unknown> & { resulting_voided: { securityId: string; securityNumber: string; voidedOn: string } | null })[];
   source: { id: string; securityNumber: string } | null;
   resulting: { id: string; securityNumber: string; holderName: string }[];
   exercisePrice: string | null;
@@ -264,11 +273,11 @@ export interface MfnElectionView {
 
 /** One security with its state, schedule, cost and history. */
 export async function loadSecurityDetail(input: ReadInput & { securityId: string; asOf: string }): Promise<SecurityDetail> {
-  if (!isUuid(input.securityId)) throw new EquityError("The security does not exist.", { status: 404, code: "equity_security_unknown", remedy: "Choose a security." });
+  if (!isUuid(input.securityId)) throw equityError("securityUnknown");
   return snapshot(input.orgId, async () => {
     const raw = (await db.execute<Record<string, unknown>>(sql`
       select ${SECURITY_COLUMNS} from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`)).rows[0];
-    if (!raw) throw new EquityError("The security does not exist.", { status: 404, code: "equity_security_unknown", remedy: "Choose a security." });
+    if (!raw) throw equityError("securityUnknown");
     const subsidiaryId = String(raw.subsidiary_id);
     const { entity, book } = await entityBook({ ...input, subsidiaryId });
     const security = securityFromRow(raw);
@@ -281,6 +290,7 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
     const reversed = reversedEvents(book, "9999-12-31");
     const reversalOf = new Map(book.events.filter((event) => event.kind === "reverse" && event.reversesEventId).map((event) => [event.reversesEventId!, event.id]));
     const numberOf = new Map(book.securities.map((row) => [row.id, row.securityNumber]));
+    const voidedOn = new Map(book.events.filter((event) => event.kind === "void").map((event) => [event.securityId, event.effectiveOn]));
     const source83b = earlyExerciseSource(book, security);
     let restricted: SecurityDetail["restricted"] = null;
     if (source83b) {
@@ -315,7 +325,7 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
           join equity_compensation_runs r on r.org_id = l.org_id and r.id = l.run_id
          where l.org_id = ${input.orgId} and l.security_id = ${security.id} and r.through_date <= ${input.asOf}::date
          order by r.through_date desc limit 1`)).rows[0];
-      const fairValue = parsePrice(security.fairValuePerUnit, "the fair value per unit");
+      const fairValue = parsePrice(security.fairValuePerUnit, "fairValuePerUnit");
       compensation = {
         grantDateValue: formatLedger(ledgerUnits(restate(multiplyRational(rational(security.quantity ?? 0n), fairValue), security.fxRate), exponent)),
         expectedAfterForfeitures: formatLedger(ledgerUnits(restate(totalCompensation(book, security, input.asOf), security.fxRate), exponent)),
@@ -323,7 +333,12 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
         posted: posted?.cumulative_amount ?? "0.0000",
       };
     }
-    const onVoided = convertible ? await conversionOnVoidedTermsAsRecorded(db, input.orgId, book, security, input.asOf, entity.currency) : null;
+    const review = convertible ? await reviewRecordedConversion(db, input.orgId, book, security, input.asOf, entity.currency) : null;
+    const onVoided = review?.voidedTerms ?? null;
+    const driftRound = review?.drift ? book.rounds.find((row) => row.id === review.drift!.roundId) ?? null : null;
+    const conversionDrift: NonNullable<SecurityDetail["convertible"]>["conversionDrift"] = review?.drift && driftRound
+      ? { ...review.drift, roundName: driftRound.name, currency: driftRound.currency, resultingSecurityNumber: review.drift.resultingSecurityId ? numberOf.get(review.drift.resultingSecurityId) ?? null : null }
+      : null;
     const invalidConversionTerms: NonNullable<SecurityDetail["convertible"]>["invalidConversionTerms"] = onVoided
       ? { electionId: onVoided.electionId, sourceSecurityId: onVoided.sourceSecurityId, sourceSecurityNumber: numberOf.get(onVoided.sourceSecurityId) ?? "", sourceVoidedOn: onVoided.sourceVoidedOn }
       : null;
@@ -339,9 +354,11 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
       mfn = {
         candidates: mfnCandidates(book, security, input.asOf),
         elections: records.map((row, index): MfnElectionView => {
-          // The terms in force just before this record: the history without it and anything after it.
+          // The terms in force just before this record as recorded (an election adopting a since-voided
+          // instrument's terms included): the history without it and anything after it. A reversal
+          // reverts from the terms its election adopted to those it restores.
           const prior = { ...book, securityAmendments: records.slice(0, index) };
-          const { terms: before } = effectiveConvertibleTerms(prior, security, row.effectiveOn);
+          const { terms: before } = effectiveConvertibleTerms(prior, security, row.effectiveOn, { includeVoidedSources: true });
           const standing: MfnElectionView["standing"] = row.kind !== "mfn_election" || row.effectiveOn > input.asOf ? null
             : reversedNow.has(row.id) ? "reversed"
             : voidedEver.has(row.sourceSecurityId) ? "source_void"
@@ -376,6 +393,7 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
         valuationCap: convertible.terms.valuationCap, discountPercent: convertible.terms.discountPercent, safeType: convertible.terms.safeType, electionId: convertible.electionId,
         issuedTerms: { valuationCap: security.valuationCap, discountPercent: security.discountPercent, safeType: security.safeType },
         invalidConversionTerms,
+        conversionDrift,
       } : null,
       vesting: security.quantity !== null ? vestingInstallments(vestingTermsOf(security)).map((row) => ({ date: row.date, quantity: row.quantity.toString(), cumulative: row.cumulative.toString() })) : [],
       compensation,
@@ -384,12 +402,16 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
         journal_entry_number: typeof row.journal_entry_id === "string" ? entryNumbers.get(row.journal_entry_id) ?? null : null,
         reversal_entry_number: typeof row.reversal_entry_id === "string" ? entryNumbers.get(row.reversal_entry_id) ?? null : null,
         reversed_by_event_id: reversalOf.get(String(row.id)) ?? null,
+        // A conversion, exercise or transfer whose resulting security was voided is undone from the void.
+        resulting_voided: typeof row.resulting_security_id === "string" && voidedOn.has(row.resulting_security_id)
+          ? { securityId: row.resulting_security_id, securityNumber: numberOf.get(row.resulting_security_id) ?? "", voidedOn: voidedOn.get(row.resulting_security_id)! }
+          : null,
         reversible: (REVERSIBLE_EVENT_KINDS as readonly string[]).includes(String(row.kind)) && !reversed.has(String(row.id)),
       })),
       source: source ? { id: source.id, securityNumber: source.securityNumber } : null,
       resulting: resulting.map((row) => ({ id: row.id, securityNumber: row.securityNumber, holderName: names[row.holderPartyId] ?? "" })),
       exercisePrice: (security.kind === "option" || security.kind === "warrant") && security.pricePerShare && shareClass
-        ? formatPrice(restatePrice(book.splits, shareClass.id, parsePrice(security.pricePerShare, "the exercise price"), security.issueDate, input.asOf))
+        ? formatPrice(restatePrice(book.splits, shareClass.id, parsePrice(security.pricePerShare, "exercisePrice"), security.issueDate, input.asOf))
         : null,
       mfn,
       interest: security.kind === "note" ? { posted: formatLedger(await accruedToDate(input.orgId, security.id, input.asOf)), accrued: convertible?.accruedInterest ?? "0.0000" } : null,
@@ -402,6 +424,13 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
       election83b: election83bStatus(book, security, input.asOf),
     };
   });
+}
+
+/** Map in order, one at a time: the reads share the snapshot's connection. */
+async function mapInOrder<T, R>(rows: readonly T[], work: (row: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (const row of rows) out.push(await work(row));
+  return out;
 }
 
 export interface StructureView {
@@ -421,6 +450,12 @@ export interface StructureView {
      * recorded: corrected by a governed amendment of the valuation or its basis.
      */
     preMoneyDrift: { fullyDilutedBefore: string; impliedPreMoney: string } | null;
+    /**
+     * Conversions into the round whose recorded price differs from the price
+     * the round now gives the converting terms, for the same reason: the
+     * conversions stand as recorded.
+     */
+    conversionDrift: (ConversionDrift & { securityNumber: string; resultingSecurityNumber: string | null })[];
     /** Live securities issued in the round or converted into it: while any stand, its price and date cannot change and it cannot be voided. */
     liveSecurities: { id: string; securityNumber: string }[];
     amendments: RoundAmendmentRecord[];
@@ -448,12 +483,15 @@ export async function loadStructure(input: ReadInput & { subsidiaryId: string; a
   return snapshot(input.orgId, async () => {
     const { entity, book } = await entityBook(input);
     const amendments = await loadRoundAmendments(db, input.orgId, input.subsidiaryId);
+    const numberOf = new Map(book.securities.map((row) => [row.id, row.securityNumber]));
+    const pricing = new Map<string, RoundPricing>();
     const originalRounds = (await db.execute<{ id: string; name: string; share_class_id: string; closed_on: string; price_per_share: string; pre_money_valuation: string; currency: string; pre_money_basis_reason: string | null }>(sql`
       select id, name, share_class_id, closed_on::text as closed_on, price_per_share::text as price_per_share, pre_money_valuation::text as pre_money_valuation,
              currency, pre_money_basis_reason
         from equity_financing_rounds where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} order by closed_on, created_at, id`)).rows
       .map((row) => ({ id: row.id, name: row.name, shareClassId: row.share_class_id, closedOn: row.closed_on, pricePerShare: row.price_per_share, preMoneyValuation: row.pre_money_valuation, currency: row.currency, preMoneyBasisReason: row.pre_money_basis_reason }));
     const voided = voidedSecurities(book, input.asOf);
+    const voidedLatest = voidedSecurities(book, "9999-12-31");
     return {
       entity,
       classes: book.classes.map((row) => classRow(book, row, input.asOf)),
@@ -466,9 +504,12 @@ export async function loadStructure(input: ReadInput & { subsidiaryId: string; a
           reserveChanges: book.reserveChanges.filter((row) => row.planId === plan.id).map((row) => ({ id: row.id, effectiveOn: row.effectiveOn, shareDelta: row.shareDelta.toString() })),
         };
       }),
-      rounds: book.rounds.map((round) => {
+      rounds: await mapInOrder(book.rounds, async (round) => {
         const issued = book.securities.filter((row) => row.roundId === round.id && row.kind === "share"
           && row.issueDate <= input.asOf && !row.sourceSecurityId && !voided.has(row.id));
+        // Fundraising totals honor the selected date and exclude conversions.
+        // Amendment dependencies include every certificate that still stands.
+        const liveSecurities = book.securities.filter((row) => row.roundId === round.id && row.kind === "share" && !voidedLatest.has(row.id));
         let raised = 0n;
         let shares = 0n;
         for (const security of issued) {
@@ -479,9 +520,12 @@ export async function loadStructure(input: ReadInput & { subsidiaryId: string; a
         return {
           ...round, raised: formatLedger(raised), sharesIssued: shares.toString(),
           fullyDilutedBefore: fullyDilutedBefore.toString(),
-          impliedPreMoney: formatMoney(multiplyRational(parsePrice(round.pricePerShare, "the round price"), rational(fullyDilutedBefore))),
+          impliedPreMoney: formatMoney(multiplyRational(parsePrice(round.pricePerShare, "roundPrice"), rational(fullyDilutedBefore))),
           preMoneyDrift: roundPreMoneyDrift(book, round),
-          liveSecurities: issued.map((row) => ({ id: row.id, securityNumber: row.securityNumber })),
+          conversionDrift: (await roundConversionDrift(db, input.orgId, book, round.id, input.asOf, entity.currency, pricing)).map((drift) => ({
+            ...drift, securityNumber: numberOf.get(drift.securityId) ?? "", resultingSecurityNumber: drift.resultingSecurityId ? numberOf.get(drift.resultingSecurityId) ?? null : null,
+          })),
+          liveSecurities: liveSecurities.map((row) => ({ id: row.id, securityNumber: row.securityNumber })),
           amendments: amendments.filter((row) => row.roundId === round.id),
         };
       }),
@@ -515,20 +559,20 @@ async function modelRates(orgId: string, entity: LegalEntity, book: EquityBook, 
 }
 
 /** A pro-forma round against the legal entity's cap table. */
-export async function modelEntityRound(input: ReadInput & { subsidiaryId: string } & RoundScenario): Promise<{ entity: LegalEntity; result: RoundModelResult; parties: Record<string, string> }> {
+export async function modelEntityRound(input: ReadInput & { subsidiaryId: string } & Omit<RoundScenario, "currency">): Promise<{ entity: LegalEntity; result: RoundModelResult; parties: Record<string, string> }> {
   return snapshot(input.orgId, async () => {
     const { entity, book } = await entityBook(input);
-    const result = modelRoundFromBook(book, input, await modelRates(input.orgId, entity, book, input.asOf));
+    const result = modelRoundFromBook(book, { ...input, currency: entity.currency }, await modelRates(input.orgId, entity, book, input.asOf));
     return { entity, result, parties: await partyNames(input.orgId, result.dilution.filter((row) => row.kind === "holder").map((row) => row.key)) };
   });
 }
 
 /** The exit waterfall against the legal entity's cap table. */
-export async function runEntityWaterfall(input: ReadInput & { subsidiaryId: string } & Omit<ExitScenario, "minorUnitScale">): Promise<{ entity: LegalEntity; result: WaterfallResult; parties: Record<string, string>; classes: Record<string, string> }> {
+export async function runEntityWaterfall(input: ReadInput & { subsidiaryId: string } & Omit<ExitScenario, "minorUnitScale" | "currency">): Promise<{ entity: LegalEntity; result: WaterfallResult; parties: Record<string, string>; classes: Record<string, string> }> {
   return snapshot(input.orgId, async () => {
     const { entity, book } = await entityBook(input);
     const minorUnitScale = await currencyExponent(db, entity.currency);
-    const result = waterfallFromBook(book, { ...input, minorUnitScale }, await modelRates(input.orgId, entity, book, input.asOf));
+    const result = waterfallFromBook(book, { ...input, currency: entity.currency, minorUnitScale }, await modelRates(input.orgId, entity, book, input.asOf));
     return {
       entity,
       result,
@@ -555,19 +599,19 @@ export interface WaterfallScenario {
 }
 
 /** The exit waterfall with its curve across exit values, in one snapshot of the legal entity's cap table. */
-export async function runEntityWaterfallScenario(input: ReadInput & { subsidiaryId: string } & Omit<ExitScenario, "minorUnitScale">): Promise<WaterfallScenario> {
+export async function runEntityWaterfallScenario(input: ReadInput & { subsidiaryId: string } & Omit<ExitScenario, "minorUnitScale" | "currency">): Promise<WaterfallScenario> {
   return snapshot(input.orgId, async () => {
     const { entity, book } = await entityBook(input);
     const minorUnitScale = await currencyExponent(db, entity.currency);
     const rates = await modelRates(input.orgId, entity, book, input.asOf);
-    const scenario = { ...input, minorUnitScale };
+    const scenario = { ...input, currency: entity.currency, minorUnitScale };
     const result = waterfallFromBook(book, scenario, rates);
     const curve = waterfallCurveFromBook(book, scenario, rates, CURVE_POINTS, CURVE_SPAN);
-    const gross = formatMoney(parseMoney(input.exitValue, "the exit value"));
+    const gross = formatMoney(parseMoney(input.exitValue, "exitValue"));
     return {
       entity,
       grossExitValue: gross,
-      transactionFees: input.transactionFees ? formatMoney(parseMoney(input.transactionFees, "the transaction fees")) : "0.0000",
+      transactionFees: input.transactionFees ? formatMoney(parseMoney(input.transactionFees, "transactionFees")) : "0.0000",
       result,
       curve,
       parties: await partyNames(input.orgId, result.holders.map((row) => row.holderPartyId)),

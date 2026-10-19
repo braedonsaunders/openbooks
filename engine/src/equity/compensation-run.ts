@@ -22,13 +22,14 @@
  * reverse in the next run.
  */
 import { sql } from "drizzle-orm";
+import type { CatalogRefusal } from "../platform/catalog-refusal.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { cumulativeCompensation, isCompensatory } from "./compensation.ts";
 import { governEquityAction } from "./governance.ts";
-import { EquityError } from "./errors.ts";
+import { EquityError, equityError, fig } from "./errors.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, writeEquityAudit } from "./internal.ts";
 import { restate } from "./fx.ts";
-import { assertRunPeriodPostable, instrumentBalance, nextRunPeriodAfter, postEquityEntry, requirePolicyAccount, resolveAccountPolicy, runBlocked, type EquityLeg, type RunPeriodAfter } from "./posting.ts";
+import { assertRunPeriodPostable, instrumentBalance, nextRunPeriodAfter, postEquityEntry, requirePolicyAccount, resolveAccountPolicy, runBlocked, runPeriodsToGenerate, type EquityLeg, type RunPeriodAfter } from "./posting.ts";
 import { ledgerUnits } from "./quantities.ts";
 import { earlyExerciseSource, measureRelease } from "./restricted-stock.ts";
 import { formatLedger, newEquityId } from "./securities.ts";
@@ -81,7 +82,7 @@ export interface CompensationPreview {
   /** The expense change recognized through the last posted run and caught up by this one. */
   catchUpTotal: string;
   /** Why the run cannot be posted through the date yet (its period has not ended, or is closed). */
-  blocked: { code: string; message: string; remedy: string } | null;
+  blocked: CatalogRefusal | null;
 }
 
 type PreviousLine = {
@@ -89,10 +90,11 @@ type PreviousLine = {
   cumulative_amount: string;
 };
 
-async function lastRun(orgId: string, subsidiaryId: string): Promise<{ id: string; through_date: string } | undefined> {
+async function lastRun(orgId: string, subsidiaryId: string, onOrBefore?: string): Promise<{ id: string; through_date: string } | undefined> {
   return (await db.execute<{ id: string; through_date: string }>(sql`
     select id, through_date::text as through_date from equity_compensation_runs
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
+       ${onOrBefore ? sql`and through_date <= ${onOrBefore}::date` : sql``}
      order by through_date desc limit 1`)).rows[0];
 }
 
@@ -192,12 +194,7 @@ async function measureReleases(book: EquityBook, throughDate: string, functional
 /** A run dated before the latest posted run refuses: earlier periods are already measured. */
 function backdated(last: { through_date: string } | undefined, throughDate: string): EquityError | null {
   if (!last || throughDate >= last.through_date) return null;
-  return new EquityError(`A stock compensation run through ${last.through_date} is already posted.`, {
-    status: 409,
-    code: "equity_compensation_run_backdated",
-    remedy: `Run through a date after ${last.through_date}; earlier periods are already measured.`,
-    field: "throughDate",
-  });
+  return equityError("compensationRunBackdated", { last: fig.date(last.through_date) }, { field: "throughDate" });
 }
 
 /** Whether a measured run posts anything: an expense change or a release line. */
@@ -208,7 +205,7 @@ const posts = (total: bigint, releases: { lines: unknown[] }): boolean => total 
  * A date before the latest posted run refuses as the run itself would.
  */
 export async function previewCompensationRun(input: { orgId: string; actorId: string; subsidiaryId: string; throughDate: string }): Promise<CompensationPreview> {
-  const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
+  const throughDate = requireDate(input.throughDate, "throughDate", "runDate");
   await assertEquityReadable(input.orgId);
   return withOrgTransaction(input.orgId, async () => {
     await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
@@ -228,7 +225,7 @@ export async function previewCompensationRun(input: { orgId: string; actorId: st
       releases: releases.lines.map(({ units: _units, shareClassKind: _kind, ...line }) => line),
       due: !alreadyRun && posts(total, releases),
       catchUpTotal: formatLedger(catchUp),
-      blocked: alreadyRun ? null : await runBlocked(input.orgId, input.subsidiaryId, throughDate, "stock compensation run"),
+      blocked: alreadyRun ? null : await runBlocked(input.orgId, input.subsidiaryId, throughDate, "compensation"),
     };
   }, { isolationLevel: "REPEATABLE READ", readOnly: true });
 }
@@ -270,30 +267,36 @@ export async function compensationRunChange(orgId: string, subsidiaryId: string,
 }
 
 /**
- * Stock compensation recognized through the last posted run that no run has
+ * Stock compensation recognized through a posted run that no run has
  * posted: cost recorded after the run for the periods it measured (a grant
  * or issue dated before it, a forfeiture or void dated before it). The next
  * run, through the end of the period after the last one, posts it as a
- * catch-up; until then it is due here with its amount. Null when there is
- * no run yet or nothing to catch up. Reads within the caller's organization
- * transaction and checks no actor (the overview and the runs view).
+ * catch-up; until then it is due here with its amount. As of a date, it is
+ * measured through the latest run on or before that date, so nothing is due
+ * for an award before the award exists. Null when there is no run yet or
+ * nothing to catch up. Reads within the caller's organization transaction
+ * and checks no actor (the overview and the runs view).
  */
-export async function compensationCatchUp(orgId: string, subsidiaryId: string): Promise<{
-  recognizedThrough: string; expense: string; releaseLines: number; currency: string; awards: { securityId: string; securityNumber: string; amount: string }[]; postsWith: RunPeriodAfter | null;
+export async function compensationCatchUp(orgId: string, subsidiaryId: string, asOf?: string): Promise<{
+  recognizedThrough: string; expense: string; releaseLines: number; currency: string; awards: { securityId: string; securityNumber: string; amount: string }[];
+  postsWith: RunPeriodAfter | null; generatePeriods: { calendarId: string; fiscalYear: number } | null;
 } | null> {
   return withOrgTransaction(orgId, async () => {
-    const last = await lastRun(orgId, subsidiaryId);
-    if (!last) return null;
+    const latest = await lastRun(orgId, subsidiaryId);
+    const last = latest && asOf && asOf < latest.through_date ? await lastRun(orgId, subsidiaryId, asOf) : latest;
+    if (!latest || !last) return null;
     const entity = await loadLegalEntity(db, orgId, subsidiaryId);
     const exponent = await currencyExponent(db, entity.currency);
     const book = await loadEquityBook(db, orgId, subsidiaryId);
     const { lines, total } = measure(book, last.through_date, exponent, await previousCumulative(orgId, subsidiaryId, last.through_date));
     const releases = await measureReleases(book, last.through_date, exponent, await previousReleases(orgId, subsidiaryId, last.through_date));
     if (!posts(total, releases)) return null;
+    const postsWith = await nextRunPeriodAfter(db, orgId, subsidiaryId, latest.through_date);
     return {
       recognizedThrough: last.through_date, expense: formatLedger(total), releaseLines: releases.lines.length, currency: entity.currency,
       awards: lines.filter((line) => line.units.period !== 0n).map((line) => ({ securityId: line.securityId, securityNumber: line.securityNumber, amount: line.period })),
-      postsWith: await nextRunPeriodAfter(db, orgId, subsidiaryId, last.through_date),
+      postsWith,
+      generatePeriods: postsWith ? null : await runPeriodsToGenerate(db, orgId, latest.through_date),
     };
   });
 }
@@ -318,14 +321,14 @@ export type GovernedRunResult<T> = (T & { status: "applied"; requestId: string |
  * action an Equity action Flow may require approval for).
  */
 export async function postCompensationRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<GovernedRunResult<CompensationRunResult>> {
-  const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
+  const throughDate = requireDate(input.throughDate, "throughDate", "runDate");
   // A run already posted for the date is returned as it stands; nothing is submitted again.
   const posted = await withOrgTransaction(input.orgId, async () => (await db.execute<{ id: string }>(sql`
     select id from equity_compensation_runs
      where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`)).rows.length > 0);
   if (posted) return { ...(await applyCompensationRun(input)), status: "applied", requestId: null };
   // A date whose period has not ended or is closed refuses before anything is submitted for approval.
-  await withOrgTransaction(input.orgId, () => assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "stock compensation run"));
+  await withOrgTransaction(input.orgId, () => assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "compensation"));
   const outcome = await governEquityAction({
     orgId: input.orgId, actorId: input.actorId, subsidiaryId: input.subsidiaryId, action: "compensation_run",
     subjectId: null, subjectLabel: `Stock compensation through ${throughDate}`, effectiveOn: throughDate, reason: null,
@@ -338,7 +341,7 @@ export async function postCompensationRun(input: EquityCommand & { subsidiaryId:
 
 /** Apply the stock compensation run: the command its approval releases. */
 export async function applyCompensationRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<CompensationRunResult> {
-  const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
+  const throughDate = requireDate(input.throughDate, "throughDate", "runDate");
   return inEquityCommand(input, "equity.manage", async ({ book, currency, entityName }) => {
     const existing = (await db.execute<{ id: string; total_amount: string; journal_entry_id: string | null; lines: number; release_amount: string; release_journal_entry_id: string | null; releases: number }>(sql`
       select r.id, r.total_amount::text as total_amount, r.journal_entry_id, r.release_amount::text as release_amount, r.release_journal_entry_id,
@@ -355,17 +358,14 @@ export async function applyCompensationRun(input: EquityCommand & { subsidiaryId
     const last = await lastRun(input.orgId, input.subsidiaryId);
     const refusal = backdated(last, throughDate);
     if (refusal) throw refusal;
-    await assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "stock compensation run");
+    await assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "compensation");
     const exponent = await currencyExponent(db, currency);
     const { lines, total } = measure(book, throughDate, exponent, await previousCumulative(input.orgId, input.subsidiaryId));
     const releases = await measureReleases(book, throughDate, exponent, await previousReleases(input.orgId, input.subsidiaryId));
     if (!posts(total, releases)) {
-      throw new EquityError(`No stock compensation is due through ${throughDate}${last ? ` beyond the run through ${last.through_date}` : ""}.`, {
-        status: 409,
-        code: "equity_run_nothing_due",
-        remedy: "Nothing changes in this period; run through a later period end once awards vest or are granted.",
-        field: "throughDate",
-      });
+      throw last
+        ? equityError("compensationNothingDueSince", { date: fig.date(throughDate), last: fig.date(last.through_date) }, { field: "throughDate" })
+        : equityError("compensationNothingDue", { date: fig.date(throughDate) }, { field: "throughDate" });
     }
     const runId = await newEquityId(db);
     let journalEntryId: string | null = null;
@@ -409,7 +409,7 @@ export async function applyCompensationRun(input: EquityCommand & { subsidiaryId
       values (${runId}, ${input.orgId}, ${input.subsidiaryId}, ${throughDate}::date, ${currency}, ${formatLedger(total)}::numeric, ${journalEntryId},
         ${formatLedger(releases.total)}::numeric, ${releaseJournalEntryId}, ${input.actorId})
       returning id`)).rows;
-    if (inserted.length !== 1) throw new EquityError("The compensation run was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+    if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("compensationRun") });
     const recorded = lines.filter((line) => line.units.period !== 0n || line.units.cumulative !== 0n);
     if (recorded.length > 0) {
       const values = recorded.map((line) => sql`(${input.orgId}, ${input.subsidiaryId}, ${runId}, ${line.securityId},
@@ -419,7 +419,7 @@ export async function applyCompensationRun(input: EquityCommand & { subsidiaryId
         values ${sql.join(values, sql`, `)}
         returning id`)).rows;
       if (written.length !== recorded.length) {
-        throw new EquityError("The compensation run lines were not stored completely; nothing was saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+        throw equityError("notStoredCompletely", { record: fig.choice("compensationLines") });
       }
     }
     if (releases.lines.length > 0) {
@@ -434,7 +434,7 @@ export async function applyCompensationRun(input: EquityCommand & { subsidiaryId
         values ${sql.join(values, sql`, `)}
         returning id`)).rows;
       if (written.length !== releases.lines.length) {
-        throw new EquityError("The restricted stock releases were not stored completely; nothing was saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+        throw equityError("notStoredCompletely", { record: fig.choice("releaseLines") });
       }
     }
     await writeEquityAudit(db, {

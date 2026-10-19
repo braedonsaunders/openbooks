@@ -81,6 +81,7 @@ export function generalLedgerExportData(
     // Exact ledger strings stay marked through every print conversion so no
     // renderer has to infer money columns or coerce their values to doubles.
     money: [false, false, false, true, true, true],
+    dates: [true, false, false, false, false, false],
     align: LEDGER_ALIGN,
   }))
   return {

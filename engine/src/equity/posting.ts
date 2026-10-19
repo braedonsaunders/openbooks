@@ -14,15 +14,19 @@ import { sql } from "drizzle-orm";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { assertPeriodModulesOpen, canonicalPeriodLabel, CloseError } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, canonicalPeriodLabel, CloseError, periodClosedDetailsOf, type PeriodClosedDetails } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { loadControlAccountsForRoles } from "../records/control-accounts.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
-import { EQUITY_ACCOUNTS_REMEDY, EquityError } from "./errors.ts";
+import { catalogRefusalOf, type CatalogRefusal } from "../platform/catalog-refusal.ts";
+import { EquityError, equityError, fig } from "./errors.ts";
 
 export const EQUITY_JOURNAL_ORIGIN = "equity";
+
+/** A periodic run, or any other dated posting, as period refusals name it. */
+export type EquityRunKind = "compensation" | "interest" | "posting";
 
 export interface EquityAccountPolicy {
   id: string;
@@ -43,20 +47,11 @@ export interface EquityAccountPolicy {
 
 type OptionalPolicyAccount = "interestExpenseAccountId" | "accruedInterestAccountId" | "earlyExerciseDepositAccountId";
 
-const OPTIONAL_ACCOUNT_LABELS: Record<OptionalPolicyAccount, string> = {
-  interestExpenseAccountId: "convertible note interest expense",
-  accruedInterestAccountId: "accrued convertible note interest",
-  earlyExerciseDepositAccountId: "early-exercise deposit",
-};
-
 /** An account the posting needs that the policy version in force does not map refuses with the Setup remedy. */
 export function requirePolicyAccount(policy: EquityAccountPolicy, key: OptionalPolicyAccount): string {
   const accountId = policy[key];
   if (!accountId) {
-    throw new EquityError(`The equity account policy in force from ${policy.effectiveFrom} does not map the ${OPTIONAL_ACCOUNT_LABELS[key]} account.`, {
-      code: "equity_account_policy_incomplete",
-      remedy: `Add an equity account policy version that maps the ${OPTIONAL_ACCOUNT_LABELS[key]} account, effective on or before the transaction date (Setup → Equity accounts).`,
-    });
+    throw equityError("accountPolicyIncomplete", { date: fig.date(policy.effectiveFrom), account: fig.term(key) });
   }
   return accountId;
 }
@@ -65,10 +60,7 @@ export function requirePolicyAccount(policy: EquityAccountPolicy, key: OptionalP
 export async function realizedFxAccount(runner: SqlExecutor, orgId: string): Promise<string> {
   const accounts = await loadControlAccountsForRoles(runner, orgId, ["fxRealizedGainLoss"]);
   if (!accounts.fxRealizedGainLoss) {
-    throw new EquityError("The realized FX gain/loss account is not configured.", {
-      code: "equity_fx_account_missing",
-      remedy: "Map the realized FX gain/loss account in Setup → Company & Accounting → Control accounts, then try again.",
-    });
+    throw equityError("fxAccountMissing");
   }
   return accounts.fxRealizedGainLoss;
 }
@@ -88,10 +80,7 @@ export async function resolveAccountPolicy(runner: SqlExecutor, orgId: string, s
      order by effective_from desc
      limit 1`)).rows[0];
   if (!row) {
-    throw new EquityError(`No equity account policy is in force for this legal entity on ${on}.`, {
-      code: "equity_account_policy_missing",
-      remedy: EQUITY_ACCOUNTS_REMEDY,
-    });
+    throw equityError("accountPolicyMissing", { date: fig.date(on) });
   }
   return {
     id: row.id,
@@ -121,20 +110,12 @@ export const CONSIDERATION_ACCOUNT_TYPES = ["asset_bank"] as const;
 /** A consideration account must be an active posting cash or bank account of the organization. */
 export async function requireConsiderationAccount(runner: SqlExecutor, orgId: string, accountId: string | null | undefined): Promise<string> {
   if (!accountId) {
-    throw new EquityError("Choose the account the consideration settles through.", {
-      code: "equity_consideration_account_missing",
-      remedy: "Choose the cash or bank account that received or paid the cash.",
-      field: "considerationAccountId",
-    });
+    throw equityError("considerationAccountMissing", { field: fig.term("considerationAccount") }, { field: "considerationAccountId" });
   }
   const row = (await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
     select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
   if (!row || !row.is_active || row.is_summary || !(CONSIDERATION_ACCOUNT_TYPES as readonly string[]).includes(row.type)) {
-    throw new EquityError("The consideration account must be an active cash or bank posting account.", {
-      code: "equity_consideration_account_invalid",
-      remedy: "Choose an active cash or bank account; receivables, prepaid, inventory and allowance accounts cannot receive or pay the cash.",
-      field: "considerationAccountId",
-    });
+    throw equityError("considerationAccountInvalid", { field: fig.term("considerationAccount") }, { field: "considerationAccountId" });
   }
   return accountId;
 }
@@ -199,14 +180,35 @@ export async function instrumentBalance(
     .filter((group) => group.units !== 0n || group.txnUnits !== 0n);
 }
 
-function refusal(error: unknown, what: string): never {
+/** An accounting period as a refusal names it: its fiscal label and the months it spans. */
+async function periodFigure(runner: SqlExecutor, orgId: string, periodId: string) {
+  const row = (await runner.execute<{ fiscal_year: number; period_number: number; is_adjustment: boolean; starts_on: string; ends_on: string }>(sql`
+    select fiscal_year, period_number, is_adjustment, starts_on::text as starts_on, ends_on::text as ends_on
+      from accounting_periods where org_id = ${orgId} and id = ${periodId}`)).rows[0];
+  if (!row) return null;
+  return fig.period(canonicalPeriodLabel({ fiscalYear: row.fiscal_year, periodNumber: row.period_number, adjustment: row.is_adjustment }), row.starts_on, row.ends_on);
+}
+
+/**
+ * The period a closed-period refusal locks, and the period whose controlled
+ * reopen releases it: the same period, or the closing period of a fiscal
+ * year sealed by its period-end journals.
+ */
+async function closedPeriods(runner: SqlExecutor, orgId: string, coveringPeriodId: string, error: unknown) {
+  const details = periodClosedDetailsOf(error) ?? periodClosedDetailsOf((error as { cause?: unknown } | null)?.cause)
+    ?? (error instanceof PostingError && error.details && typeof error.details === "object" && (error.details as { kind?: unknown }).kind === "period-closed" ? error.details as PeriodClosedDetails : undefined);
+  if (!details) return null;
+  const period = await periodFigure(runner, orgId, coveringPeriodId);
+  const closing = await periodFigure(runner, orgId, details.periodId);
+  return period && closing ? { period, closing } : null;
+}
+
+async function refusal(runner: SqlExecutor, orgId: string, periodId: string, on: string, error: unknown): Promise<never> {
   if (error instanceof PostingError || error instanceof CloseError) {
-    throw new EquityError(`The ${what} was refused by the ledger: ${error.message}`, {
-      status: 422,
-      code: "equity_posting_refused",
-      remedy: "Resolve the ledger refusal (for example, reopen the period through Period Close or reactivate the account), then try again.",
-      cause: error,
-    });
+    // The ledger's own refusal is kept whenever its period cannot be read back.
+    const closed = await closedPeriods(runner, orgId, periodId, error).catch(() => null);
+    if (closed) throw equityError("postingPeriodClosed", { date: fig.date(on), period: closed.period, closing: closed.closing }, { cause: error });
+    throw equityError("postingRefused", { date: fig.date(on), reason: fig.text(error.message) }, { cause: error });
   }
   throw error;
 }
@@ -216,10 +218,7 @@ async function primaryBook(runner: SqlExecutor, orgId: string, lock = true): Pro
   const book = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 ${lock ? sql`for share` : sql``}`)).rows[0];
   if (!book) {
-    throw new EquityError("The organization has no active primary book that posts to the general ledger.", {
-      code: "equity_book_missing",
-      remedy: "Activate the primary accounting book in Company Settings → Accounting books.",
-    });
+    throw equityError("bookMissing");
   }
   return book.id;
 }
@@ -227,10 +226,7 @@ async function primaryBook(runner: SqlExecutor, orgId: string, lock = true): Pro
 async function coveringPeriod(runner: SqlExecutor, orgId: string, subsidiaryId: string, on: string): Promise<string> {
   const period = await resolveCoveringPeriod(runner, orgId, on, subsidiaryId);
   if (!period) {
-    throw new EquityError(`No accounting period covers ${on}.`, {
-      code: "equity_period_missing",
-      remedy: `Generate the accounting period covering ${on} (Accounting → Period Close), then try again.`,
-    });
+    throw equityError("periodMissing", { date: fig.date(on) });
   }
   return period.id;
 }
@@ -241,20 +237,16 @@ async function coveringPeriod(runner: SqlExecutor, orgId: string, subsidiaryId: 
  * run records what it measured into its period, so it is dated into an open
  * one, exactly as its entry would be.
  */
-export async function assertPostingPeriodOpen(runner: SqlExecutor, orgId: string, subsidiaryId: string, on: string, what: string, options: { lock?: boolean } = {}): Promise<void> {
+export async function assertPostingPeriodOpen(runner: SqlExecutor, orgId: string, subsidiaryId: string, on: string, run: EquityRunKind, options: { lock?: boolean } = {}): Promise<void> {
   const bookId = await primaryBook(runner, orgId, options.lock !== false);
   const periodId = await coveringPeriod(runner, orgId, subsidiaryId, on);
   try {
     await assertPeriodModulesOpen(runner, { orgId, periodId, bookId, subsidiaryIds: [subsidiaryId], modules: ["gl"] });
   } catch (error) {
     if (error instanceof CloseError) {
-      throw new EquityError(`The ${what} through ${on} falls in a closed period: ${error.message}`, {
-        status: 409,
-        code: "equity_period_closed",
-        remedy: "Run through the end of an open period (the runs view offers the next one with activity due), or reopen the period through Period Close.",
-        field: "throughDate",
-        cause: error,
-      });
+      const closed = await closedPeriods(runner, orgId, periodId, error);
+      const period = closed?.period ?? (await periodFigure(runner, orgId, periodId))!;
+      throw equityError("runPeriodClosed", { run: fig.choice(run), date: fig.date(on), period, closing: closed?.closing ?? period }, { field: "throughDate", cause: error });
     }
     throw error;
   }
@@ -268,35 +260,27 @@ export async function assertPostingPeriodOpen(runner: SqlExecutor, orgId: string
  * issue recorded after a run) is caught up by the next run, which can only
  * be dated after the last one.
  */
-export async function assertRunPeriodPostable(runner: SqlExecutor, orgId: string, subsidiaryId: string, throughDate: string, what: string, options: { lock?: boolean } = {}): Promise<void> {
+export async function assertRunPeriodPostable(runner: SqlExecutor, orgId: string, subsidiaryId: string, throughDate: string, run: Exclude<EquityRunKind, "posting">, options: { lock?: boolean } = {}): Promise<void> {
   const period = await resolveCoveringPeriod(runner, orgId, throughDate, subsidiaryId);
-  if (!period) {
-    throw new EquityError(`No accounting period covers ${throughDate}.`, {
-      code: "equity_period_missing",
-      remedy: `Generate the accounting period covering ${throughDate} (Accounting → Period Close), then try again.`,
-      field: "throughDate",
-    });
-  }
+  if (!period) throw equityError("periodMissing", { date: fig.date(throughDate) }, { field: "throughDate" });
   const today = await businessTodayInTx(runner, orgId);
   if (period.ends_on > today) {
-    throw new EquityError(`The ${what} through ${throughDate} falls in ${canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false })}, which ends on ${period.ends_on}, after today (${today}).`, {
-      status: 409,
-      code: "equity_run_period_not_ended",
-      remedy: `Run through the end of a period that has ended by today (${today}); the runs view offers the next one with activity due, and anything recognized since the last run is caught up in it.`,
-      field: "throughDate",
-    });
+    const label = canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false });
+    throw equityError("runPeriodNotEnded", {
+      run: fig.choice(run), date: fig.date(throughDate), period: fig.period(label, period.starts_on, period.ends_on), endsOn: fig.date(period.ends_on), today: fig.date(today),
+    }, { field: "throughDate" });
   }
-  await assertPostingPeriodOpen(runner, orgId, subsidiaryId, throughDate, what, options);
+  await assertPostingPeriodOpen(runner, orgId, subsidiaryId, throughDate, run, options);
 }
 
 /** The refusal a run through the date would raise for its period (not ended, closed or missing), or null when it can post. */
-export async function runBlocked(orgId: string, subsidiaryId: string, throughDate: string, what: string): Promise<{ code: string; message: string; remedy: string } | null> {
+export async function runBlocked(orgId: string, subsidiaryId: string, throughDate: string, run: Exclude<EquityRunKind, "posting">): Promise<CatalogRefusal | null> {
   try {
-    await assertRunPeriodPostable(db, orgId, subsidiaryId, throughDate, what, { lock: false });
+    await assertRunPeriodPostable(db, orgId, subsidiaryId, throughDate, run, { lock: false });
     return null;
   } catch (error) {
     if (!(error instanceof EquityError)) throw error;
-    return { code: error.code, message: error.message, remedy: error.remedy };
+    return catalogRefusalOf(error);
   }
 }
 
@@ -325,6 +309,23 @@ export async function nextRunPeriodAfter(runner: SqlExecutor, orgId: string, sub
     if (await postingPeriodOpen(runner, orgId, subsidiaryId, period.ends_on)) return { periodId: period.id, name: canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false }), endsOn: period.ends_on, ended: period.ends_on <= today };
   }
   return null;
+}
+
+/**
+ * The fiscal year of the default calendar to generate when no accounting
+ * period ends after `after`: the year after the calendar's latest generated
+ * period. Null when the calendar has periods after the date (they are closed,
+ * so generating more would not help) or there is no default calendar.
+ */
+export async function runPeriodsToGenerate(runner: SqlExecutor, orgId: string, after: string): Promise<{ calendarId: string; fiscalYear: number } | null> {
+  const latest = (await runner.execute<{ calendar_id: string; fiscal_year: number; ends_on: string }>(sql`
+    select p.fiscal_calendar_id as calendar_id, p.fiscal_year, p.ends_on::text as ends_on from accounting_periods p
+     where p.org_id = ${orgId} and not p.is_adjustment
+       and p.fiscal_calendar_id in (select id from fiscal_calendars where org_id = ${orgId} and is_default and is_active)
+     order by p.ends_on desc, p.id
+     limit 1`)).rows[0];
+  if (!latest || latest.ends_on > after) return null;
+  return { calendarId: latest.calendar_id, fiscalYear: latest.fiscal_year + 1 };
 }
 
 /** Whether the accounting period covering a date is open for general ledger posting in the primary book. */
@@ -361,7 +362,7 @@ export async function postEquityEntry(
   const legs = input.legs.filter((leg) => leg.units !== 0n);
   const balance = legs.reduce((sum, leg) => sum + leg.units, 0n);
   if (legs.length < 2 || balance !== 0n) {
-    throw new EquityError(`The ${input.memo} entry does not balance.`, { status: 409, code: "equity_entry_unbalanced", remedy: "Review the amounts and try again." });
+    throw equityError("entryUnbalanced", { date: fig.date(input.postingDate) });
   }
   const bookId = await primaryBook(runner, input.orgId);
   const periodId = await coveringPeriod(runner, input.orgId, input.subsidiaryId, input.postingDate);
@@ -392,7 +393,7 @@ export async function postEquityEntry(
     });
     return posted.entryId;
   } catch (error) {
-    return refusal(error, `${input.memo} entry`);
+    return refusal(runner, input.orgId, periodId, input.postingDate, error);
   }
 }
 
@@ -410,11 +411,11 @@ export async function reverseEquityEntry(
      where org_id = ${input.orgId} and id = ${input.entryId}
      for update`)).rows[0];
   if (!header || header.origin !== EQUITY_JOURNAL_ORIGIN) {
-    throw new EquityError("The entry to reverse is not an equity entry of this organization.", { status: 409, code: "equity_entry_unknown", remedy: "Reload the record and try again." });
+    throw equityError("entryUnknown");
   }
   // Live entries only: an entry already reversed cannot be reversed again.
   if (header.status !== "posted") {
-    throw new EquityError(`Entry ${header.entry_number} is not a posted entry and cannot be reversed.`, { status: 409, code: "equity_entry_not_posted", remedy: "Reload the record; it may already be reversed." });
+    throw equityError("entryNotPosted", { entry: fig.text(header.entry_number) });
   }
   const lines = (await runner.execute<{ account_id: string; amount: string; currency: string; txn_amount: string; fx_rate: string; line_number: number; custom: Record<string, unknown> | null }>(sql`
     select account_id, amount::text as amount, currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate, line_number, custom
@@ -453,7 +454,7 @@ export async function reverseEquityEntry(
     await markEntryReversed(runner, { orgId: input.orgId, entryId: input.entryId, actorId: input.actorId });
     return posted.entryId;
   } catch (error) {
-    return refusal(error, "reversal");
+    return refusal(runner, input.orgId, periodId, input.reversalDate, error);
   }
 }
 

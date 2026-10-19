@@ -16,7 +16,7 @@
  * quantum, so the value rounded half up to ten decimal places is the same
  * on every machine. No binary floating point is involved.
  */
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import {
   compareRational,
   formatPrice,
@@ -73,7 +73,7 @@ function exp(x: bigint): bigint {
 }
 
 function ln(x: bigint): bigint {
-  if (x <= 0n) throw new EquityError("The logarithm needs a positive value.", { code: "equity_valuation_invalid", remedy: "Check the share price and exercise price." });
+  if (x <= 0n) throw equityError("valuationLogarithmUndefined", { sharePrice: fig.term("grantSharePrice"), exercisePrice: fig.term("exercisePrice") });
   let k = 0n;
   let m = x;
   while (m >= 2n * SCALE) {
@@ -138,21 +138,18 @@ const toRationalFixed = (value: bigint): Rational => rational(value, SCALE);
 
 /** Black-Scholes-Merton value of a European call; missing or invalid inputs refuse by name. */
 export function blackScholesCall(inputs: BlackScholesInputs): BlackScholesResult {
-  const s = parsePrice(inputs.sharePrice, "the share price");
-  const k = parsePrice(inputs.exercisePrice, "the exercise price");
-  const sigma = parsePercent(inputs.volatilityPercent, "the volatility");
-  const r = parsePercent(inputs.riskFreeRatePercent, "the risk-free rate");
-  const t = parsePrice(inputs.expectedTermYears, "the expected term");
-  const q = parsePercent(inputs.dividendYieldPercent, "the dividend yield");
+  const s = parsePrice(inputs.sharePrice, "grantSharePrice");
+  const k = parsePrice(inputs.exercisePrice, "exercisePrice");
+  const sigma = parsePercent(inputs.volatilityPercent, "volatilityPercent");
+  const r = parsePercent(inputs.riskFreeRatePercent, "riskFreeRatePercent");
+  const t = parsePrice(inputs.expectedTermYears, "expectedTermYears");
+  const q = parsePercent(inputs.dividendYieldPercent, "dividendYieldPercent");
   const zero = rational(0n);
-  const refuse = (message: string, remedy: string): never => {
-    throw new EquityError(message, { code: "equity_valuation_invalid", remedy, field: "valuation" });
-  };
-  if (compareRational(s, zero) <= 0) refuse("The share price must be greater than zero.", "Enter the grant-date share price.");
-  if (compareRational(k, zero) < 0) refuse("The exercise price cannot be negative.", "Enter the exercise price.");
-  if (compareRational(sigma, zero) <= 0) refuse("The volatility must be greater than zero.", "Enter the expected volatility as a percentage.");
-  if (compareRational(t, zero) <= 0) refuse("The expected term must be greater than zero.", "Enter the expected term in years.");
-  if (compareRational(q, zero) < 0) refuse("The dividend yield cannot be negative.", "Enter the expected dividend yield as a percentage.");
+  if (compareRational(s, zero) <= 0) throw equityError("valuationSharePriceNotPositive", { field: fig.term("grantSharePrice") }, { field: "valuation" });
+  if (compareRational(k, zero) < 0) throw equityError("valuationExercisePriceNegative", { field: fig.term("exercisePrice") }, { field: "valuation" });
+  if (compareRational(sigma, zero) <= 0) throw equityError("valuationVolatilityNotPositive", { field: fig.term("volatilityPercent") }, { field: "valuation" });
+  if (compareRational(t, zero) <= 0) throw equityError("valuationTermNotPositive", { field: fig.term("expectedTermYears") }, { field: "valuation" });
+  if (compareRational(q, zero) < 0) throw equityError("valuationDividendYieldNegative", { field: fig.term("dividendYieldPercent") }, { field: "valuation" });
   const S = fixedFromRational(s);
   const K = fixedFromRational(k);
   const sig = fixedFromRational(sigma);

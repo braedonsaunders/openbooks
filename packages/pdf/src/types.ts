@@ -167,4 +167,8 @@ export type PdfDocumentInput = {
   footerLeft?: string
   /** Footer right text (defaults to the generated-at timestamp). */
   footerRight?: string
+  /** BCP 47 locale the generated stamp prints in; omitted prints ISO. */
+  locale?: string
+  /** The footer's page numbering in the reader's language (defaults to "Page n of total"). */
+  pageLabel?: (page: number, total: number) => string
 }

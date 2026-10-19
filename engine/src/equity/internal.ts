@@ -8,15 +8,11 @@ import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } 
 import type { SqlExecutor } from "../platform/db.ts";
 import { memoizedRead } from "../platform/read-memo.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { EQUITY_FEATURE_KEY, EQUITY_FEATURE_REMEDY, EquityError } from "./errors.ts";
+import { EQUITY_FEATURE_KEY, EquityError, equityError, fig } from "./errors.ts";
 
 export type EquityPermission = "equity.read" | "equity.manage" | "equity.approve";
 
-const featureOff = (): EquityError => new EquityError("Equity & cap table is not enabled for this organization.", {
-  status: 403,
-  code: "equity_feature_off",
-  remedy: EQUITY_FEATURE_REMEDY,
-});
+const featureOff = (): EquityError => equityError("featureOff");
 
 /** Hold the organization's feature fence and refuse when the feature is off, so a disable and a write serialize. */
 export async function assertEquityFeature(runner: SqlExecutor, orgId: string): Promise<void> {
@@ -30,14 +26,7 @@ export async function assertEquityReadable(orgId: string): Promise<void> {
 }
 
 function forbidden(permission: EquityPermission, scoped: boolean): EquityError {
-  return new EquityError(
-    scoped ? `This action requires the ${permission} permission for the legal entity.` : `This action requires the ${permission} permission.`,
-    {
-      status: 403,
-      code: "equity_forbidden",
-      remedy: `Ask an administrator to grant ${permission} and access to the legal entity (Company Settings → Roles), then try again.`,
-    },
-  );
+  return equityError(scoped ? "forbiddenForEntity" : "forbidden", { permission: fig.text(permission) });
 }
 
 /**
@@ -70,7 +59,7 @@ export async function requireEquityReader(
     return actorAllowedSubsidiaryIds(runner, orgId, actorId) as Promise<ReadonlySet<string> | null>;
   });
   if (subsidiaryId !== null && allowed !== null && !allowed.has(subsidiaryId)) {
-    throw new EquityError("The legal entity does not exist or is outside your access.", { status: 404, code: "equity_entity_unknown", remedy: "Choose a legal entity you can access." });
+    throw equityError("entityOutsideAccess");
   }
   return allowed;
 }
@@ -97,19 +86,16 @@ export async function loadLegalEntity(runner: SqlExecutor, orgId: string, subsid
 
 async function readLegalEntity(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<LegalEntity> {
   if (!isUuid(subsidiaryId)) {
-    throw new EquityError("Choose a valid legal entity.", { code: "equity_entity_unknown", status: 404, remedy: "Choose a legal entity of this organization.", field: "subsidiaryId" });
+    throw equityError("entityInvalid", {}, { field: "subsidiaryId" });
   }
   const row = (await runner.execute<{ id: string; name: string; currency: string | null; is_active: boolean; is_elimination: boolean }>(sql`
     select id, name, nullif(trim(base_currency), '') as currency, is_active, is_elimination
       from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`)).rows[0];
   if (!row || !row.is_active || row.is_elimination) {
-    throw new EquityError("The legal entity does not exist or is inactive.", { code: "equity_entity_unknown", status: 404, remedy: "Choose an active legal entity of this organization.", field: "subsidiaryId" });
+    throw equityError("entityInactive", {}, { field: "subsidiaryId" });
   }
   if (!row.currency) {
-    throw new EquityError(`Legal entity ${row.name} has no functional currency.`, {
-      code: "equity_entity_currency_missing",
-      remedy: "Set the legal entity's base currency in Company Settings → Subsidiaries.",
-    });
+    throw equityError("entityCurrencyMissing", { entity: fig.text(row.name) });
   }
   return { id: row.id, name: row.name, currency: row.currency };
 }
@@ -119,10 +105,7 @@ export async function currencyExponent(runner: SqlExecutor, currency: string): P
   const row = (await runner.execute<{ minor_units: number }>(sql`select minor_units from currencies where code = ${currency}`)).rows[0];
   const exponent = row?.minor_units;
   if (exponent === undefined || !Number.isInteger(exponent) || exponent < 0 || exponent > 4) {
-    throw new EquityError(`Currency ${currency} has no supported precision in the currency registry.`, {
-      code: "equity_currency_unknown",
-      remedy: `Restore ${currency} in the currency registry (Company Settings → Currencies).`,
-    });
+    throw equityError("currencyUnknown", { currency: fig.text(currency) });
   }
   return exponent;
 }
@@ -138,23 +121,23 @@ export async function writeEquityAudit(
       ${JSON.stringify(input.changes, (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value))}::jsonb, ${input.actorId})
     returning id`)).rows;
   if (written.length !== 1) {
-    throw new EquityError("The audit record was not written; the change was not saved.", {
-      status: 409,
-      code: "equity_audit_unwritten",
-      remedy: "Try the change again.",
-    });
+    throw equityError("auditUnwritten");
   }
 }
 
-/** A required reason: trimmed, 5 to 2000 characters (the schema's own bounds). */
-export function requireReason(reason: unknown, what: string): string {
+/** What a required reason explains, as the refusal names it. */
+export type ReasonSubject =
+  | "classAmendment" | "split" | "reserveChange" | "mfnElection" | "mfnReversal" | "roundAmendment" | "roundVoid" | "accountPolicy"
+  | "forfeit" | "expire" | "cancel" | "repurchase" | "void" | "reverse" | "withdrawal";
+
+/** A reason's bounds, the schema's own. */
+export const REASON_LENGTH = { min: 5, max: 2000 } as const;
+
+/** A required reason: trimmed, 5 to 2000 characters. */
+export function requireReason(reason: unknown, subject: ReasonSubject): string {
   const text = typeof reason === "string" ? reason.trim() : "";
-  if (text.length < 5 || text.length > 2000) {
-    throw new EquityError(`Record a reason of 5 to 2000 characters for ${what}.`, {
-      code: "equity_reason_required",
-      remedy: `Describe why (for example, the board resolution that approved it), then submit again.`,
-      field: "reason",
-    });
+  if (text.length < REASON_LENGTH.min || text.length > REASON_LENGTH.max) {
+    throw equityError("reasonRequired", { subject: fig.choice(subject), min: fig.count(REASON_LENGTH.min), max: fig.count(REASON_LENGTH.max) }, { field: "reason" });
   }
   return text;
 }

@@ -20,7 +20,7 @@
  * stores.
  */
 import { addMonthsClamped, calendarDaysBetween } from "../platform/civil-date.ts";
-import { EquityError } from "./errors.ts";
+import { equityError } from "./errors.ts";
 import {
   addRational,
   multiplyRational,
@@ -84,10 +84,7 @@ export function yearFraction(dayCount: DayCount, from: string, to: string): Rati
       return total;
     }
     default:
-      throw new EquityError("The note has no day-count convention.", {
-        code: "equity_note_terms_missing",
-        remedy: "Record the note's day count (Actual/365, Actual/360, 30/360 or Actual/Actual).",
-      });
+      throw equityError("noteDayCountMissing");
   }
 }
 
@@ -102,13 +99,10 @@ export interface InterestTerms {
 /** Interest accrued from the issue date to `asOf` (exact, in the note's currency). */
 export function noteInterest(terms: InterestTerms, asOf: string): Rational {
   if (asOf <= terms.issueDate) return ZERO;
-  const principal = parseMoney(terms.principal, "the note principal");
-  const rate = parsePercent(terms.interestRatePercent ?? "", "the note interest rate");
+  const principal = parseMoney(terms.principal, "principal");
+  const rate = parsePercent(terms.interestRatePercent ?? "", "interestRatePercent");
   if (!terms.interestBasis || !(terms.interestBasis in COMPOUNDING_MONTHS)) {
-    throw new EquityError("The note has no interest basis.", {
-      code: "equity_note_terms_missing",
-      remedy: "Record how the note's interest builds (simple, or compounded annually, semiannually, quarterly or monthly).",
-    });
+    throw equityError("noteInterestBasisMissing");
   }
   const dayCount = terms.interestDayCount as DayCount;
   const months = COMPOUNDING_MONTHS[terms.interestBasis];

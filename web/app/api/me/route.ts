@@ -67,6 +67,7 @@ export const PATCH = defineRoute({
     // The verified preference identity may belong to the home organization
     // during production workspace switching. Keep the update and its audit
     // record atomic while checking that the identity is still active.
+    // bypass: user-keyed-lookup — update and audit the verified home preference identity while another workspace is active.
     const saved = await withBypass(async () => {
       const result = await db.execute<{ id: string }>(sql`
         update users set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}

@@ -37,7 +37,7 @@
  * Amounts are exact until the end, then rounded to the currency's minor
  * unit by largest remainder so the payouts sum to the exit value exactly.
  */
-import { EquityError } from "./errors.ts";
+import { equityError } from "./errors.ts";
 import {
   addRational,
   compareRational,
@@ -357,10 +357,10 @@ function roundToTotal(amounts: readonly Rational[], quantum: Rational): bigint[]
 /** Run the waterfall at one exit value. */
 export function runWaterfall(input: WaterfallInput): WaterfallResult {
   if (compareRational(input.exitValue, ZERO) < 0) {
-    throw new EquityError("The exit value cannot be negative.", { code: "equity_waterfall_invalid", remedy: "Enter the proceeds available to equity holders.", field: "exitValue" });
+    throw equityError("exitValueNegative", {}, { field: "exitValue" });
   }
   if (!Number.isInteger(input.minorUnitScale) || input.minorUnitScale < 0 || input.minorUnitScale > 4) {
-    throw new EquityError("The currency precision is not supported.", { code: "equity_currency_unknown", remedy: "Restore the currency in Company Settings → Currencies." });
+    throw equityError("currencyPrecisionUnsupported");
   }
   const notesPaid = new Map<string, Rational>();
   const notes = input.convertibles.filter((convertible) => convertible.kind === "note");
@@ -398,11 +398,7 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
     }
   }
   if (!settled) {
-    throw new EquityError("The preferred classes' conversion choices do not settle at this exit value.", {
-      status: 409,
-      code: "equity_waterfall_unsettled",
-      remedy: "Review the classes' preferences, participation caps and seniority, or model a different exit value.",
-    });
+    throw equityError("waterfallUnsettled");
   }
   // What each elector's other choice would pay it, holding the others' settled choices.
   const alternatives = new Map<string, Rational>();

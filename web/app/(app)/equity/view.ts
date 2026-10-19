@@ -21,7 +21,6 @@ import {
   loadSecurityDetail,
   loadStructure,
   equityRunCatchUp,
-  localizeRefusalDates,
   nextEquityRunPeriod,
   previewCompensationRun,
   previewInterestRun,
@@ -59,6 +58,7 @@ import { ownershipSliceColor } from '../../../lib/equity-colors'
 import { getMoneyFormatter } from '../../../lib/money-server'
 import { formatCivilDate, formatExactPercent } from '../../../lib/format'
 import { additiveRounding } from '../../../lib/additive-rounding'
+import { readerRefusal } from '../../../lib/reader-refusal'
 import { capTableFilters, type CapTableDimension, type CapTableInstrument } from '../../../lib/equity-cap-table'
 import { defaultExitAnchor, exitPresets } from '../../../lib/equity-waterfall'
 import type { DirectoryItem } from '../../../components/module-home/ui'
@@ -219,6 +219,8 @@ export interface RunsViewData {
   compensation: CompensationPreview | null
   interest: InterestPreview | null
   refusal: { message: string; remedy: string } | null
+  /** Where the refusal of the body is resolved, when the reader can act on it (generating the next fiscal year's periods). */
+  refusalAction: { href: string; label: string } | null
   /** What the next run catches up (recorded after the last run for the periods it measured), in the reader's words. */
   catchUp: string | null
   /** Why the selected period cannot be posted yet (not ended, or closed), in the reader's locale. */
@@ -598,7 +600,7 @@ async function loadEquityPage(sp: Record<string, string | string[] | undefined>)
 
   const runsRead = async (): Promise<RunsViewData | null> => {
     if (view !== 'compensation') return null
-    return runsData(sp, await contextRead, keep, orgId, actor, entity.id, today)
+    return runsData(sp, await contextRead, keep, orgId, actor, entity.id, today, can(authz, 'periods.manage'))
   }
 
   const drawerRead = async (): Promise<SecurityDrawerData | null> => {
@@ -730,18 +732,25 @@ async function overviewData(
   const pool = data.ownership.find((slice) => slice.group === 'pool') ?? null
   const security = (securityId: string) => keep({ view: 'securities', security: securityId, new: undefined })
 
+  // Runs that cannot be measured name their refusal in the reader's language.
+  const refusedRuns = new Map<EquityAttention, string>()
+  for (const item of data.attention) {
+    if ((item.kind === 'compensation_due' || item.kind === 'interest_due') && item.refusal) refusedRuns.set(item, (await readerRefusal(item.refusal)).message)
+  }
+  const price = (value: string, currency: string) => money(value, { currency, ...perShareFormatOptions(value) })
+
   const attention: AttentionItem[] = data.attention.map((item: EquityAttention): AttentionItem => {
     switch (item.kind) {
       case 'cliff':
-        return { tone: 'warning', href: security(item.securityId), text: t('overview.attention.cliff', { holder: item.holderName, number: item.securityNumber, date: date(item.date), quantity: shares(item.quantity) }) }
+        return { tone: 'warning', href: security(item.securityId), text: t('overview.attention.cliff', { holder: item.holderName, number: item.securityNumber, date: date(item.date), quantity: shares(item.quantity), quantityCount: Number(item.quantity) }) }
       case 'election_83b':
         return { tone: item.daysLeft <= 7 ? 'negative' : 'warning', href: security(item.securityId), text: t('overview.attention.election83b', { holder: item.holderName, number: item.securityNumber, date: date(item.date), days: item.daysLeft }) }
       case 'restricted_deposit':
-        return { tone: 'warning', href: security(item.securityId), text: t('overview.attention.restrictedDeposit', { holder: item.holderName, number: item.securityNumber, shares: shares(item.shares) }) }
+        return { tone: 'warning', href: security(item.securityId), text: t('overview.attention.restrictedDeposit', { holder: item.holderName, number: item.securityNumber, shares: shares(item.shares), sharesCount: Number(item.shares) }) }
       case 'departed':
-        return { tone: 'negative', href: keep({ view: 'securities', holder: item.holderPartyId, kind: undefined, status: 'outstanding', new: undefined }), text: t('overview.attention.departed', { holder: item.holderName, date: date(item.date), units: shares(item.units) }) }
+        return { tone: 'negative', href: keep({ view: 'securities', holder: item.holderPartyId, kind: undefined, status: 'outstanding', new: undefined }), text: t('overview.attention.departed', { holder: item.holderName, date: date(item.date), units: shares(item.units), unitsCount: Number(item.units) }) }
       case 'expiring':
-        return { tone: 'warning', href: security(item.securityId), text: t('overview.attention.expiring', { holder: item.holderName, number: item.securityNumber, date: date(item.date), quantity: shares(item.quantity) }) }
+        return { tone: 'warning', href: security(item.securityId), text: t('overview.attention.expiring', { holder: item.holderName, number: item.securityNumber, date: date(item.date), quantity: shares(item.quantity), quantityCount: Number(item.quantity) }) }
       case 'conversion_terms_void':
         return {
           tone: 'negative', href: security(item.securityId),
@@ -752,12 +761,12 @@ async function overviewData(
       case 'compensation_due':
         return {
           tone: 'warning', href: keep({ view: 'compensation', run: undefined, new: undefined }),
-          text: item.refusal ? t('overview.attention.compensationRefused', { date: date(item.date), message: localizeRefusalDates(item.refusal, locale) }) : t('overview.attention.compensationDue', { date: date(item.date), amount: money(item.amount, { currency: item.currency }) }),
+          text: item.refusal ? t('overview.attention.compensationRefused', { date: date(item.date), message: refusedRuns.get(item) ?? item.refusal.message }) : t('overview.attention.compensationDue', { date: date(item.date), amount: money(item.amount, { currency: item.currency }) }),
         }
       case 'interest_due':
         return {
           tone: 'warning', href: keep({ view: 'compensation', run: 'interest', new: undefined }),
-          text: item.refusal ? t('overview.attention.interestRefused', { date: date(item.date), message: localizeRefusalDates(item.refusal, locale) }) : t('overview.attention.interestDue', { date: date(item.date), amount: money(item.amount, { currency: item.currency }) }),
+          text: item.refusal ? t('overview.attention.interestRefused', { date: date(item.date), message: refusedRuns.get(item) ?? item.refusal.message }) : t('overview.attention.interestDue', { date: date(item.date), amount: money(item.amount, { currency: item.currency }) }),
         }
       case 'compensation_catch_up':
       case 'interest_catch_up': {
@@ -775,6 +784,13 @@ async function overviewData(
           text: t('overview.attention.roundPreMoneyDrift', {
             name: item.roundName, preMoney: money(item.preMoneyValuation, { currency: item.currency }), implied: money(item.impliedPreMoney, { currency: item.currency }),
             shares: shares(item.fullyDilutedBefore),
+          }),
+        }
+      case 'conversion_price_drift':
+        return {
+          tone: 'warning', href: security(item.securityId),
+          text: t('overview.attention.conversionPriceDrift', {
+            number: item.securityNumber, round: item.roundName, recorded: price(item.recordedPrice, item.currency), standing: price(item.standingPrice, item.currency),
           }),
         }
     }
@@ -800,7 +816,7 @@ async function overviewData(
   ]
 
   const activity = data.activity.map((row) => {
-    const detail = row.quantity ? t('overview.activity.shares', { quantity: shares(row.quantity) }) : row.amount && row.currency ? money(row.amount, { currency: row.currency }) : null
+    const detail = row.quantity ? t('overview.activity.shares', { quantity: shares(row.quantity), quantityCount: Number(row.quantity) }) : row.amount && row.currency ? money(row.amount, { currency: row.currency }) : null
     const text = row.kind === 'round'
       ? t('overview.activity.round', { name: row.label ?? '', price: money(row.amount ?? '0', { currency: row.currency ?? data.entity.currency, ...perShareFormatOptions(row.amount ?? '0') }) })
       : row.kind === 'issue'
@@ -886,7 +902,7 @@ async function waterfallData(
       })
     } catch (error) {
       if (!(error instanceof EquityError)) throw error
-      refusal = error.localized(await getLocale())
+      refusal = await readerRefusal(error)
     }
   }
   return { context, asOfControl, anchor, presets: exitPresets(anchor?.postMoney ?? null), inputs, classOrder, scenario, refusal }
@@ -900,6 +916,7 @@ async function runsData(
   actor: { orgId: string; actorId: string },
   subsidiaryId: string,
   today: string,
+  canManagePeriods: boolean,
 ): Promise<RunsViewData> {
   const run: RunKind = pickString(sp.run) === 'interest' ? 'interest' : 'compensation'
   const lines: RunsViewData['lines'] = run === 'compensation' && pickString(sp.lines) === 'releases' ? 'releases' : 'expense'
@@ -931,19 +948,47 @@ async function runsData(
     }
   })
   const requested = pickString(sp.period)
+  const key = run === 'compensation' ? 'compensation' : 'interest'
+  // Recorded after the last run for the periods it measured: the next run catches it up.
+  const late = await equityRunCatchUp({ ...actor, subsidiaryId, kind: run })
   // The period a run is due for: the earliest open period after the last run
-  // through whose end the run would post a change. Nothing is offered when
-  // nothing is due, so a closed period or an empty run is never the default.
+  // through whose end the run would post a change. With none ended, a
+  // pending catch-up is due in the period after the last run, so that period
+  // is shown with why it cannot post yet; nothing is offered when nothing is
+  // due, so a closed period or an empty run is never the default.
   const due = requested ? null : await nextEquityRunPeriod({ ...actor, subsidiaryId, kind: run, today })
-  const selected = periods.find((period) => period.id === (requested ?? due?.periodId)) ?? null
+  const catchUpPeriodId = !requested && !due && late?.postsWith ? late.postsWith.periodId : null
+  const selected = periods.find((period) => period.id === (requested ?? due?.periodId ?? catchUpPeriodId)) ?? null
   let compensation: CompensationPreview | null = null
   let interest: InterestPreview | null = null
   let refusal: RunsViewData['refusal'] = null
+  let refusalAction: RunsViewData['refusalAction'] = null
+  const t = await getTranslations('equity')
+  const catchUpValues = late
+    ? {
+      amount: (await getMoneyFormatter(orgId, late.currency)).money(late.amount, { currency: late.currency }),
+      date: formatCivilDate(late.recognizedThrough, locale),
+      through: late.postsWith ? formatCivilDate(late.postsWith.endsOn, locale) : '',
+    }
+    : null
   if (!selected && periods.length > 0) {
-    const t = await getTranslations('equity')
-    refusal = {
-      message: t(run === 'compensation' ? 'runs.nothingDueCompensation' : 'runs.nothingDueInterest'),
-      remedy: lastRunThrough ? t('runs.nothingDueRemedy', { date: formatCivilDate(lastRunThrough, await getLocale()) }) : t('runs.nothingDueRemedyFirst'),
+    if (late && catchUpValues && !late.postsWith) {
+      // A catch-up is due, but no open period follows the last run to post it in.
+      const year = late.generatePeriods?.fiscalYear ?? null
+      refusal = {
+        message: t(`runs.catchUp.${key}NoPeriodTitle`, catchUpValues),
+        remedy: year !== null
+          ? canManagePeriods ? t('runs.catchUp.generateRemedy', { year }) : t('runs.catchUp.generateRemedyReadOnly', { year })
+          : canManagePeriods ? t('runs.catchUp.reopenRemedy') : t('runs.catchUp.reopenRemedyReadOnly'),
+      }
+      refusalAction = !canManagePeriods ? null : year !== null
+        ? { href: `/admin/setup/period-close?${new URLSearchParams({ tab: 'periods', period: 'new', fy: String(year) })}`, label: t('runs.catchUp.generatePeriods', { year }) }
+        : { href: `/admin/setup/period-close?${new URLSearchParams({ tab: 'periods' })}`, label: t('runs.catchUp.openPeriods') }
+    } else {
+      refusal = {
+        message: t(run === 'compensation' ? 'runs.nothingDueCompensation' : 'runs.nothingDueInterest'),
+        remedy: lastRunThrough ? t('runs.nothingDueRemedy', { date: formatCivilDate(lastRunThrough, locale) }) : t('runs.nothingDueRemedyFirst'),
+      }
     }
   }
   if (selected) {
@@ -952,22 +997,15 @@ async function runsData(
       else interest = await previewInterestRun({ ...actor, subsidiaryId, throughDate: selected.endsOn })
     } catch (error) {
       if (!(error instanceof EquityError)) throw error
-      refusal = error.localized(await getLocale())
+      refusal = await readerRefusal(error)
     }
   }
-  // Recorded after the last run for the periods it measured: the next run catches it up.
-  const readerLocale = await getLocale()
-  const late = await equityRunCatchUp({ ...actor, subsidiaryId, kind: run })
-  let catchUp: string | null = null
-  if (late) {
-    const t = await getTranslations('equity')
-    const { money } = await getMoneyFormatter(orgId, late.currency)
-    const values = { amount: money(late.amount, { currency: late.currency }), date: formatCivilDate(late.recognizedThrough, readerLocale), through: late.postsWith ? formatCivilDate(late.postsWith.endsOn, readerLocale) : '' }
-    const key = run === 'compensation' ? 'compensation' : 'interest'
-    catchUp = !late.postsWith ? t(`runs.catchUp.${key}NoPeriod`, values) : late.postsWith.ended ? t(`runs.catchUp.${key}Now`, values) : t(`runs.catchUp.${key}`, values)
-  }
+  // The catch-up notice names what the next run posts; with no period to post it in, the body says so instead.
+  const catchUp = late && catchUpValues && late.postsWith
+    ? late.postsWith.ended ? t(`runs.catchUp.${key}Now`, catchUpValues) : t(`runs.catchUp.${key}`, catchUpValues)
+    : null
   const pendingBlock = (compensation ?? interest)?.blocked ?? null
-  const blocked = pendingBlock ? { message: localizeRefusalDates(pendingBlock.message, readerLocale), remedy: localizeRefusalDates(pendingBlock.remedy, readerLocale) } : null
+  const blocked = pendingBlock ? await readerRefusal(pendingBlock) : null
   const holderIds = [
     ...(compensation?.lines.map((line) => line.holderPartyId) ?? []),
     ...(compensation?.releases.map((line) => line.holderPartyId) ?? []),
@@ -983,6 +1021,7 @@ async function runsData(
     compensation,
     interest,
     refusal,
+    refusalAction,
     catchUp,
     blocked,
     compensationRuns,

@@ -6,7 +6,7 @@ import type { ExportData } from './report-pdf'
 test('CSV book labels retain exact values and leave the source report unchanged', () => {
   const data: ExportData = { title: 'Ledger', dateRangeLabel: 'July', summary: [], groups: [{
     kind: 'results', title: 'Revenue', columns: ['Account', 'Amount'],
-    rows: [['4000', '9007199254740993.1234']], money: [false, true], align: ['left', 'right'],
+    rows: [['4000', '9007199254740993.1234']], money: [false, true], align: ['left', 'right'], dates: [false, false],
   }] }
   const before = structuredClone(data)
   const labeled = withReportBookColumn(data, { label: 'Book', value: 'TAX · Alternate' })
@@ -14,5 +14,6 @@ test('CSV book labels retain exact values and leave the source report unchanged'
   assert.deepEqual(labeled.groups[0]?.rows, [['TAX · Alternate', '4000', '9007199254740993.1234']])
   assert.deepEqual(labeled.groups[0]?.money, [false, false, true])
   assert.deepEqual(labeled.groups[0]?.align, ['left', 'left', 'right'])
+  assert.deepEqual(labeled.groups[0]?.dates, [false, false, false])
   assert.deepEqual(data, before)
 })

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { postingRefusal } from './responses'
+import { readerRefusal } from '../reader-refusal'
+import { isCatalogRefusal } from '../refusal-catalog'
 
 /** A typed refusal is safe to show only when its class names the business condition and its status is 4xx. */
 /**
@@ -16,11 +18,14 @@ export function typedRefusal(error: unknown, safeStatus?: number): error is Erro
 }
 
 /**
- * A refusal that names figures (share counts, amounts) and civil dates
- * renders them in the reader's locale; outside a request it keeps its own
- * rendering.
+ * A refusal in the reader's language: a catalog-backed refusal renders its
+ * message and remedy from the locale catalogs with its figures (share
+ * counts, amounts, prices, dates, field names) formatted for the reader; a
+ * refusal that renders its own figures for a locale does so. Outside a
+ * request either keeps its own rendering.
  */
 export async function readerRefusalText(error: Error): Promise<{ message: string; remedy: string } | null> {
+  if (isCatalogRefusal(error)) return readerRefusal(error)
   const localized = (error as Error & { localized?: unknown }).localized
   if (typeof localized !== 'function') return null
   let locale: string | null = null

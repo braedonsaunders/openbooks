@@ -25,10 +25,11 @@ function paperHtml(locale: string): string {
     groups: [{
       kind: 'summary',
       title: 'Summary',
-      columns: ['Holder', 'Outstanding shares', 'Fully diluted %', 'Note'],
-      rows: [['Avery Quinn', '4500000', '42.4528', '1200']],
-      align: ['left', 'right', 'right', 'left'],
-      numberFormats: [null, 'number', 'percent', null],
+      columns: ['Holder', 'Outstanding shares', 'Fully diluted %', 'Note', 'Issued'],
+      rows: [['Avery Quinn', '4500000', '42.4528', '1200', '2026-03-01']],
+      align: ['left', 'right', 'right', 'left', 'left'],
+      numberFormats: [null, 'number', 'percent', null, null],
+      dates: [false, false, false, false, true],
     }],
     summary: [],
     rowCount: 1,
@@ -52,9 +53,11 @@ test('the report paper prints quantity columns in the viewer locale and leaves u
   assert.match(english, />42\.4528%</)
   assert.match(english, />6,320,000</, 'the summary band formats its quantity total')
   assert.match(english, />1200</, 'an untyped column is not reformatted')
+  assert.match(english, />Mar 1, 2026</, 'typed civil dates use the viewer locale')
   const german = paperHtml('de')
   assert.match(german, />4\.500\.000</)
   assert.match(german, />42,4528\s%</)
+  assert.ok(german.includes(new Intl.DateTimeFormat('de', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date('2026-03-01T12:00:00Z'))))
 })
 
 test('per-share report cells read under the per-share rule on screen and in print', async () => {

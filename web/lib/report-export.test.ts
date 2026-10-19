@@ -3,7 +3,7 @@ import test from 'node:test'
 import { resolvePdfPageSetup } from '@openbooks/pdf'
 import type { ReportRunResult } from '@openbooks/reports'
 
-const { exportDataToCsv, exportDataToPdfInput, runResultToExportData } = await import('./report-pdf.ts')
+const { exportDataToCsv, exportDataToPdfInput, exportDataToRunResult, runResultToExportData } = await import('./report-pdf.ts')
 const { reportExportFilename } = await import('./export.ts')
 
 const page = resolvePdfPageSetup({ paperSize: 'letter', orientation: 'landscape', marginMm: 12, density: 'compact' })
@@ -54,4 +54,17 @@ test('a point-in-time export is named for its as-of date and any other for the d
   assert.equal(reportExportFilename('equity-cap-table', { asOf: '2025-10-01', producedOn: '2026-10-19' }), 'equity-cap-table-2025-10-01')
   assert.equal(reportExportFilename('equity-stock-compensation-schedule', { producedOn: '2026-10-19' }), 'equity-stock-compensation-schedule-2026-10-19')
   assert.equal(reportExportFilename('equity/cap "table"', { asOf: null, producedOn: '2026-10-19' }), 'equity-cap table-2026-10-19')
+})
+
+test('typed dates print in the reader language and retain civil ISO values in data exports', () => {
+  const run: ReportRunResult = {
+    groups: [{ kind: 'results', title: 'Securities', columns: ['Issued', 'Memo'], rows: [['2026-03-01', '2026-03-01']], dates: [true, false] }],
+    summary: [], rowCount: 1,
+  }
+  const data = runResultToExportData(run, { title: 'Securities', dateRangeLabel: '' })
+  const pdf = exportDataToPdfInput(data, { orgName: 'Main Co' }, page, { locale: 'de' })
+  assert.equal(pdf.groups[0]!.rows[0]![0], new Intl.DateTimeFormat('de', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date('2026-03-01T12:00:00Z')))
+  assert.equal(pdf.groups[0]!.rows[0]![1], '2026-03-01', 'untyped text is preserved')
+  assert.deepEqual(exportDataToRunResult(data).groups[0]!.dates, [true, false])
+  assert.match(exportDataToCsv(data, {}), /2026-03-01,2026-03-01/)
 })

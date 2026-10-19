@@ -224,7 +224,8 @@ function exactDecimal(value: string | null): string | null {
  * `quantity` in shares (a signed delta for a plan reserve change, authorized
  * shares for a class amendment, the event quantity for security events),
  * `amount` with its `currency` for security events, MFN elections and round
- * amendments (pre-money valuation), and a class amendment's conversion price,
+ * amendments (pre-money valuation), a reversal's figures from the event it
+ * undoes (what it restores), and a class amendment's conversion price,
  * which carries no currency of its own and so reads in the legal entity's
  * functional currency. Runs, policy versions and splits carry no figure.
  * A pending request names its withdrawal endpoint.
@@ -249,10 +250,13 @@ async function resolveEquityActions(
   }>(sql`
     select r.id::text as id, r.action, r.subject_label as "subjectLabel", r.status,
            nullif(btrim(r.summary->>'holderName'), '') as "holderName",
-           r.summary->>'quantity' as quantity, r.summary->>'amount' as amount,
+           coalesce(r.summary->>'quantity', reversed.quantity::text) as quantity, coalesce(r.summary->>'amount', reversed.amount::text) as amount,
            coalesce(nullif(btrim(r.summary->>'currency'), ''), nullif(btrim(s.base_currency), '')) as currency
       from equity_action_requests r
       left join subsidiaries s on s.id = r.subsidiary_id and s.org_id = r.org_id
+      left join equity_security_events reversed
+        on r.action = 'reverse' and reversed.org_id = r.org_id and reversed.security_id = r.subject_id
+       and reversed.id::text = r.payload->>'reversesEventId'
      where r.org_id = ${orgId} and r.id = any(${pgTextArrayLiteral(ids)}::uuid[])
   `)).rows
   for (const row of rows) {

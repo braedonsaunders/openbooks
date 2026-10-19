@@ -10,6 +10,7 @@ import { RegisteredListTable } from '@/components/registered-list-table'
 import { ListFilterSelect } from '@/components/list-filter-select'
 import { JournalEntryLink } from '@/components/journal-entry-link'
 import { MoneyProvider, useMoney } from '@/components/money-provider'
+import { joinRefusal } from '@/lib/refusal-sentence'
 import { useAppAction } from '@/lib/use-app-action'
 import type { RunsViewData } from './view'
 import { CELL, CommandRefusal, DATE_CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, Refusal, listSort, postCommand, useCivilDate, useShares, withParams } from './shared'
@@ -119,7 +120,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
       <CommandRefusal refusal={refusal} fallback={failed} />
       {/* Recorded after the last run for the periods it measured, and why the selected period cannot post yet. */}
       {view.catchUp && <p role="status" className={NOTICE}>{view.catchUp}</p>}
-      {view.blocked && !alreadyRun && !backdated && <p role="status" className={NOTICE}>{view.blocked.message} {view.blocked.remedy}</p>}
+      {view.blocked && !alreadyRun && !backdated && <p role="status" className={NOTICE}>{joinRefusal(view.blocked.message, view.blocked.remedy)}</p>}
       {view.periods.length === 0 ? (
         <>
           {toolbar}
@@ -128,7 +129,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
       ) : view.refusal ? (
         <>
           {toolbar}
-          <Refusal refusal={view.refusal} />
+          <Refusal refusal={view.refusal} action={view.refusalAction} />
         </>
       ) : (
         <>

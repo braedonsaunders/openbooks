@@ -27,7 +27,7 @@ import { NewMenuButton } from "../../../components/new-menu-button";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 import { promptDialog } from "@/lib/prompt";
-import { channelCards, channelMarginPercentValue, type Channel, type MarginChannel } from "./channel-cards";
+import { channelCards, channelMarginPercentValue, type Channel } from "./channel-cards";
 import type { ChannelsHomeData } from "./view";
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive" | "warning"> = {

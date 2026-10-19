@@ -23,7 +23,7 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { conversionRatio, holdingState, planPool } from "./cap-table.ts";
-import { EquityError } from "./errors.ts";
+import { equityError } from "./errors.ts";
 import { floorShares, multiplyRational, rational } from "./quantities.ts";
 import { loadEquityBook } from "./store.ts";
 import type { EquityBook, PlanRecord, SecurityRecord } from "./types.ts";
@@ -200,11 +200,7 @@ export async function syncPositionLedger(runner: SqlExecutor, orgId: string, sub
       values ${sql.join(values, sql`, `)}
       returning id`)).rows;
     if (written.length !== batch.length) {
-      throw new EquityError("The cap table position ledger was not brought up to date; nothing was saved.", {
-        status: 409,
-        code: "equity_write_failed",
-        remedy: "Try again.",
-      });
+      throw equityError("positionsStale");
     }
   }
   return append.length;

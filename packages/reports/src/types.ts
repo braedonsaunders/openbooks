@@ -255,6 +255,9 @@ export type ReportGroup = {
    *  undefined-formula explanation) stays text. CSV keeps the exact,
    *  machine-readable value. */
   numberFormats?: (ReportNumberFormat | null)[]
+  /** Per-column: the cells are ISO calendar dates (YYYY-MM-DD) that viewers
+   *  and print read in the viewer's locale; CSV keeps the ISO date. */
+  dates?: boolean[]
   /** Per-column alignment (text left, numeric/money right). Viewers fall back
    *  to first-column-left/rest-right when absent. */
   align?: ('left' | 'right' | 'center')[]

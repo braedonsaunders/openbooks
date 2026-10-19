@@ -3463,7 +3463,8 @@
     "exported": "已导出 {filename}。",
     "exportFailed": "无法导出 {format}。",
     "exporting": "正在导出 {format}…",
-    "export": "导出"
+    "export": "导出",
+    "pageOf": "第 {page} 页，共 {total} 页"
   },
   "builtIns": {
     "equity-stock-compensation-schedule": {

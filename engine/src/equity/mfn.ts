@@ -30,7 +30,7 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { convertibleState, convertibleTerms, effectiveConvertibleTerms, electionInForce, reversedElections, voidedSecurities } from "./cap-table.ts";
 import type { ConvertibleTerms } from "./convertibles.ts";
-import { EquityError } from "./errors.ts";
+import { equityError, fig, type EquityError } from "./errors.ts";
 import { governEquityAction, type GovernedStatus } from "./governance.ts";
 import { requireReason, writeEquityAudit } from "./internal.ts";
 import { compareRational, parseMoney, parsePercent } from "./quantities.ts";
@@ -63,14 +63,14 @@ function offered(terms: ConvertibleTerms): { valuationCap: string | null; discou
 export function compareMfnTerms(current: ConvertibleTerms, later: ReturnType<typeof offered>): { improves: MfnTerm[]; concedes: MfnTerm[] } {
   const improves: MfnTerm[] = [];
   const concedes: MfnTerm[] = [];
-  const cap = (value: string | null) => (value ? parseMoney(value, "the valuation cap") : null);
+  const cap = (value: string | null) => (value ? parseMoney(value, "valuationCap") : null);
   const currentCap = cap(current.valuationCap);
   const laterCap = cap(later.valuationCap);
   if (laterCap && (!currentCap || compareRational(laterCap, currentCap) < 0)) improves.push("cap");
   else if (currentCap && (!laterCap || compareRational(laterCap, currentCap) > 0)) concedes.push("cap");
   // A 0% discount is recorded as stated, but betters nothing and concedes nothing against no discount.
   const discount = (value: string | null) => {
-    const parsed = value ? parsePercent(value, "the discount") : null;
+    const parsed = value ? parsePercent(value, "discountPercent") : null;
     return parsed && parsed.numerator > 0n ? parsed : null;
   };
   const currentDiscount = discount(current.discountPercent);
@@ -121,14 +121,14 @@ export interface ElectMfnInput extends EquityCommand {
  * approval for).
  */
 export async function electMfnTerms(input: ElectMfnInput): Promise<{ amendmentId: string | null; replayed: boolean; status: GovernedStatus; requestId: string }> {
-  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The election date");
-  const reason = requireReason(input.reason, "the MFN election");
-  if (!isUuid(input.securityId)) throw new EquityError("The SAFE does not exist.", { status: 404, code: "equity_security_unknown", remedy: "Choose a SAFE." });
+  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "electedOn");
+  const reason = requireReason(input.reason, "mfnElection");
+  if (!isUuid(input.securityId)) throw equityError("safeUnknown");
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string; security_number: string; currency: string; holder_name: string | null; amount: string | null }>(sql`
     select s.subsidiary_id, s.security_number, s.currency, p.display_name as holder_name, s.consideration_amount::text as amount
       from equity_securities s left join parties p on p.org_id = s.org_id and p.id = s.holder_party_id
      where s.org_id = ${input.orgId} and s.id = ${input.securityId}`)).rows[0]);
-  if (!located) throw new EquityError("The SAFE does not exist.", { status: 404, code: "equity_security_unknown", remedy: "Choose a SAFE." });
+  if (!located) throw equityError("safeUnknown");
   const { orgId: _org, actorId: _actor, ...payload } = input;
   const outcome = await governEquityAction({
     orgId: input.orgId, actorId: input.actorId, subsidiaryId: located.subsidiary_id, action: "mfn_election",
@@ -141,10 +141,10 @@ export async function electMfnTerms(input: ElectMfnInput): Promise<{ amendmentId
 
 /** Apply an MFN election: the command its approval releases. */
 export async function applyMfnElection(input: ElectMfnInput): Promise<{ amendmentId: string; replayed: boolean }> {
-  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The election date");
-  const reason = requireReason(input.reason, "the MFN election");
+  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "electedOn");
+  const reason = requireReason(input.reason, "mfnElection");
   const idempotencyKey = typeof input.idempotencyKey === "string" && input.idempotencyKey.trim() !== "" ? input.idempotencyKey.trim() : null;
-  const unknown = () => new EquityError("The SAFE does not exist.", { status: 404, code: "equity_security_unknown", remedy: "Choose a SAFE." });
+  const unknown = () => equityError("safeUnknown");
   if (!isUuid(input.securityId)) throw unknown();
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string }>(sql`
     select subsidiary_id from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`)).rows[0]);
@@ -155,7 +155,7 @@ export async function applyMfnElection(input: ElectMfnInput): Promise<{ amendmen
         select id, security_id, source_security_id from equity_security_amendments where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
       if (existing) {
         if (existing.security_id !== input.securityId || existing.source_security_id !== input.sourceSecurityId) {
-          throw new EquityError("This request key was already used for a different election.", { status: 409, code: "equity_idempotency_conflict", remedy: "Retry with a new request key." });
+          throw equityError("idempotencyConflict", { subject: fig.choice("election") });
         }
         return { amendmentId: existing.id, replayed: true };
       }
@@ -163,19 +163,15 @@ export async function applyMfnElection(input: ElectMfnInput): Promise<{ amendmen
     await db.execute(sql`select id from equity_securities where org_id = ${input.orgId} and id = ${input.securityId} for update`);
     const security = book.securities.find((row) => row.id === input.securityId)!;
     if (security.kind !== "safe" || !security.mfn) {
-      throw new EquityError(`Security ${security.securityNumber} has no most-favored-nation term.`, { code: "equity_mfn_not_applicable", remedy: "Record MFN elections only on SAFEs issued with the MFN term.", field: "securityId" });
+      throw equityError("mfnNotApplicable", { security: fig.text(security.securityNumber) }, { field: "securityId" });
     }
     const lifetime = convertibleState(book, security, "9999-12-31");
     if (lifetime.status !== "outstanding") {
-      throw new EquityError(`Security ${security.securityNumber} is ${lifetime.status} as of ${lifetime.endedOn}; its terms can no longer change.`, {
-        status: 409,
-        code: "equity_mfn_closed",
-        remedy: "Record an election only while the SAFE is outstanding; correct a conversion by voiding the certificate it produced first.",
-      });
+      throw equityError("mfnElectionClosed", { security: fig.text(security.securityNumber), status: fig.choice(lifetime.status), date: fig.date(lifetime.endedOn ?? effectiveOn) });
     }
     const latest = book.securityAmendments.filter((row) => row.securityId === security.id).map((row) => row.effectiveOn).sort().at(-1);
     if (latest && effectiveOn < latest) {
-      throw new EquityError(`An MFN election or reversal on ${security.securityNumber} is already recorded from ${latest}.`, { status: 409, code: "equity_mfn_backdated", remedy: `Date the election on or after ${latest}.`, field: "effectiveOn" });
+      throw equityError("mfnBackdated", { security: fig.text(security.securityNumber), date: fig.date(latest), action: fig.choice("election"), field: fig.term("electedOn") }, { field: "effectiveOn" });
     }
     const candidate = mfnCandidates(book, security, effectiveOn).find((row) => row.sourceSecurityId === input.sourceSecurityId);
     if (!candidate) throw notBetter(book, security, input.sourceSecurityId, effectiveOn);
@@ -187,7 +183,7 @@ export async function applyMfnElection(input: ElectMfnInput): Promise<{ amendmen
       values (${id}, ${input.orgId}, ${located.subsidiary_id}, ${security.id}, 'mfn_election', ${effectiveOn}::date, ${candidate.sourceSecurityId},
         ${candidate.valuationCap}::numeric, ${candidate.discountPercent}::numeric, ${candidate.safeType}, ${reason}, ${idempotencyKey}, ${input.actorId})
       returning id`)).rows;
-    if (inserted.length !== 1) throw new EquityError("The election was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+    if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("election") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_securities", rowId: security.id, action: "equity.mfn.elect", actorId: input.actorId,
       changes: {
@@ -203,32 +199,36 @@ export async function applyMfnElection(input: ElectMfnInput): Promise<{ amendmen
 
 /** Why an instrument's terms cannot be adopted on the date, with the remedy for that reason. */
 function notBetter(book: EquityBook, security: SecurityRecord, sourceSecurityId: string, effectiveOn: string): EquityError {
-  const refuse = (message: string, remedy: string, field: "sourceSecurityId" | "effectiveOn" = "sourceSecurityId") => new EquityError(message, { status: 409, code: "equity_mfn_not_better", remedy, field });
+  const onSource = { field: "sourceSecurityId" };
   const source = book.securities.find((row) => row.id === sourceSecurityId);
   if (!source || (source.kind !== "safe" && source.kind !== "note") || source.id === security.id) {
-    return refuse("The instrument is not a SAFE or note of this legal entity.", "Choose a SAFE or convertible note issued after this SAFE.");
+    return equityError("mfnSourceNotConvertible", {}, onSource);
   }
   if (source.issueDate <= security.issueDate) {
-    return refuse(`${source.securityNumber} was issued on ${source.issueDate}, not after ${security.securityNumber} (${security.issueDate}).`, "Choose an instrument issued after this SAFE; the MFN term covers later instruments only.");
+    return equityError("mfnSourceNotLater", {
+      source: fig.text(source.securityNumber), sourceIssuedOn: fig.date(source.issueDate), safe: fig.text(security.securityNumber), safeIssuedOn: fig.date(security.issueDate),
+    }, onSource);
   }
   if (source.issueDate > effectiveOn) {
-    return refuse(`${source.securityNumber} was not yet issued on ${effectiveOn}.`, `Date the election on or after ${source.issueDate}, when ${source.securityNumber} was issued.`, "effectiveOn");
+    return equityError("mfnSourceNotYetIssued", {
+      source: fig.text(source.securityNumber), date: fig.date(effectiveOn), issuedOn: fig.date(source.issueDate), field: fig.term("electedOn"),
+    }, { field: "effectiveOn" });
   }
   if (source.currency !== security.currency) {
-    return refuse(`${source.securityNumber} is stated in ${source.currency}, not ${security.currency}.`, `Choose an instrument stated in ${security.currency}.`);
+    return equityError("mfnSourceCurrency", { source: fig.text(source.securityNumber), sourceCurrency: fig.text(source.currency), currency: fig.text(security.currency) }, onSource);
   }
   if (voidedSecurities(book, effectiveOn).has(source.id)) {
-    return refuse(`${source.securityNumber} is void.`, "Choose an instrument that stands; a void instrument's terms were entered in error.");
+    return equityError("mfnSourceVoid", { source: fig.text(source.securityNumber) }, onSource);
   }
   const standing = electionInForce(book, security, effectiveOn);
   if (standing?.sourceSecurityId === source.id) {
-    return refuse(`${security.securityNumber} already carries ${source.securityNumber}'s terms from ${standing.effectiveOn}.`, "Nothing to elect; the terms are already adopted.");
+    return equityError("mfnTermsAlreadyAdopted", { safe: fig.text(security.securityNumber), source: fig.text(source.securityNumber), date: fig.date(standing.effectiveOn) }, onSource);
   }
   const offeredTerms = convertibleTerms(source);
   if (!offeredTerms.valuationCap && !offeredTerms.discountPercent) {
-    return refuse(`${source.securityNumber} has neither a valuation cap nor a discount.`, "Choose an instrument with a cap or a discount the SAFE lacks or betters.");
+    return equityError("mfnSourceNoTerms", { source: fig.text(source.securityNumber) }, onSource);
   }
-  return refuse(`None of ${source.securityNumber}'s terms is better than ${security.securityNumber}'s terms in force on ${effectiveOn}.`, "Choose an instrument whose cap is lower, discount higher or conversion post-money where the SAFE's is pre-money.");
+  return equityError("mfnTermsNotBetter", { source: fig.text(source.securityNumber), safe: fig.text(security.securityNumber), date: fig.date(effectiveOn) }, onSource);
 }
 
 export interface ReverseMfnInput extends EquityCommand {
@@ -246,14 +246,14 @@ export interface ReverseMfnInput extends EquityCommand {
  * date the SAFE carries the terms in force before the election again.
  */
 export async function reverseMfnElection(input: ReverseMfnInput): Promise<{ amendmentId: string | null; replayed: boolean; status: GovernedStatus; requestId: string }> {
-  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The reversal date");
-  const reason = requireReason(input.reason, "the MFN election reversal");
-  if (!isUuid(input.securityId)) throw new EquityError("The SAFE does not exist.", { status: 404, code: "equity_security_unknown", remedy: "Choose a SAFE." });
+  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "effectiveOn");
+  const reason = requireReason(input.reason, "mfnReversal");
+  if (!isUuid(input.securityId)) throw equityError("safeUnknown");
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string; security_number: string; currency: string; holder_name: string | null; amount: string | null }>(sql`
     select s.subsidiary_id, s.security_number, s.currency, p.display_name as holder_name, s.consideration_amount::text as amount
       from equity_securities s left join parties p on p.org_id = s.org_id and p.id = s.holder_party_id
      where s.org_id = ${input.orgId} and s.id = ${input.securityId}`)).rows[0]);
-  if (!located) throw new EquityError("The SAFE does not exist.", { status: 404, code: "equity_security_unknown", remedy: "Choose a SAFE." });
+  if (!located) throw equityError("safeUnknown");
   const { orgId: _org, actorId: _actor, ...payload } = input;
   const outcome = await governEquityAction({
     orgId: input.orgId, actorId: input.actorId, subsidiaryId: located.subsidiary_id, action: "mfn_reversal",
@@ -266,10 +266,10 @@ export async function reverseMfnElection(input: ReverseMfnInput): Promise<{ amen
 
 /** Apply an MFN election reversal: the command its approval releases. */
 export async function applyMfnReversal(input: ReverseMfnInput): Promise<{ amendmentId: string; replayed: boolean }> {
-  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The reversal date");
-  const reason = requireReason(input.reason, "the MFN election reversal");
+  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "effectiveOn");
+  const reason = requireReason(input.reason, "mfnReversal");
   const idempotencyKey = typeof input.idempotencyKey === "string" && input.idempotencyKey.trim() !== "" ? input.idempotencyKey.trim() : null;
-  const unknown = () => new EquityError("The SAFE does not exist.", { status: 404, code: "equity_security_unknown", remedy: "Choose a SAFE." });
+  const unknown = () => equityError("safeUnknown");
   if (!isUuid(input.securityId)) throw unknown();
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string }>(sql`
     select subsidiary_id from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`)).rows[0]);
@@ -280,7 +280,7 @@ export async function applyMfnReversal(input: ReverseMfnInput): Promise<{ amendm
         select id, security_id, reverses_amendment_id from equity_security_amendments where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
       if (existing) {
         if (existing.security_id !== input.securityId || existing.reverses_amendment_id !== input.amendmentId) {
-          throw new EquityError("This request key was already used for a different reversal.", { status: 409, code: "equity_idempotency_conflict", remedy: "Retry with a new request key." });
+          throw equityError("idempotencyConflict", { subject: fig.choice("reversal") });
         }
         return { amendmentId: existing.id, replayed: true };
       }
@@ -289,32 +289,29 @@ export async function applyMfnReversal(input: ReverseMfnInput): Promise<{ amendm
     const security = book.securities.find((row) => row.id === input.securityId)!;
     const election = book.securityAmendments.find((row) => row.id === input.amendmentId && row.securityId === security.id && row.kind === "mfn_election");
     if (!election) {
-      throw new EquityError("The MFN election does not exist on this SAFE.", { status: 404, code: "equity_mfn_election_unknown", remedy: "Choose an election from the SAFE's MFN terms.", field: "amendmentId" });
+      throw equityError("mfnElectionUnknown", {}, { field: "amendmentId" });
     }
     if (reversedElections(book, "9999-12-31").has(election.id)) {
-      throw new EquityError("The MFN election is already reversed.", { status: 409, code: "equity_mfn_reversed", remedy: "Reload the SAFE's MFN terms." });
+      throw equityError("mfnElectionAlreadyReversed");
     }
     if (effectiveOn < election.effectiveOn) {
-      throw new EquityError(`The reversal cannot precede the election (${election.effectiveOn}).`, { code: "equity_date_invalid", remedy: `Date the reversal on or after ${election.effectiveOn}.`, field: "effectiveOn" });
+      throw equityError("mfnReversalBeforeElection", { date: fig.date(election.effectiveOn) }, { field: "effectiveOn" });
     }
     const later = book.securityAmendments.find((row) => row.securityId === security.id && row.id !== election.id && row.effectiveOn > election.effectiveOn && row.kind === "mfn_election" && !reversedElections(book, "9999-12-31").has(row.id));
     if (later) {
-      throw new EquityError(`A later MFN election on ${security.securityNumber} is recorded from ${later.effectiveOn}.`, { status: 409, code: "equity_mfn_reversal_has_dependents", remedy: `Reverse the election of ${later.effectiveOn} first, latest first.` });
+      throw equityError("mfnReversalHasDependents", { security: fig.text(security.securityNumber), date: fig.date(later.effectiveOn) });
     }
     const lifetime = convertibleState(book, security, "9999-12-31");
     if (lifetime.status !== "outstanding") {
       const certificate = lifetime.resultingSecurityId ? book.securities.find((row) => row.id === lifetime.resultingSecurityId) : null;
-      throw new EquityError(`Security ${security.securityNumber} is ${lifetime.status} as of ${lifetime.endedOn}; its terms can no longer change.`, {
-        status: 409,
-        code: "equity_mfn_closed",
-        remedy: certificate
-          ? `Void certificate ${certificate.securityNumber}, which the conversion produced, dated ${lifetime.endedOn} (the round's closing date), to undo the conversion; then reverse the election and convert ${security.securityNumber} again.`
-          : `Reverse the ${lifetime.status === "repaid" ? "repayment" : "cancellation"} first, then reverse the election.`,
-      });
+      const closed = { security: fig.text(security.securityNumber), status: fig.choice(lifetime.status), date: fig.date(lifetime.endedOn ?? effectiveOn) };
+      throw certificate
+        ? equityError("mfnReversalClosedConverted", { ...closed, certificate: fig.text(certificate.securityNumber) })
+        : equityError("mfnReversalClosed", closed);
     }
     const latest = book.securityAmendments.filter((row) => row.securityId === security.id).map((row) => row.effectiveOn).sort().at(-1);
     if (latest && effectiveOn < latest) {
-      throw new EquityError(`An MFN election or reversal on ${security.securityNumber} is already recorded from ${latest}.`, { status: 409, code: "equity_mfn_backdated", remedy: `Date the reversal on or after ${latest}.`, field: "effectiveOn" });
+      throw equityError("mfnBackdated", { security: fig.text(security.securityNumber), date: fig.date(latest), action: fig.choice("reversal"), field: fig.term("effectiveOn") }, { field: "effectiveOn" });
     }
     const { terms: before } = effectiveConvertibleTerms(book, security, effectiveOn);
     const after = effectiveConvertibleTerms({ ...book, securityAmendments: [...book.securityAmendments, { ...election, id: "pending", kind: "mfn_reversal", effectiveOn, reversesAmendmentId: election.id }] }, security, effectiveOn).terms;
@@ -325,7 +322,7 @@ export async function applyMfnReversal(input: ReverseMfnInput): Promise<{ amendm
       values (${id}, ${input.orgId}, ${located.subsidiary_id}, ${security.id}, 'mfn_reversal', ${effectiveOn}::date, ${election.sourceSecurityId},
         ${after.valuationCap}::numeric, ${after.discountPercent}::numeric, ${after.safeType ?? "pre_money"}, ${election.id}, ${reason}, ${idempotencyKey}, ${input.actorId})
       returning id`)).rows;
-    if (inserted.length !== 1) throw new EquityError("The reversal was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+    if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("reversal") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_securities", rowId: security.id, action: "equity.mfn.reverse", actorId: input.actorId,
       changes: {

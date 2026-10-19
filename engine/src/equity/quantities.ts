@@ -15,7 +15,8 @@ import {
   subtractRational,
   type Rational,
 } from "../money/rational.ts";
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
+import type { EquityTermName } from "./refusals/terms.ts";
 
 export type { Rational };
 export { addRational, compareRational, divideRational, multiplyRational, rational, subtractRational };
@@ -38,54 +39,34 @@ const DECIMAL_RE = /^(-)?(\d+)(?:\.(\d+))?$/;
  * anything beyond `maxScale` places refuse by name: a value is never
  * coerced through a binary float or silently rounded on the way in.
  */
-export function parseDecimal(value: unknown, label: string, maxScale: number): Rational {
+export function parseDecimal(value: unknown, label: EquityTermName, maxScale: number): Rational {
   const text = typeof value === "string" ? value.trim() : typeof value === "bigint" ? value.toString() : null;
   const match = text === null ? null : DECIMAL_RE.exec(text);
-  if (!match) {
-    throw new EquityError(`${label} must be a plain decimal number.`, {
-      code: "equity_decimal_invalid",
-      remedy: `Enter ${label} as digits with an optional decimal point, such as 1.25.`,
-    });
-  }
+  if (!match) throw equityError("decimalInvalid", { label: fig.term(label), example: fig.decimal("1.25") });
   const fraction = (match[3] ?? "").replace(/0+$/, "");
-  if (fraction.length > maxScale) {
-    throw new EquityError(`${label} carries more than ${maxScale} decimal places.`, {
-      code: "equity_decimal_precision",
-      remedy: `Enter ${label} with at most ${maxScale} decimal places.`,
-    });
-  }
+  if (fraction.length > maxScale) throw equityError("decimalPrecision", { label: fig.term(label), places: fig.count(maxScale) });
   const units = BigInt(`${match[2]}${fraction}`) * (match[1] ? -1n : 1n);
   return rational(units, 10n ** BigInt(fraction.length));
 }
 
 /** A required stored value; a missing one refuses instead of becoming zero. */
-export function requireDecimal(value: string | null | undefined, label: string, maxScale: number): Rational {
-  if (value === null || value === undefined || value === "") {
-    throw new EquityError(`${label} is required.`, {
-      code: "equity_value_missing",
-      remedy: `Record ${label} before continuing.`,
-    });
-  }
+export function requireDecimal(value: string | null | undefined, label: EquityTermName, maxScale: number): Rational {
+  if (value === null || value === undefined || value === "") throw equityError("valueMissing", { label: fig.term(label) });
   return parseDecimal(value, label, maxScale);
 }
 
-export const parsePrice = (value: unknown, label: string): Rational => parseDecimal(value, label, PRICE_SCALE);
-export const parseMoney = (value: unknown, label: string): Rational => parseDecimal(value, label, MONEY_SCALE);
+export const parsePrice = (value: unknown, label: EquityTermName): Rational => parseDecimal(value, label, PRICE_SCALE);
+export const parseMoney = (value: unknown, label: EquityTermName): Rational => parseDecimal(value, label, MONEY_SCALE);
 
 /** A percentage (0–100 with four places) as the fraction it denotes. */
-export function parsePercent(value: unknown, label: string): Rational {
+export function parsePercent(value: unknown, label: EquityTermName): Rational {
   return divideRational(parseDecimal(value, label, PERCENT_SCALE), HUNDRED);
 }
 
 /** A whole, non-negative share count. */
-export function parseShares(value: unknown, label: string): bigint {
+export function parseShares(value: unknown, label: EquityTermName): bigint {
   const text = typeof value === "bigint" ? value.toString() : typeof value === "string" ? value.trim() : null;
-  if (text === null || !/^\d+$/.test(text)) {
-    throw new EquityError(`${label} must be a whole number of shares.`, {
-      code: "equity_shares_invalid",
-      remedy: `Enter ${label} as a whole number, without decimals or separators.`,
-    });
-  }
+  if (text === null || !/^\d+$/.test(text)) throw equityError("sharesInvalid", { label: fig.term(label) });
   return BigInt(text);
 }
 

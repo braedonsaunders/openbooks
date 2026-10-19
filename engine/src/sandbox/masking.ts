@@ -231,6 +231,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // Checklist responses are employee-authored evidence; publication reasons may name people.
   { tableName: "hrm_process_steps", columnName: "response", transform: "null_out" },
   { tableName: "hrm_process_template_versions", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_leave_payroll_entitlement_mappings", columnName: "reason", transform: "redact" },
   // Sales target names, reasons and authored coverage can contain personal
   // details. Published definitions are removed from masked sandboxes so
   // routing cannot act on a partially anonymized definition.

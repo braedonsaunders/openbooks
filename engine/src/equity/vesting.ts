@@ -15,7 +15,7 @@
  * exactly n completed months.
  */
 import { addMonthsClamped, isIsoCalendarDate } from "../platform/civil-date.ts";
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import { floorShares, multiplyRational, parsePercent, rational } from "./quantities.ts";
 import type { Acceleration, VestingFrequency, VestingTranche } from "./types.ts";
 
@@ -82,45 +82,42 @@ function timeBasedVested(quantity: bigint, months: number, cliff: number, total:
  * time-based schedule without its start, frequency or a cliff inside it.
  */
 export function validateVestingTerms(terms: VestingTerms): void {
-  const refuse = (message: string, remedy: string): never => {
-    throw new EquityError(message, { code: "equity_vesting_invalid", remedy, field: "vesting" });
-  };
   if (terms.vestingTranches && terms.vestingTranches.length > 0) {
     if (terms.vestingMonths !== null || terms.cliffMonths !== null || terms.vestingFrequency !== null) {
-      refuse("A schedule is either dated tranches or a time-based schedule, not both.", "Remove the time-based terms or the tranches.");
+      throw equityError("vestingShapesMixed", {}, { field: "vesting" });
     }
     let previous = "";
     let total = 0n;
     for (const tranche of terms.vestingTranches) {
-      if (!isIsoCalendarDate(tranche.date)) refuse("Every tranche needs a valid YYYY-MM-DD date.", "Correct the tranche dates.");
-      if (tranche.date <= previous) refuse("Tranche dates must be distinct and in ascending order.", "List each tranche once, earliest first.");
-      if (tranche.quantity <= 0n) refuse("Every tranche must vest at least one share.", "Remove empty tranches.");
+      if (!isIsoCalendarDate(tranche.date)) throw equityError("vestingTrancheDateInvalid", {}, { field: "vesting" });
+      if (tranche.date <= previous) throw equityError("vestingTranchesUnordered", {}, { field: "vesting" });
+      if (tranche.quantity <= 0n) throw equityError("vestingTrancheEmpty", {}, { field: "vesting" });
       previous = tranche.date;
       total += tranche.quantity;
     }
     if (total !== terms.quantity) {
-      refuse(`The tranches vest ${total} shares but the security carries ${terms.quantity}.`, "Make the tranche quantities sum to the security's quantity.");
+      throw equityError("vestingTranchesTotalMismatch", { total: fig.shares(total), quantity: fig.shares(terms.quantity) }, { field: "vesting" });
     }
     return;
   }
   if (terms.vestingMonths === null) {
     if (terms.cliffMonths !== null || terms.vestingFrequency !== null) {
-      refuse("A cliff or frequency needs a vesting term in months.", "Enter the vesting term, or clear the cliff and frequency.");
+      throw equityError("vestingCliffWithoutTerm", { months: fig.term("vestingMonths"), cliff: fig.term("cliffMonths"), frequency: fig.term("vestingFrequency") }, { field: "vesting" });
     }
     return;
   }
   if (!Number.isInteger(terms.vestingMonths) || terms.vestingMonths < 1 || terms.vestingMonths > 600) {
-    refuse("The vesting term must be a whole number of months from 1 to 600.", "Enter the vesting term in whole months.");
+    throw equityError("vestingMonthsOutOfRange", { field: fig.term("vestingMonths"), min: fig.count(1), max: fig.count(600) }, { field: "vesting" });
   }
   const cliff = terms.cliffMonths ?? 0;
   if (!Number.isInteger(cliff) || cliff < 0 || cliff > (terms.vestingMonths ?? 0)) {
-    refuse("The cliff must be a whole number of months within the vesting term.", "Enter a cliff from 0 to the vesting term.");
+    throw equityError("vestingCliffOutOfRange", { field: fig.term("cliffMonths"), term: fig.term("vestingMonths"), min: fig.count(0) }, { field: "vesting" });
   }
   if (!terms.vestingFrequency || !(terms.vestingFrequency in VESTING_STEP_MONTHS)) {
-    refuse("A time-based schedule needs a vesting frequency.", "Choose monthly, quarterly or annual vesting.");
+    throw equityError("vestingFrequencyRequired", { field: fig.term("vestingFrequency") }, { field: "vesting" });
   }
   if (!terms.vestingStart || !isIsoCalendarDate(terms.vestingStart)) {
-    refuse("A time-based schedule needs a vesting start date.", "Enter the vesting start date as YYYY-MM-DD.");
+    throw equityError("vestingStartRequired", { field: fig.term("vestingStart") }, { field: "vesting" });
   }
 }
 
@@ -194,7 +191,7 @@ export function acceleratedVested(
     || (terms.acceleration === "double" && trigger.changeOfControl && trigger.terminated);
   const capped = vested < outstanding ? vested : outstanding;
   if (!fires) return capped;
-  const percent = parsePercent(terms.accelerationPercent ?? "", "the acceleration percentage");
+  const percent = parsePercent(terms.accelerationPercent ?? "", "accelerationPercent");
   const extra = floorShares(multiplyRational(rational(outstanding - capped), percent));
   const total = capped + extra;
   return total < outstanding ? total : outstanding;
@@ -207,20 +204,14 @@ export function acceleratedVested(
 export function parseVestingTranches(raw: unknown): VestingTranche[] | null {
   if (raw === null || raw === undefined) return null;
   if (!Array.isArray(raw)) {
-    throw new EquityError("The stored vesting tranches are not a list.", {
-      code: "equity_vesting_invalid",
-      remedy: "Record the tranches as a list of dated whole-share quantities.",
-    });
+    throw equityError("vestingStoredTranchesNotList");
   }
   return raw.map((entry) => {
     const date = entry && typeof entry === "object" ? (entry as { date?: unknown }).date : undefined;
     const quantity = entry && typeof entry === "object" ? (entry as { quantity?: unknown }).quantity : undefined;
     const text = typeof quantity === "string" ? quantity : typeof quantity === "number" && Number.isSafeInteger(quantity) ? String(quantity) : "";
     if (typeof date !== "string" || !isIsoCalendarDate(date) || !/^\d+$/.test(text)) {
-      throw new EquityError("A vesting tranche needs a YYYY-MM-DD date and a whole-share quantity.", {
-        code: "equity_vesting_invalid",
-        remedy: "Correct the tranche dates and quantities.",
-      });
+      throw equityError("vestingStoredTrancheInvalid");
     }
     return { date, quantity: BigInt(text) };
   });

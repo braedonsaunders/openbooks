@@ -11,19 +11,17 @@
  */
 import { lookupSpotRate } from "../fx/spot-rate.ts";
 import type { SqlExecutor } from "../platform/db.ts";
-import { EquityError } from "./errors.ts";
+import { EquityError, equityError, fig } from "./errors.ts";
+import type { EquityTermName } from "./refusals/terms.ts";
 import { divideRational, fromLedgerUnits, MONEY_SCALE, multiplyRational, parseDecimal, quantize, type Rational } from "./quantities.ts";
 
 /** Decimal places of a stored exchange rate. */
 export const RATE_SCALE = 10;
 
-export const parseRate = (value: string, label = "the exchange rate"): Rational => parseDecimal(value, label, RATE_SCALE);
+export const parseRate = (value: string, label: EquityTermName = "exchangeRate"): Rational => parseDecimal(value, label, RATE_SCALE);
 
 function missingRate(from: string, to: string, on: string): EquityError {
-  return new EquityError(`No ${from} to ${to} exchange rate is recorded on or before ${on}.`, {
-    code: "equity_fx_rate_missing",
-    remedy: `Record the ${from}/${to} spot rate for ${on} (Setup → Exchange Rates), then try again.`,
-  });
+  return equityError("fxRateMissing", { from: fig.text(from), to: fig.text(to), date: fig.date(on) });
 }
 
 /** Units of `to` per unit of `from` on `on`, as the stored rate string. */

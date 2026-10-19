@@ -27,7 +27,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { blackScholesCall } from "./black-scholes.ts";
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import { functionalUnits, spotRate } from "./fx.ts";
 import { currencyExponent, writeEquityAudit } from "./internal.ts";
 import { postEquityEntry, requireConsiderationAccount, resolveAccountPolicy, type EquityLeg } from "./posting.ts";
@@ -171,7 +171,7 @@ export interface SecurityInsert {
 /** A database-generated, time-ordered identifier, so records keep their recording order. */
 export async function newEquityId(runner: SqlExecutor): Promise<string> {
   const row = (await runner.execute<{ id: string }>(sql`select public.uuid_generate_v7() as id`)).rows[0];
-  if (!row) throw new EquityError("No identifier was generated.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+  if (!row) throw equityError("equityIdNotGenerated");
   return row.id;
 }
 
@@ -197,7 +197,7 @@ export async function insertSecurity(runner: SqlExecutor, row: SecurityInsert): 
       ${row.journalEntryId}, ${row.idempotencyKey}, ${row.actorId},
       ${row.interestDayCount}, ${row.mfn}, ${row.unvestedRepurchaseBasis}, ${row.fxRate}::numeric)
     returning id`)).rows;
-  if (inserted.length !== 1) throw new EquityError("The security was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+  if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("security") });
 }
 
 /** The security as the cap-table math reads it. */
@@ -231,10 +231,10 @@ export function nextSecurityNumber(book: EquityBook, kind: SecurityKind, shareCl
 
 /** An active party of the organization; anything else refuses. */
 export async function requireHolder(runner: SqlExecutor, orgId: string, partyId: string, field = "holderPartyId"): Promise<string> {
-  if (!isUuid(partyId)) throw new EquityError("Choose a valid holder.", { code: "equity_holder_unknown", status: 404, remedy: "Choose a person or company from the directory.", field });
+  if (!isUuid(partyId)) throw equityError("holderInvalid", {}, { field });
   const row = (await runner.execute<{ display_name: string; is_active: boolean }>(sql`
     select display_name, is_active from parties where org_id = ${orgId} and id = ${partyId}`)).rows[0];
-  if (!row || !row.is_active) throw new EquityError("The holder must be an active person or company of this organization.", { code: "equity_holder_unknown", status: 404, remedy: "Choose an active person or company, or reactivate it in the directory.", field });
+  if (!row || !row.is_active) throw equityError("holderInactive", {}, { field });
   return row.display_name;
 }
 
@@ -243,23 +243,19 @@ function blankToNull(value: string | null | undefined): string | null {
   return text === "" ? null : text;
 }
 
-function refuse(message: string, field: string, remedy: string, code = "equity_security_invalid"): never {
-  throw new EquityError(message, { code, remedy, field });
-}
-
 /** Par value of `quantity` shares of a class on a date, as ledger units in the currency's minor unit. */
 export function parUnits(book: EquityBook, shareClass: ShareClassRecord, quantity: bigint, on: string, exponent: number): bigint {
-  const par = restatePrice(book.splits, shareClass.id, parsePrice(shareClass.parValue, "the par value"), shareClass.effectiveOn, on);
+  const par = restatePrice(book.splits, shareClass.id, parsePrice(shareClass.parValue, "parValue"), shareClass.effectiveOn, on);
   return ledgerUnits(multiplyRational(par, rational(quantity)), exponent);
 }
 
 /** Issue a security (equity.manage). Returns the security and the entry it posted, if any. */
 export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: string; securityNumber: string; journalEntryId: string | null; replayed: boolean }> {
-  const issueDate = requireDate(input.issueDate, "issueDate", "The issue date");
+  const issueDate = requireDate(input.issueDate, "issueDate", "issueDate");
   const kind = input.kind;
-  if (!["share", "option", "rsu", "warrant", "safe", "note"].includes(kind)) refuse("Choose what kind of security to issue.", "kind", "Choose share, option, RSU, warrant, SAFE or note.");
+  if (!["share", "option", "rsu", "warrant", "safe", "note"].includes(kind)) throw equityError("issuanceKindRequired", { field: fig.term("kind") }, { field: "kind" });
   const memo = blankToNull(input.memo);
-  if (memo && memo.length > 2000) refuse("The memo is longer than 2000 characters.", "memo", "Shorten the memo.");
+  if (memo && memo.length > 2000) throw equityError("issuanceMemoTooLong", { field: fig.term("memo"), max: fig.count(2000) }, { field: "memo" });
   const idempotencyKey = blankToNull(input.idempotencyKey);
   return inEquityCommand(input, "equity.manage", async ({ book, currency: functional }) => {
     if (idempotencyKey) {
@@ -268,7 +264,7 @@ export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: st
          where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
       if (existing) {
         if (existing.kind !== kind || existing.holder_party_id !== input.holderPartyId || existing.subsidiary_id !== input.subsidiaryId) {
-          throw new EquityError("This request key was already used for a different issuance.", { status: 409, code: "equity_idempotency_conflict", remedy: "Retry with a new request key." });
+          throw equityError("idempotencyConflict", { subject: fig.choice("issuance") });
         }
         return { id: existing.id, securityNumber: existing.security_number, journalEntryId: existing.journal_entry_id, replayed: true };
       }
@@ -276,24 +272,24 @@ export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: st
     const holderName = await requireHolder(db, input.orgId, input.holderPartyId);
     const shareBased = kind === "share" || kind === "option" || kind === "rsu" || kind === "warrant";
     const shareClass = shareBased ? book.classes.find((row) => row.id === input.shareClassId) ?? null : null;
-    if (shareBased && !shareClass) refuse("Choose the share class of this legal entity the security is in.", "shareClassId", "Choose a share class.", "equity_class_unknown");
-    if (shareClass && issueDate < shareClass.effectiveOn) refuse(`Class ${shareClass.code} is not effective until ${shareClass.effectiveOn}.`, "issueDate", `Date the issuance on or after ${shareClass.effectiveOn}.`);
+    if (shareBased && !shareClass) throw equityError("issuanceClassRequired", { field: fig.term("shareClass") }, { field: "shareClassId" });
+    if (shareClass && issueDate < shareClass.effectiveOn) throw equityError("issuanceClassNotYetEffective", { code: fig.text(shareClass.code), date: fig.date(shareClass.effectiveOn), field: fig.term("issueDate") }, { field: "issueDate" });
     const plan = input.planId ? book.plans.find((row) => row.id === input.planId) ?? null : null;
-    if (input.planId && !plan) refuse("The plan does not exist for this legal entity.", "planId", "Choose a plan of the legal entity.", "equity_plan_unknown");
-    if (plan && kind !== "option" && kind !== "rsu") refuse("Only options and RSUs are granted from a plan.", "planId", "Clear the plan.");
-    if (plan && shareClass && plan.shareClassId !== shareClass.id) refuse(`Plan ${plan.code} grants awards over its own class.`, "shareClassId", "Choose the plan's share class.");
-    if (plan && issueDate < plan.effectiveOn) refuse(`Plan ${plan.code} is not effective until ${plan.effectiveOn}.`, "issueDate", `Date the grant on or after ${plan.effectiveOn}.`);
+    if (input.planId && !plan) throw equityError("planUnknown", {}, { field: "planId", status: 422 });
+    if (plan && kind !== "option" && kind !== "rsu") throw equityError("issuancePlanKindInvalid", { field: fig.term("plan") }, { field: "planId" });
+    if (plan && shareClass && plan.shareClassId !== shareClass.id) throw equityError("issuancePlanClassMismatch", { plan: fig.text(plan.code), field: fig.term("shareClass") }, { field: "shareClassId" });
+    if (plan && issueDate < plan.effectiveOn) throw equityError("issuancePlanNotYetEffective", { plan: fig.text(plan.code), date: fig.date(plan.effectiveOn), field: fig.term("issueDate") }, { field: "issueDate" });
     const round = input.roundId ? book.rounds.find((row) => row.id === input.roundId) ?? null : null;
-    if (input.roundId && !round) refuse("The round does not exist for this legal entity.", "roundId", "Choose a round of the legal entity.", "equity_round_unknown");
-    if (round && kind !== "share" && kind !== "warrant") refuse("Only shares and warrants are issued in a round.", "roundId", "Clear the round.");
-    if (round && shareClass && kind === "share" && round.shareClassId !== shareClass.id) refuse(`The round sells class ${book.classes.find((row) => row.id === round.shareClassId)?.code ?? ""}.`, "shareClassId", "Choose the round's share class.");
-    const quantity = shareBased ? parseShares(input.quantity ?? "", "the quantity") : null;
-    if (quantity !== null && quantity <= 0n) refuse("Issue at least one share.", "quantity", "Enter the quantity.");
-    if (!shareBased && blankToNull(input.quantity)) refuse("SAFEs and notes are measured in money, not shares.", "quantity", "Clear the quantity and enter the principal.");
+    if (input.roundId && !round) throw equityError("roundUnknown", {}, { field: "roundId", status: 422 });
+    if (round && kind !== "share" && kind !== "warrant") throw equityError("issuanceRoundKindInvalid", { field: fig.term("round") }, { field: "roundId" });
+    if (round && shareClass && kind === "share" && round.shareClassId !== shareClass.id) throw equityError("issuanceRoundClassMismatch", { code: fig.text(book.classes.find((row) => row.id === round.shareClassId)?.code ?? ""), field: fig.term("shareClass") }, { field: "shareClassId" });
+    const quantity = shareBased ? parseShares(input.quantity ?? "", "quantity") : null;
+    if (quantity !== null && quantity <= 0n) throw equityError("issuanceQuantityNotPositive", { field: fig.term("quantity") }, { field: "quantity" });
+    if (!shareBased && blankToNull(input.quantity)) throw equityError("issuanceConvertibleQuantity", { quantity: fig.term("quantity"), principal: fig.term("principal") }, { field: "quantity" });
     const requestedCurrency = blankToNull(input.currency)?.toUpperCase() ?? null;
-    if (round && requestedCurrency && requestedCurrency !== round.currency) refuse(`The round is priced in ${round.currency}.`, "currency", `Issue the round's securities in ${round.currency}.`);
+    if (round && requestedCurrency && requestedCurrency !== round.currency) throw equityError("issuanceRoundCurrencyMismatch", { currency: fig.text(round.currency), field: fig.term("currency") }, { field: "currency" });
     const currency = requestedCurrency ?? round?.currency ?? functional;
-    if (!/^[A-Z]{3}$/.test(currency)) refuse("Choose the currency the security is stated in.", "currency", "Enter a three-letter ISO currency code.");
+    if (!/^[A-Z]{3}$/.test(currency)) throw equityError("issuanceCurrencyInvalid", { field: fig.term("currency") }, { field: "currency" });
     const exponent = await currencyExponent(db, currency);
     const fxRate = currency === functional ? "1" : await spotRate(db, input.orgId, currency, functional, issueDate, functional);
     const functionalExponent = currency === functional ? exponent : await currencyExponent(db, functional);
@@ -301,22 +297,22 @@ export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: st
     // Prices and consideration.
     let pricePerShare = blankToNull(input.pricePerShare);
     if (kind === "share" && !pricePerShare && round) pricePerShare = round.pricePerShare;
-    if ((kind === "option" || kind === "warrant") && !pricePerShare) refuse("Enter the exercise price per share.", "pricePerShare", "Enter the exercise price.");
-    if (pricePerShare && parsePrice(pricePerShare, "the price per share").numerator < 0n) refuse("The price cannot be negative.", "pricePerShare", "Enter a price of zero or more.");
-    if ((kind === "safe" || kind === "note") && pricePerShare) refuse("A SAFE or note has no price per share.", "pricePerShare", "Clear the price.");
-    if (kind === "rsu" && pricePerShare) refuse("An RSU has no purchase or exercise price.", "pricePerShare", "Clear the price.");
+    if ((kind === "option" || kind === "warrant") && !pricePerShare) throw equityError("issuanceExercisePriceRequired", { field: fig.term("exercisePrice") }, { field: "pricePerShare" });
+    if (pricePerShare && parsePrice(pricePerShare, "pricePerShare").numerator < 0n) throw equityError("issuancePriceNegative", { field: fig.term(kind === "option" || kind === "warrant" ? "exercisePrice" : "pricePerShare") }, { field: "pricePerShare" });
+    if ((kind === "safe" || kind === "note") && pricePerShare) throw equityError("issuanceConvertiblePrice", { field: fig.term("pricePerShare") }, { field: "pricePerShare" });
+    if (kind === "rsu" && pricePerShare) throw equityError("issuanceRsuPrice", { field: fig.term("pricePerShare") }, { field: "pricePerShare" });
     let consideration = blankToNull(input.considerationAmount);
     if (kind === "share" && !consideration && pricePerShare && quantity !== null) {
       consideration = (() => {
-        const units = ledgerUnits(multiplyRational(parsePrice(pricePerShare!, "the price per share"), rational(quantity)), exponent);
+        const units = ledgerUnits(multiplyRational(parsePrice(pricePerShare!, "pricePerShare"), rational(quantity)), exponent);
         return units === 0n ? null : formatLedger(units);
       })();
     }
-    const considerationUnits = consideration ? ledgerUnits(parseMoney(consideration, "the consideration"), exponent) : 0n;
-    if (consideration && considerationUnits < 0n) refuse("The consideration cannot be negative.", "considerationAmount", "Enter the cash received.");
-    if ((kind === "safe" || kind === "note") && considerationUnits <= 0n) refuse("Enter the principal the investor paid.", "considerationAmount", "Enter the purchase amount or note principal.");
+    const considerationUnits = consideration ? ledgerUnits(parseMoney(consideration, "consideration"), exponent) : 0n;
+    if (consideration && considerationUnits < 0n) throw equityError("issuanceConsiderationNegative", { field: fig.term(kind === "safe" || kind === "note" ? "principal" : "consideration") }, { field: "considerationAmount" });
+    if ((kind === "safe" || kind === "note") && considerationUnits <= 0n) throw equityError("issuancePrincipalRequired", { field: fig.term("principal") }, { field: "considerationAmount" });
     if (kind === "option" || kind === "rsu") {
-      if (consideration && considerationUnits !== 0n) refuse("Awards are granted without consideration; the exercise price is paid on exercise.", "considerationAmount", "Clear the consideration.");
+      if (consideration && considerationUnits !== 0n) throw equityError("issuanceAwardConsideration", { field: fig.term("consideration") }, { field: "considerationAmount" });
       consideration = null;
     }
     const considerationAccountId = considerationUnits > 0n ? await requireConsiderationAccount(db, input.orgId, input.considerationAccountId) : null;
@@ -324,11 +320,11 @@ export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: st
     // Vesting.
     const vestable = kind === "share" || kind === "option" || kind === "rsu";
     const tranches: VestingTranche[] | null = input.vestingTranches && input.vestingTranches.length > 0
-      ? input.vestingTranches.map((tranche) => ({ date: requireDate(tranche.date, "vestingTranches", "A tranche date"), quantity: parseShares(tranche.quantity, "a tranche quantity") }))
+      ? input.vestingTranches.map((tranche) => ({ date: requireDate(tranche.date, "vestingTranches", "trancheDate"), quantity: parseShares(tranche.quantity, "trancheQuantity") }))
       : null;
     const vestingMonths = input.vestingMonths ?? null;
-    if (!vestable && (tranches || vestingMonths !== null)) refuse("Only shares, options and RSUs vest.", "vesting", "Clear the vesting terms.");
-    const vestingStart = vestingMonths !== null ? requireDate(input.vestingStart ?? issueDate, "vestingStart", "The vesting start") : null;
+    if (!vestable && (tranches || vestingMonths !== null)) throw equityError("issuanceVestingKindInvalid", {}, { field: "vesting" });
+    const vestingStart = vestingMonths !== null ? requireDate(input.vestingStart ?? issueDate, "vestingStart", "vestingStart") : null;
     if (vestable && quantity !== null) {
       validateVestingTerms({
         issueDate, quantity, vestingStart, vestingMonths, cliffMonths: vestingMonths !== null ? input.cliffMonths ?? 0 : null,
@@ -336,60 +332,60 @@ export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: st
       });
     }
     const acceleration: Acceleration = input.acceleration ?? "none";
-    if (!["none", "single", "double"].includes(acceleration)) refuse("Choose the acceleration terms.", "acceleration", "Choose none, single trigger or double trigger.");
+    if (!["none", "single", "double"].includes(acceleration)) throw equityError("issuanceAccelerationRequired", { field: fig.term("acceleration") }, { field: "acceleration" });
     const accelerationPercent = acceleration === "none" ? null : blankToNull(input.accelerationPercent) ?? "100";
     if (accelerationPercent) {
-      const percent = parseDecimal(accelerationPercent, "the acceleration percentage", PERCENT_SCALE);
-      if (percent.numerator <= 0n || compareRational(percent, rational(100n)) > 0) refuse("Acceleration must be above 0% and at most 100%.", "accelerationPercent", "Enter the share of unvested units that accelerates.");
+      const percent = parseDecimal(accelerationPercent, "accelerationPercent", PERCENT_SCALE);
+      if (percent.numerator <= 0n || compareRational(percent, rational(100n)) > 0) throw equityError("issuanceAccelerationOutOfRange", { field: fig.term("accelerationPercent"), zero: fig.percent("0"), hundred: fig.percent("100") }, { field: "accelerationPercent" });
     }
-    if (acceleration !== "none" && !vestable) refuse("Only vesting securities accelerate.", "acceleration", "Clear the acceleration.");
+    if (acceleration !== "none" && !vestable) throw equityError("issuanceAccelerationKindInvalid", { field: fig.term("acceleration") }, { field: "acceleration" });
 
     // Option, convertible and valuation terms.
-    const expirationDate = input.expirationDate ? requireDate(input.expirationDate, "expirationDate", "The expiration date") : null;
-    if (expirationDate && expirationDate <= issueDate) refuse("The expiration date must follow the issue date.", "expirationDate", "Correct the expiration date.");
-    if (expirationDate && kind !== "option" && kind !== "warrant") refuse("Only options and warrants expire.", "expirationDate", "Clear the expiration date.");
+    const expirationDate = input.expirationDate ? requireDate(input.expirationDate, "expirationDate", "expirationDate") : null;
+    if (expirationDate && expirationDate <= issueDate) throw equityError("issuanceExpirationNotAfterIssue", { field: fig.term("expirationDate"), issueDate: fig.term("issueDate") }, { field: "expirationDate" });
+    if (expirationDate && kind !== "option" && kind !== "warrant") throw equityError("issuanceExpirationKindInvalid", { field: fig.term("expirationDate") }, { field: "expirationDate" });
     const optionType = kind === "option" ? input.optionType ?? null : null;
-    if (kind === "option" && optionType !== "iso" && optionType !== "nso") refuse("Choose whether the option is an incentive or non-qualified option.", "optionType", "Choose ISO or NSO.");
+    if (kind === "option" && optionType !== "iso" && optionType !== "nso") throw equityError("issuanceOptionTypeRequired", { field: fig.term("optionType") }, { field: "optionType" });
     const earlyExercise = kind === "option" ? input.earlyExercise === true : false;
-    if (input.earlyExercise === true && kind !== "option") refuse("Only options admit early exercise.", "earlyExercise", "Clear early exercise.");
+    if (input.earlyExercise === true && kind !== "option") throw equityError("issuanceEarlyExerciseKindInvalid", { field: fig.term("earlyExercise") }, { field: "earlyExercise" });
     const unvestedRepurchaseBasis = earlyExercise ? input.unvestedRepurchaseBasis ?? null : null;
     if (earlyExercise && unvestedRepurchaseBasis !== "cost" && unvestedRepurchaseBasis !== "lower_of_cost_or_fmv") {
-      refuse("Choose the price at which the company repurchases unvested early-exercised shares.", "unvestedRepurchaseBasis", "Choose cost, or the lower of cost and fair market value.");
+      throw equityError("issuanceRepurchaseBasisRequired", { field: fig.term("unvestedRepurchaseBasis") }, { field: "unvestedRepurchaseBasis" });
     }
-    if (!earlyExercise && input.unvestedRepurchaseBasis) refuse("Only an early-exercisable option carries an unvested repurchase price.", "unvestedRepurchaseBasis", "Clear the repurchase basis or allow early exercise.");
+    if (!earlyExercise && input.unvestedRepurchaseBasis) throw equityError("issuanceRepurchaseBasisUnused", { field: fig.term("unvestedRepurchaseBasis"), earlyExercise: fig.term("earlyExercise") }, { field: "unvestedRepurchaseBasis" });
     const safeType = kind === "safe" ? input.safeType ?? null : null;
-    if (kind === "safe" && safeType !== "pre_money" && safeType !== "post_money") refuse("Choose a pre-money or post-money SAFE.", "safeType", "Choose the SAFE type.");
+    if (kind === "safe" && safeType !== "pre_money" && safeType !== "post_money") throw equityError("issuanceSafeTypeRequired", { field: fig.term("safeType") }, { field: "safeType" });
     const mfn = kind === "safe" ? input.mfn === true : false;
-    if (input.mfn === true && kind !== "safe") refuse("Only a SAFE carries a most-favored-nation term.", "mfn", "Clear the MFN term.");
+    if (input.mfn === true && kind !== "safe") throw equityError("issuanceMfnKindInvalid", { field: fig.term("mfn") }, { field: "mfn" });
     const convertible = kind === "safe" || kind === "note";
     const valuationCap = convertible ? blankToNull(input.valuationCap) : null;
     const discountPercent = convertible ? blankToNull(input.discountPercent) : null;
-    if (!convertible && (blankToNull(input.valuationCap) || blankToNull(input.discountPercent))) refuse("Only SAFEs and notes carry a cap or discount.", "valuationCap", "Clear the cap and discount.");
-    if (valuationCap && parseMoney(valuationCap, "the valuation cap").numerator <= 0n) refuse("The valuation cap must be greater than zero.", "valuationCap", "Enter the cap or clear it.");
+    if (!convertible && (blankToNull(input.valuationCap) || blankToNull(input.discountPercent))) throw equityError("issuanceCapDiscountKindInvalid", { cap: fig.term("valuationCap"), discount: fig.term("discountPercent") }, { field: "valuationCap" });
+    if (valuationCap && parseMoney(valuationCap, "valuationCap").numerator <= 0n) throw equityError("issuanceValuationCapNotPositive", { field: fig.term("valuationCap") }, { field: "valuationCap" });
     // A stated 0% discount is a term as written (it converts at the round price); blank records no discount.
     if (discountPercent) {
-      const discount = parsePercent(discountPercent, "the discount");
-      if (discount.numerator < 0n || compareRational(discount, rational(1n)) >= 0) refuse("The discount must be at least 0% and below 100%.", "discountPercent", "Enter a discount from 0% up to, but not including, 100%, or leave it blank for none.");
+      const discount = parsePercent(discountPercent, "discountPercent");
+      if (discount.numerator < 0n || compareRational(discount, rational(1n)) >= 0) throw equityError("issuanceDiscountOutOfRange", { field: fig.term("discountPercent"), zero: fig.percent("0"), hundred: fig.percent("100") }, { field: "discountPercent" });
     }
     const interestRatePercent = kind === "note" ? blankToNull(input.interestRatePercent) : null;
     const interestBasis = kind === "note" ? input.interestBasis ?? null : null;
     const interestDayCount = kind === "note" ? input.interestDayCount ?? null : null;
-    const maturityDate = kind === "note" && input.maturityDate ? requireDate(input.maturityDate, "maturityDate", "The maturity date") : null;
+    const maturityDate = kind === "note" && input.maturityDate ? requireDate(input.maturityDate, "maturityDate", "maturityDate") : null;
     if (kind === "note") {
-      if (!interestRatePercent || parseDecimal(interestRatePercent, "the interest rate", PERCENT_SCALE).numerator < 0n) refuse("Enter the note's annual interest rate.", "interestRatePercent", "Enter the interest rate (zero for none).");
-      if (!interestBasis || !INTEREST_BASES.includes(interestBasis)) refuse("Choose how the note's interest accrues.", "interestBasis", "Choose simple interest, or compounding annually, semiannually, quarterly or monthly.");
-      if (!interestDayCount || !DAY_COUNTS.includes(interestDayCount)) refuse("Choose the note's day-count convention.", "interestDayCount", "Choose Actual/365, Actual/360, 30/360 or Actual/Actual.");
-      if (maturityDate && maturityDate <= issueDate) refuse("The maturity date must follow the issue date.", "maturityDate", "Correct the maturity date.");
+      if (!interestRatePercent || parseDecimal(interestRatePercent, "interestRatePercent", PERCENT_SCALE).numerator < 0n) throw equityError("issuanceInterestRateRequired", { field: fig.term("interestRatePercent") }, { field: "interestRatePercent" });
+      if (!interestBasis || !INTEREST_BASES.includes(interestBasis)) throw equityError("issuanceInterestBasisRequired", { field: fig.term("interestBasis") }, { field: "interestBasis" });
+      if (!interestDayCount || !DAY_COUNTS.includes(interestDayCount)) throw equityError("issuanceDayCountRequired", { field: fig.term("interestDayCount") }, { field: "interestDayCount" });
+      if (maturityDate && maturityDate <= issueDate) throw equityError("issuanceMaturityNotAfterIssue", { field: fig.term("maturityDate"), issueDate: fig.term("issueDate") }, { field: "maturityDate" });
     } else if (input.interestDayCount) {
-      refuse("Only a note carries a day-count convention.", "interestDayCount", "Clear the day count.");
+      throw equityError("issuanceDayCountKindInvalid", { field: fig.term("interestDayCount") }, { field: "interestDayCount" });
     }
     let valuationMethod: SecurityInsert["valuationMethod"] = null;
     let fairValuePerUnit: string | null = null;
     const valuation = input.valuation ?? null;
     if (kind === "option" || kind === "rsu") {
-      if (!valuation) refuse("Awards need their grant-date valuation.", "valuation", "Enter the grant-date share price and valuation assumptions.");
-      if (valuation!.attribution !== "straight_line" && valuation!.attribution !== "graded") refuse("Choose how the award's cost is attributed.", "valuation", "Choose straight-line or graded attribution.");
-      if (parsePrice(valuation!.sharePrice, "the grant-date share price").numerator <= 0n) refuse("The grant-date share price must be greater than zero.", "valuation", "Enter the fair value of a share on the grant date.");
+      if (!valuation) throw equityError("issuanceValuationRequired", { field: fig.term("grantSharePrice") }, { field: "valuation" });
+      if (valuation!.attribution !== "straight_line" && valuation!.attribution !== "graded") throw equityError("issuanceAttributionRequired", { field: fig.term("attribution") }, { field: "valuation" });
+      if (parsePrice(valuation!.sharePrice, "grantSharePrice").numerator <= 0n) throw equityError("issuanceGrantSharePriceNotPositive", { field: fig.term("grantSharePrice") }, { field: "valuation" });
       if (kind === "option") {
         valuationMethod = "black_scholes";
         fairValuePerUnit = blackScholesCall({
@@ -405,14 +401,14 @@ export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: st
         fairValuePerUnit = valuation!.sharePrice.trim();
       }
     } else if (valuation) {
-      refuse("Only options and RSUs carry a share-based payment valuation.", "valuation", "Clear the valuation.");
+      throw equityError("issuanceValuationKindInvalid", {}, { field: "valuation" });
     }
 
     const id = await newEquityId(db);
     const securityNumber = blankToNull(input.securityNumber) ?? nextSecurityNumber(book, kind, shareClass);
-    if (securityNumber.length > 40) refuse("The security number is longer than 40 characters.", "securityNumber", "Shorten the security number.");
+    if (securityNumber.length > 40) throw equityError("issuanceNumberTooLong", { field: fig.term("securityNumber"), max: fig.count(40) }, { field: "securityNumber" });
     if (book.securities.some((row) => row.securityNumber.toLowerCase() === securityNumber.toLowerCase())) {
-      throw new EquityError(`Security number ${securityNumber} is already used by this legal entity.`, { status: 409, code: "equity_security_number_taken", remedy: "Choose a different number, or leave it blank to number it automatically.", field: "securityNumber" });
+      throw equityError("securityNumberTaken", { number: fig.text(securityNumber), field: fig.term("securityNumber") }, { field: "securityNumber" });
     }
     const row: SecurityInsert = {
       id, orgId: input.orgId, subsidiaryId: input.subsidiaryId, securityNumber, kind, holderPartyId: input.holderPartyId,
@@ -442,7 +438,7 @@ export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: st
       const cash: EquityLeg = { accountId: considerationAccountId!, units: cashFunctional, foreign: foreign(considerationUnits) };
       if (kind === "share") {
         const par = parUnits(book, shareClass!, quantity!, issueDate, functionalExponent);
-        if (cashFunctional < par) refuse("The consideration is below the shares' par value.", "considerationAmount", "Shares cannot be issued below par; enter the full consideration received.");
+        if (cashFunctional < par) throw equityError("issuanceBelowPar", { field: fig.term("consideration") }, { field: "considerationAmount" });
         legs = [
           cash,
           { accountId: shareClass!.kind === "preferred" ? policy.preferredStockAccountId : policy.commonStockAccountId, units: -par },
@@ -454,7 +450,7 @@ export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: st
         legs = [cash, { accountId: policy.convertibleInstrumentsAccountId, units: -cashFunctional, foreign: foreign(-considerationUnits) }];
       }
     } else if (kind === "share" && parUnits(book, shareClass!, quantity!, issueDate, functionalExponent) > 0n) {
-      refuse("Shares carry par value, so their issuance needs consideration.", "considerationAmount", "Enter the cash received for the shares and the account that received it.");
+      throw equityError("issuanceParConsiderationRequired", { field: fig.term("consideration"), account: fig.term("considerationAccount") }, { field: "considerationAmount" });
     }
     if (legs.length > 0) {
       row.journalEntryId = await postEquityEntry(db, {

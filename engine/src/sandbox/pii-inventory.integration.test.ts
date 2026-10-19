@@ -3122,6 +3122,9 @@ test("financial clone projections redact source prose and preserve rebased fair-
   assert.equal(await project("performance_obligations","hold_reason","Customer Jane approval"),"REDACTED");
   assert.equal(await project("fx_rate_types","name","Jane's corporate treasury"),"REDACTED");
   assert.equal(await project("account_translation_policies","reason","Jane's corporate treasury"),"REDACTED");
+  const leaveReason = "Approved banked leave destination for Worker Example";
+  assert.equal(await project("hrm_leave_payroll_entitlement_mappings", "reason", leaveReason), "REDACTED");
+  assert.equal(await project("hrm_leave_payroll_entitlement_mappings", "reason", leaveReason, false), leaveReason);
 });
 
 test("warehouse evidence masking removes arbitrary prose and preserves native dated movement values", async () => {

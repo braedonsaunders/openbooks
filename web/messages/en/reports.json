@@ -3463,7 +3463,8 @@
     "exported": "Exported {filename}.",
     "exportFailed": "Could not export {format}.",
     "exporting": "Exporting {format}…",
-    "export": "Export"
+    "export": "Export",
+    "pageOf": "Page {page} of {total}"
   },
   "builtIns": {
     "equity-stock-compensation-schedule": {

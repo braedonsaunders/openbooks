@@ -10,6 +10,7 @@
 import PDFDocument from 'pdfkit'
 import { DEFAULT_PRIMARY_COLOR, type PdfBranding, type PdfPageSetup } from './types'
 import { resolvePage } from './page'
+import { formatStamp } from './document'
 
 export type StatementPdfColumnKind = 'amount' | 'variance_abs' | 'variance_pct'
 export type StatementPdfColumn = { label: string; kind: StatementPdfColumnKind }
@@ -45,6 +46,8 @@ export type StatementPdfInput = {
   generatedAt: Date
   /** Optional footnote line (e.g. rounding note). */
   footnote?: string
+  /** The footer's page numbering in the reader's language (defaults to "Page n of total"). */
+  pageLabel?: (page: number, total: number) => string
 }
 
 type Theme = {
@@ -385,7 +388,9 @@ function stampFooters(
 ): void {
   const range = doc.bufferedPageRange()
   const footerY = Math.min(page.contentBottom + (page.margin - 10) / 2, page.height - 14)
-  const stamp = input.generatedAt.toISOString().slice(0, 10)
+  // A statement footer carries the generated date alone.
+  const stamp = formatStamp(new Date(`${input.generatedAt.toISOString().slice(0, 10)}T00:00:00.000Z`), input.locale)
+  const pageLabel = input.pageLabel ?? ((n: number, of: number) => `Page ${n} of ${of}`)
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i)
     // The footer sits in the bottom MARGIN band (below contentBottom). Drawing
@@ -401,7 +406,7 @@ function stampFooters(
       lineBreak: false,
       ellipsis: true,
     })
-    doc.text(`${stamp}    Page ${i - range.start + 1} of ${range.count}`, page.contentLeft + page.contentWidth * 0.5, footerY, {
+    doc.text(`${stamp}    ${pageLabel(i - range.start + 1, range.count)}`, page.contentLeft + page.contentWidth * 0.5, footerY, {
       width: page.contentWidth * 0.5,
       align: 'right',
       lineBreak: false,

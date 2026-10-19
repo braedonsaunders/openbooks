@@ -7,10 +7,12 @@
  */
 import { sql } from "drizzle-orm";
 import { toUnits } from "../money/money.ts";
+import type { CatalogRefusal } from "../platform/catalog-refusal.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { buildCapTable, holdingState, vestingTermsOf, voidedSecurities, type CapTable } from "./cap-table.ts";
-import { conversionOnVoidedTermsAsRecorded } from "./conversion-review.ts";
+import { reviewRecordedConversion } from "./conversion-review.ts";
+import type { RoundPricing } from "./round-conversion.ts";
 import { assertEquityReadable, loadLegalEntity, requireEquityReader, type LegalEntity } from "./internal.ts";
 import { equityPostingsDue, type EquityPostingsDue } from "./period-postings.ts";
 import { formatPercent, rational } from "./quantities.ts";
@@ -46,10 +48,14 @@ export type EquityAttention =
   | { kind: "expiring"; securityId: string; securityNumber: string; securityKind: SecurityKind; holderName: string; date: string; quantity: string }
   | { kind: "conversion_terms_void"; securityId: string; securityNumber: string; holderName: string; sourceSecurityNumber: string; certificateId: string | null; certificateNumber: string | null }
   | { kind: "round_pre_money_drift"; roundId: string; roundName: string; date: string; preMoneyValuation: string; impliedPreMoney: string; fullyDilutedBefore: string; currency: string }
-  | { kind: "compensation_due"; date: string; amount: string; currency: string; refusal: string | null }
+  | {
+    kind: "conversion_price_drift"; securityId: string; securityNumber: string; holderName: string; roundId: string; roundName: string; date: string; currency: string;
+    recordedPrice: string; standingPrice: string; recordedShares: string; standingShares: string; certificateId: string | null; certificateNumber: string | null;
+  }
+  | { kind: "compensation_due"; date: string; amount: string; currency: string; refusal: CatalogRefusal | null }
   | { kind: "compensation_catch_up"; date: string; amount: string; currency: string; postsThrough: string | null; postsNow: boolean }
   | { kind: "interest_catch_up"; date: string; amount: string; currency: string; postsThrough: string | null; postsNow: boolean }
-  | { kind: "interest_due"; date: string; amount: string; currency: string; refusal: string | null };
+  | { kind: "interest_due"; date: string; amount: string; currency: string; refusal: CatalogRefusal | null };
 
 export interface EquityActivity {
   key: string;
@@ -207,17 +213,31 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
         departedUnits.set(security.holderPartyId, row);
       }
     }
-    // A SAFE converted on terms an MFN election adopted from an instrument since voided.
+    // A SAFE converted on terms an MFN election adopted from an instrument since voided, and
+    // a conversion on its own terms that the round now measures at another price.
     const numberOf = new Map(book.securities.map((row) => [row.id, row.securityNumber]));
+    const pricing = new Map<string, RoundPricing>();
     for (const security of issued) {
-      if (security.kind !== "safe" || !security.mfn) continue;
-      const invalid = await conversionOnVoidedTermsAsRecorded(db, orgId, book, security, asOf, entity.currency);
-      if (!invalid) continue;
-      attention.push({
-        kind: "conversion_terms_void", securityId: security.id, securityNumber: security.securityNumber, holderName: nameOf(security.holderPartyId),
-        sourceSecurityNumber: numberOf.get(invalid.sourceSecurityId) ?? "", certificateId: invalid.resultingSecurityId,
-        certificateNumber: invalid.resultingSecurityId ? numberOf.get(invalid.resultingSecurityId) ?? null : null,
-      });
+      if (security.kind !== "safe" && security.kind !== "note") continue;
+      const review = await reviewRecordedConversion(db, orgId, book, security, asOf, entity.currency, pricing);
+      if (review?.voidedTerms) {
+        const invalid = review.voidedTerms;
+        attention.push({
+          kind: "conversion_terms_void", securityId: security.id, securityNumber: security.securityNumber, holderName: nameOf(security.holderPartyId),
+          sourceSecurityNumber: numberOf.get(invalid.sourceSecurityId) ?? "", certificateId: invalid.resultingSecurityId,
+          certificateNumber: invalid.resultingSecurityId ? numberOf.get(invalid.resultingSecurityId) ?? null : null,
+        });
+      }
+      if (review?.drift) {
+        const drift = review.drift;
+        const round = book.rounds.find((row) => row.id === drift.roundId)!;
+        attention.push({
+          kind: "conversion_price_drift", securityId: security.id, securityNumber: security.securityNumber, holderName: nameOf(security.holderPartyId),
+          roundId: round.id, roundName: round.name, date: drift.convertedOn, currency: round.currency,
+          recordedPrice: drift.recordedPrice, standingPrice: drift.standingPrice, recordedShares: drift.recordedShares, standingShares: drift.standingShares,
+          certificateId: drift.resultingSecurityId, certificateNumber: drift.resultingSecurityId ? numberOf.get(drift.resultingSecurityId) ?? null : null,
+        });
+      }
     }
     // A round whose pre-money no longer agrees with its price and the shares before it, as later backdated activity reads them.
     for (const round of book.rounds) {
@@ -233,10 +253,10 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
       attention.push({ kind: "departed", holderPartyId, holderName: nameOf(holderPartyId), date: departures.get(holderPartyId)!, units: row.units.toString(), securityId: row.securityId });
     }
     if (postings?.compensation.due) {
-      attention.push({ kind: "compensation_due", date: postings.throughDate, amount: postings.compensation.amount, currency: postings.compensation.currency, refusal: postings.compensation.refusal?.message ?? null });
+      attention.push({ kind: "compensation_due", date: postings.throughDate, amount: postings.compensation.amount, currency: postings.compensation.currency, refusal: postings.compensation.refusal });
     }
     if (postings?.interest.due) {
-      attention.push({ kind: "interest_due", date: postings.throughDate, amount: postings.interest.amount, currency: postings.interest.currency, refusal: postings.interest.refusal?.message ?? null });
+      attention.push({ kind: "interest_due", date: postings.throughDate, amount: postings.interest.amount, currency: postings.interest.currency, refusal: postings.interest.refusal });
     }
     // Cost or interest recorded after a posted run for the periods it measured: the next run catches it up.
     for (const [kind, due] of [["compensation_catch_up", postings?.compensation], ["interest_catch_up", postings?.interest]] as const) {
