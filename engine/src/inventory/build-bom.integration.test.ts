@@ -109,12 +109,13 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
+      const quarantineLocationId = randomUUID();
       await db.execute(sql`
-        update stock_locations set kind = 'quarantine'
-         where org_id = ${org.orgId} and id = ${org.stockLocationId}`);
+        insert into stock_locations (id, org_id, location_id, code, kind, is_active)
+        values (${quarantineLocationId}, ${org.orgId}, ${org.locationId}, 'QUARANTINE', 'quarantine', true)`);
       await receiveInventory(org.orgId, null, {
         itemId: org.items.component,
-        stockLocationId: org.stockLocationId,
+        stockLocationId: quarantineLocationId,
         quantity: "10",
         unitCost: "1",
         subsidiaryId: org.subsidiaryId,
@@ -126,7 +127,7 @@ test(
         buildAssembly(org.orgId, null, {
           assemblyItemId: org.items.assembly,
           quantity: "1",
-          stockLocationId: org.stockLocationId,
+          stockLocationId: quarantineLocationId,
           subsidiaryId: org.subsidiaryId,
           date: org.date,
         }),
@@ -188,8 +189,8 @@ test(
       const restrictedSubsidiaryId = randomUUID();
       await db.execute(sql`
         insert into subsidiaries
-          (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-        values (${restrictedSubsidiaryId}, ${org.orgId}, 'Restricted entity', 'CAD', 'CA',
+          (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${restrictedSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Restricted entity', 'CAD', 'CA',
           '{}'::jsonb, false, true, '{}'::jsonb)`);
       await db.execute(sql`
         update accounts set subsidiary_id = ${restrictedSubsidiaryId}
