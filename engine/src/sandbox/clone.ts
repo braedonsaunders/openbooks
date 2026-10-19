@@ -537,7 +537,7 @@ export function generateCopySql(
       // (an early-exercise deposit, accrued note interest). The security is
       // copied with a rebased id, so the line's identity is rebased with it;
       // a masked copy keeps only that identity, which holds no personal data.
-      const tagged = `("custom"->>'equitySecurityId') ~ '^[0-9a-fA-F-]{36}$'`;
+      const tagged = `("custom"->>'equitySecurityId') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'`;
       const identity = `jsonb_build_object('equitySecurityId', ob_rebase(("custom"->>'equitySecurityId')::uuid, '${seed}'::uuid)::text, 'equityRole', "custom"->'equityRole')`;
       const otherwise = opts.masked ? maskExpr(c.name, tableMask?.get(c.name) ?? "null_out", "id", { ...c, tableName: t.name }) : `"custom"`;
       exprs.push(`(case when ${tagged} then ${opts.masked ? identity : `"custom" || ${identity}`} else ${otherwise} end)`);
