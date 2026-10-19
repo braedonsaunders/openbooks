@@ -190,7 +190,10 @@ test("the automation tick leaves sandbox recipes and queued events untouched", {
       const summary = await runAutomationTick(new Date());
       assert.equal(summary.schedulesFired, 0);
       assert.equal(summary.eventsDrained, 0);
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from automation_runs where org_id = ${h.org.orgId} and automation_id = any(${[schedule.id, event.id]}::uuid[])`)).rows[0]!.n, 0);
+      assert.equal((await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from automation_runs
+         where org_id = ${h.org.orgId} and automation_id in (${schedule.id}, ${event.id})
+      `)).rows[0]!.n, 0);
       assert.equal((await db.execute<{ status: string }>(sql`select status from automation_event_queue where org_id = ${h.org.orgId}`)).rows[0]?.status, "pending");
     } finally {
       await db.execute(sql`update orgs set env_kind = 'production' where id = ${h.org.orgId}`);
