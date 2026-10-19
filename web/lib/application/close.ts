@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine/close/approvals";
 import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/close/run-completion";
-import { CloseError, type CloseModule } from "@openbooks/engine/periods/period-policy";
+import { CloseError, type CloseModule, type PeriodDisplayInput } from "@openbooks/engine/periods/period-policy";
 import { decidePeriodReopen, requestPeriodReopen } from "@openbooks/engine/close/reopening";
 import { refreshCloseRun } from "@openbooks/engine/close/run-automation";
 import { startCloseRun } from "@openbooks/engine/close/run-start";
@@ -50,10 +50,32 @@ function assertUnrestrictedCloseDiagnostics(context: ApplicationContext): void {
     throw new ApplicationError("forbidden", CLOSE_ORG_WIDE_DIAGNOSTICS_REFUSAL, 403);
   }
 }
+/**
+ * The fiscal position and dates of an `accounting_periods` row aliased `p`,
+ * returned beside its stored name so presenters label the period in the
+ * viewer's locale (`periodDisplayLabel`) and every fiscal year reads alike.
+ */
+const PERIOD_REF_COLUMNS = sql`p.fiscal_year as period_fiscal_year, p.period_number as period_number,
+             p.is_adjustment as period_is_adjustment,
+             p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_on`;
+
+function periodRef(row: Record<string, unknown>): PeriodDisplayInput {
+  return {
+    fiscalYear: Number(row.period_fiscal_year),
+    periodNumber: Number(row.period_number),
+    adjustment: row.period_is_adjustment === true,
+    startsOn: String(row.period_starts_on),
+    endsOn: String(row.period_ends_on),
+  };
+}
+
 type CloseRunRow = {
   id: string;
   periodId: string;
+  /** The period's stored name. */
   periodName: string;
+  /** The period's fiscal position and dates, for display labels. */
+  periodRef: PeriodDisplayInput;
   bookId: string;
   bookCode: string;
   status: string;
@@ -73,8 +95,8 @@ function mapCloseError(error: unknown): never {
 
 async function closeRun(context: ApplicationContext, runId: string): Promise<CloseRunRow> {
   assertSubsidiaryAccess(context, null);
-  const result = (await db.execute<CloseRunRow>(sql`
-    select r.id, r.period_id as "periodId", p.name as "periodName",
+  const result = (await db.execute<CloseRunDbRow>(sql`
+    select r.id, r.period_id as "periodId", p.name as "periodName", ${PERIOD_REF_COLUMNS},
            r.book_id as "bookId", b.code as "bookCode", r.status,
            r.current_stage as "currentStage", r.target_close_date as "targetCloseDate",
            r.scope, r.started_at as "startedAt", r.last_validated_at as "lastValidatedAt"
@@ -86,7 +108,23 @@ async function closeRun(context: ApplicationContext, runId: string): Promise<Clo
   `));
   const row = result.rows[0];
   if (!row) throw notFound("close run");
-  return row;
+  return closeRunRow(row);
+}
+
+type CloseRunDbRow = Omit<CloseRunRow, "periodRef"> & {
+  period_fiscal_year: number;
+  period_number: number;
+  period_is_adjustment: boolean;
+  period_starts_on: string;
+  period_ends_on: string;
+};
+
+function closeRunRow(row: CloseRunDbRow): CloseRunRow {
+  const { period_fiscal_year, period_number, period_is_adjustment, period_starts_on, period_ends_on, ...run } = row;
+  return {
+    ...run,
+    periodRef: periodRef({ period_fiscal_year, period_number, period_is_adjustment, period_starts_on, period_ends_on }),
+  };
 }
 
 export async function listCloseRuns(
@@ -97,8 +135,8 @@ export async function listCloseRuns(
   // Declared lock targets do not narrow the organization-wide diagnostics.
   assertUnrestrictedCloseDiagnostics(context);
   const limit = clamp(input.limit ?? 50, 1, 100);
-  const result = (await db.execute<CloseRunRow>(sql`
-    select r.id, r.period_id as "periodId", p.name as "periodName",
+  const result = (await db.execute<CloseRunDbRow>(sql`
+    select r.id, r.period_id as "periodId", p.name as "periodName", ${PERIOD_REF_COLUMNS},
            r.book_id as "bookId", b.code as "bookCode", r.status,
            r.current_stage as "currentStage", r.target_close_date as "targetCloseDate",
            r.scope, r.started_at as "startedAt", r.last_validated_at as "lastValidatedAt"
@@ -110,7 +148,7 @@ export async function listCloseRuns(
      order by p.ends_on desc, r.started_at desc
      limit ${limit}
   `));
-  return result.rows;
+  return result.rows.map(closeRunRow);
 }
 
 const LOCK_STATES = new Set(["open", "soft_closed", "closed"]);
@@ -137,7 +175,7 @@ export async function listPeriodLocks(
   const [rows, count] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select l.id, l.module, l.state, l.locked_at, l.reason, l.reopen_expires_at,
-             p.name as period_name, p.starts_on, p.ends_on,
+             p.name as period_name, p.starts_on, p.ends_on, ${PERIOD_REF_COLUMNS},
              b.name as book_name, b.code as book_code,
              s.name as subsidiary_name,
              u.name as locked_by_name
@@ -157,6 +195,7 @@ export async function listPeriodLocks(
     locks: rows.rows.map((lock) => ({
       id: lock.id,
       period: lock.period_name,
+      periodRef: periodRef(lock),
       periodStartsOn: lock.starts_on,
       periodEndsOn: lock.ends_on,
       book: lock.book_name,
@@ -244,7 +283,7 @@ export async function listPeriodReopenRequests(
     db.execute<Record<string, unknown>>(sql`
       select r.id, r.modules, r.reason, r.status, r.expires_at, r.reclosed_at, r.created_at, r.requested_by,
              r.approved_by,
-             p.name as period_name, b.name as book_name, b.code as book_code,
+             p.name as period_name, ${PERIOD_REF_COLUMNS}, b.name as book_name, b.code as book_code,
              s.name as subsidiary_name,
              req.name as requested_by_name, app.name as approved_by_name, r.approved_at,
              (select a.action from audit_log a
@@ -281,6 +320,7 @@ export async function listPeriodReopenRequests(
     requests: rows.rows.map((row) => ({
       id: row.id,
       period: row.period_name,
+      periodRef: periodRef(row),
       book: row.book_name,
       bookCode: row.book_code,
       subsidiary: row.subsidiary_name,

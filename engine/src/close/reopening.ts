@@ -1,4 +1,4 @@
-import { CloseError, CLOSE_MODULES, periodLockRequiresApprovedReopen, type CloseModule } from "../periods/period-policy.ts";
+import { canonicalPeriodLabelSql, CloseError, CLOSE_MODULES, periodLockRequiresApprovedReopen, type CloseModule } from "../periods/period-policy.ts";
 import { assertPeriodEndReopenAllowed } from "./period-end-journals.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
@@ -64,8 +64,8 @@ async function insertPeriodReopenRequest(tx: SqlExecutor, args: ReopenRequestArg
   // same scope can never both be approved, so the second would strand its
   // approver. A pending request is withdrawn and raised again with every
   // module; an approved window is widened instead.
-  const overlapping = (await tx.execute<{ id: string; status: string; modules: CloseModule[]; subsidiary_id: string | null; period_name: string | null }>(sql`
-    select r.id, r.status, r.modules, r.subsidiary_id, p.name as period_name
+  const overlapping = (await tx.execute<{ id: string; status: string; modules: CloseModule[]; subsidiary_id: string | null; period_label: string | null }>(sql`
+    select r.id, r.status, r.modules, r.subsidiary_id, ${canonicalPeriodLabelSql()} as period_label
       from close_reopen_requests r
       left join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
      where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}
@@ -79,7 +79,7 @@ async function insertPeriodReopenRequest(tx: SqlExecutor, args: ReopenRequestArg
       && !(request.status === "approved" && request.subsidiary_id === (args.subsidiaryId ?? null)
         && request.modules.every((module) => args.modules.includes(module))));
   if (overlapping) {
-    const scope = `${overlapping.period_name ?? "this period"} ${overlapping.modules.map((module) => module.toUpperCase()).join(", ")}`;
+    const scope = `${overlapping.period_label ?? "this period"} ${overlapping.modules.map((module) => module.toUpperCase()).join(", ")}`;
     throw new CloseError(
       overlapping.status === "requested"
         ? `a reopen request for ${scope} is already awaiting a decision; withdraw it and raise one request covering every module you need, or wait for its decision and widen the approved window`

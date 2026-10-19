@@ -64,6 +64,14 @@ test("generation closes every income-statement balance into retained earnings on
     assert.deepEqual(preview.problems, []);
     const entity = preview.entities.find((candidate) => candidate.subsidiaryId === org.subsidiaryId)!;
     assert.equal(entity.status, "not_generated");
+    // Periods are named by their fiscal position, never the stored "2026-12",
+    // and carry the dates presenters label them with.
+    assert.equal(preview.fiscalYear.closingPeriod?.name, "P12 FY2026");
+    assert.deepEqual(preview.fiscalYear.closingPeriod?.periodRef, {
+      fiscalYear: 2026, periodNumber: 12, adjustment: false, startsOn: "2026-12-01", endsOn: "2026-12-31",
+    });
+    assert.ok(entity.journals.length > 0);
+    assert.ok(entity.journals.every((journal) => journal.periodName === "P12 FY2026"));
     // Revenue 1000.25 less rent 400.10 and cost of sales 100.05.
     assert.equal(entity.fiscalYearEarnings, "500.1000");
     // December 2025 revenue was never closed by journal: it is swept and shown apart.
@@ -243,7 +251,7 @@ test("a governed reopen admits only the year-end period and its approval reverse
     const july = year.periods.get("2026-07")!;
     await assert.rejects(
       () => requestPeriodReopen({ orgId: org.orgId, periodId: july, bookId: org.bookId, modules: ["gl"], actorId: actors.adminId, reason: "Correct a July accrual" }),
-      (error: unknown) => error instanceof CloseError && /request the reopen of 2026-12 first/.test(error.message),
+      (error: unknown) => error instanceof CloseError && /request the reopen of P12 FY2026 first/.test(error.message),
     );
     const requestId = await requestPeriodReopen({
       orgId: org.orgId, periodId: december, bookId: org.bookId, modules: ["gl"], actorId: actors.adminId, reason: "Auditor adjustment to fiscal year 2026",

@@ -1,6 +1,14 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
-import { assertPeriodModulesOpen, CloseError, closeModuleForDocument, type CloseModule, NON_POSTING_DOCUMENT_KINDS } from "../periods/period-policy.ts";
+import {
+  assertPeriodModulesOpen,
+  canonicalPeriodLabel,
+  CloseError,
+  closeModuleForDocument,
+  type CloseModule,
+  NON_POSTING_DOCUMENT_KINDS,
+  type PeriodDisplayInput,
+} from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
@@ -33,13 +41,23 @@ export interface PostingPeriodCandidate {
   /** The kernel's effective date: posting_date ?? document_date. */
   effectiveDate: string;
   periodId: string | null;
+  /** Locale-free label of the derived period (`P05 FY2026`). */
   periodName: string | null;
+  /** The derived period's fiscal position and dates, for display labels. */
+  periodRef: PeriodDisplayInput | null;
   blocked: boolean;
   blockReason: string | null;
   /** True when the derived period is the adjustment opt-in, not the regular cover. */
   adjustment: boolean;
   /** Open adjustment alternative for a closed regular period; null when none stands open. */
-  adjustmentPeriod: { id: string; name: string } | null;
+  adjustmentPeriod: AdjustmentAlternative | null;
+}
+
+/** An open adjustment period: its id, locale-free label and fiscal position. */
+export interface AdjustmentAlternative {
+  id: string;
+  name: string;
+  periodRef: PeriodDisplayInput;
 }
 
 export interface PostingPeriodAssignmentOptions {
@@ -139,13 +157,21 @@ async function openAdjustmentAlternative(
   subsidiaryId: string | null,
   calendarId: string,
   fiscalYear: number,
-): Promise<{ id: string; name: string } | null> {
-  const adjustment = (await runner.execute<{ id: string; name: string }>(sql`
-    select id, name from accounting_periods
+): Promise<AdjustmentAlternative | null> {
+  const row = (await runner.execute<{ id: string; period_number: number; starts_on: string; ends_on: string }>(sql`
+    select id, period_number, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods
      where org_id = ${orgId} and fiscal_calendar_id = ${calendarId}
        and fiscal_year = ${fiscalYear} and is_adjustment
      order by period_number limit 1`)).rows[0];
-  if (!adjustment) return null;
+  if (!row) return null;
+  const periodRef: PeriodDisplayInput = {
+    fiscalYear,
+    periodNumber: Number(row.period_number),
+    adjustment: true,
+    startsOn: row.starts_on,
+    endsOn: row.ends_on,
+  };
+  const adjustment: AdjustmentAlternative = { id: row.id, name: canonicalPeriodLabel(periodRef), periodRef };
   try {
     await assertPeriodModulesOpen(runner, {
       orgId,
@@ -175,8 +201,9 @@ async function resolveCandidate(
     subsidiaryId: row.subsidiary_id,
     effectiveDate: row.effective_date,
     adjustment: false as boolean,
-    adjustmentPeriod: null as { id: string; name: string } | null,
+    adjustmentPeriod: null as AdjustmentAlternative | null,
   };
+  const unresolved = { periodId: null, periodName: null, periodRef: null };
   let module: CloseModule;
   try {
     module = closeModuleForDocument(row.kind);
@@ -188,16 +215,14 @@ async function resolveCandidate(
     if (error instanceof CloseError) {
       return {
         ...base,
-        periodId: null,
-        periodName: null,
+        ...unresolved,
         blocked: true,
         blockReason: `document kind "${row.kind}" is not configured for period close, so ${row.document_number} cannot be assigned a period and stays blocked; your system administrator must add a period-close decision for this kind`,
       };
     }
     return {
       ...base,
-      periodId: null,
-      periodName: null,
+      ...unresolved,
       blocked: true,
       blockReason: error instanceof Error ? error.message : String(error),
     };
@@ -209,12 +234,19 @@ async function resolveCandidate(
   if (!period) {
     return {
       ...base,
-      periodId: null,
-      periodName: null,
+      ...unresolved,
       blocked: true,
       blockReason: `no accounting period covers ${row.effective_date}`,
     };
   }
+  const periodRef: PeriodDisplayInput = {
+    fiscalYear: period.fiscal_year,
+    periodNumber: period.period_number,
+    adjustment: false,
+    startsOn: period.starts_on,
+    endsOn: period.ends_on,
+  };
+  const covering = { periodId: period.id, periodName: canonicalPeriodLabel(periodRef), periodRef };
   try {
     await assertPeriodModulesOpen(runner, {
       orgId,
@@ -227,8 +259,7 @@ async function resolveCandidate(
     if (!(error instanceof CloseError)) {
       return {
         ...base,
-        periodId: period.id,
-        periodName: period.name,
+        ...covering,
         blocked: true,
         blockReason: error instanceof Error ? error.message : String(error),
       };
@@ -246,6 +277,7 @@ async function resolveCandidate(
         ...base,
         periodId: alternative.id,
         periodName: alternative.name,
+        periodRef: alternative.periodRef,
         blocked: false,
         blockReason: null,
         adjustment: true,
@@ -254,15 +286,14 @@ async function resolveCandidate(
     }
     return {
       ...base,
-      periodId: period.id,
-      periodName: period.name,
+      ...covering,
       blocked: true,
-      blockReason: `period ${period.name} is closed for ${module.toUpperCase()} on this book` +
+      blockReason: `period ${covering.periodName} is closed for ${module.toUpperCase()} on this book` +
         (alternative ? `; the open adjustment period "${alternative.name}" can take it instead` : ""),
       adjustmentPeriod: alternative,
     };
   }
-  return { ...base, periodId: period.id, periodName: period.name, blocked: false, blockReason: null };
+  return { ...base, ...covering, blocked: false, blockReason: null };
 }
 
 /** A named adjustment opt-in must name the org's own adjustment period — a

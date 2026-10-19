@@ -4,6 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from "next/server";
+import { getLocale } from "next-intl/server";
 import {
   commitPostingPeriodAssignment,
   PostingPeriodAssignmentError,
@@ -12,6 +13,7 @@ import {
 import { CloseError } from "@openbooks/engine/periods/period-policy";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
+import { labelPostingPeriodCandidates } from "../../../../lib/close/period-labels";
 
 const requestBodySchema = z.object({
   bookId: uuidString(),
@@ -72,7 +74,7 @@ async function legacyGET(req: Request) {
       subsidiaryIds: scope,
       adjustmentPeriodId,
     });
-    return NextResponse.json(preview);
+    return NextResponse.json({ ...preview, rows: labelPostingPeriodCandidates(preview.rows, await getLocale()) });
   } catch (error) {
     if (error instanceof PostingPeriodAssignmentError || error instanceof CloseError) {
       return apiErrorResponse(error, { safeStatus: 422 });

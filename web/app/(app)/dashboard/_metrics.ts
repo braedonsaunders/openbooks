@@ -52,6 +52,8 @@ import { approvalRecordHref } from '@/lib/approvals-links'
 import { WIDGETS } from './_widget-registry'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { MissingAccountingPeriodError, resolvePeriod, type ResolvedPeriod } from '@/lib/periods'
+import { fiscalPeriodLabel, reportPeriodLabel } from '@/lib/format'
+import { canonicalPeriodLabel, periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import type { DashboardWidgetContext } from './_metrics-context'
 import { EMPTY_FINANCIAL_WIDGET_METRICS, loadFinancialWidgetMetrics, type FinancialWidgetMetrics } from './_metrics-financial'
 import { EMPTY_CASH_WIDGET_METRICS, loadCashWidgetMetrics, type CashWidgetMetrics } from './_metrics-cash'
@@ -445,12 +447,13 @@ export async function loadExpenseSummary(authz: Authz): Promise<{ pendingExpense
  * (loadDashboardMetrics) maps that declared outcome into
  * closeRunsUnavailable, never into an empty list that reads as "no runs".
  */
-export async function loadCloseReadiness(authz: Authz): Promise<DashboardMetrics['closeRuns'] | null> {
+export async function loadCloseReadiness(authz: Authz, locale?: string): Promise<DashboardMetrics['closeRuns'] | null> {
   if (!can(authz, 'close.run')) return null
   const runs = await listCloseRuns(applicationContextFromSession(authz, 'api', randomUUID()), { limit: 5 })
   return runs.map((run) => ({
     id: run.id,
-    period: run.periodName,
+    // Labelled like the /close list; locale-free when no viewer locale is supplied.
+    period: locale ? periodDisplayLabel(run.periodRef, locale) : canonicalPeriodLabel(run.periodRef),
     book: run.bookCode,
     status: run.status,
     stage: run.currentStage,
@@ -645,7 +648,7 @@ async function readDashboardMetrics(
     // closeRunsUnavailable (with an empty closeRuns), and let anything else
     // throw — the refusal must never read as "no runs".
     need('closeRuns', 'closeRunsUnavailable')
-      ? loadCloseReadiness(authz)
+      ? loadCloseReadiness(authz, locale)
         .then((runs) => ({ runs, unavailable: null as string | null }))
         .catch((e: unknown) => {
           if (e instanceof ApplicationError && e.code === 'forbidden') {
@@ -701,9 +704,11 @@ async function readDashboardMetrics(
           const period = await resolvePeriod('this_period_to_date', { orgId, today })
           // The qualifier renders through the catalog off the structured
           // label — never parsed out of English — so the hint translates.
-          periodLabel = period.toDate && period.windowName
-            ? t('metricContext.periodToDate', { label: period.windowName })
-            : period.label
+          // The accounting period reads as every period list labels it.
+          const windowName = period.fiscalPeriod && locale ? fiscalPeriodLabel(period.fiscalPeriod, locale) : period.windowName
+          periodLabel = period.toDate && windowName
+            ? t('metricContext.periodToDate', { label: windowName })
+            : locale ? reportPeriodLabel(period, locale) : period.label
           const r = await readers.profitAndLoss(period.from, period.to, period.label, { allowed: authz.allowedSubsidiaryIds }, orgId)
           return {
             revenue: r.revenue,
@@ -723,7 +728,10 @@ async function readDashboardMetrics(
           // refusal naming the Close Setup remedy, never the raw message.
           if (e instanceof MissingAccountingPeriodError) {
             return none(
-              t('metricContext.noAccountingPeriod', { date: e.businessDate, period: e.firstPeriodName }),
+              t('metricContext.noAccountingPeriod', {
+                date: e.businessDate,
+                period: locale ? fiscalPeriodLabel(e.firstPeriod, locale) : e.firstPeriodLabel,
+              }),
               null,
             )
           }

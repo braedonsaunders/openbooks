@@ -364,6 +364,7 @@
         "hrm",
         "organization",
         "payroll",
+        "periods",
         "platform"
       ]
     },
@@ -937,6 +938,7 @@
         "ledger",
         "organization",
         "payables",
+        "periods",
         "platform",
         "qbd",
         "receivables",

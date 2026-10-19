@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { MissingExchangeRateError } from '@/lib/fx-presentation'
 import { sentinelRiskSummary } from '@/lib/analytics/sentinel-data'
 import { sentinelStrings } from '@/lib/analytics/sentinel-strings'
+import { reportPeriodLabel } from '@/lib/format'
 import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
 
 /**
@@ -67,7 +68,7 @@ export async function loadRiskWidgetMetrics(
   // dashboard Promise.all — the tile carries the refusal like any other.
   const summary = await (async () => sentinelRiskSummary(
     ctx.orgId,
-    { from: period.from, to: period.to, label: period.label },
+    { from: period.from, to: period.to, label: reportPeriodLabel(period, locale) },
     ctx.authz,
     strings,
   ))().then((data) => ({ ok: true as const, data }), (error: unknown) => ({ ok: false as const, error }))

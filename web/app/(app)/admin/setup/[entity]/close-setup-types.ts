@@ -131,6 +131,7 @@ export interface ReopenRow extends Record<string, unknown> {
   reason: string;
   modules: unknown[];
   impact_snapshot?: { amendment?: { expiresAt: string } };
+  /** The period's display label in the viewer's locale (`P12 FY2026 · Dec 2026`). */
   period_name: string;
   book_name: string;
   requested_by: string;

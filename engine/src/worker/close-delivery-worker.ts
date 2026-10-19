@@ -16,6 +16,7 @@ import {
   type EmailQueuedJobProbe,
 } from "../delivery/email-enqueue-settlement.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import { db, withOrgContext } from "../platform/db.ts";
 import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
 import { renderReportPdf } from "./render-client.ts";
@@ -115,7 +116,8 @@ async function mergePdfs(buffers: Buffer[]): Promise<Buffer> {
 }
 
 type PackageContext = {
-  period_name: string;
+  /** Locale-free period label (`P12 FY2026`) for the subject and body. */
+  period_label: string;
   starts_on: string;
   ends_on: string;
   book_name: string;
@@ -198,7 +200,7 @@ async function loadContext(data: {
   bookId?: string;
 }): Promise<PackageContext | undefined> {
   const { orgId, packageId, runId, periodId, bookId } = data;
-  const select = sql`p.name as period_name, p.starts_on, p.ends_on, b.name as book_name,
+  const select = sql`${canonicalPeriodLabelSql()} as period_label, p.starts_on, p.ends_on, b.name as book_name,
            pkg.name as package_name, pkg.reports, pkg.recipients, pkg.delivery,
            pkg.created_by as package_author, o.name as org_name`;
   const rows = runId
@@ -363,12 +365,12 @@ export async function processCloseDeliveryJobData(
             contentType: format === "xlsx" ? xlsxType : "application/pdf",
           }));
       const countPhrase = `${rendered.length} report${rendered.length === 1 ? "" : "s"}`;
-      const subject = `${packageName} — ${row.period_name} (${row.book_name})`;
+      const subject = `${packageName} — ${row.period_label} (${row.book_name})`;
       const text =
-        `The ${packageName} for ${row.period_name} · ${row.book_name} is attached (${countPhrase}).\n\n` +
+        `The ${packageName} for ${row.period_label} · ${row.book_name} is attached (${countPhrase}).\n\n` +
         `— ${row.org_name} via OpenBooks`;
       const html =
-        `<p>The <strong>${escapeHtml(packageName)}</strong> for <strong>${escapeHtml(row.period_name)}</strong> · ${escapeHtml(row.book_name)} is attached (${countPhrase}).</p>` +
+        `<p>The <strong>${escapeHtml(packageName)}</strong> for <strong>${escapeHtml(row.period_label)}</strong> · ${escapeHtml(row.book_name)} is attached (${countPhrase}).</p>` +
         `<p style="color:#666">${escapeHtml(row.org_name)} · OpenBooks</p>`;
 
       // Durable email identity, derived from the publication content — never

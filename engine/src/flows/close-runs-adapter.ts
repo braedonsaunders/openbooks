@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db } from "../platform/db.ts";
+import { canonicalPeriodLabel } from "../periods/period-policy.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
@@ -103,6 +104,13 @@ export const closeRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapte
       values: {
         id: run.id,
         periodName: run.period_name,
+        // Locale-free label for titles and notifications; periodName stays the
+        // stored name that conditions are written against.
+        periodLabel: canonicalPeriodLabel({
+          fiscalYear: run.fiscal_year,
+          periodNumber: run.period_number,
+          adjustment: run.is_adjustment,
+        }),
         fiscalYear: run.fiscal_year,
         periodType: periodType(run),
         bookId: run.book_id,
@@ -119,7 +127,7 @@ export const closeRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapte
   },
 
   label(subjectId: string, values: Record<string, unknown>): string {
-    return `${String(values.periodName ?? subjectId)} close · ${String(values.bookName ?? "")}`.trim();
+    return `${String(values.periodLabel ?? values.periodName ?? subjectId)} close · ${String(values.bookName ?? "")}`.trim();
   },
 
   deepLink(subjectId: string): string {

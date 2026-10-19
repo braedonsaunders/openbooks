@@ -68,6 +68,12 @@ test("dashboard close widget lists recent runs through the workspace reader", { 
     assert.equal(metrics.closeRuns.length, 1);
     assert.equal(metrics.closeRuns[0]?.status, "in_progress");
     assert.equal(metrics.closeRuns[0]?.stage, "execute");
+    // The tile names the period like the /close list, never by its stored "2026-07".
+    assert.equal(metrics.closeRuns[0]?.period, "P07 FY2026");
+    const localized = await withOrgContext(org.orgId, () =>
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["close.run"]), CLOSE_WIDGETS, undefined, "en"),
+    );
+    assert.equal(localized.closeRuns[0]?.period, "P07 FY2026 · Jul 2026");
     // A caller without close.run reads no runs — and loadCloseReadiness
     // proves separately (no-DB unit test) that the reader is never called.
     const blind = await withOrgContext(org.orgId, () =>

@@ -1,4 +1,4 @@
-import { CloseError, type CloseModule } from "../periods/period-policy.ts";
+import { canonicalPeriodLabelSql, CloseError, type CloseModule } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
@@ -403,11 +403,11 @@ export async function describeActiveReopenOverlap(
     modules: CloseModule[];
     approved_at: string | null;
     expires_at: string | null;
-    period_name: string | null;
+    period_label: string | null;
     approver_name: string | null;
   }>(sql`
     select r.modules, r.approved_at::text as approved_at, r.expires_at::text as expires_at,
-           p.name as period_name, u.name as approver_name
+           ${canonicalPeriodLabelSql()} as period_label, u.name as approver_name
       from close_reopen_requests r
       left join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
       left join users u on u.id = r.approved_by and u.org_id = r.org_id
@@ -416,7 +416,7 @@ export async function describeActiveReopenOverlap(
   const stamp = (value: string | null) =>
     value == null ? "(time unknown)" : value.slice(0, 16).replace("T", " ");
   const what = row
-    ? `${row.period_name ?? "the period"} ${row.modules.map((module) => module.toUpperCase()).join(", ")} reopen`
+    ? `${row.period_label ?? "the period"} ${row.modules.map((module) => module.toUpperCase()).join(", ")} reopen`
     : "another reopen";
   const by = row?.approver_name ? ` by ${row.approver_name}` : "";
   return (

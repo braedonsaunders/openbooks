@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
+import { getLocale } from 'next-intl/server'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { PostingError } from '@openbooks/engine/journal/contracts'
@@ -11,6 +12,7 @@ import {
   previewPeriodEndJournals,
   reversePeriodEndJournals,
 } from '@openbooks/engine/close/period-end-journals'
+import { labelPeriodEndPreview } from '@/lib/close/period-labels'
 
 export const runtime = 'nodejs'
 
@@ -64,7 +66,7 @@ export const GET = defineRoute({
         bookId: preview.book.id,
         subsidiaryIds,
       })
-      return NextResponse.json({ preview, history })
+      return NextResponse.json({ preview: labelPeriodEndPreview(preview, await getLocale()), history })
     } catch (error) {
       return refusal(error, request)
     }

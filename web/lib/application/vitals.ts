@@ -1,5 +1,6 @@
 import "server-only";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { canonicalPeriodLabel } from "@openbooks/engine/periods/period-policy";
 import { can } from "../authz";
 import { maySeeUnion } from "../approval-doorway";
 import { analyticsConfig } from "../analytics/config";
@@ -91,7 +92,8 @@ async function closeSection(context: ApplicationContext) {
       latest: latest
         ? {
           runId: latest.id,
-          period: latest.periodName,
+          // Locale-free: the payload serves API and assistant callers alike.
+          period: canonicalPeriodLabel(latest.periodRef),
           book: latest.bookCode,
           status: latest.status,
           currentStage: latest.currentStage,

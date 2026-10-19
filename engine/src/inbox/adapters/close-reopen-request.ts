@@ -17,10 +17,12 @@ import { InboxError, type InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId } from "../types.ts";
 import { isUuid } from "../../platform/uuid.ts";
+import { canonicalPeriodLabelSql } from "../../periods/period-policy.ts";
 
 type ReopenRow = {
   id: string;
-  period_name: string;
+  /** Locale-free period label (`P12 FY2026`). */
+  period_label: string;
   book_name: string;
   subsidiary_name: string | null;
   modules: string[];
@@ -39,7 +41,7 @@ async function mayDecide(ctx: InboxListContext): Promise<boolean> {
 
 async function pendingRequests(ctx: InboxListContext, requestId?: string): Promise<ReopenRow[]> {
   return (await (ctx.exec ?? db).execute<ReopenRow>(sql`
-    select r.id::text as id, p.name as period_name, b.name as book_name, s.name as subsidiary_name,
+    select r.id::text as id, ${canonicalPeriodLabelSql()} as period_label, b.name as book_name, s.name as subsidiary_name,
            r.modules, r.reason, req.name as requester_name, r.created_at::text as created_at
       from close_reopen_requests r
       join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
@@ -58,7 +60,7 @@ function toItem(row: ReopenRow): InboxItem {
   return {
     id: inboxItemId("close_reopen_request", row.id),
     kind: "close_reopen_request",
-    title: `Period reopen requested: ${row.period_name}`,
+    title: `Period reopen requested: ${row.period_label}`,
     subtitle: `${scope} — ${row.modules.join(", ")} — ${row.reason}${row.requester_name ? ` (requested by ${row.requester_name})` : ""}`,
     dueAt: null,
     createdAt: new Date(row.created_at).toISOString(),

@@ -26,3 +26,10 @@ test("period close freezes its configurable approval policy", () => {
     "/close?run=00000000-0000-0000-0000-000000000001&stage=lock",
   );
 });
+
+test("a close run is titled by its fiscal period label, not its stored name", () => {
+  assert.equal(
+    closeRunsFlowAdapter.label("run-1", { periodName: "2026-12", periodLabel: "P12 FY2026", bookName: "Primary" }),
+    "P12 FY2026 close · Primary",
+  );
+});

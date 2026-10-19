@@ -6,7 +6,15 @@ import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
 import { neg, normalizeMoney, sum } from "../money/money.ts";
-import { CLOSE_MODULES, CloseError, NON_POSTING_DOCUMENT_KINDS, periodLockRequiresApprovedReopen } from "../periods/period-policy.ts";
+import {
+  canonicalPeriodLabel,
+  canonicalPeriodLabelSql,
+  CLOSE_MODULES,
+  CloseError,
+  NON_POSTING_DOCUMENT_KINDS,
+  periodLockRequiresApprovedReopen,
+  type PeriodDisplayInput,
+} from "../periods/period-policy.ts";
 import { periodScopeAdvisoryLock } from "../periods/period-locks.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
@@ -118,22 +126,42 @@ function requireReason(reason: string | undefined, action: string): string {
 
 type PeriodRow = {
   id: string;
-  name: string;
+  fiscal_year: number;
   starts_on: string;
   ends_on: string;
   is_adjustment: boolean;
   period_number: number;
 };
 
+/**
+ * A period of the fiscal year: `name` is its locale-free label
+ * (`P12 FY2026`) for refusal and remedy text; `periodRef` lets presenters
+ * label it in the viewer's locale.
+ */
+interface PeriodEndPeriod {
+  id: string;
+  name: string;
+  startsOn: string;
+  endsOn: string;
+  periodRef: PeriodDisplayInput;
+}
+
 export interface PeriodEndFiscalYear {
   calendarId: string;
   fiscalYear: number;
   startsOn: string;
   endsOn: string;
-  periods: { id: string; name: string; startsOn: string; endsOn: string; isAdjustment: boolean }[];
-  lastRegularPeriod: { id: string; name: string; endsOn: string };
-  adjustmentPeriod: { id: string; name: string; endsOn: string } | null;
-  nextYearFirstPeriod: { id: string; name: string; startsOn: string } | null;
+  periods: (PeriodEndPeriod & { isAdjustment: boolean })[];
+  lastRegularPeriod: PeriodEndPeriod;
+  adjustmentPeriod: PeriodEndPeriod | null;
+  nextYearFirstPeriod: PeriodEndPeriod | null;
+}
+
+/** A period by id with its locale-free label and display reference. */
+export interface PeriodEndPeriodLabel {
+  id: string;
+  name: string;
+  periodRef: PeriodDisplayInput;
 }
 
 /** The fiscal year that contains a period, by calendar and fiscal-year number. */
@@ -149,7 +177,7 @@ export async function loadPeriodEndFiscalYear(
     throw new PeriodEndJournalError("accounting period not found", "not_found", "Choose a period of the fiscal year to close.");
   }
   const periods = (await executor.execute<PeriodRow>(sql`
-    select id, name, starts_on::text as starts_on, ends_on::text as ends_on, is_adjustment, period_number
+    select id, fiscal_year, starts_on::text as starts_on, ends_on::text as ends_on, is_adjustment, period_number
       from accounting_periods
      where org_id = ${orgId} and fiscal_calendar_id = ${anchor.fiscal_calendar_id}
        and fiscal_year = ${anchor.fiscal_year}
@@ -165,7 +193,7 @@ export async function loadPeriodEndFiscalYear(
   }
   const adjustment = periods.find((period) => period.is_adjustment) ?? null;
   const next = (await executor.execute<PeriodRow>(sql`
-    select id, name, starts_on::text as starts_on, ends_on::text as ends_on, is_adjustment, period_number
+    select id, fiscal_year, starts_on::text as starts_on, ends_on::text as ends_on, is_adjustment, period_number
       from accounting_periods
      where org_id = ${orgId} and fiscal_calendar_id = ${anchor.fiscal_calendar_id}
        and not is_adjustment and starts_on > ${last.ends_on}::date
@@ -175,13 +203,22 @@ export async function loadPeriodEndFiscalYear(
     fiscalYear: Number(anchor.fiscal_year),
     startsOn: regular[0].starts_on,
     endsOn: last.ends_on,
-    periods: periods.map((period) => ({
-      id: period.id, name: period.name, startsOn: period.starts_on, endsOn: period.ends_on, isAdjustment: period.is_adjustment,
-    })),
-    lastRegularPeriod: { id: last.id, name: last.name, endsOn: last.ends_on },
-    adjustmentPeriod: adjustment ? { id: adjustment.id, name: adjustment.name, endsOn: adjustment.ends_on } : null,
-    nextYearFirstPeriod: next ? { id: next.id, name: next.name, startsOn: next.starts_on } : null,
+    periods: periods.map((period) => ({ ...periodEndPeriod(period), isAdjustment: period.is_adjustment })),
+    lastRegularPeriod: periodEndPeriod(last),
+    adjustmentPeriod: adjustment ? periodEndPeriod(adjustment) : null,
+    nextYearFirstPeriod: next ? periodEndPeriod(next) : null,
   };
+}
+
+function periodEndPeriod(row: PeriodRow): PeriodEndPeriod {
+  const periodRef: PeriodDisplayInput = {
+    fiscalYear: Number(row.fiscal_year),
+    periodNumber: Number(row.period_number),
+    adjustment: row.is_adjustment,
+    startsOn: row.starts_on,
+    endsOn: row.ends_on,
+  };
+  return { id: row.id, name: canonicalPeriodLabel(periodRef), startsOn: row.starts_on, endsOn: row.ends_on, periodRef };
 }
 
 type BookRow = {
@@ -258,7 +295,7 @@ export async function periodEndPolicyInEffect(
   };
 }
 
-function closingPeriodFor(year: PeriodEndFiscalYear, policy: PeriodEndPolicy): { id: string; name: string; endsOn: string } | null {
+function closingPeriodFor(year: PeriodEndFiscalYear, policy: PeriodEndPolicy): PeriodEndPeriod | null {
   return policy.postingPeriod === "adjustment_period" ? year.adjustmentPeriod : year.lastRegularPeriod;
 }
 
@@ -301,7 +338,7 @@ async function openPeriodsOfYear(
   closingPeriodId: string,
 ): Promise<string[]> {
   const rows = (await executor.execute<{ name: string; state: string | null; reopen_expires_at: Date | null }>(sql`
-    select p.name, governing.state, governing.reopen_expires_at
+    select ${canonicalPeriodLabelSql()} as name, governing.state, governing.reopen_expires_at
       from accounting_periods p
      cross join unnest(${modulesLiteral()}::text[]) as m(module)
       left join lateral (
@@ -404,7 +441,7 @@ async function laterLiveYear(
   yearEndsOn: string,
 ): Promise<{ fiscal_year: number; period_name: string } | null> {
   return (await executor.execute<{ fiscal_year: number; period_name: string }>(sql`
-    select s.fiscal_year, p.name as period_name
+    select s.fiscal_year, ${canonicalPeriodLabelSql()} as period_name
       from period_end_journal_sets s
       join accounting_periods p on p.org_id = s.org_id and p.id = s.closing_period_id
      where s.org_id = ${orgId} and s.book_id = ${bookId} and s.subsidiary_id = ${subsidiaryId}
@@ -554,7 +591,9 @@ export interface PeriodEndPreviewLine {
 export interface PeriodEndPreviewJournal {
   kind: PeriodEndJournalKind;
   periodId: string;
+  /** Locale-free label of the period the journal posts into. */
   periodName: string;
+  periodRef: PeriodDisplayInput;
   postingDate: string;
   debits: string;
   lines: PeriodEndPreviewLine[];
@@ -582,8 +621,8 @@ export interface PeriodEndPreview {
     fiscalYear: number;
     startsOn: string;
     endsOn: string;
-    closingPeriod: { id: string; name: string } | null;
-    openingPeriod: { id: string; name: string } | null;
+    closingPeriod: PeriodEndPeriodLabel | null;
+    openingPeriod: PeriodEndPeriodLabel | null;
   };
   book: { id: string; name: string };
   featureEnabled: boolean;
@@ -603,7 +642,7 @@ interface YearScope {
   book: BookRow;
   year: PeriodEndFiscalYear;
   policy: PeriodEndPolicy | null;
-  closingPeriod: { id: string; name: string; endsOn: string } | null;
+  closingPeriod: PeriodEndPeriod | null;
   globalProblems: PeriodEndProblem[];
   featureOn: boolean;
   multiCurrency: boolean;
@@ -836,7 +875,7 @@ async function describeJournals(
   executor: SqlExecutor,
   orgId: string,
   plan: PeriodEndPlan,
-  closingPeriod: { id: string; name: string; endsOn: string },
+  closingPeriod: PeriodEndPeriod,
   year: PeriodEndFiscalYear,
 ): Promise<PeriodEndPreviewJournal[]> {
   const accountIds = [...new Set(plan.journals.flatMap((journal) => journal.lines.map((line) => line.accountId)))];
@@ -850,6 +889,7 @@ async function describeJournals(
       kind: journal.kind,
       periodId: opening ? year.nextYearFirstPeriod!.id : closingPeriod.id,
       periodName: opening ? year.nextYearFirstPeriod!.name : closingPeriod.name,
+      periodRef: opening ? year.nextYearFirstPeriod!.periodRef : closingPeriod.periodRef,
       postingDate: opening ? year.nextYearFirstPeriod!.startsOn : closingPeriod.endsOn,
       debits: sum(journal.lines.filter((line) => !line.amount.startsWith("-")).map((line) => line.amount)),
       lines: journal.lines.map((line) => ({
@@ -942,9 +982,11 @@ export async function previewPeriodEndJournals(
       fiscalYear: scope.year.fiscalYear,
       startsOn: scope.year.startsOn,
       endsOn: scope.year.endsOn,
-      closingPeriod: scope.closingPeriod ? { id: scope.closingPeriod.id, name: scope.closingPeriod.name } : null,
+      closingPeriod: scope.closingPeriod
+        ? { id: scope.closingPeriod.id, name: scope.closingPeriod.name, periodRef: scope.closingPeriod.periodRef }
+        : null,
       openingPeriod: scope.policy?.balanceSheetJournals && scope.year.nextYearFirstPeriod
-        ? { id: scope.year.nextYearFirstPeriod.id, name: scope.year.nextYearFirstPeriod.name }
+        ? { id: scope.year.nextYearFirstPeriod.id, name: scope.year.nextYearFirstPeriod.name, periodRef: scope.year.nextYearFirstPeriod.periodRef }
         : null,
     },
     book: { id: scope.book.id, name: scope.book.name },
@@ -1512,7 +1554,7 @@ export async function periodEndJournalHistory(
            s.fiscal_year, s.generation, s.status, s.currency,
            s.fiscal_year_earnings::text as fiscal_year_earnings,
            s.prior_unclosed_earnings::text as prior_unclosed_earnings,
-           p.name as closing_period_name, s.reason, s.generated_at,
+           ${canonicalPeriodLabelSql()} as closing_period_name, s.reason, s.generated_at,
            gu.name as generated_by_name, s.reversed_at, ru.name as reversed_by_name,
            s.reversal_reason, s.reopen_request_id,
            coalesce((
@@ -1627,7 +1669,7 @@ async function liveSetsSealing(executor: SqlExecutor, scope: ReopenScope) {
     opening_period_name: string | null;
   }>(sql`
     select s.id, s.subsidiary_id, sub.name as subsidiary_name, s.fiscal_year, s.closing_period_id,
-           cp.name as closing_period_name, s.opening_period_id, op.name as opening_period_name
+           ${canonicalPeriodLabelSql("cp")} as closing_period_name, s.opening_period_id, ${canonicalPeriodLabelSql("op")} as opening_period_name
       from period_end_journal_sets s
       join accounting_periods target on target.org_id = s.org_id and target.id = ${scope.periodId}
       join subsidiaries sub on sub.org_id = s.org_id and sub.id = s.subsidiary_id

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { db } from '@openbooks/engine/platform/db'
 import { previewPostingPeriodAssignment, PostingPeriodAssignmentError } from '@openbooks/engine/close/posting-periods'
@@ -19,6 +19,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { guardCloseScope } from '../../../../lib/close-scope'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
+import { labelPostingPeriodCandidates } from '../../../../lib/close/period-labels'
 import { resolvePostingPeriodsBookId, type PostingPeriodBook } from './books'
 
 const BASE = '/close/posting-periods'
@@ -67,7 +68,8 @@ export async function loadPostingPeriods(
   let previewError: string | null = null
   if (selectedBookId && canPreview) {
     try {
-      previewRows = (await previewPostingPeriodAssignment(orgId, { bookId: selectedBookId, subsidiaryIds })).rows
+      const preview = await previewPostingPeriodAssignment(orgId, { bookId: selectedBookId, subsidiaryIds })
+      previewRows = labelPostingPeriodCandidates(preview.rows, await getLocale())
     } catch (error) {
       if (!(error instanceof PostingPeriodAssignmentError || error instanceof CloseError)) throw error
       previewError = error.message

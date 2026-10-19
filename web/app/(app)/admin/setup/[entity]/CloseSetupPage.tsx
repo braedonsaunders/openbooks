@@ -160,7 +160,8 @@ export async function CloseSetupPage({
   // One select for every reopen read: the paged list, and the live and
   // selected requests the period panel and the request drawer resolve
   // whatever page the list shows.
-  const reopenSelect = sql`select r.*, p.name as period_name, b.name as book_name,
+  // Requests name their period with the label the periods list shows.
+  const reopenSelect = sql`select r.*, ${periodDisplayLabelSql(locale)} as period_name, b.name as book_name,
              requester.name as requester_name, approver.name as approver_name,
              -- Decision evidence is read from the stored audit trail, never
              -- reconstructed: the decision action (approve vs the
@@ -304,7 +305,7 @@ export async function CloseSetupPage({
     db.execute<ReopenRow>(sql`
       ${reopenSelect}
        where r.org_id = ${orgId}
-         ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}
+         ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}
        order by r.created_at desc
        limit ${CONFIG_PER_PAGE} offset ${reopenList.offset}`),
     db.execute(sql`
@@ -314,7 +315,7 @@ export async function CloseSetupPage({
         join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
         join users requester on requester.id = r.requested_by
        where r.org_id = ${orgId}
-         ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}`),
+         ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}`),
     db.execute<ReopenRow>(sql`
       ${reopenSelect}
        where r.org_id = ${orgId}

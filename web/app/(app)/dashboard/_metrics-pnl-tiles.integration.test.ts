@@ -86,12 +86,13 @@ async function loadPlTiles(
   allowedSubsidiaryIds: Set<string> | null,
   calls: string[],
   widgetIds: readonly string[] = [...PNL_IDS],
+  locale?: string,
 ) {
   const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
   const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read", "gl.read"], allowedSubsidiaryIds);
   for (const id of PNL_IDS) assert.equal(canSeeWidget(authz, id), true);
   return pinClock(TODAY, () =>
-    withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...widgetIds], denialProofReaders(calls))),
+    withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...widgetIds], denialProofReaders(calls), locale)),
   );
 }
 
@@ -162,6 +163,11 @@ test("P&L tiles read one consolidated period-to-date call and exclude out-of-win
     assert.equal(toUnits(metrics.netIncomeMtd ?? "0"), toUnits("500"), "gross profit minus expenses");
     assert.equal(metrics.plCurrency, "CAD", "the tile labels the reader's currency");
     assert.ok(metrics.plPeriodLabel?.endsWith("to date"), `the tile labels the resolved period, not the civil month: ${metrics.plPeriodLabel}`);
+    // The period reads by its fiscal position, never its stored "2026-07";
+    // with the viewer's locale it carries the month it covers.
+    assert.equal(metrics.plPeriodLabel, "P07 FY2026 to date");
+    const localized = await loadPlTiles(org, null, [], [...PNL_IDS], "en");
+    assert.equal(localized.plPeriodLabel, "P07 FY2026 · Jul 2026 to date");
     assert.equal(metrics.plUnavailable, null);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));

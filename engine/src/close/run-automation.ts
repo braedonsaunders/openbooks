@@ -1,4 +1,4 @@
-import { CloseError } from "../periods/period-policy.ts";
+import { canonicalPeriodLabelSql, CloseError } from "../periods/period-policy.ts";
 import { advancedCloseEnabled } from "./features.ts";
 import { claimCloseAutomationExecution, commitCloseEffectStage, finishCloseExecution, CloseAutomationLeaseFencedError, type CloseAutomationContext } from "./automations.ts";
 import { createHash } from "node:crypto";
@@ -302,7 +302,7 @@ export async function runCloseAutomations(
     readiness_score: string | number | null;
     data_fingerprint: string;
     started_by: string | null;
-    period_name: string;
+    period_label: string;
     book_name: string;
     task_key: string | null;
     workstream: string | null;
@@ -310,7 +310,7 @@ export async function runCloseAutomations(
     exception_severity: string | null;
     exception_code: string | null;
   }>(sql`
-    select r.*, p.name as period_name, b.name as book_name,
+    select r.*, ${canonicalPeriodLabelSql()} as period_label, b.name as book_name,
            t.key as task_key, t.workstream, t.status as task_status,
            x.severity as exception_severity, x.code as exception_code
       from close_runs r
@@ -401,7 +401,7 @@ export async function runCloseAutomations(
             effect: async (tx) => {
               await tx.execute(sql`insert into notifications (org_id, user_id, kind, title, body, href, created_by, updated_by)
                 values (${context.orgId}, ${user.id}, 'close', ${String(config.title ?? rule.name)},
-                        ${String(config.body ?? `${run.period_name} · ${run.book_name}`)}, ${`/close?run=${context.runId}`},
+                        ${String(config.body ?? `${run.period_label} · ${run.book_name}`)}, ${`/close?run=${context.runId}`},
                         ${context.actorId ?? null}, ${context.actorId ?? null})`);
             },
           });

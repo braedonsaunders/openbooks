@@ -292,9 +292,11 @@ export async function generateAccountingPeriods(
         row.is_adjustment !== period.adjustment;
       const renamed = row.name !== period.name;
       if (!datesChanged && !renamed) continue;
+      // Refusals name the period by its fiscal position, the label every list shows.
+      const label = canonicalPeriodLabel({ fiscalYear, periodNumber: period.number, adjustment: row.is_adjustment });
       if (datesChanged && row.has_entries)
         throw new CloseError(
-          `${row.name} has ledger activity and its dates cannot be regenerated`,
+          `${label} has ledger activity and its dates cannot be regenerated`,
         );
       if (datesChanged || !row.has_entries) {
         const result = await tx.execute<{ id: string }>(sql`
@@ -305,7 +307,7 @@ export async function generateAccountingPeriods(
           returning id`);
         if (!result.rows[0]) {
           throw new CloseError(
-            `${row.name} disappeared while regenerating its dates; no calendar change was saved`,
+            `${label} disappeared while regenerating its dates; no calendar change was saved`,
           );
         }
         updated++;

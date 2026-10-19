@@ -8,7 +8,7 @@ import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { loadControlAccounts } from "../records/control-accounts.ts";
 import { add, isZero, mulRate, neg, sum } from "../money/money.ts";
 import { loadSubsidiaryContext, restrictionAdmits, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, canonicalPeriodLabelSql, CloseError } from "../periods/period-policy.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { applyBookAccountMaps } from "../journal/book-account-maps.ts";
 import { closingSpotRateWithinAgeLimit } from "../fx/rate-age-policy.ts";
@@ -468,19 +468,22 @@ function requiredAdjustments(positions: RevaluationPosition[], effective: Revalu
 type RevaluationPeriod = {
   id: string;
   ends_on: string;
+  /** Stored name: the journal number keeps it so numbering never shifts. */
   name: string;
+  /** Locale-free label (`P12 FY2026`) for memos and refusals. */
+  label: string;
   is_adjustment: boolean;
   fiscal_calendar_id: string;
   period_number: number;
   next_starts_on: string | null;
   next_period_id: string | null;
-  next_name: string | null;
+  next_label: string | null;
 };
 
 /** The period plus the following regular period its reversal must land in. */
 async function loadRevaluationPeriod(orgId: string, periodId: string): Promise<RevaluationPeriod> {
   const periodRes = (await db.execute<RevaluationPeriod>(sql`
-    select p.id as id, p.ends_on as ends_on, p.name as name,
+    select p.id as id, p.ends_on as ends_on, p.name as name, ${canonicalPeriodLabelSql()} as label,
            p.is_adjustment as is_adjustment, p.fiscal_calendar_id as fiscal_calendar_id,
            p.period_number as period_number,
            (select n.starts_on from accounting_periods n
@@ -491,10 +494,10 @@ async function loadRevaluationPeriod(orgId: string, periodId: string): Promise<R
              where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
                and n.fiscal_calendar_id = p.fiscal_calendar_id
              order by n.starts_on asc limit 1) as next_period_id,
-           (select n.name from accounting_periods n
+           (select ${canonicalPeriodLabelSql("n")} from accounting_periods n
              where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
                and n.fiscal_calendar_id = p.fiscal_calendar_id
-             order by n.starts_on asc limit 1) as next_name
+             order by n.starts_on asc limit 1) as next_label
       from accounting_periods p
      where p.org_id = ${orgId} and p.id = ${periodId}`));
   const period = periodRes.rows[0];
@@ -660,7 +663,7 @@ async function postRevaluationEntry(
     await tx.execute(sql`select id from accounts where org_id=${orgId} order by id for share`);
     const configuredGainLossAccount = await unrealizedAccount(orgId);
     const period = await loadRevaluationPeriod(orgId, periodId);
-    const { ends_on: asOfDate, name: periodName, next_period_id: nextPeriodId, next_starts_on: nextStartsOn, next_name: nextPeriodName } = period;
+    const { ends_on: asOfDate, name: storedPeriodName, label: periodName, next_period_id: nextPeriodId, next_starts_on: nextStartsOn, next_label: nextPeriodName } = period;
     // Exposures are read from this book's own ledger, so they already carry
     // the book's accounts. Only the configured gain/loss account is a source
     // account; it takes the book's mapping once, and the entry posts on the
@@ -789,7 +792,7 @@ async function postRevaluationEntry(
     // Every subsidiary and correction generation needs a distinct org-wide
     // journal number, so every physical journal —
     // adjustment and its -R mirror alike — carries its own number.
-    const entryNumber = `FXREVAL-${periodName}-${randomUUID().slice(0, 8)}`;
+    const entryNumber = `FXREVAL-${storedPeriodName}-${randomUUID().slice(0, 8)}`;
     // The incremental audit must name its reversal mirror, but the mirror is
     // posted second. Pre-generate its id (audit JSON carries no FK) and pin
     // the mirror to it, so both audit rows link the pair without ever

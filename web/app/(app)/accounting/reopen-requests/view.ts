@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { randomUUID } from 'node:crypto'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { listPeriodReopenRequests } from '../../../../lib/application/close'
 import { applicationContextFromSession } from '../../../../lib/application/context'
@@ -54,14 +55,17 @@ export async function loadReopenRequests(
       ? listPeriodReopenRequests(context, { requestId: selectedId, limit: 1 })
       : Promise.resolve(null),
   ])
-  const common = await getTranslations('common')
+  const [common, locale] = await Promise.all([getTranslations('common'), getLocale()])
+  // Every request names its period the way the close list labels it.
+  const labelled = (row: ReopenRequestRow): ReopenRequestRow => ({ ...row, period: periodDisplayLabel(row.periodRef, locale) })
+  const selected = selectedResult?.requests[0]
   return {
     workspace: {
       orgId: authz.user.orgId,
       userId: authz.user.id,
       sp,
-      rows: result?.requests ?? [],
-      selected: selectedResult?.requests[0] ?? null,
+      rows: (result?.requests ?? []).map(labelled),
+      selected: selected ? labelled(selected) : null,
       total: result?.total ?? 0,
       page: pageNumber,
       perPage,

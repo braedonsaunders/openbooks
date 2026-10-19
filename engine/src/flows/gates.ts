@@ -7,6 +7,7 @@ import { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
 import { DOCUMENT_FLOW_KINDS } from "./subject-profiles.ts";
 import { resolveSubjectSubsidiaries, subjectSubsidiarySql } from "./subject-scope.ts";
 import { CLOSE_RUN_SUBJECT_KIND, closeRunsFlowAdapter } from "./close-runs-adapter.ts";
+import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import { MANUFACTURING_BOM_APPROVAL_OPERATION, MANUFACTURING_LOSS_DISPOSITION_OPERATION, MANUFACTURING_ROUTING_APPROVAL_OPERATION, MANUFACTURING_SCRAP_RESTATEMENT_OPERATION, MANUFACTURING_STANDARD_ROLLUP_OPERATION } from "../platform/financial-changes.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { enqueueApprovalEscalation, enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
@@ -1040,7 +1041,7 @@ const WORKLIST_SUBJECT_JOINS = sql`
       left join worker_employments hce on hce.id = hcr.employment_id and hce.org_id = hcr.org_id
       left join parties hcp on hcp.id = hce.worker_party_id and hcp.org_id = hce.org_id`;
 const WORKLIST_SUBJECT_LABEL = sql`
-      case when cp.name is not null then cp.name || ' close'
+      case when cp.id is not null then ${canonicalPeriodLabelSql("cp")} || ' close'
            when g.subject_kind = 'hrm_employment_change_request' then hcp.display_name
            when g.subject_kind = 'equity_action' then ear.subject_label
            when g.subject_kind = 'financial_change' then case
@@ -1189,7 +1190,8 @@ function worklistGateKindSql(kind: string | undefined): SQL {
 function worklistGateSearchSql(query: string | undefined): SQL {
   const needle = query?.trim().toLowerCase()
   if (!needle) return sql``
-  return sql`and position(${needle} in lower(concat_ws(' ', g.title, g.subject_kind, d.document_number, d.memo, ${WORKLIST_SUBJECT_LABEL}))) > 0`
+  // The close period matches by its shown label and by its stored name.
+  return sql`and position(${needle} in lower(concat_ws(' ', g.title, g.subject_kind, d.document_number, d.memo, cp.name, ${WORKLIST_SUBJECT_LABEL}))) > 0`
 }
 
 function worklistGateOverdueSql(overdue: boolean | undefined): SQL {

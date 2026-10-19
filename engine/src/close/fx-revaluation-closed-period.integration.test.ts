@@ -70,8 +70,8 @@ test("revaluation into a GL-closed period refuses with a named error", { skip: !
     assert.equal(run.problems.length, 1, `one named refusal expected, got ${JSON.stringify(run)}`);
     assert.match(
       run.problems[0]!,
-      /FX revaluation cannot post into the closed GL period/,
-      `refusal must be named, got: ${run.problems[0]}`,
+      /FX revaluation cannot post into the closed GL period P07 FY2026\b/,
+      `refusal must name the period by its fiscal position, got: ${run.problems[0]}`,
     );
     assert.equal(await fxRevaluationEntryCount(org.orgId), 0, "the backstop must leave no partial pair");
   } finally {
@@ -101,7 +101,7 @@ test("revaluation refuses with a named error when the reversal period is closed"
     assert.equal(run.problems.length, 1, `one named refusal expected, got ${JSON.stringify(run)}`);
     assert.match(
       run.problems[0]!,
-      /FX revaluation cannot post its reversal into the closed GL period/,
+      /FX revaluation cannot post its reversal into the closed GL period P08 FY2026\b/,
       `refusal must be named, got: ${run.problems[0]}`,
     );
     assert.equal(await fxRevaluationEntryCount(org.orgId), 0, "no half pair may survive");
