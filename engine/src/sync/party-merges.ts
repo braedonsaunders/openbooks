@@ -88,6 +88,7 @@ const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[
   // opening-balance authorities and Record of Employment evidence are sealed
   // statutory sources for the named employee.
   ["payroll_prior_earnings", "employee_party_id"],
+  ["entitlement_ledger", "employee_party_id"],
   ["payroll_holiday_obligations", "employee_party_id"],
   ["payroll_opening_employer_authorities", "employee_party_id"],
   ["payroll_opening_levy_source_authorities", "employee_party_id"],
@@ -118,6 +119,7 @@ const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
   schedule_attendance_observations: "attendance observations",
   withholding_deductions: "contractor withholding deductions",
   payroll_prior_earnings: "prior-provider earnings history",
+  entitlement_ledger: "earned entitlement movement history",
   payroll_holiday_obligations: "approved holiday pay entitlements",
   payroll_opening_employer_authorities: "payroll opening employer authorities",
   payroll_opening_levy_source_authorities: "payroll opening levy source authorities",
@@ -365,6 +367,8 @@ interface GuardedPartyRef {
    * table's uniqueness. Rows with a conflict stay on the absorbed party.
    */
   conflict: string;
+  /** Additional source-row condition required for a safe in-place move. */
+  moveOnly?: string;
 }
 
 /**
@@ -436,14 +440,6 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
       "s.org_id = d.org_id and s.certificate_key = d.certificate_key" +
       " and s.region is not distinct from d.region and s.sub_region is not distinct from d.sub_region" +
       " and s.superseded_on is null and d.superseded_on is null",
-  },
-  {
-    table: "entitlement_ledger",
-    column: "employee_party_id",
-    conflict:
-      "((d.kind = 'opening' and s.kind = 'opening' and s.org_id = d.org_id and s.plan_id = d.plan_id)" +
-      " or (d.pay_run_document_id is not null and s.pay_run_document_id is not distinct from d.pay_run_document_id" +
-      " and s.plan_id = d.plan_id and s.kind = d.kind))",
   },
   {
     table: "entitlement_plan_limits",
@@ -594,6 +590,7 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     table: "hrm_scorecards",
     column: "interviewer_party_id",
     conflict: "s.interview_id = d.interview_id",
+    moveOnly: "d.submitted_at is null",
   },
   {
     // 0196: the review uniqueness is (org, cycle, employment, kind,
@@ -816,6 +813,7 @@ async function moveGuarded(
   const updated = (await tx.execute(sql`
     update ${sql.identifier(ref.table)} as d set ${sql.identifier(ref.column)} = ${survivorId}
      where d.org_id = ${orgId} and d.${sql.identifier(ref.column)} = ${absorbedId}
+       and (${sql.raw(ref.moveOnly ?? "true")})
        and not exists (
          select 1 from ${sql.identifier(ref.table)} as s
           where s.org_id = d.org_id and s.${sql.identifier(ref.column)} = ${survivorId}
@@ -938,6 +936,37 @@ async function applyMergeTx(
     const referenced = (await tx.execute(sql`select id from ${sql.identifier(ref.table)}
       where org_id=${orgId} and ${sql.identifier(ref.column)}=${absorbedId} limit 1`)).rows;
     if (referenced.length) throw new PartyMergeError(`This party has ${ref.label}. ${ref.remedy}`);
+  }
+
+  // Employment identity is referenced by payroll evidence whose party key
+  // must match the employment's worker. Keep the identities separate before
+  // moving worker_employments if any such row would be left inconsistent.
+  const payrollEmploymentReferences = [
+    "employee_pay_components",
+    "employee_payroll_profiles",
+    "employee_tax_certificates",
+    "entitlement_ledger",
+    "entitlement_plan_limits",
+    "pay_run_adjustments",
+    "pay_run_holiday_assertions",
+    "pay_stubs",
+    "payroll_opening_balances",
+    "payroll_retro_settlements",
+  ] as const;
+  for (const table of payrollEmploymentReferences) {
+    const referenced = (await tx.execute(sql`
+      select payroll_row.id from ${sql.identifier(table)} payroll_row
+      join worker_employments employment
+        on employment.org_id = payroll_row.org_id
+       and employment.id = payroll_row.employment_id
+       and employment.worker_party_id = ${absorbedId}
+      where payroll_row.org_id = ${orgId} and payroll_row.employee_party_id = ${absorbedId}
+      limit 1`)).rows;
+    if (referenced.length) {
+      throw new PartyMergeError(
+        "This employee has payroll records tied to their employment. Keep the employee identities separate to preserve payroll history.",
+      );
+    }
   }
 
   {

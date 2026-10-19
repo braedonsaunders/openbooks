@@ -75,6 +75,8 @@ export async function neuterSandbox(sandboxOrgId: string): Promise<void> {
   await db.execute(sql`
     update api_keys set is_active = false where org_id = ${sandboxOrgId}`);
   await db.execute(sql`
+    update automations set status = 'disabled' where org_id = ${sandboxOrgId}`);
+  await db.execute(sql`
     update sftp_servers
        set password_encrypted = null, authorized_keys = null, is_active = false
      where org_id = ${sandboxOrgId}`);

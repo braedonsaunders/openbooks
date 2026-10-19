@@ -103,6 +103,24 @@ export function orgCivilDate(now: Date, timezone: string): string {
   return parts;
 }
 
+/** Org-local wall-clock time in HH:MM form for daily automation triggers. */
+export function orgCivilTime(now: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const hour = parts.find((part) => part.type === "hour")?.value;
+  const minute = parts.find((part) => part.type === "minute")?.value;
+  if (!hour || !minute) throw new Error("could not resolve organization local time");
+  return `${hour}:${minute}`;
+}
+
+export function dateRelativeTriggerIsDue(now: Date, timezone: string, atTime: string): boolean {
+  return orgCivilTime(now, timezone) >= atTime;
+}
+
 async function orgTimezone(orgId: string): Promise<string> {
   const rows = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
     select settings from orgs where id = ${orgId} limit 1
@@ -136,14 +154,16 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
     eventsFailed: 0,
     errors: [],
   };
-  // bypass: scheduler-tick — the tick scans enabled automations of every organization.
+  // bypass: scheduler-tick — the tick scans enabled production automations only.
   await withBypassContext(async () => {
     const automations = await db.execute<{
       id: string; orgId: string; name: string; trigger: unknown; version: number; createdAt: string; lastRunAt: string | null;
     }>(sql`
-      select id, org_id as "orgId", name, trigger, version,
-             created_at as "createdAt", last_run_at as "lastRunAt"
-        from automations where status = 'enabled'
+      select a.id, a.org_id as "orgId", a.name, a.trigger, a.version,
+             a.created_at as "createdAt", a.last_run_at as "lastRunAt"
+        from automations a
+        join orgs o on o.id = a.org_id and o.env_kind = 'production'
+       where a.status = 'enabled'
     `);
     for (const automation of automations.rows) {
       try {
@@ -183,7 +203,9 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
     }
     const checklistOrgs = (
       await db.execute<{ org_id: string }>(
-        sql`select distinct org_id from hrm_process_steps where status='pending' and design->>'reminderDays' is not null`,
+        sql`select distinct s.org_id from hrm_process_steps s
+          join orgs o on o.id = s.org_id and o.env_kind = 'production'
+         where s.status='pending' and s.design->>'reminderDays' is not null`,
       )
     ).rows;
     for (const org of checklistOrgs) {
@@ -308,6 +330,9 @@ async function fireDateRelative(
     );
   }
   const timezone = await orgTimezone(automation.orgId);
+  if (!dateRelativeTriggerIsDue(now, timezone, trigger.atTime)) {
+    return { fired: 0, failed: 0, errors: [] };
+  }
   const today = orgCivilDate(now, timezone);
   // direction before + offset 3 on target T means T is 3 days AFTER today:
   // match rows whose date equals today + offset (before) or today - offset (after).
@@ -383,16 +408,18 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
              then 'automation event claim lease expired without a completion mark — worker likely crashed; at the attempt ceiling, parked dead'
              else 'automation event claim lease expired without a completion mark — worker likely crashed; re-queued for retry' end
      where status = 'claimed'
+       and org_id in (select id from orgs where env_kind = 'production')
        and claimed_at < ${new Date(now.getTime() - STALE_AUTOMATION_EVENT_CLAIM_MS)}
   `);
   const claimed = await db.execute<ClaimedEvent>(sql`
     update automation_event_queue
        set status = 'claimed', claimed_at = now()
      where id in (
-       select id from automation_event_queue
-        where status = 'pending'
-          and (next_attempt_at is null or next_attempt_at <= now())
-        order by created_at limit 100
+       select e.id from automation_event_queue e
+        join orgs o on o.id = e.org_id and o.env_kind = 'production'
+        where e.status = 'pending'
+          and (e.next_attempt_at is null or e.next_attempt_at <= now())
+        order by e.created_at limit 100
         for update skip locked
      )
     returning id, org_id as "orgId", event_kind as "eventKind",
@@ -414,7 +441,11 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
         await markEventDead(event, "no enabled automation remains for this event after a previous failure — inspect the automation's error state, fix it, and re-stage the trigger");
         outcome.failed += 1;
       } else {
-        const finished = await db.execute(sql`update automation_event_queue set status = 'done' where id = ${event.id} and org_id = ${event.orgId}`);
+        const finished = await db.execute(sql`
+          update automation_event_queue set status = 'done'
+           where id = ${event.id} and org_id = ${event.orgId}
+             and org_id in (select id from orgs where env_kind = 'production')
+        `);
         if ((finished.rowCount ?? 0) !== 1) {
           throw new Error(`event ${event.id} fired but the done-mark matched no row — refusing to count it drained`);
         }
@@ -441,8 +472,9 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
 async function fireClaimedEvent(event: ClaimedEvent): Promise<{ attempted: number; failed: number; firstError: string }> {
   return withOrg(event.orgId, async () => {
     const automations = await db.execute<{ id: string; name: string; trigger: unknown }>(sql`
-      select id, name, trigger from automations
-       where org_id = ${event.orgId} and status = 'enabled'
+      select a.id, a.name, a.trigger from automations a
+       join orgs o on o.id = a.org_id and o.env_kind = 'production'
+       where a.org_id = ${event.orgId} and a.status = 'enabled'
     `);
     let attempted = 0;
     let failed = 0;
@@ -508,6 +540,7 @@ async function parkEventForRetry(event: ClaimedEvent, message: string, now: Date
        set status = 'pending', attempt_count = ${attempts},
            next_attempt_at = ${dueAt}, error = ${message.slice(0, 1000)}
      where id = ${event.id} and org_id = ${event.orgId} and status = 'claimed'
+       and org_id in (select id from orgs where env_kind = 'production')
   `);
   if ((updated.rowCount ?? 0) !== 1) {
     throw new Error(`event ${event.id} left 'claimed' under the drain — refusing to overwrite its state`);
@@ -519,6 +552,7 @@ async function markEventDead(event: ClaimedEvent, message: string): Promise<void
     update automation_event_queue
        set status = 'dead', attempt_count = ${event.attemptCount + 1}, error = ${message.slice(0, 1000)}
      where id = ${event.id} and org_id = ${event.orgId}
+       and org_id in (select id from orgs where env_kind = 'production')
   `);
   if ((stamped.rowCount ?? 0) !== 1) {
     throw new Error(`event ${event.id} could not be parked dead — the row moved under the drain; refusing to report it dead`);

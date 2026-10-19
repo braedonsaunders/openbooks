@@ -143,6 +143,7 @@ function subsidiaryScopeSql(alias: string, allowed: GateSubsidiaryScope): SQL {
 
 interface LegOpts {
   prefix?: number;
+  documentId?: string;
   kind?: string;
   query?: string;
   audience?: WorklistAudience;
@@ -155,6 +156,7 @@ function worklistDocumentWhere(
   kind?: string,
   query?: string,
   audience?: WorklistAudience,
+  documentId?: string,
 ): SQL {
   const needle = query?.trim().toLowerCase()
   return sql`d.org_id = ${orgId} and d.status = 'pending_approval'
@@ -166,6 +168,7 @@ function worklistDocumentWhere(
        where g.org_id = d.org_id and g.subject_id = d.id and g.status = 'pending'
     )
     ${subsidiaryScopeSql("d", allowedSubsidiaryIds)}
+    ${documentId ? sql`and d.id = ${documentId}::uuid` : sql``}
     ${kind ? sql`and d.kind = ${kind}` : sql``}
     ${needle ? sql`and position(${needle} in lower(concat_ws(' ', d.document_number, d.kind, d.memo,
       (select p.display_name from parties p where p.id=d.party_id and p.org_id=d.org_id)))) > 0` : sql``}`;
@@ -190,7 +193,7 @@ async function worklistDocuments(
            d.submitted_at::text as "submittedAt", d.created_at::text as "createdAt"
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
-     where ${worklistDocumentWhere(orgId, userId, allowedSubsidiaryIds, opts?.kind, opts?.query, opts?.audience)}
+     where ${worklistDocumentWhere(orgId, userId, allowedSubsidiaryIds, opts?.kind, opts?.query, opts?.audience, opts?.documentId)}
      order by coalesce(d.submitted_at, d.created_at), d.id
      ${opts?.prefix != null ? sql`limit ${opts.prefix}` : sql``}`)).rows;
   return rows
@@ -198,7 +201,7 @@ async function worklistDocuments(
     .map((row) => ({ kind: "document" as const, ...row }));
 }
 
-async function worklistDocumentKindCounts(
+export async function worklistDocumentKindCounts(
   orgId: string,
   userId: string,
   allowedSubsidiaryIds: GateSubsidiaryScope,
@@ -476,6 +479,28 @@ export async function worklistApprovals(
     }
   }
   return out;
+}
+
+/** Resolve one gate or gateless document through the approval worklist predicates. */
+export async function worklistApprovalById(
+  orgId: string,
+  userId: string,
+  scope: WorklistScope,
+  leg: "gate" | "document",
+  sourceId: string,
+): Promise<UnifiedApproval | null> {
+  if (leg === "gate") {
+    const gate = (await worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, {
+      prefix: 1,
+      gateId: sourceId,
+    }))[0];
+    return gate ? { kind: "flow_gate", id: gate.id, gate } : null;
+  }
+  const document = (await worklistDocuments(orgId, userId, scope.allowedSubsidiaryIds, {
+    prefix: 1,
+    documentId: sourceId,
+  }))[0];
+  return document ? { kind: "document", id: document.id, document } : null;
 }
 
 export class DocumentApprovalError extends Error {

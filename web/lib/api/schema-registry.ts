@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/platform/db";
 import { isFeatureEnabled } from "../features";
 import { normalizeSectionsInput } from "../record-schema";
 import { inTypeAudience } from "../records";
+import { customFieldVisible, type CustomFieldViewer } from "@openbooks/engine/records/custom-fields";
 import {
   API_RECORD_TYPES,
   DOCUMENT_REVISION_READ_METADATA,
@@ -47,7 +48,7 @@ interface ColumnRow extends Record<string, unknown> {
 }
 interface CustomFieldRow extends Record<string, unknown> {
   target_table: string; target_kind: string | null; key: string; label: string | null;
-  field_type: string; is_required: boolean;
+  field_type: string; is_required: boolean; config: { allowedRoles?: unknown } | null;
 }
 interface CustomRecordTypeRow extends Record<string, unknown> {
   key: string; name: string; description: string | null; fields: unknown;
@@ -66,6 +67,7 @@ interface StoredFormField {
 export async function loadApiSchema(
   orgId: string,
   roleKeys: readonly string[] | null = null,
+  customFieldViewer?: CustomFieldViewer,
 ): Promise<ApiRecordTypeSchema[]> {
   const builtIn: ApiRecordType[] = []
   for (const t of API_RECORD_TYPES.filter((candidate) => candidate.table)) {
@@ -97,7 +99,7 @@ export async function loadApiSchema(
   // optional kind. Surfaced as `cf_<key>` so bills/parties/etc. advertise and
   // accept their org custom fields.
   const cfDefs = await db.execute<CustomFieldRow>(sql`
-    select target_table, target_kind, key, label, field_type, is_required
+    select target_table, target_kind, key, label, field_type, is_required, config
       from custom_field_defs
      where org_id = ${orgId} and is_active
      order by sort_order, label`);
@@ -116,6 +118,7 @@ export async function loadApiSchema(
     const out: ApiField[] = [];
     for (const k of keys) {
       for (const d of cfByTargetKind.get(k) ?? []) {
+        if (customFieldViewer && !customFieldVisible({ key: d.key, config: d.config }, customFieldViewer)) continue;
         const name = `cf_${d.key}`;
         if (seen.has(name)) continue;
         seen.add(name);

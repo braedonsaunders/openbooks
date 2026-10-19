@@ -209,6 +209,32 @@ const mockSources = new Map<string, string>([
         return state.customDefs
       }
 
+      export const UNATTRIBUTED_CUSTOM_FIELD_VIEWER = { roleKeys: [], canManageCustomFields: false }
+
+      function customFieldVisible(def, viewer) {
+        if (viewer.canManageCustomFields) return true
+        const roles = def.config?.allowedRoles
+        if (roles === undefined || roles === null || Array.isArray(roles) && roles.length === 0) return true
+        return Array.isArray(roles) && roles.some((role) => viewer.roleKeys.includes(role))
+      }
+
+      export function visibleCustomFieldDefs(defs, viewer) {
+        return defs.filter((def) => customFieldVisible(def, viewer))
+      }
+
+      export function hiddenCustomFieldRefusal(defs, viewer, submitted, stored) {
+        for (const def of defs) {
+          if (customFieldVisible(def, viewer)) continue
+          if (!Object.hasOwn(submitted, def.key)) {
+            if (stored === null && def.isRequired) return { key: def.key, message: def.label + ' is required and restricted to other roles' }
+            continue
+          }
+          if (stored !== null && JSON.stringify(submitted[def.key] ?? null) === JSON.stringify(stored?.[def.key] ?? null)) continue
+          return { key: def.key, message: def.label + ' is restricted to other roles and cannot be changed by your role' }
+        }
+        return null
+      }
+
       export function validateCustomValues(defs, values) {
         const errors = {}
         const cleaned = {}

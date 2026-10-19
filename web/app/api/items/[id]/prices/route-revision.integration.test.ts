@@ -5,7 +5,7 @@ import test, { after } from 'node:test'
 import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.item-price-revision-test')
-const routeState: { authz: { user: { orgId: string; id: string } } | null } = { authz: null }
+const routeState: { authz: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null } = { authz: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
 const hooks = registerHooks({
@@ -82,7 +82,7 @@ function scheduleBody(f: Fixture, effectiveFrom: string, unitPrice: string, extr
 }
 
 async function postSchedule(f: Fixture, effectiveFrom: string, unitPrice: string) {
-  routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
+  routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, allowedSubsidiaryIds: null }
   const response = await POST(new Request(`http://openbooks.test/api/items/${f.itemId}/prices`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'Idempotency-Key': randomUUID() },
@@ -93,7 +93,7 @@ async function postSchedule(f: Fixture, effectiveFrom: string, unitPrice: string
 }
 
 async function patchSchedule(f: Fixture, body: Record<string, unknown>) {
-  routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
+  routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, allowedSubsidiaryIds: null }
   return PATCH(new Request(`http://openbooks.test/api/items/${f.itemId}/prices`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
@@ -102,13 +102,13 @@ async function patchSchedule(f: Fixture, body: Record<string, unknown>) {
 }
 
 async function deleteSchedule(f: Fixture, query: string) {
-  routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
+  routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, allowedSubsidiaryIds: null }
   return DELETE(new Request(`http://openbooks.test/api/items/${f.itemId}/prices?${query}`, { method: 'DELETE' }),
     { params: Promise.resolve({ id: f.itemId }) })
 }
 
 async function getSchedules(f: Fixture) {
-  routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
+  routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, allowedSubsidiaryIds: null }
   const response = await GET(new Request(`http://openbooks.test/api/items/${f.itemId}/prices`),
     { params: Promise.resolve({ id: f.itemId }) })
   assert.equal(response.status, 200)

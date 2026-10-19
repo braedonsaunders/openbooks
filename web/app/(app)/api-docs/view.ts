@@ -40,6 +40,10 @@ export async function loadApiDocs(): Promise<ApiDocsData> {
   const schema = await loadApiSchema(
     authz.user.orgId,
     authz.user.roles.map(({ key }) => key),
+    {
+      roleKeys: authz.user.roles.map(({ key }) => key),
+      canManageCustomFields: authz.permissions.has('admin.custom_fields.manage'),
+    },
   )
   return { schema }
 }

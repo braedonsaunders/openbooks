@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/database";
+import { isUuid } from "@/lib/list-params";
 import {
   createWebhookEndpoint,
   redeliverWebhookDelivery,
@@ -55,9 +56,11 @@ function endpointErrorResponse(error: unknown) {
 export const GET = defineRoute({
   permission: "webhooks.read",
   feature: "outboundWebhooks",
+  scope: "unrestricted",
   handler: async ({ authz, request }) => {
     const endpointId = new URL(request.url).searchParams.get("endpoint") ?? "";
     if (!endpointId) return NextResponse.json({ error: "endpoint is required" }, { status: 400 });
+    if (!isUuid(endpointId)) return NextResponse.json({ error: "endpoint must be a uuid" }, { status: 400 });
     const endpoint = (await db.execute<Record<string, unknown>>(sql`
       select id, key, url, description, events, status, consecutive_failures as "consecutiveFailures",
              auto_disable_after as "autoDisableAfter", disabled_at as "disabledAt",
@@ -87,6 +90,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "webhooks.manage",
   feature: "outboundWebhooks",
+  scope: "unrestricted",
   body: createBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ body, authz }) => {
@@ -107,6 +111,7 @@ export const POST = defineRoute({
 export const PATCH = defineRoute({
   permission: "webhooks.manage",
   feature: "outboundWebhooks",
+  scope: "unrestricted",
   body: updateBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ body, authz }) => {
@@ -131,7 +136,7 @@ export const PATCH = defineRoute({
       }
       if (op === "redeliver") {
         if (!body.deliveryId) return NextResponse.json({ error: "deliveryId is required to redeliver" }, { status: 400 });
-        const result = await redeliverWebhookDelivery(orgId, actorId, body.deliveryId);
+        const result = await redeliverWebhookDelivery(orgId, actorId, body.id, body.deliveryId);
         return NextResponse.json(result);
       }
       const pinged = await sendWebhookTestPing(orgId, actorId, body.id);

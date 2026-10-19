@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrg, type SqlExecutor } from "../platform/db.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
-import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
+import { reversalJournalLines, type ReversalSourceJournalLine } from "../records/reversal-journal-lines.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import {
   captureTransactionAuditSnapshot,
@@ -152,6 +152,25 @@ async function sourceApplicationLineIds(
   return endpoints.rows.map((row) => row.id);
 }
 
+async function sourceApplicationFxEntryIds(
+  tx: SqlExecutor,
+  orgId: string,
+  entryId: string,
+): Promise<string[]> {
+  const result = await tx.execute<{ id: string }>(sql`
+    select distinct application.fx_gain_loss_entry_id as id
+      from applications application
+      join journal_lines endpoint
+        on endpoint.org_id = application.org_id
+       and endpoint.id in (application.from_line_id, application.to_line_id)
+     where application.org_id = ${orgId}
+       and application.unapplied_at is null
+       and application.fx_gain_loss_entry_id is not null
+       and endpoint.entry_id = ${entryId}
+     order by application.fx_gain_loss_entry_id`);
+  return result.rows.map((row) => row.id);
+}
+
 /** Lock the complete application graph before the source document is changed.
  * The shared order is documents, journal entries, then lines, each by id.
  * Loading ids is only discovery; all lifecycle/application decisions happen
@@ -172,17 +191,22 @@ async function lockImportedSourceApplicationEvidence(
   if (candidate.posted_entry_id) {
     lineIds.push(...await sourceApplicationLineIds(tx, input.orgId, candidate.posted_entry_id));
   }
+  const fxEntryIds = candidate.posted_entry_id
+    ? await sourceApplicationFxEntryIds(tx, input.orgId, candidate.posted_entry_id)
+    : [];
   const locks = await lockApplicationEvidence(
     tx,
     input.orgId,
     lineIds,
     [candidate.id],
-    candidate.posted_entry_id ? [candidate.posted_entry_id] : [],
+    [...(candidate.posted_entry_id ? [candidate.posted_entry_id] : []), ...fxEntryIds],
   );
 
   if (candidate.posted_entry_id) {
     const currentLineIds = await sourceApplicationLineIds(tx, input.orgId, candidate.posted_entry_id);
-    if (currentLineIds.some((id) => !locks.lineIds.includes(id))) {
+    const currentFxEntryIds = await sourceApplicationFxEntryIds(tx, input.orgId, candidate.posted_entry_id);
+    if (currentLineIds.some((id) => !locks.lineIds.includes(id)) ||
+        currentFxEntryIds.some((id) => !locks.entryIds.includes(id))) {
       throw new SourceDeletionResolutionError(
         "application endpoints changed while preparing the correction; retry the source deletion",
       );
@@ -196,6 +220,124 @@ async function lockImportedSourceApplicationEvidence(
     );
   }
   return locked;
+}
+
+async function reverseSourceApplicationFxEntries(
+  tx: SqlExecutor,
+  input: { orgId: string; documentId: string; sourceEntryId: string; sourceKind: string; sourceRef: string; actorId: string | null },
+): Promise<void> {
+  const applications = await tx.execute<{ id: string; fx_entry_id: string }>(sql`
+    select application.id, application.fx_gain_loss_entry_id as fx_entry_id
+      from applications application
+     where application.org_id = ${input.orgId}
+       and application.unapplied_at is null
+       and application.fx_gain_loss_entry_id is not null
+       and (
+         application.from_line_id in (
+           select id from journal_lines where org_id = ${input.orgId} and entry_id = ${input.sourceEntryId}
+         )
+         or application.to_line_id in (
+           select id from journal_lines where org_id = ${input.orgId} and entry_id = ${input.sourceEntryId}
+         )
+       )`);
+  const fxEntryIds = [...new Set(applications.rows.map((row) => row.fx_entry_id))].sort();
+  for (const fxEntryId of fxEntryIds) {
+    const shared = await tx.execute(sql`
+      select id from applications
+       where org_id = ${input.orgId} and unapplied_at is null
+         and fx_gain_loss_entry_id = ${fxEntryId}
+         and id not in (${sql.join(applications.rows.filter((row) => row.fx_entry_id === fxEntryId).map((row) => sql`${row.id}`), sql`, `)})
+       limit 1`);
+    if (shared.rows.length) {
+      throw new SourceDeletionResolutionError(
+        "the source settlement's foreign-exchange journal is shared with another active application; reconcile that allocation before deleting the source",
+      );
+    }
+    const fxEntry = (await tx.execute<{
+      id: string; status: string; origin: string; periodId: string; bookId: string;
+      subsidiaryId: string; entryNumber: string; postingDate: string;
+    }>(sql`
+      select id, status, origin, period_id as "periodId", book_id as "bookId",
+             subsidiary_id as "subsidiaryId", entry_number as "entryNumber",
+             posting_date::text as "postingDate"
+        from journal_entries
+       where id = ${fxEntryId} and org_id = ${input.orgId}
+       for update`)).rows[0];
+    if (!fxEntry || fxEntry.status !== "posted" || fxEntry.origin !== "fx_settlement") {
+      throw new SourceDeletionResolutionError(
+        "the source settlement's foreign-exchange journal is missing or no longer posted",
+      );
+    }
+    const lines = (await tx.execute<ReversalSourceJournalLine>(sql`
+      select line_number as "lineNumber", account_id as "accountId", subsidiary_id as "subsidiaryId",
+             amount::text as amount, currency, txn_amount::text as "txnAmount", fx_rate::text as "fxRate",
+             party_id as "partyId", department_id as "departmentId", project_id as "projectId",
+             location_id as "locationId", class_id as "classId", equipment_unit_id as "equipmentUnitId",
+             extra_dims as "extraDims", payment_card_id as "paymentCardId", tax_code_id as "taxCodeId",
+             memo, quantity::text as quantity, unit, custom, eliminate,
+             is_currency_adjustment as "isCurrencyAdjustment",
+             contributor_kind as "contributorKind", contributor_ref as "contributorRef"
+        from journal_lines
+       where org_id = ${input.orgId} and entry_id = ${fxEntry.id}
+       order by line_number`)).rows;
+    if (lines.length === 0) {
+      throw new SourceDeletionResolutionError(
+        "the source settlement's foreign-exchange journal has no lines",
+      );
+    }
+    await assertPeriodModulesOpen(tx, {
+      orgId: input.orgId,
+      periodId: fxEntry.periodId,
+      bookId: fxEntry.bookId,
+      subsidiaryIds: lines.map((line) => line.subsidiaryId),
+      modules: [closeModuleForDocument(input.sourceKind)],
+    });
+    const mirror = reversalJournalLines(lines, { entryId: "", orgId: input.orgId });
+    const reversal = await postEntry(tx, {
+      orgId: input.orgId,
+      bookId: fxEntry.bookId,
+      subsidiaryId: fxEntry.subsidiaryId,
+      entryNumber: await nextFreeEntryNumber(tx, input.orgId, `${fxEntry.entryNumber}-SOURCE-DELETE`),
+      postingDate: fxEntry.postingDate,
+      periodId: fxEntry.periodId,
+      memo: `Source deletion ${input.sourceRef} settlement FX reversal`,
+      sourceDocumentId: input.documentId,
+      origin: fxEntry.origin,
+      reversesEntryId: fxEntry.id,
+      actorId: input.actorId,
+      closeModules: [closeModuleForDocument(input.sourceKind)],
+      allowImportedLocks: true,
+      allowInactiveAccounts: true,
+      lines: mirror.map((line) => ({
+        accountId: line.accountId,
+        subsidiaryId: line.subsidiaryId,
+        amount: line.amount,
+        currency: line.currency,
+        txnAmount: line.txnAmount,
+        fxRate: line.fxRate,
+        memo: line.memo,
+        partyId: line.partyId,
+        departmentId: line.departmentId,
+        projectId: line.projectId,
+        locationId: line.locationId,
+        classId: line.classId,
+        equipmentUnitId: line.equipmentUnitId,
+        extraDims: (line.extraDims ?? {}) as Record<string, unknown>,
+        paymentCardId: line.paymentCardId,
+        taxCodeId: line.taxCodeId,
+        quantity: line.quantity,
+        unit: line.unit,
+        custom: (line.custom ?? {}) as Record<string, unknown>,
+        contributorKind: line.contributorKind,
+        contributorRef: line.contributorRef,
+        lineNumber: line.lineNumber,
+        eliminate: line.eliminate,
+        isCurrencyAdjustment: line.isCurrencyAdjustment,
+      })),
+    });
+    await markEntryReversed(tx, { orgId: input.orgId, entryId: fxEntry.id, actorId: input.actorId });
+    if (!reversal.entryId) throw new SourceDeletionResolutionError("the source settlement FX reversal was not posted");
+  }
 }
 
 /**
@@ -294,6 +436,14 @@ export async function mirrorSourceDeletion(input: {
       // Application rows are immutable settlement evidence. A source deletion
       // releases them through their one permitted transition; it never erases
       // the evidence or its original endpoints/amounts.
+      await reverseSourceApplicationFxEntries(tx, {
+        orgId: input.orgId,
+        documentId: document.id,
+        sourceEntryId: entry.id,
+        sourceKind: document.kind,
+        sourceRef: `${input.source}:${input.sourceRef}`,
+        actorId: null,
+      });
       await tx.execute(sql`
         update applications a
            set unapplied_at = now(), updated_at = now()
@@ -322,7 +472,7 @@ export async function mirrorSourceDeletion(input: {
         periodId: entry.periodId,
         memo: `Source deletion ${input.source}:${input.sourceRef}`,
         sourceDocumentId: document.id,
-        origin: "migration",
+        origin: entry.origin,
         reversesEntryId: entry.id,
         actorId: null,
         closeModules: [closeModuleForDocument(document.kind)],
@@ -351,6 +501,8 @@ export async function mirrorSourceDeletion(input: {
           contributorKind: line.contributorKind,
           contributorRef: line.contributorRef,
           lineNumber: line.lineNumber,
+          eliminate: line.eliminate,
+          isCurrencyAdjustment: line.isCurrencyAdjustment,
         })),
       });
       const reversal = { id: postedReversal.entryId };
@@ -502,7 +654,7 @@ export async function resolveSourceDeletion(input: {
           periodId: entry.periodId,
           memo: `Source deletion ${source}:${input.sourceRef}${input.note ? ` — ${input.note}` : ""}`,
           sourceDocumentId: document.id,
-          origin: "migration",
+          origin: entry.origin,
           reversesEntryId: entry.id,
           actorId: input.actorId,
           closeModules: [closeModuleForDocument(document.kind)],
@@ -531,6 +683,8 @@ export async function resolveSourceDeletion(input: {
             contributorKind: line.contributorKind,
             contributorRef: line.contributorRef,
             lineNumber: line.lineNumber,
+            eliminate: line.eliminate,
+            isCurrencyAdjustment: line.isCurrencyAdjustment,
           })),
         });
         const reversal = { id: postedReversal.entryId };

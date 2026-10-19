@@ -1241,10 +1241,32 @@ for(const {tracking,quarantined} of [{tracking:'lot',quarantined:false},{trackin
   const available=()=>run(tx=>getAvailableToPromise(tx,f.org.orgId,{itemId:item,subsidiaryId:f.org.subsidiaryId}));assert.equal((await available()).available,quantity+'.0000');
   await run(()=>reverseMaterialIssue(f.org.orgId,f.actorId,{movementId:repaired.id,reversalDate:f.postingDate,reason:'Correct repaired receipt without losing original hold'}));
   assert.equal((await available()).available,'0.0000');assert.equal(await wip(f,order.number),receipt.value);
-  if(tracking==='serial')assert.deepEqual(await serialState(),{status:'registered',location:null});
+  if(tracking==='serial')assert.deepEqual(await serialState(),{status:'shipped',location:null});
   const afterReversal=await counts(f);await assert.rejects(run(tx=>issueInventory(f.org.orgId,f.actorId,{tx,itemId:item,stockLocationId:sourceLocationId,quantity,subsidiaryId:f.org.subsidiaryId,date:f.postingDate,...selection})),/held/);assert.deepEqual(await counts(f),afterReversal);
   await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,orderId,{quantity}));assert.equal(await wip(f,order.number),'0.0000');
   if(tracking==='serial')assert.deepEqual(await serialState(),{status:'in_stock',location:f.org.stockLocationId});
+}});
+
+cases.push({name:'a serial-tracked work-order component returns to stock when its issue is reversed',run:async f=>{
+  const itemId=f.org.items.component;
+  const profile=await run(tx=>tx.execute(sql`update item_inventory_profiles set tracking='serial'
+    where org_id=${f.org.orgId} and item_id=${itemId} returning item_id`));
+  assert.equal(profile.rows.length,1);
+  const serialId=await withBypassContext(()=>ensureSerial(f.org.orgId,itemId,'COMPONENT-'+randomUUID(),null,f.actorId));
+  await withBypassContext(()=>receiveInventory(f.org.orgId,f.actorId,{itemId,stockLocationId:f.org.stockLocationId,
+    quantity:'1',unitCost:'3',serialId,subsidiaryId:f.org.subsidiaryId,offsetAccountId:f.org.accounts.clearing,date:f.postingDate}));
+  const wo=await prepare(f);
+  const issued=await withBypassContext(()=>executeManufacturingIssue(f.org.orgId,f.actorId,null,wo.id,randomUUID(),[
+    {materialId:wo.materials[0]!.id,quantity:'1',serialId},
+  ]));
+  assert.ok(issued.value.entryId);
+  const issueMovement=(await run(tx=>tx.execute<{id:string}>(sql`select id from inventory_movements
+    where org_id=${f.org.orgId} and journal_entry_id=${issued.value.entryId} and kind='assembly_consume' and serial_id=${serialId}`))).rows[0]!;
+  const serialState=()=>run(async tx=>(await tx.execute<{status:string;location:string|null}>(sql`select status,current_stock_location_id as location
+    from serials where org_id=${f.org.orgId} and id=${serialId}`)).rows[0]);
+  assert.deepEqual(await serialState(),{status:'shipped',location:null});
+  await withBypassContext(()=>reverseMaterialIssue(f.org.orgId,f.actorId,{movementId:issueMovement.id,reversalDate:f.postingDate,reason:'Return the unused serial component'}));
+  assert.deepEqual(await serialState(),{status:'in_stock',location:f.org.stockLocationId});
 }});
 
 cases.push(
@@ -1777,6 +1799,39 @@ function saleOn(f: Fixture, itemId: string, date: string) {
   }));
 }
 const redateCases: Case[] = [
+  { name: "completion date correction recreates the receipt inspection hold on the replacement movement", run: async (f) => {
+    const itemId = f.org.items.assembly;
+    const profile = await run((tx) => tx.execute(sql`update item_inventory_profiles set tracking='lot'
+      where org_id=${f.org.orgId} and item_id=${itemId} returning item_id`));
+    assert.equal(profile.rows.length, 1);
+    await inspectionPlan(f, itemId, "receipt");
+    const wo = await prepare(f);
+    await stockOn(f, f.org.items.component, "4", "3", "2026-01-15");
+    await run((tx) => tx.execute(sql`update mfg_work_orders set started_at='2026-02-01T08:00:00Z'::timestamptz
+      where org_id=${f.org.orgId} and id=${wo.id} returning id`));
+    await run((tx) => issueMaterials(tx, f.org.orgId, f.actorId, wo.id,
+      [{ materialId: wo.materials[0]!.id, quantity: "2" }], { issuedOn: "2026-02-01" }));
+    const receipt = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, {
+      quantity: "1", lots: [{ itemId, quantity: "1", lotNumber: "REDATE-" + randomUUID() }],
+    }));
+    await run((tx) => markWorkOrderDone(tx, f.org.orgId, f.actorId, wo.id));
+    const sourceMovement = (await run((tx) => tx.execute<{ id: string }>(sql`select id from inventory_movements
+      where org_id=${f.org.orgId} and journal_entry_id=${receipt.entryId} and kind='assembly_build'`))).rows[0]!;
+    const sourceInspection = (await run((tx) => tx.execute<{ id: string }>(sql`select id from inventory_inspections
+      where org_id=${f.org.orgId} and receipt_movement_id=${sourceMovement.id}`))).rows[0]!;
+    const correction = (await correctTo(f, wo.id, "2026-02-03")).corrections[0]!;
+    assert.ok(correction.redatedEntryId);
+    const replacementMovement = (await run((tx) => tx.execute<{ id: string }>(sql`select id from inventory_movements
+      where org_id=${f.org.orgId} and journal_entry_id=${correction.redatedEntryId} and kind='assembly_build'`))).rows[0]!;
+    const replacementInspection = (await run((tx) => tx.execute<{ id: string }>(sql`select id from inventory_inspections
+      where org_id=${f.org.orgId} and receipt_movement_id=${replacementMovement.id}`))).rows[0]!;
+    const oldState = await run((tx) => loadInspection(tx, f.org.orgId, sourceInspection.id));
+    const newState = await run((tx) => loadInspection(tx, f.org.orgId, replacementInspection.id));
+    assert.equal(oldState.status, "pending");
+    assert.equal(oldState.sourceActive, false);
+    assert.equal(newState.status, "pending");
+    assert.equal(newState.sourceActive, true);
+  } },
   { name: "re-dating a completed receipt earlier makes a previously refused as-of issue possible", run: async (f) => {
     const { wo } = await februaryOrder(f);
     await assert.rejects(saleOn(f, f.org.items.assembly, "2026-02-03"), /had 0\.0000 on hand on 2026-02-03/);

@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
 import { currentUser } from "./auth";
 import { requestAuthzContext } from "./authz-context";
+import { preferenceUserIdentity } from "./user-preference-identity";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
 import { canonicalTimeZone } from "@openbooks/engine/platform/time-zone";
 
@@ -69,13 +70,15 @@ async function readLocaleSettings(): Promise<{ user_locale: unknown; org_default
   // Off-request requestUser() is null (see above), so this stays anonymous.
   const activeUser = requestAuthzContext()?.user ?? await requestUser();
   if (!activeUser) return null;
-  // bypass: user-keyed-lookup — the viewer's own locale preference, read outside the request's organization scope.
-  const r = await withBypassContext(async () => (await db.execute<{ user_locale: unknown; org_default: unknown }>(sql`
+  const preferenceUser = preferenceUserIdentity(activeUser);
+  // bypass: user-keyed-lookup — the acting identity's preference and active
+  // organization's default are both qualified to their verified identities.
+  const r = await withBypassContext(() => db.execute<{ user_locale: unknown; org_default: unknown }>(sql`
       select u.locale as user_locale, o.settings ->> 'defaultLocale' as org_default
         from users u
-        join orgs o on o.id = u.org_id
-       where u.id = ${activeUser.id} and u.org_id = ${activeUser.orgId} and o.id = ${activeUser.orgId} and u.is_active
-    `)));
+        left join orgs o on o.id = ${activeUser.orgId}
+       where u.id = ${preferenceUser.id} and u.org_id = ${preferenceUser.orgId} and u.is_active
+    `));
   return r.rows[0] ?? null;
 }
 const renderLocaleSettings = cache(readLocaleSettings);

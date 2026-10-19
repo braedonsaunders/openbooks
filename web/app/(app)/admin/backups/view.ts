@@ -6,7 +6,8 @@ import { db } from '@openbooks/engine/platform/db'
 import { s3Enabled } from '@openbooks/engine/platform/file-storage'
 import { getWorkerHeartbeat } from '@openbooks/jobs'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { forbidden } from 'next/navigation'
+import { guardUnrestrictedScope, requirePermission } from '../../../../lib/authz'
 import type { BackupManagerProps } from './BackupManager'
 
 /**
@@ -46,6 +47,7 @@ export interface AdminBackupsData {
 
 export async function loadAdminBackups(): Promise<AdminBackupsData> {
   const authz = await requirePermission('admin.backups.manage')
+  if (guardUnrestrictedScope(authz)) forbidden()
   const t = await getTranslations('admin')
   const tHub = await getTranslations('admin.hub')
   const { orgId } = authz.user

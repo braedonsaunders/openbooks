@@ -1,0 +1,1 @@
+No data preflight is needed: the migration replaces a lifecycle trigger function after verifying its exact predecessor body.

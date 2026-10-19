@@ -30,6 +30,8 @@ interface ApiKeysRouteState {
   actorLens: string[] | null
   /** Super admins are exempt from the ceiling, like admin.users.manage. */
   actorSuperAdmin: boolean
+  /** Whether the session actor also has an active user row in the selected org. */
+  actorTenantLocalActive: boolean
   /** Owner role permission sets for the use-time authority resolution. */
   ownerRoleRows: Array<{ permissions: unknown }>
   /** Owner permission overrides for the use-time authority resolution. */
@@ -51,6 +53,7 @@ const state: ApiKeysRouteState = {
   actorPermissions: [],
   actorLens: null,
   actorSuperAdmin: false,
+  actorTenantLocalActive: true,
   ownerRoleRows: [],
   ownerOverrides: [],
   ownerIdentity: { isSuperAdmin: false, isActive: true },
@@ -125,6 +128,9 @@ const mockSources = new Map<string, string>([
               return { rows: state.ownerOverrides }
             }
             if (text.includes('from users')) {
+              if (text.includes('select id from users')) {
+                return { rows: state.actorTenantLocalActive ? [{ id: '${USER_ID}' }] : [] }
+              }
               return { rows: [{ isSuperAdmin: state.ownerIdentity.isSuperAdmin, isActive: state.ownerIdentity.isActive }] }
             }
             if (text.includes('from subsidiaries')) {
@@ -195,6 +201,20 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  [
+    'mock:authz-core',
+    `
+      const state = globalThis[Symbol.for('openbooks.api-keys-route-test')]
+      export async function resolveUserAuthz(user) {
+        const permissions = new Set(user.isSuperAdmin ? ['*'] : state.ownerRoleRows.flatMap((row) => Array.isArray(row.permissions) ? row.permissions : []))
+        for (const override of state.ownerOverrides) {
+          if (override.effect === 'grant') permissions.add(override.permission)
+          else permissions.delete(override.permission)
+        }
+        return { user, permissions, allowedSubsidiaryIds: null }
+      }
+    `,
+  ],
 ])
 
 const mockUrls = new Map<string, string>([
@@ -208,6 +228,7 @@ const mockUrls = new Map<string, string>([
   // canonical alias while the route module is loaded.
   ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../../../lib/api-auth', 'mock:api-auth'],
+  ['../../../../lib/authz-core', 'mock:authz-core'],
 ])
 
 registerHooks({
@@ -240,6 +261,7 @@ function reset(): void {
   state.actorPermissions = ['gl.read', 'ar.read', 'api.keys.manage']
   state.actorLens = null
   state.actorSuperAdmin = false
+  state.actorTenantLocalActive = true
   state.ownerRoleRows = []
   state.ownerOverrides = []
   state.ownerIdentity = { isSuperAdmin: false, isActive: true }
@@ -323,6 +345,25 @@ test('create returns the plaintext once and commits the key with its audit evide
   assert.match(audit, /"after":/, 'creation evidence identifies the resulting state')
   assert.match(audit, new RegExp(USER_ID), 'creation evidence identifies the actor')
   assert.equal(audit.includes(payload.plaintext), false, 'audit evidence never contains the secret')
+})
+
+test('create and update accept digit strings and blank unlimited rate limits', async () => {
+  reset()
+  const created = await post({ name: 'rate limited key', scopes: ['gl.read'], rateLimitPerMin: '120' })
+  assert.equal(created.status, 201, await created.clone().text())
+  assert.ok(state.committed.some((text) => text.includes('insert into api_keys')), 'a digit string passes create validation')
+
+  reset()
+  state.keyRow = ownedKeyRow(['gl.read'])
+  const updated = await patchKey({ id: KEY_ID, rateLimitPerMin: '90' })
+  assert.equal(updated.status, 200, await updated.clone().text())
+  assert.ok(state.committed.some((text) => text.includes('update api_keys')), 'a digit string passes update validation')
+
+  reset()
+  state.keyRow = ownedKeyRow(['gl.read'])
+  const unlimited = await patchKey({ id: KEY_ID, rateLimitPerMin: '' })
+  assert.equal(unlimited.status, 200, await unlimited.clone().text())
+  assert.ok(state.committed.some((text) => text.includes('update api_keys')), 'blank remains the supported unlimited value')
 })
 
 test('create rejects omitted or empty scopes before opening a transaction', async () => {
@@ -542,6 +583,20 @@ test('a super administrator is exempt from the grant ceiling', async () => {
   assert.equal(widened.status, 200)
 })
 
+test('a super administrator without an active tenant-local identity cannot create a key', async () => {
+  reset()
+  state.actorSuperAdmin = true
+  state.actorPermissions = []
+  state.actorTenantLocalActive = false
+
+  const response = await post({ name: 'tenant key', scopes: ['payroll.read'] })
+
+  assert.equal(response.status, 403)
+  assert.match((await response.json()).error, /active user in this organization/)
+  assert.deepEqual(committedWrites(), [], 'a key is never stored under a foreign-org user id')
+  assert.equal(state.executed.some((text) => text.includes('insert into api_keys')), false)
+})
+
 test('resuming a suspended key refuses authority the editor does not hold', async () => {
   reset()
   state.actorPermissions = ['ar.read', 'api.keys.manage']
@@ -572,6 +627,19 @@ test('resuming a key whose extra scopes are inert to the owner is permitted', as
 
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { ok: true })
+})
+
+test('resuming a super-admin owner key observes the owner’s effective authority', async () => {
+  reset()
+  state.actorPermissions = ['ar.read', 'api.keys.manage']
+  state.keyRow = ownedKeyRow(['payroll.read'], false)
+  state.ownerIdentity.isSuperAdmin = true
+
+  const response = await patchKey({ id: KEY_ID, isActive: true })
+
+  assert.equal(response.status, 403)
+  assert.match((await response.json()).error, /cannot grant permissions you do not hold: payroll\.read/)
+  assert.deepEqual(committedWrites(), [], 'resume cannot widen the manager’s ceiling')
 })
 
 test('resuming an already-active key grants nothing and needs no ceiling', async () => {

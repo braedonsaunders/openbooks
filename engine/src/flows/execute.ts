@@ -28,6 +28,7 @@ import { flowDocumentEffects } from "./document-effects-hook.ts";
 import { enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import { flowSubjectProfileForOrg } from "./registry.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { sodBlockedIds } from "./sod.ts";
 
 /**
  * The subject-agnostic flows executor. Runs a planned graph (actions + gates)
@@ -443,25 +444,25 @@ async function createGate(
     values: evalCtx.values,
   });
 
-  // preventSelfApproval (or an adapter-level accounting invariant): the
-  // record's submitter may not sit on their own gate. Drop them; if that
-  // empties the gate, route to their
-  // supervisor instead; if THAT resolves nothing, fail the run loudly — a
-  // silently self-approvable gate would be worse than a failed run.
+  // Keep the submitter and maker off their own gate by default. If removing
+  // them empties the assignment, route to an eligible submitter supervisor;
+  // if none exists, fail the run instead of creating an unapprovable gate.
   const preventSelfApproval =
-    gate.preventSelfApproval === true ||
     adapter.selfApprovalPolicy === "forbidden" ||
-    (adapter.profile.pinsSubmissionPolicy === true &&
-      gate.preventSelfApproval !== false);
-  if (preventSelfApproval && args.submitterUserId) {
-    const hadSubmitter = assignees.some((u) => u.id === args.submitterUserId);
-    assignees = assignees.filter((u) => u.id !== args.submitterUserId);
-    if (hadSubmitter && assignees.length === 0) {
-      const sup = await supervisorOf(ctx.orgId, args.submitterUserId);
-      if (sup) assignees = [sup];
+    gate.preventSelfApproval !== false;
+  if (preventSelfApproval) {
+    const blocked = new Set(sodBlockedIds(await adapter.loadContext(args.subjectId)));
+    if (args.submitterUserId) blocked.add(args.submitterUserId);
+    const hadBlockedAssignee = assignees.some((user) => blocked.has(user.id));
+    assignees = assignees.filter((user) => !blocked.has(user.id));
+    if (hadBlockedAssignee && assignees.length === 0) {
+      const sup = args.submitterUserId
+        ? await supervisorOf(ctx.orgId, args.submitterUserId)
+        : null;
+      if (sup && !blocked.has(sup.id)) assignees = [sup];
       else {
         throw new Error(
-          `gate "${gate.title}" only resolved to the submitter (self-approval is prevented) and no supervisor was found`,
+          `gate "${gate.title}" only resolved to the submitter or maker (self-approval is prevented) and no eligible supervisor was found`,
         );
       }
     }

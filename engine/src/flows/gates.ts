@@ -26,6 +26,9 @@ import { emailActionUrls } from "./email-tokens.ts";
 import { lockFlowSubjectDecision } from "./decision-lock.ts";
 import { resolveApprovalRequestNotices } from "./approval-notices.ts";
 import { sanitizeDecisionCause } from "./decision-cause.ts";
+import { sodBlockedIds } from "./sod.ts";
+
+export { sodBlockedIds } from "./sod.ts";
 
 /**
  * Gate lifecycle — decide / worklist / delegate / timers. OpenBooks resumes
@@ -255,13 +258,16 @@ async function assertGateSubsidiaryScope(
  * record. Adapters that do not separate the two leave makerUserId unset and
  * behave exactly as before.
  */
-export function sodBlockedIds(
-  subject: Pick<FlowSubjectContext, "submitterUserId" | "makerUserId"> | null,
-): ReadonlySet<string> {
-  const ids = new Set<string>();
-  if (subject?.submitterUserId) ids.add(subject.submitterUserId);
-  if (subject?.makerUserId) ids.add(subject.makerUserId);
-  return ids;
+async function gateDecisionSodBlocked(
+  gate: GateRow,
+  adapter: FlowSubjectAdapter | null | undefined,
+  subject: FlowSubjectContext | null | undefined,
+  identities: readonly (string | null | undefined)[],
+): Promise<boolean> {
+  const blocked = sodBlockedIds(subject ?? null)
+  if (!identities.some((id) => id !== null && id !== undefined && blocked.has(id))) return false
+  const node = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId, gate.runId)
+  return adapter?.selfApprovalPolicy === "forbidden" || !node || node.preventSelfApproval !== false
 }
 
 /**
@@ -286,24 +292,23 @@ export async function gateDecisionCapability(
   }
   const canDelegate = gate.assigneeUserId === userId || (await userRoleKeys(gate.orgId, userId)).has(GATE_ADMIN_ROLE);
   let authorized = await canActOnGate(gate, userId);
+  let onBehalfOf: ResolvedUser | null = null;
   if (!authorized && gate.assigneeUserId) {
-    authorized =
-      (await activeDelegationPrincipal(gate.orgId, gate.assigneeUserId, userId)) !== null;
+    onBehalfOf = await activeDelegationPrincipal(gate.orgId, gate.assigneeUserId, userId);
+    authorized = onBehalfOf !== null;
   }
   if (!authorized) {
     return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: false, canDelegate };
   }
   const adapter = getFlowAdapter(gate.subjectKind);
   const subject = await adapter?.loadContext(gate.subjectId);
-  if (subject && sodBlockedIds(subject).has(userId)) {
-    const node = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId, gate.runId);
-    if (
-      adapter?.selfApprovalPolicy === "forbidden" ||
-      !node ||
-      node.preventSelfApproval !== false
-    ) {
-      return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: true, canDelegate };
-    }
+  if (await gateDecisionSodBlocked(
+    gate,
+    adapter,
+    subject,
+    [userId, onBehalfOf?.id, gate.delegatedFromUserId],
+  )) {
+    return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: true, canDelegate };
   }
   return { canAct: true, signatureRequired: gate.signatureRequired, sodBlocked: false, canDelegate };
 }
@@ -478,21 +483,19 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
   // teamwork (maker, submitter, and an independent approver) keeps working.
   const preAdapter = getFlowAdapter(pre.subjectKind);
   const preSubject = await preAdapter?.loadContext(pre.subjectId);
-  if (preSubject && sodBlockedIds(preSubject).has(userId)) {
-    const node = await gateNodeData(pre.orgId, pre.flowId, pre.nodeId, pre.runId);
-    if (
-      preAdapter?.selfApprovalPolicy === "forbidden" ||
-      !node ||
-      node.preventSelfApproval !== false
-    ) {
-      // A timesheet's enterer reads a timesheet-worded refusal; every other
-      // subject keeps the established generic text its tests assert.
-      const message = pre.subjectKind === "timesheet_week"
-        ? "You entered this timesheet; another approver must approve it."
-        : "you cannot approve your own submission — you created or submitted this record. " +
-          "Route it to another approver to decide.";
-      throw new GateError(message, "self_approval_forbidden");
-    }
+  if (await gateDecisionSodBlocked(
+    pre,
+    preAdapter,
+    preSubject,
+    [userId, onBehalfOf?.id, pre.delegatedFromUserId],
+  )) {
+    // A timesheet's enterer reads a timesheet-worded refusal; every other
+    // subject keeps the established generic text its tests assert.
+    const message = pre.subjectKind === "timesheet_week"
+      ? "You entered this timesheet; another approver must approve it."
+      : "you cannot approve your own submission — you created or submitted this record. " +
+        "Route it to another approver to decide.";
+    throw new GateError(message, "self_approval_forbidden");
   }
 
   // -- Serialized decision: a subject lock coordinates every governing policy,
@@ -1126,6 +1129,7 @@ async function resolveWorklistSubsidiaries(
  */
 export interface WorklistGatePage {
   prefix: number;
+  gateId?: string;
   kind?: string;
   query?: string;
   overdue?: boolean;
@@ -1237,6 +1241,7 @@ function worklistDirectWhere(
   kind: string | undefined,
   query: string | undefined,
   overdue: boolean | undefined,
+  gateId?: string,
 ): SQL {
   return sql`g.org_id = ${orgId} and g.status = 'pending'
     ${worklistLiveGateSql()}
@@ -1244,6 +1249,7 @@ function worklistDirectWhere(
          or (g.assignee_role is not null and g.assignee_role in
               (select jsonb_array_elements_text(${JSON.stringify(roleList)}::jsonb))))
     ${worklistGateScopeSql(allowedSubsidiaryIds)}
+    ${gateId ? sql`and g.id = ${gateId}::uuid` : sql``}
     ${worklistGateKindSql(kind)}
     ${worklistGateSearchSql(query)}
     ${worklistGateOverdueSql(overdue)}`;
@@ -1309,7 +1315,7 @@ export async function worklistGates(
   // across pages (same rule as the document list order clause).
   const r = (await db.execute<Record<string, unknown>>(sql`
     ${WORKLIST_SELECT}
-     where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind, query, overdue)}
+     where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind, query, overdue, page?.gateId)}
      order by g.created_at, g.id
      ${page ? sql`limit ${page.prefix}` : sql``}
   `));
@@ -1331,6 +1337,7 @@ export async function worklistGates(
       ${WORKLIST_SELECT}
        where g.org_id = ${orgId} and g.status = 'pending'
          ${worklistLiveGateSql()}
+         ${page?.gateId ? sql`and g.id = ${page.gateId}::uuid` : sql``}
          and g.assignee_user_id in
               (select jsonb_array_elements_text(${JSON.stringify(principals.map((p) => p.id))}::jsonb)::uuid)
          ${worklistGateScopeSql(allowedSubsidiaryIds)}
@@ -1540,6 +1547,14 @@ export async function delegateGate(
   }
   const to = await verifyUser(gate.orgId, toUserId);
   if (!to) throw new GateError("delegate target is not an active user in this org");
+  const adapter = getFlowAdapter(gate.subjectKind);
+  const subject = await adapter?.loadContext(gate.subjectId);
+  if (await gateDecisionSodBlocked(gate, adapter, subject, [to.id])) {
+    throw new GateError(
+      "an approval cannot be delegated to its submitter or maker",
+      "self_approval_forbidden",
+    );
+  }
   // Preserve the ORIGINAL assignee (the first hand-off wins — a chain of
   // delegations still points back to who the gate was authored to).
   const delegatedFrom = gate.delegatedFromUserId ?? gate.assigneeUserId ?? fromUserId;
@@ -1855,8 +1870,18 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
     !nodeGate ||
     nodeGate.preventSelfApproval !== false;
   const blocked = sodBlockedIds(subject);
+  const existingAssignees = new Set(
+    (await db.select({ assigneeUserId: schema.flowGates.assigneeUserId })
+      .from(schema.flowGates)
+      .where(and(
+        eq(schema.flowGates.orgId, gate.orgId),
+        eq(schema.flowGates.runId, gate.runId),
+        eq(schema.flowGates.nodeId, gate.nodeId),
+      )))
+      .flatMap(({ assigneeUserId }) => assigneeUserId ? [assigneeUserId] : []),
+  );
   const eligible = (users: ResolvedUser[]) => users.filter((user) =>
-    user.id !== gate.assigneeUserId &&
+    !existingAssignees.has(user.id) &&
     !(sodApplies && blocked.has(user.id)));
   let replacements = nodeGate?.escalateTo
     ? eligible(await resolveAssigneeUsers([nodeGate.escalateTo], targetCtx))

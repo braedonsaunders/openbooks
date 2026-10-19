@@ -13,6 +13,7 @@ import { controlDeps, loadDocument } from "@openbooks/engine/documents";
 import { DocumentEditError } from "@openbooks/engine/documents";
 import type { DocumentEditInput } from "@openbooks/engine/documents";
 import { createPermission, postPermission, DOC_KINDS } from "../document-kinds";
+import { customFieldViewerFor } from "../custom-fields";
 // Form-specific editing remains in the shared editor adapter; the engine owns
 // the correction transaction, source checks and retained correction evidence.
 import { correctPostedDocumentWithEditor, runPostedCorrectionDraftFlows, isDocKindEnabled } from "../documents.ts";
@@ -165,7 +166,7 @@ export async function advanceDocumentLifecycle(
             return {
               status: "pending_approval",
               requestId: submission.runId,
-              document: await loadDocument(input.documentId, context.authz.user.orgId),
+              document: await loadDocument(input.documentId, context.authz.user.orgId, customFieldViewerFor(context.authz)),
             };
           }
           currentStatus = "approved";
@@ -190,7 +191,7 @@ export async function advanceDocumentLifecycle(
           }
           return {
             status: "approved",
-            document: await loadDocument(input.documentId, context.authz.user.orgId),
+            document: await loadDocument(input.documentId, context.authz.user.orgId, customFieldViewerFor(context.authz)),
           };
         }
         if (currentStatus !== "approved") {
@@ -208,7 +209,7 @@ export async function advanceDocumentLifecycle(
         return {
           status: "posted",
           entryId,
-          document: await loadDocument(input.documentId, context.authz.user.orgId),
+          document: await loadDocument(input.documentId, context.authz.user.orgId, customFieldViewerFor(context.authz)),
         };
       } catch (error) {
         domainFailure(error);

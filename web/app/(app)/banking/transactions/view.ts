@@ -11,7 +11,7 @@ import { BANK_KINDS, DOC_KINDS, createPermission, isDocumentCreateKind, postPerm
 import { canReadDocumentKind } from '../../../../lib/flow-subject-authz'
 import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions, transferAccountOptions } from "../../../../lib/documents.ts";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
-import { loadFieldDefs } from '../../../../lib/custom-fields'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import type { DocumentDrawer } from '../../../../components/document-drawer'
@@ -137,8 +137,9 @@ export async function loadBankingTransactions(
     : undefined
   const docInScope = !!docSummary
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(docSummary.subsidiaryId)))
+  const fieldViewer = customFieldViewerFor(authz)
   const loadedDoc = docSummary && docInScope && canReadDocumentKind(authz, docSummary.kind)
-    ? await loadDocument(docId!, authz.user.orgId)
+    ? await loadDocument(docId!, authz.user.orgId, fieldViewer)
     : null
   const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId ? loadedDoc : null
   const openKind = openDoc?.doc.kind as string | undefined
@@ -198,14 +199,16 @@ export async function loadBankingTransactions(
         drawerKind === 'card_charge' || drawerKind === 'card_refund' ? cardLiabilityAccountOptions() : Promise.resolve([]),
       ])
     : null
+  const visibleHeaderDefs = pickers ? visibleCustomFieldDefs(pickers[7], fieldViewer) : []
+  const visibleLineDefs = pickers ? visibleCustomFieldDefs(pickers[8], fieldViewer) : []
   const resolvedForm = drawerOpen && pickers
     ? await resolveFormLayout({
         orgId: authz.user.orgId,
         userId: authz.user.id,
         recordType: drawerKind!,
         userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: (pickers[7]),
-        lineDefs: (pickers[8]),
+        headerDefs: visibleHeaderDefs,
+        lineDefs: visibleLineDefs,
         explicitLayoutId: pickString(sp.form),
       })
     : null
@@ -257,8 +260,8 @@ export async function loadBankingTransactions(
           bankAccounts: pickers[6],
           parties: pickers[10] as DocumentDrawerProps['parties'],
           subsidiaries: pickers[9] ?? undefined,
-          headerDefs: pickers[7] as DocumentDrawerProps['headerDefs'],
-          lineDefs: pickers[8] as DocumentDrawerProps['lineDefs'],
+          headerDefs: visibleHeaderDefs as DocumentDrawerProps['headerDefs'],
+          lineDefs: visibleLineDefs as DocumentDrawerProps['lineDefs'],
           canCreate: can(authz, createPermission(drawerKind!)),
           canPost: can(authz, postPermission(drawerKind!)),
           allocationsEntryEnabled,

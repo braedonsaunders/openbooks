@@ -21,10 +21,14 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  seedDraftDocument,
+  seedFlowActors,
   seedApprovalFlow,
+  seedActiveEmployment,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { decideGate } from "../flows/gates.ts";
+import { submitForApproval } from "../flows/submit.ts";
 import {
   createLeavePolicy,
   createLeaveType,
@@ -35,6 +39,8 @@ import { createProcessTemplate, openProcess, upsertProcessTemplateStep } from ".
 import { createChangeRequestDraft, submitChangeRequest } from "../hrm/change-requests.ts";
 import { actOnInboxItem, countInbox, InboxError, listInbox, type InboxSourceNotice } from "./registry.ts";
 import { writeNotification } from "./adapters/notification.ts";
+import { flowsApprovalAdapter } from "./adapters/flows-approval.ts";
+import { hrmLeaveRequestAdapter } from "./adapters/hrm-leave-request.ts";
 import "./index.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
@@ -190,6 +196,69 @@ test("leave approval: inbox act and native decide leave identical rows and event
   }
 });
 
+test("approval lookup resolves a gate directly and counts the mapped worklist", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+    });
+    const documentId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await submitForApproval("vendor_bill", documentId);
+    const gate = (await gatesForSubject(org.orgId, "vendor_bill", documentId))[0]!;
+    const ctx = { orgId: org.orgId, actorId: actors.approver1Id, asOf: nowIso() };
+    const item = await flowsApprovalAdapter.lookup!(ctx, `gate:${gate.id}`);
+    assert.equal(item?.source.id, gate.id, "the direct lookup resolves its visible gate by source ID");
+    assert.equal(await flowsApprovalAdapter.count!(ctx), 1, "the badge count matches the mapped approval item");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a leave maker reassigned to their own gate sees no decision actions", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableHrm(org.orgId);
+    const workerId = await createScratchUser(org.orgId, "Self Approving Worker", "self_approving_worker");
+    await grant(org.orgId, workerId, ["hrm.leave.request", "hrm.leave.manage"]);
+    const workerParty = await linkPerson(org.orgId, workerId, "Self Approving Worker");
+    const approverId = await createScratchUser(org.orgId, "Independent Approver", "leave_approver");
+    await linkPerson(org.orgId, approverId, "Independent Approver");
+    const employmentId = await mkEmployment(org.orgId, workerParty, org.subsidiaryId);
+    const type = await createLeaveType({ orgId: org.orgId, actorId: workerId, code: "SOD", name: "SoD leave", paid: true, valueCrossing: "payout" });
+    await createLeavePolicy({
+      orgId: org.orgId, actorId: workerId, leaveTypeId: type.id,
+      appliesTo: { employer_subsidiary_id: null, department_id: null },
+      accrualRule: { kind: "per_year", hours: "120" },
+      carryoverRule: { kind: "none" }, minimumNoticeDays: 0, effectiveFrom: "2020-01-01",
+    });
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
+      assignees: [{ type: "user", userId: approverId }],
+      mode: "any",
+    });
+    const draft = await fileLeaveRequest({
+      orgId: org.orgId, actorId: workerId, employmentId, leaveTypeId: type.id,
+      startsOn: "2026-09-07", endsOn: "2026-09-07", hours: "8", reason: "rest",
+    });
+    await submitLeaveRequest({ orgId: org.orgId, actorId: workerId, requestId: draft.id });
+    const gate = (await db.execute<{ id: string }>(sql`
+      select id from flow_gates where org_id = ${org.orgId} and subject_id = ${draft.id} and status = 'pending'
+    `)).rows[0];
+    assert.ok(gate, "the independent approver receives the leave gate");
+    await db.execute(sql`update flow_gates set assignee_user_id = ${workerId} where id = ${gate.id}`);
+    const item = (await hrmLeaveRequestAdapter.list({ orgId: org.orgId, actorId: workerId, asOf: nowIso() }))
+      .find((candidate) => candidate.source.kind === "hrm_leave_request_gate");
+    assert.ok(item, "the assigned gate remains visible to its submitter");
+    assert.deepEqual(item.actions, [], "separation of duties hides decision actions");
+    assert.match(item.subtitle ?? "", /^Awaiting another approver/);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("process step: inbox complete and native complete leave identical rows", { skip: !DB }, async () => {
   const org: ScratchOrg = await createScratchOrg();
   try {
@@ -254,6 +323,7 @@ test("change request: inbox approve and native decide release identically throug
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${workerParty}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)
       `);
+      await seedActiveEmployment(org.orgId, workerParty);
       const employmentId = randomUUID();
       await db.execute(sql`
         insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)

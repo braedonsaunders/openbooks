@@ -7,6 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
@@ -340,6 +341,63 @@ test("a foreign-organization line department is refused with a domain error and 
   } finally {
     await dropScratchOrg(orgA.orgId);
     await dropScratchOrg(orgB.orgId);
+  }
+});
+
+test("script journals refuse accounts and projects outside the selected subsidiary", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    const otherSubsidiaryId = randomUUID();
+    const projectId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other Entity', 'CAD', 'CA')
+    `);
+    await db.execute(sql`
+      update accounts set subsidiary_id = ${otherSubsidiaryId}
+       where org_id = ${org.orgId} and id = ${org.accounts.bank}
+    `);
+    await db.execute(sql`
+      insert into projects (id, org_id, subsidiary_id, name, status)
+      values (${projectId}, ${org.orgId}, ${otherSubsidiaryId}, 'Other Entity Project', 'active')
+    `);
+    const opts = { allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
+    const journal = (lines: Parameters<typeof validateJournalInput>[0]["lines"]) =>
+      createScriptJournal(org.orgId, actors.adminId, {
+        documentDate: org.date,
+        subsidiaryId: org.subsidiaryId,
+        memo: "subsidiary line probe",
+        lines,
+      }, opts);
+
+    await assert.rejects(
+      journal([
+        { accountId: org.accounts.bank, amount: "25" },
+        { accountId: org.accounts.adjustment, amount: "-25" },
+      ]),
+      /unavailable accountId/,
+    );
+    await assert.rejects(
+      journal([
+        { accountCode: "1000", amount: "25" },
+        { accountCode: "5100", amount: "-25" },
+      ]),
+      /unavailable account code/,
+    );
+    await assert.rejects(
+      journal([
+        { accountId: org.accounts.adjustment, amount: "25", projectId },
+        { accountId: org.accounts.revenue, amount: "-25" },
+      ]),
+      /project not found in this organization/,
+    );
+    const writes = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'journal'
+    `)).rows[0]!.n;
+    assert.equal(writes, 0, "refused references write no draft");
+  } finally {
+    await dropScratchOrg(org.orgId);
   }
 });
 

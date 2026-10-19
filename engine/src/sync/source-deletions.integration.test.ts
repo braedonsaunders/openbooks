@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
+import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -195,6 +199,99 @@ test(
          )
       `));
       assert.equal(reversalCount.rows[0]?.count, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "source deletion reverses realized FX before releasing its application",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Source deletion operator", "admin");
+      const connectionId = randomUUID();
+      const sourceRef = `deleted-fx-${randomUUID()}`;
+      const invoiceId = randomUUID();
+      await db.execute(sql`
+        insert into connections (id, org_id, source, display_name, status)
+        values (${connectionId}, ${org.orgId}, 'netsuite', 'Source deletion FX test', 'active')`);
+      await db.execute(sql`
+        insert into currencies (code, name, minor_units)
+        values ('EUR', 'Euro', 2) on conflict (code) do nothing`);
+      await db.execute(sql`
+        update orgs
+           set settings = settings || '{"features":{"multiCurrency":true}}'::jsonb
+         where id = ${org.orgId}`);
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, currency, fx_rate, subtotal, tax_total, total, custom, created_by)
+        values (
+          ${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-SOURCE-FX',
+          ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'EUR', '1.1',
+          '1000', '0', '1000', ${JSON.stringify({ nsId: sourceRef, connectionId })}::jsonb,
+          ${userId}
+        )`);
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price,
+           amount, tax_amount, tax_input_amount)
+        values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '1000', '1000', '0', '0')`);
+      await db.execute(sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`);
+      await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+      const invoiceLineId = (await db.execute<{ id: string }>(sql`
+        select line.id
+          from documents document
+          join journal_lines line on line.org_id = document.org_id and line.entry_id = document.posted_entry_id
+         where document.org_id = ${org.orgId} and document.id = ${invoiceId}
+           and line.account_id = ${org.accounts.ar}`)).rows[0]!.id;
+
+      const payment = await createPaymentDocument({
+        orgId: org.orgId, kind: "customer_payment", createdBy: userId, allowedSubsidiaryIds: null,
+        partyId: org.customerId, bankAccountId: org.accounts.bank, documentDate: org.date,
+        subsidiaryId: org.subsidiaryId, currency: "EUR",
+      });
+      const allocations = [sameCurrencyAllocation(invoiceLineId, "1000")];
+      await updateDraftPayment(payment.id, {
+        allocations,
+        explicitFx: {
+          rate: "1.115", source: "Bank confirmation",
+          reason: "Rate evidenced on the bank settlement confirmation",
+          fromCurrency: "EUR", toCurrency: "CAD", rateDate: org.date,
+        },
+      }, userId, org.orgId, { allowedSubsidiaryIds: null });
+      const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, userId);
+      assert.equal(submission.gated, false);
+      await postPaymentWithApplications(payment.id, allocations, userId, "api");
+      const application = (await db.execute<{ id: string; fx_id: string | null }>(sql`
+        select id, fx_gain_loss_entry_id as fx_id
+          from applications
+         where org_id = ${org.orgId} and to_line_id = ${invoiceLineId} and unapplied_at is null`)).rows[0]!;
+      assert.ok(application.fx_id, "settlement created realized FX evidence");
+
+      const result = await mirrorSourceDeletion({ orgId: org.orgId, source: "netsuite", sourceRef, connectionId });
+      assert.deepEqual(result, { documentId: invoiceId, deleted: true });
+      const lifecycle = (await db.execute<{
+        fx_status: string; fx_origin: string; fx_reversal_count: number;
+        fx_reversal_origin: string | null; application_unapplied: boolean;
+      }>(sql`
+        select fx.status as fx_status, fx.origin as fx_origin,
+               (select count(*)::int from journal_entries reversal
+                 where reversal.org_id = fx.org_id and reversal.reverses_entry_id = fx.id) as fx_reversal_count,
+               (select reversal.origin from journal_entries reversal
+                 where reversal.org_id = fx.org_id and reversal.reverses_entry_id = fx.id) as fx_reversal_origin,
+               application.unapplied_at is not null as application_unapplied
+          from journal_entries fx
+          join applications application on application.org_id = fx.org_id
+                                        and application.fx_gain_loss_entry_id = fx.id
+         where fx.org_id = ${org.orgId} and fx.id = ${application.fx_id}`)).rows[0]!;
+      assert.deepEqual(lifecycle, {
+        fx_status: "reversed", fx_origin: "fx_settlement", fx_reversal_count: 1,
+        fx_reversal_origin: "fx_settlement", application_unapplied: true,
+      });
     } finally {
       await dropScratchOrg(org.orgId);
     }

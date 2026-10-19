@@ -13,6 +13,7 @@ import { can } from '../../../../lib/authz'
 import { defineRoute } from '../../../../lib/api/route'
 import { parseJsonBody } from '../../../../lib/api/json'
 import { getResource } from '../../../../lib/data-io/resources'
+import { customFieldViewerFor } from '../../../../lib/custom-fields'
 import { guessMapping, ImportParseError, MAX_IMPORT_ROWS, parseImportFile } from '../../../../lib/data-io/parse'
 import {
   CELL_PROVENANCE_KEY,
@@ -80,7 +81,8 @@ export const POST = defineRoute({
   const mode = body.mode
   const format: ImportFormat = body.format ?? 'csv'
 
-  const resource = await getResource(orgId, body.resource ?? '', authz.allowedSubsidiaryIds)
+  const viewer = customFieldViewerFor(authz)
+  const resource = await getResource(orgId, body.resource ?? '', authz.allowedSubsidiaryIds, viewer)
   if (!resource) return notFound("record")
   if (!resource.descriptor.supportsImport) {
     return NextResponse.json({ error: 'resource is read-only' }, { status: 400 })
@@ -197,6 +199,7 @@ export const POST = defineRoute({
     orgId,
     actorId: authz.user.id,
     permissions: authz.permissions,
+    customFieldViewer: viewer,
     dryRun: mode === 'preview',
     post,
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,

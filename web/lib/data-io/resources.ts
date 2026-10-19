@@ -5,6 +5,7 @@ import { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, type Setup
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { DOC_KINDS, docKindConfig } from '../document-kinds'
 import { isDocKindEnabled } from "../documents.ts";
+import type { CustomFieldViewer } from '@openbooks/engine/records/custom-fields'
 import { loadRecordTypeByKey } from '../records'
 import {
   PAYROLL_OPENING_BALANCES_DESCRIPTOR,
@@ -294,6 +295,7 @@ export async function getResource(
   orgId: string,
   key: string,
   allowedSubsidiaryIds?: SubsidiaryScope,
+  customFieldViewer?: CustomFieldViewer,
 ): Promise<DataResource | null> {
   if (PROPERTY_DESCRIPTOR_BY_KEY.has(key)) {
     if (!(await propertyManagementEnabled(orgId))) return null
@@ -378,7 +380,7 @@ export async function getResource(
     return bindReadScope(setupResource(setup, orgId), orgId, allowedSubsidiaryIds)
   }
   const master = MASTER_BY_KEY.get(key)
-  if (master) return bindReadScope(masterResource(master, orgId), orgId, allowedSubsidiaryIds)
+  if (master) return bindReadScope(masterResource(master, orgId, customFieldViewer), orgId, allowedSubsidiaryIds)
   if (key.startsWith('record:')) {
     const typeKey = key.slice('record:'.length)
     const sections = await recordSections(orgId, typeKey)

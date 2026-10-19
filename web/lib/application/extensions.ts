@@ -104,7 +104,9 @@ export async function activateExtensionDraft(context: ApplicationContext, input:
   if (draft.status !== 'draft') throw conflict('This extension draft is no longer available')
   const bundle = validateExtensionBundle(draft.bundle)
   const manifest = parseManifest(bundle.manifest).manifest!
-  for (const permission of manifest.permissions) if (!can(context.authz, permission)) throw forbidden(permission)
+  for (const permission of bundle.grantedPermissions ?? manifest.permissions) {
+    if (!can(context.authz, permission)) throw forbidden(permission)
+  }
   try {
     const installed = await withOrgTransaction(context.authz.user.orgId, () => withTransactionSavepoint(db, () => installApp(context.authz.user.orgId, context.authz.user.id, bundle, { id: draft.id, hash: draft.content_hash })))
     return { ...installed, activated: true, reviewUrl: `/admin/apps?app=${installed.key}`, openUrl: `/apps/${installed.key}` }

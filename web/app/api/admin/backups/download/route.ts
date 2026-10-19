@@ -24,5 +24,6 @@ async function legacyGET() {
 export const GET = defineRoute({
   permission: "admin.backups.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
   handler: async () => legacyGET(),
 });

@@ -801,7 +801,11 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       if (Object.keys(changes).length === 0) throw invalidInput("changes must name at least one setting");
       const outcome = await executeIdempotent({
         context, operation: "company_settings.update", idempotencyKey: input.idempotencyKey, request: { changes },
-        execute: async () => settleWrite(await updateCompanySettings(context.authz.user, changes)),
+        execute: async () => settleWrite(await updateCompanySettings({
+          orgId: context.authz.user.orgId,
+          id: context.authz.user.id,
+          allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+        }, changes)),
       });
       return { ok: true, replayed: outcome.replayed, ...outcome.value };
     },

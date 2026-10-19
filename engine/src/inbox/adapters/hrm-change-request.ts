@@ -14,7 +14,7 @@
  */
 
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
-import { decideGate, delegateGate } from "../../flows/gates.ts";
+import { decideGate, delegateGate, gateDecisionCapability } from "../../flows/gates.ts";
 import { validateSubmitActionReason } from "../../automations/action-reasons.ts";
 import { getChangeRequest, listChangeRequests, submitChangeRequest } from "../../hrm/change-requests.ts";
 import { parseDelegationReason } from "../delegation.ts";
@@ -30,18 +30,19 @@ export const hrmChangeRequestAdapter: InboxAdapter = {
     const out: InboxItem[] = [];
     for (const gate of await actorPendingGates(ctx)) {
       if (gate.subjectKind !== HRM_CHANGE_REQUEST_SUBJECT_KIND) continue;
+      const sodBlocked = (await gateDecisionCapability(gate.id, ctx.actorId)).sodBlocked;
       const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
       out.push({
         id: inboxItemId("hrm_change_request", `gate:${gate.id}`),
         kind: "hrm_change_request",
         title: gate.title,
-        subtitle: `change request approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""}`,
+        subtitle: `${sodBlocked ? "Awaiting another approver — " : ""}change request approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""}`,
         dueAt,
         createdAt: new Date(gate.createdAt).toISOString(),
         waitingSince: new Date(gate.createdAt).toISOString(),
         priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/hrm/change-requests",
-        actions: [
+        actions: sodBlocked ? [] : [
           { key: "approve", label: "Approve", style: "primary", needsReason: false },
           { key: "reject", label: "Reject", style: "danger", needsReason: true },
           { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },

@@ -51,7 +51,16 @@ import { DOC_KIND_FEATURE, docKindConfig, documentCreateContentRefusal, isDocume
 import { DOCUMENT_CONTROL_SIDE } from './posting-control-account.ts'
 import { featureEnabled } from '../organization/feature-registry.ts'
 import { isFeatureEnabled, orgFeatureState, checkProjectsWriteEnabled } from '../organization/feature-state.ts'
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../records/custom-fields.ts'
+import {
+  findUnownedCustomReferences,
+  customFieldVisible,
+  hiddenCustomFieldRefusal,
+  loadCustomFieldAccessDefs,
+  loadFieldDefs,
+  UNATTRIBUTED_CUSTOM_FIELD_VIEWER,
+  validateCustomValues,
+  type CustomFieldViewer,
+} from '../records/custom-fields.ts'
 import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from '../organization/segments.ts'
 import { assertDocumentSegmentDependencies } from '../organization/segment-dependencies.ts'
 import { resolveExternalRefPair } from '../records/external-ref.ts'
@@ -332,6 +341,8 @@ export interface DocumentEditContext {
   commercialKind?: CommercialDocumentKind;
   orgId: string
   userId: string
+  /** Role-derived audience for custom-field values. Missing viewers fail closed. */
+  customFieldViewer?: CustomFieldViewer
   allowedSubsidiaryIds?: ReadonlySet<string> | null
   /**
    * Customer scope asserted by the caller (a portal session, a signed link):
@@ -1164,6 +1175,7 @@ export async function applyDocumentEdit(
     )
   }
   const { orgId, userId } = ctx
+  const customFieldViewer = ctx.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER
   const referenceSubsidiaryId = body.subsidiaryId ?? current.subsidiaryId
   // Reference-account ownership is scoped to the document's subsidiary. With
   // no subsidiary on either side only org-wide accounts apply: interpolating
@@ -1299,6 +1311,8 @@ export async function applyDocumentEdit(
   // can reorder protocol messages under load.
   const headerDefs = await loadFieldDefs('documents', current.kind)
   const lineDefs = await loadFieldDefs('document_lines', current.kind)
+  const headerAccessDefs = await loadCustomFieldAccessDefs('documents', current.kind)
+  const lineAccessDefs = await loadCustomFieldAccessDefs('document_lines', current.kind)
   const segments = await segmentRegistry(orgId)
   const headerDims = body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments)
   if (headerDims && !headerDims.ok) throw new DocumentEditError(422, headerDims.error!)
@@ -1306,6 +1320,15 @@ export async function applyDocumentEdit(
   if (body.custom !== undefined) {
     const supplied = body.custom
     const existingCustom = current.custom ?? {}
+    const hiddenHeader = hiddenCustomFieldRefusal(
+      headerAccessDefs.map((def) => ({ ...def, isRequired: false })),
+      customFieldViewer,
+      supplied,
+      existingCustom,
+    )
+    if (hiddenHeader) {
+      throw new DocumentEditError(403, hiddenHeader.message, { [hiddenHeader.key]: hiddenHeader.message })
+    }
     for (const key of ['withholdingRemittance', 'withholdingDeposit']) {
       if (Object.hasOwn(supplied, key) && JSON.stringify(supplied[key]) !== JSON.stringify(existingCustom[key])) throw new DocumentEditError(422, 'Withholding source evidence is written by the native withholding workflow and cannot be changed as a custom field.');
     }
@@ -2167,6 +2190,19 @@ export async function applyDocumentEdit(
         // Persisted ids compare in the same canonical form: the driver returns
         // uuid columns lowercase, but the match must not depend on that.
         const byId = new Map(persisted.map((row) => [row.id.toLowerCase(), row]))
+        const hiddenLineDefs = lineAccessDefs.filter((def) => !customFieldVisible(def, customFieldViewer))
+        const hasStoredHiddenLineValues = persisted.some((row) => {
+          const custom = row.custom && typeof row.custom === 'object' && !Array.isArray(row.custom)
+            ? row.custom as Record<string, unknown>
+            : {}
+          return hiddenLineDefs.some((def) => Object.hasOwn(custom, def.key))
+        })
+        if (hasStoredHiddenLineValues && submittedLineKeys.some((key) => key === null)) {
+          throw new DocumentEditError(
+            422,
+            'Line identities are required to preserve restricted custom fields — reload the document and save again',
+          )
+        }
         // Ownership under the lock, on every edit carrying identities — even
         // when no line carries provenance. A foreign or stale identity is the
         // tenant-opaque 404 the line-account and reference prechecks return,
@@ -2180,6 +2216,45 @@ export async function applyDocumentEdit(
               `Line ${i + 1}: line not found in this document — reload the document and save again`,
             )
           }
+        }
+        for (let i = 0; i < submittedLineKeys.length; i++) {
+          const key = submittedLineKeys[i]
+          const persistedLine = key ? byId.get(key) : undefined
+          const oldCustom = persistedLine?.custom && typeof persistedLine.custom === 'object' && !Array.isArray(persistedLine.custom)
+            ? persistedLine.custom as Record<string, unknown>
+            : {}
+          const submittedCustom = body.lines?.[i]?.custom ?? {}
+          const refusal = hiddenCustomFieldRefusal(
+            lineAccessDefs.map((def) => ({ ...def, isRequired: false })),
+            customFieldViewer,
+            submittedCustom,
+            persistedLine ? oldCustom : null,
+          )
+          if (refusal) {
+            throw new DocumentEditError(403, `Line ${i + 1}: ${refusal.message}`, { [refusal.key]: refusal.message })
+          }
+          if (persistedLine && hiddenLineDefs.length > 0) {
+            const preserved = Object.fromEntries(
+              hiddenLineDefs
+                .filter((def) => Object.hasOwn(oldCustom, def.key))
+                .map((def) => [def.key, oldCustom[def.key]]),
+            )
+            preparedLines[i]!.custom = { ...preparedLines[i]!.custom, ...preserved }
+          }
+        }
+        const submittedLineIdSet = new Set(submittedLineKeys.filter((key): key is string => key !== null))
+        const removedRestrictedLine = persisted.find((row) => {
+          if (submittedLineIdSet.has(row.id.toLowerCase())) return false
+          const custom = row.custom && typeof row.custom === 'object' && !Array.isArray(row.custom)
+            ? row.custom as Record<string, unknown>
+            : {}
+          return hiddenLineDefs.some((def) => Object.hasOwn(custom, def.key))
+        })
+        if (removedRestrictedLine) {
+          throw new DocumentEditError(
+            403,
+            'A line with restricted custom data cannot be removed by your role',
+          )
         }
         const evidenceOf = (row: (typeof persisted)[number]) => persistedLineProvenance(row.custom)
         const kindOf = (row: (typeof persisted)[number]) => nativeReservationKind(row.custom)
@@ -2860,6 +2935,8 @@ export class DocumentCreateConflict extends Error {
 export interface DocumentCreateInput {
   orgId: string
   userId: string
+  /** Role-derived audience for custom-field values. Missing viewers fail closed. */
+  customFieldViewer?: CustomFieldViewer
   kind: string
   /** Caller UUID idempotency key; becomes the document id. */
   key: string
@@ -3077,6 +3154,7 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
         deferFlows: true,
         precomputedTotals,
         customerPartyId: input.onBehalfOfPartyId ?? undefined,
+        customFieldViewer: input.customFieldViewer,
         deferVendorReturnDisposition: Boolean(input.nativeCustom?.rmaVendorReturnDraft),
       },
       { tx },

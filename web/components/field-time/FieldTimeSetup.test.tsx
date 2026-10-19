@@ -77,6 +77,8 @@ test("filling every visible rule sends the complete rule set", async () => {
       await tick();
     });
 
+    assert.ok(host.querySelector('a[href="/admin/flows"]'), "approval routing links to the existing Flows page");
+
     // Rounding increment: open the dropdown and pick 15. The menu portals
     // to document.body in both desktop and mobile modes.
     const trigger = buttons().find((b) => b.textContent?.includes(msg("notDeclared")));

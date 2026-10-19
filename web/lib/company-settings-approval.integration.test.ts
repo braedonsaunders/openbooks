@@ -22,7 +22,7 @@ test('vendor-bill approval requirement defaults OFF and persists through Company
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-    const me = { orgId: org.orgId, id: actor }
+    const me = { orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }
 
     const before = await withBypassContext(() => readCompanySettings(org.orgId))
     assert.equal(before.status, 200)
@@ -60,7 +60,7 @@ test('vendor-bill approval requirement refuses non-boolean input', { skip: !proc
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
     for (const bad of ['yes', 1, null, {}, []]) {
-      const res = await withBypassContext(() => updateCompanySettings({ orgId: org.orgId, id: actor }, { requireVendorBillApproval: bad }))
+      const res = await withBypassContext(() => updateCompanySettings({ orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }, { requireVendorBillApproval: bad }))
       assert.equal(res.status, 400, `${JSON.stringify(bad)} must be refused`)
     }
     assert.equal(((await orgSettings(org.orgId)).approvals as Record<string, unknown> | undefined)?.requireVendorBillApproval, undefined)
@@ -77,7 +77,7 @@ test('stock-count review requirement defaults OFF and persists through Company S
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-    const me = { orgId: org.orgId, id: actor }
+    const me = { orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }
 
     const before = await withBypassContext(() => readCompanySettings(org.orgId))
     assert.equal(before.status, 200)
@@ -144,7 +144,7 @@ const consolidatedRows = [
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-            const me = { orgId: org.orgId, id: actor }
+            const me = { orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }
 
             const before = await withBypassContext(() => readCompanySettings(org.orgId))
             assert.equal(before.status, 200)
@@ -181,7 +181,7 @@ const consolidatedRows = [
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-            const me = { orgId: org.orgId, id: actor }
+            const me = { orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }
 
             const saved = await withBypassContext(() => updateCompanySettings(me, { timeZone: 'US/Eastern' }))
             assert.equal(saved.status, 200)
@@ -204,7 +204,7 @@ const consolidatedRows = [
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-            const me = { orgId: org.orgId, id: actor }
+            const me = { orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }
 
             for (const bad of ['Mars/Olympus_Mons', 'Not/AZone', 42, {}, []]) {
               const res = await withBypassContext(() => updateCompanySettings(me, { timeZone: bad }))
@@ -226,7 +226,7 @@ const consolidatedRows = [
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-            const me = { orgId: org.orgId, id: actor }
+            const me = { orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }
 
             assert.equal((await withBypassContext(() => updateCompanySettings(me, { timeZone: 'Pacific/Auckland' }))).status, 200)
             const cleared = await withBypassContext(() => updateCompanySettings(me, { timeZone: null }))

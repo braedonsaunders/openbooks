@@ -5,7 +5,7 @@ import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { abs as absMoney, add as addMoney, cmp as compareMoney } from "@openbooks/engine/money/money";
 import { db } from "@openbooks/engine/platform/db";
 import { canonicalPeriodLabel } from "@openbooks/engine/periods/period-policy";
-import { can, subsidiaryScopeAllows, type Authz } from "../authz";
+import { can, type Authz } from "../authz";
 import { accountsWithBalances, entryDetail } from "../data";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
@@ -23,6 +23,7 @@ import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
 import { dateInput, num, orgToday, rangeInputFields, resolveToolRange, uuidInput, type RangeArgs } from "./tools-shared";
 import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/agents/continuous-close-config";
 import { loadWorkItemAccess, readableContinuousCloseAgents } from "../continuous-close";
+import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectInScope, workItemSubjectScopePredicate } from "../agents/work-item-subsidiary-scope";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
 import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
@@ -1251,10 +1252,9 @@ const getContinuousCloseFinding: AssistantToolDef = {
              w.confidence::text, w.materiality::text, w.subject_type, w.subject_id,
              w.summary, w.first_detected_at, w.last_detected_at
         from ai_work_items w
-        left join accounts subject_account
-          on subject_account.id = w.subject_id and w.subject_type = 'account' and subject_account.org_id = w.org_id
+        ${WORK_ITEM_SUBJECT_JOIN}
        where w.id = ${findingId} and w.org_id = ${authz.user.orgId}
-         ${subsidiaryVisibleFilter(sql`subject_account.subsidiary_id`, authz.allowedSubsidiaryIds)}
+         ${workItemSubjectScopePredicate(authz.user.orgId, authz.allowedSubsidiaryIds)}
     `));
     const row = item.rows[0];
     if (!row) return { ok: false, error: "finding_not_found" };
@@ -1265,8 +1265,8 @@ const getContinuousCloseFinding: AssistantToolDef = {
     // restricted caller shares the uniform not-found for findings whose
     // subject sits outside their allowlist, instead of reading another
     // subsidiary's evidence packet through the pack grant alone.
-    const access = await loadWorkItemAccess(authz.user.orgId, findingId);
-    if (!access || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)) {
+    const access = await loadWorkItemAccess(authz.user.orgId, findingId, authz.allowedSubsidiaryIds);
+    if (!access || !workItemSubjectInScope(authz.allowedSubsidiaryIds, access.subjectType ?? "", access.subjectSubsidiaryId)) {
       return { ok: false, error: "finding_not_found" };
     }
     const evidence = (await db.execute<Record<string, unknown>>(sql`

@@ -12,7 +12,7 @@ import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, t
 import { listScopedPartyOptions, listScopedPartyOptionsWithCurrent } from "../../../lib/scoped-options";
 import { loadDocument } from "@openbooks/engine/documents";
 import type { DocKindConfig } from '../../../lib/document-kinds'
-import { loadFieldDefs } from '../../../lib/custom-fields'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from '../../../lib/features'
@@ -180,7 +180,8 @@ export async function loadCashSales(
 
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId && docId !== 'new' ? await loadDocument(docId, authz.user.orgId) : null
+  const fieldViewer = customFieldViewerFor(authz)
+  const loadedDoc = docId && docId !== 'new' ? await loadDocument(docId, authz.user.orgId, fieldViewer) : null
   const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
     ? loadedDoc : null
@@ -197,9 +198,11 @@ export async function loadCashSales(
   const isCreate = docId === 'new' && !!createKind && canCreate
   const drawerKind = openKind ?? createKind
   const drawerOpen = !!(openDoc && openKind && (CASH_SALE_KINDS as readonly string[]).includes(openKind)) || isCreate
-  const [headerDefs, lineDefs] = drawerOpen
+  const [loadedHeaderDefs, loadedLineDefs] = drawerOpen
     ? await Promise.all([loadFieldDefs('documents', drawerKind!), loadFieldDefs('document_lines', drawerKind!)])
     : [[], []]
+  const headerDefs = visibleCustomFieldDefs(loadedHeaderDefs, fieldViewer)
+  const lineDefs = visibleCustomFieldDefs(loadedLineDefs, fieldViewer)
   // Till defaults: the walk-in customer unattributed sales post against and
   // the per-channel accounts new tenders prefill.
   const tillDefaults = drawerOpen

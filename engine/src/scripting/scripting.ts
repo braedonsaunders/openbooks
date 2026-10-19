@@ -19,6 +19,7 @@ import { installedScriptJournalWriter } from "./journal-writer.ts";
 import { actorHasPermission, actorIdentity, actorPrincipal, isSystemAutomationActor } from "../organization/actor-permissions.ts";
 import { grantsConferring } from "../organization/permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { PAYMENT_SYSTEM_CUSTOM_FIELD_SET } from "../platform/payment-system-fields.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -176,13 +177,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Validate the only JSON shape that a before_post custom mutation may carry.
- * Returning a message (rather than throwing) lets the sandbox record a normal
+ * Validate the only JSON shape that a before_submit or before_post custom
+ * mutation may carry. Returning a message lets the sandbox record a normal
  * failed script run, exactly like a non-whitelisted header field.
  */
-export function beforePostCustomMutationError(value: unknown): string | null {
+export function beforePostCustomMutationError(
+  value: unknown,
+  trigger: "before_submit" | "before_post" = "before_post",
+): string | null {
   if (!isRecord(value)) {
-    return "before_post scripts may only set custom to an object";
+    return `${trigger} scripts may only set custom to an object`;
   }
   const protectedKey = Object.keys(value).find((key) =>
     BEFORE_POST_PROTECTED_CUSTOM_FIELDS.has(key),
@@ -207,9 +211,9 @@ export function beforePostCustomControlsChanged(previous: unknown, next: unknown
 }
 
 /**
- * Merge a validated before_post custom mutation without replacing existing
- * posting controls. This remains a second, posting-layer guard in case a
- * caller ever supplies a ScriptOutcome without going through runScript.
+ * Merge a validated before_* custom mutation without replacing existing
+ * fields. This remains a second guard in case a caller supplies a
+ * ScriptOutcome without going through runScript.
  */
 export function mergeBeforePostCustomMutation(
   existing: unknown,
@@ -1164,8 +1168,8 @@ export async function runScript(
             durationMs: Date.now() - started,
           };
         }
-        if (ctx.trigger === "before_post" && k === "custom") {
-          const customError = beforePostCustomMutationError(v);
+        if ((ctx.trigger === "before_submit" || ctx.trigger === "before_post") && k === "custom") {
+          const customError = beforePostCustomMutationError(v, ctx.trigger);
           if (customError) {
             return {
               status: "error",
@@ -1798,6 +1802,16 @@ export async function runCustomGlLineScripts(
     .orderBy(asc(schema.userScripts.sortOrder));
   if (scripts.length === 0) return [];
 
+  const documentSubsidiary = req.document.subsidiaryId;
+  const documentSubsidiaryId = typeof documentSubsidiary === "string"
+    ? documentSubsidiary
+    : documentSubsidiary === null
+      ? (await loadSubsidiaryContext(db, req.orgId)).rootId
+      : null;
+  if (!documentSubsidiaryId) {
+    throw new CustomGlLinesError("custom_gl_lines: the document's subsidiary could not be resolved");
+  }
+
   // The posting caller needs gl.post, re-resolved live against its roles —
   // the same pattern as ob.journal.create. The ctx user object is display
   // data; the tenant authorization below is authoritative. A system posting
@@ -1891,7 +1905,14 @@ export async function runCustomGlLineScripts(
       );
     }
     try {
-      out.push(...(await resolveCustomGlLines(req.orgId, s.id, s.name, res.returned, allowedSubsidiaryIds)));
+      out.push(...(await resolveCustomGlLines(
+        req.orgId,
+        s.id,
+        s.name,
+        res.returned,
+        documentSubsidiaryId,
+        allowedSubsidiaryIds,
+      )));
     } catch (error) {
       // A refused line set (unbalanced, unknown account, over-limit,
       // out-of-scope subsidiary) rolls back the ok row above with the post;
@@ -1914,6 +1935,19 @@ interface ParsedCustomGlLine {
   subsidiaryId: string | null;
   memo: string | null;
   bookCode?: string;
+}
+
+/** Return the first 1-based line outside the script owner's effective entity scope. */
+export function customGlLineOutOfScopeIndex(
+  lines: readonly { subsidiaryId: string | null }[],
+  documentSubsidiaryId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): number | null {
+  if (allowedSubsidiaryIds === null) return null;
+  const index = lines.findIndex((line) =>
+    !allowedSubsidiaryIds.has(line.subsidiaryId ?? documentSubsidiaryId),
+  );
+  return index < 0 ? null : index + 1;
 }
 
 function customGlLineId(
@@ -1942,6 +1976,7 @@ export async function resolveCustomGlLines(
   scriptId: string,
   scriptName: string,
   returned: unknown,
+  documentSubsidiaryId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<ContributedLine[]> {
   if (returned === null || returned === undefined) return [];
@@ -2081,16 +2116,13 @@ export async function resolveCustomGlLines(
         `custom_gl_lines script "${scriptName}" line ${parsed.indexOf(foreign) + 1}: ${label} not found in this organization`,
       );
     }
-    if (key === "subsidiaryId" && allowedSubsidiaryIds !== null) {
-      const outOfScope = parsed.find(
-        (l) => l.subsidiaryId && !allowedSubsidiaryIds.has(l.subsidiaryId),
-      );
-      if (outOfScope) {
-        throw new CustomGlLinesError(
-          `custom_gl_lines script "${scriptName}" line ${parsed.indexOf(outOfScope) + 1}: subsidiary not found in this organization`,
-        );
-      }
-    }
+  }
+
+  const outOfScopeLine = customGlLineOutOfScopeIndex(parsed, documentSubsidiaryId, allowedSubsidiaryIds);
+  if (outOfScopeLine !== null) {
+    throw new CustomGlLinesError(
+      `custom_gl_lines script "${scriptName}" line ${outOfScopeLine}: subsidiary is outside the script owner's allowed scope`,
+    );
   }
 
   // Secondary-book targets arrive with allocation rule support; a script

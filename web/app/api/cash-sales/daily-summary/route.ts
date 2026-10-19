@@ -13,6 +13,7 @@ import { getAuthz, can, guardSubsidiaryScope, subsidiariesInScope } from '../../
 import { isUuid } from '../../../../lib/list-params'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { notFound } from "@/lib/api/responses";
+import { customFieldViewerFor } from "../../../../lib/custom-fields";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { activeOperatingSubsidiaryIds } from '@/lib/record-scope-reads'
 
@@ -140,6 +141,7 @@ export const POST = defineRoute({
         body,
         subsidiaryId,
         requestBody: { kind: 'cash_sale', ...body },
+        customFieldViewer: customFieldViewerFor(authz),
       })
     } catch (e) {
       if (e instanceof DocumentCreateConflict) {
@@ -152,7 +154,7 @@ export const POST = defineRoute({
       throw e
     }
     if (created.status === 'replayed') {
-      const doc = await loadDocument(created.id, user.orgId)
+      const doc = await loadDocument(created.id, user.orgId, customFieldViewerFor(authz))
       if (!doc) return notFound("record")
       const replayDenied = guardSubsidiaryScope(authz, doc.doc.subsidiary_id as string | null)
       if (replayDenied) return replayDenied
@@ -162,7 +164,7 @@ export const POST = defineRoute({
     if (created.deferredUpdate) {
       await runRecordFlows(created.deferredUpdate, 'cash_sale', created.id, { orgId: user.orgId, userId: user.id })
     }
-    const doc = await loadDocument(created.id, user.orgId)
+    const doc = await loadDocument(created.id, user.orgId, customFieldViewerFor(authz))
     if (!doc) return notFound("record")
     const createdDenied = guardSubsidiaryScope(authz, doc.doc.subsidiary_id as string | null)
     if (createdDenied) return createdDenied

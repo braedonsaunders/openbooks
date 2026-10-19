@@ -39,8 +39,7 @@ test(
            'Overhead adjustment job', ${org.customerId}, 'active', true, '{}'::jsonb)
       `));
 
-      const adjustment = await withOrgContext(org.orgId, () =>
-        recordProjectOverheadAdjustment({
+      const input = {
           orgId: org.orgId,
           projectId,
           adjustmentDate: org.date,
@@ -50,8 +49,15 @@ test(
           sourceRef: "period-2026-09-project-1",
           evidence: { approval: "OH-2026-09-17" },
           actorId,
-        }),
-      );
+      };
+      const concurrentAdjustments = await withOrgContext(org.orgId, () => Promise.all([
+        recordProjectOverheadAdjustment(input),
+        recordProjectOverheadAdjustment(input),
+      ]));
+      assert.equal(new Set(concurrentAdjustments.map((entry) => entry.id)).size, 1,
+        "concurrent first writes with one source identity resolve to one adjustment");
+      assert.deepEqual(concurrentAdjustments.map((entry) => entry.existing).sort(), [false, true]);
+      const adjustment = concurrentAdjustments.find((entry) => !entry.existing)!;
       assert.equal(adjustment.amount, "65.4321");
       assert.equal(adjustment.existing, false);
 

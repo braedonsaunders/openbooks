@@ -56,9 +56,14 @@ test(
         evidence: { ticket: "FIN-2048", approvedBy: actorId },
         actorId,
       };
-      const original = await withOrgContext(org.orgId, () =>
+      const concurrentOriginals = await withOrgContext(org.orgId, () => Promise.all([
         recordProjectFinancialAdjustment(input),
-      );
+        recordProjectFinancialAdjustment(input),
+      ]));
+      assert.equal(new Set(concurrentOriginals.map((entry) => entry.id)).size, 1,
+        "concurrent first writes with one source identity resolve to one adjustment");
+      assert.deepEqual(concurrentOriginals.map((entry) => entry.existing).sort(), [false, true]);
+      const original = concurrentOriginals.find((entry) => !entry.existing)!;
       assert.deepEqual(original, {
         id: original.id,
         measure: "actual_cost",
@@ -99,7 +104,7 @@ test(
       );
       assert.equal(afterRejectedMutation.costs.get(projectId), "75.1200");
 
-      const reversal = await withOrgContext(org.orgId, () =>
+      const concurrentReversals = await withOrgContext(org.orgId, () => Promise.all([
         reverseProjectFinancialAdjustment({
           orgId: org.orgId,
           adjustmentId: original.id,
@@ -109,7 +114,20 @@ test(
           sourceSystem: "legacy-import",
           sourceRef: "cost-correction-2048-reversal",
         }),
-      );
+        reverseProjectFinancialAdjustment({
+          orgId: org.orgId,
+          adjustmentId: original.id,
+          adjustmentDate: org.date,
+          reason: "reverse approved correction",
+          actorId,
+          sourceSystem: "legacy-import",
+          sourceRef: "cost-correction-2048-reversal",
+        }),
+      ]));
+      assert.equal(new Set(concurrentReversals.map((entry) => entry.id)).size, 1,
+        "concurrent reversal requests resolve to one append-only reversal");
+      assert.deepEqual(concurrentReversals.map((entry) => entry.existing).sort(), [false, true]);
+      const reversal = concurrentReversals.find((entry) => !entry.existing)!;
       assert.equal(reversal.measure, "actual_cost");
       assert.equal(reversal.amount, "-75.1200");
       assert.equal(reversal.existing, false);

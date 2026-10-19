@@ -22,6 +22,7 @@ import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
 import { lockedDocumentScopeDenied } from "../../../../lib/document-scope.ts";
 import { type DocumentEditCurrent, type DocumentEditInput } from "@openbooks/engine/ledger/document-input";
 import { notFound } from "@/lib/api/responses";
+import { customFieldViewerFor } from "../../../../lib/custom-fields";
 // An absent body is an empty edit; it is refused in the handler after the
 // existence, scope and permission gates so an unreadable or unknown id keeps
 // its 404 contract.
@@ -57,7 +58,7 @@ export const GET = defineRoute({
     if (!canReadDocumentKind(authz, row.kind)) {
         return notFound("record")
       }
-    const doc = await loadDocument(id, authz.user.orgId)
+    const doc = await loadDocument(id, authz.user.orgId, customFieldViewerFor(authz))
     if (!doc) return notFound("record")
     const redisclosed = guardSubsidiaryScope(authz, doc.doc.subsidiary_id as string | null)
     if (redisclosed) return redisclosed
@@ -176,6 +177,7 @@ export const PATCH = defineRoute({
             userId: user.id,
             source: 'ui',
             allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+            customFieldViewer: customFieldViewerFor(authz),
           })
         })
       } catch (e) {
@@ -184,7 +186,7 @@ export const PATCH = defineRoute({
         }
         throw e
       }
-    const doc = await loadDocument(id, user.orgId)
+    const doc = await loadDocument(id, user.orgId, customFieldViewerFor(authz))
     return NextResponse.json(doc)
   },
 });

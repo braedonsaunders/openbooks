@@ -11,13 +11,12 @@ import {
 import { setRequestOrg } from "./request-org";
 import {
   permissionSetCovers,
-  resolveEffectivePermissions,
   resolveKeyScopeAuthority,
 } from "./permissions";
 import type { SessionUser } from "./auth";
-import { allowedSubsidiaryIds } from "./subsidiaries";
 import { isFeatureEnabled } from "./features";
 import { notFound } from "@/lib/api/responses";
+import { resolveUserAuthz } from "./authz-core";
 
 /**
  * API-key authentication for the versioned REST API (`/api/v1/*`).
@@ -98,6 +97,7 @@ interface ApiKeySqlRow {
   email: string;
   name: string;
   user_active: boolean;
+  user_is_super_admin: boolean;
   env_kind: string;
 }
 
@@ -105,11 +105,6 @@ interface ApiKeyRoleSqlRow {
   key: string;
   name: string;
   permissions: unknown;
-}
-
-interface PermissionOverrideSqlRow {
-  permission: string;
-  effect: "grant" | "deny";
 }
 
 /**
@@ -140,6 +135,7 @@ export async function resolveApiKeyAuth(
       select k.id, k.org_id, k.user_id, k.scopes, k.is_active, k.expires_at,
              k.rate_limit_per_min,
              u.email, u.name, u.is_active as user_active,
+             u.is_super_admin as user_is_super_admin,
              o.env_kind
         from api_keys k
         join users u on u.id = k.user_id and u.org_id = k.org_id
@@ -167,28 +163,26 @@ export async function resolveApiKeyAuth(
   // Scope the rest of this request to the key's org (RLS enforced).
   setRequestOrg(keyRow.org_id);
 
-  // Resolve the owner's effective permissions (same logic as authz.getAuthz).
-  const [assignmentResult, overrideResult, allowedSubs] = await Promise.all([
-    db.execute(sql`
+  // Resolve the owner's live permissions through the same path as session auth.
+  const assignmentResult = await db.execute(sql`
       select r.key, r.name, r.permissions
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-       where a.user_id = ${keyRow.user_id} and a.org_id = ${keyRow.org_id}`),
-    db.execute(sql`
-      select permission, effect
-        from user_permission_overrides
-       where user_id = ${keyRow.user_id} and org_id = ${keyRow.org_id}`),
-    allowedSubsidiaryIds(keyRow.user_id, keyRow.org_id),
-  ]);
+       where a.user_id = ${keyRow.user_id} and a.org_id = ${keyRow.org_id}`);
   const assignments = assignmentResult as unknown as { rows: ApiKeyRoleSqlRow[] };
-  const overrides = overrideResult as unknown as { rows: PermissionOverrideSqlRow[] };
-
-  const ownerPerms = resolveEffectivePermissions({
-    rolePermissionSets: assignments.rows.map((r) =>
-      Array.isArray(r.permissions) ? r.permissions : [],
-    ),
-    overrides: overrides.rows,
-  });
+  const ownerAuthz = await resolveUserAuthz({
+    id: keyRow.user_id,
+    email: keyRow.email,
+    name: keyRow.name,
+    roles: assignments.rows.map((row) => ({ key: row.key, name: row.name })),
+    orgId: keyRow.org_id,
+    envKind,
+    productionOrgId: keyRow.org_id,
+    isSuperAdmin: keyRow.user_is_super_admin,
+    homeUserId: keyRow.user_id,
+    homeOrgId: keyRow.org_id,
+  }, db);
+  const ownerPerms = ownerAuthz.permissions;
 
   // Fail closed on malformed or residual empty scope sets: storage rejects
   // empty arrays outright (api_keys_scopes_non_empty) and scopes are exact
@@ -209,7 +203,7 @@ export async function resolveApiKeyAuth(
     orgId: keyRow.org_id,
     envKind,
     productionOrgId: keyRow.org_id,
-    isSuperAdmin: false,
+    isSuperAdmin: keyRow.user_is_super_admin,
     homeUserId: keyRow.user_id,
     homeOrgId: keyRow.org_id,
   };
@@ -240,7 +234,7 @@ export async function resolveApiKeyAuth(
     keyId: keyRow.id,
     permissions: scopedSet,
     rateLimitPerMin: keyRow.rate_limit_per_min == null ? null : Number(keyRow.rate_limit_per_min),
-    allowedSubsidiaryIds: allowedSubs,
+    allowedSubsidiaryIds: ownerAuthz.allowedSubsidiaryIds,
     audit: {
       method: req.method,
       path: new URL(req.url).pathname,

@@ -161,6 +161,12 @@ test('bridge records.list/get honor the caller subsidiary fence on JSON subsidia
     assert.equal(gotHidden.ok, true, JSON.stringify(gotHidden))
     assert.equal((gotHidden as { result?: unknown }).result, null)
 
+    const malformedId = await withOrgContext(fx.org.orgId, () =>
+      runBridgeMethod({ ...base, method: 'records.get', payload: { typeKey: fx.typeKey, id: 'not-a-uuid' } }),
+    )
+    assert.equal(malformedId.ok, true, JSON.stringify(malformedId))
+    assert.equal((malformedId as { result?: unknown }).result, null)
+
     // Unrestricted callers still see every entity; types without a
     // subsidiary field stay fully visible to a restricted caller.
     const unscoped = await withOrgContext(fx.org.orgId, () =>

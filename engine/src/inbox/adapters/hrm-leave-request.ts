@@ -12,7 +12,7 @@
  */
 
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
-import { decideGate, delegateGate } from "../../flows/gates.ts";
+import { decideGate, delegateGate, gateDecisionCapability } from "../../flows/gates.ts";
 import { submitLeaveRequest } from "../../hrm/leave.ts";
 import { mayReadOwnLeaveRequests, myLeaveRequests } from "../../hrm/leave-read.ts";
 import { db } from "../../platform/db.ts";
@@ -30,18 +30,19 @@ export const hrmLeaveRequestAdapter: InboxAdapter = {
     // Approver leg — gates on leave subjects addressed to me.
     for (const gate of await actorPendingGates(ctx)) {
       if (gate.subjectKind !== HRM_LEAVE_REQUEST_SUBJECT_KIND) continue;
+      const sodBlocked = (await gateDecisionCapability(gate.id, ctx.actorId)).sodBlocked;
       const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
       out.push({
         id: inboxItemId("hrm_leave_request", `gate:${gate.id}`),
         kind: "hrm_leave_request",
         title: gate.title,
-        subtitle: `leave approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""}`,
+        subtitle: `${sodBlocked ? "Awaiting another approver — " : ""}leave approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""}`,
         dueAt,
         createdAt: new Date(gate.createdAt).toISOString(),
         waitingSince: new Date(gate.createdAt).toISOString(),
         priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/hrm/leave",
-        actions: [
+        actions: sodBlocked ? [] : [
           // The leave release requires a non-blank reason even to approve
           // (staffing evidence) — the source names it, so the inbox collects it.
           { key: "approve", label: "Approve", style: "primary", needsReason: true },

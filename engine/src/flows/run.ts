@@ -414,7 +414,12 @@ export async function runRecordFlows(
             subjectId,
             plan,
             evalCtx,
-            submitterUserId: subject.submitterUserId,
+            // The subject may not have submitted_by stamped until the owning
+            // submit command returns. During on_submit, the command actor is
+            // the authoritative submitter for separation-of-duties routing.
+            submitterUserId: event.kind === "on_submit"
+              ? ctx.userId ?? subject.submitterUserId
+              : subject.submitterUserId,
           });
           gatesCreated = res.gatesCreated;
           status = res.failed.length > 0 ? "failed" : res.gatesCreated > 0 ? "waiting" : "completed";

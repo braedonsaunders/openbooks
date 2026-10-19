@@ -9,7 +9,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../lib/list-params'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
-import { loadFieldDefs } from '../../../lib/custom-fields'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, taxGroupOptions } from '../../../lib/documents'
 import { listScopedPartyOptionsWithCurrent } from '../../../lib/scoped-options'
@@ -53,12 +53,15 @@ export async function loadReturns(sp: Record<string, string | string[] | undefin
   const workflow = id
     ? await findReturnAuthorization(authz.user.orgId, id, authz.allowedSubsidiaryIds)
     : null
-  const loaded = id && workflow ? await loadDocument(id, authz.user.orgId) : null
+  const fieldViewer = customFieldViewerFor(authz)
+  const loaded = id && workflow ? await loadDocument(id, authz.user.orgId, fieldViewer) : null
   const openDocument = loaded?.doc.kind === 'rma' ? loaded as LoadedDocument : null
   const drawerOpen = Boolean(openDocument || (creating && canCreate))
-  const [headerDefs, lineDefs] = drawerOpen
+  const [loadedHeaderDefs, loadedLineDefs] = drawerOpen
     ? await Promise.all([loadFieldDefs('documents', 'rma'), loadFieldDefs('document_lines', 'rma')])
     : [[], []]
+  const headerDefs = visibleCustomFieldDefs(loadedHeaderDefs, fieldViewer)
+  const lineDefs = visibleCustomFieldDefs(loadedLineDefs, fieldViewer)
   const [parties, vendors, accounts, taxCodes, taxGroups, dimensions, items, stockLocations, subsidiaries, form] = drawerOpen
     ? await Promise.all([
         listScopedPartyOptionsWithCurrent(authz.user.orgId, authz.allowedSubsidiaryIds, 'customer', openDocument?.doc.party_id ? String(openDocument.doc.party_id) : undefined),

@@ -5,6 +5,9 @@ import { assertUuid } from "./catalog.ts";
 import { withSandboxRefreshLock } from "./lifecycle.ts";
 import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { actorAllowedSubsidiaryIds, grantedRestrictionWithinCoverage, grantedScopeSetWithinCoverage, loadSubsidiaryGrantCoverage, resolveRestrictionEditScopes } from "../organization/actor-subsidiaries.ts";
+import { assertUnrestrictedScope } from "../organization/subsidiary-scope.ts";
+import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { computeScheduledScriptNextRunAt, scriptSaveRefusal } from "../scripting/scripting.ts";
 import { validateScriptConfiguration } from "../scripting/script-config.ts";
 import { isCataloguePermission, PERMISSION_CATALOGUE, permissionSetCovers, permissionsOutsideCeiling, resolveEffectivePermissions } from "../organization/permissions.ts";
@@ -177,7 +180,12 @@ async function withChangeSetSandboxLock<T>(changeSetId: string, work: () => Prom
  * set to gate per-table writes and role grants. User administration takes the
  * user write lock; role edits take the role write lock. Holding both here
  * orders revocations with the whole promotion. */
-async function promotionAuthority(actorId: string, orgId: string): Promise<Set<string>> {
+interface PromotionAuthority {
+  permissions: Set<string>;
+  isSuperAdmin: boolean;
+}
+
+async function promotionAuthority(actorId: string, orgId: string): Promise<PromotionAuthority> {
   const actor = (await db.execute<{ is_super_admin: boolean; is_active: boolean }>(sql`
     select is_super_admin,is_active from users where id=${actorId} and org_id=${orgId} for share`)).rows[0];
   if (!actor?.is_active) throw new Error("promotion requires an active production actor");
@@ -190,7 +198,8 @@ async function promotionAuthority(actorId: string, orgId: string): Promise<Set<s
     select permission,effect from user_permission_overrides where org_id=${orgId} and user_id=${actorId} order by id for share`)).rows;
   const permissions = actor.is_super_admin ? new Set(["*"]) : resolveEffectivePermissions({ rolePermissionSets: roles.map(row => row.permissions), overrides });
   if (!permissionSetCovers(permissions, "admin.sandboxes.manage")) throw new Error("promotion requires admin.sandboxes.manage");
-  return permissions;
+  assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
+  return { permissions, isSuperAdmin: actor.is_super_admin };
 }
 
 function promotedRolePermissions(value: unknown): string[] {
@@ -496,7 +505,7 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
       const t = it.table_name;
       if (!PROMOTABLE.includes(t)) throw new Error(`change set contains non-promotable table: ${t}`);
       const requiredPermission = PROMOTION_PERMISSIONS[t]!;
-      if (!permissionSetCovers(authority, requiredPermission)) {
+      if (!permissionSetCovers(authority.permissions, requiredPermission)) {
         throw new Error(`${t} promotion requires ${requiredPermission}`);
       }
       if (t === "user_scripts" && !(await lockAndCheckOrgFeature(db, prod, "scripts"))) {
@@ -524,7 +533,7 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
       if (it.op !== "insert" && !prior.rows[0]!.matches_base) {
         throw new Error(`promotion target ${t}/${target} changed since capture; recapture and review the change set`);
       }
-      await assertPromotionOwner(t, before, actor, authority, c.sandbox_org_id, true);
+      await assertPromotionOwner(t, before, actor, authority.permissions, c.sandbox_org_id, true);
       let after: Record<string, unknown> | null = null;
       if (it.op === "delete") {
         if (t === "user_scripts") {
@@ -576,7 +585,7 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
           const owner = (await db.execute(sql`select id from users where org_id=${prod} and id=${ownerId} for key share`)).rows[0];
           if (!owner) throw new Error(`promotion ${t}/${target}: user reference must belong to production; recapture the change set`);
         }
-        await assertPromotionOwner(t, payload, actor, authority, c.sandbox_org_id, false);
+        await assertPromotionOwner(t, payload, actor, authority.permissions, c.sandbox_org_id, false);
         if (t === "report_definitions") {
           if (!before && (payload.kind !== "custom" || payload.system)) {
             throw new Error("built-in report identity is managed by setup, not promotion");
@@ -588,15 +597,31 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
         if (t === "app_roles") {
           const requested = promotedRolePermissions(payload.permissions);
           const current = new Set(before ? promotedRolePermissions(before.permissions) : []);
-          const missing = permissionsOutsideCeiling(authority, requested.filter(key => !current.has(key)));
+          const missing = permissionsOutsideCeiling(authority.permissions, requested.filter(key => !current.has(key)));
           if (missing.length) throw new Error(`cannot grant permissions you do not hold: ${missing.join(", ")}`);
           payload.permissions = requested;
           // Revalidate a captured scope against live, locked production rows;
           // the target entity can disappear between capture and application.
           const subsidiaries = (await db.execute<{ id: string }>(sql`
             select id from subsidiaries where org_id=${prod} order by id for share`)).rows;
-          payload.subsidiary_restriction = remapRoleRestriction(payload.subsidiary_restriction,
+          const nextRestriction = remapRoleRestriction(payload.subsidiary_restriction,
             new Map(subsidiaries.map(row => [row.id, row.id])), `promotion role ${target}`);
+          const coverage = await loadSubsidiaryGrantCoverage(db, prod, actor);
+          if (!authority.isSuperAdmin) {
+            const previousRestriction = before
+              ? before.subsidiary_restriction as SubsidiaryRestriction | null
+              : { mode: "list", subsidiaryIds: [] } as const;
+            const edit = await resolveRestrictionEditScopes(db, prod, previousRestriction, nextRestriction);
+            const outsideCoverage = edit.additions === undefined
+              ? true
+              : edit.additions === null
+                ? !grantedRestrictionWithinCoverage(coverage, nextRestriction)
+                : edit.additions.size > 0 && !grantedScopeSetWithinCoverage(coverage, edit.additions);
+            if (outsideCoverage) {
+              throw new Error("cannot grant subsidiary access beyond your scope: ask an administrator whose scope covers the requested entities to make this change");
+            }
+          }
+          payload.subsidiary_restriction = nextRestriction;
           if (!before && payload.is_built_in) throw new Error("built-in roles are managed by setup, not promotion");
           if (before) {
             if (before.is_built_in && before.key === "admin") throw new Error("the Administrator role cannot be edited by promotion");

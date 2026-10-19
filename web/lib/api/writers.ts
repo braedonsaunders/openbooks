@@ -1159,6 +1159,7 @@ async function runDocumentLifecycle(
   kind: string,
   action: DocApiBody["action"],
   source: "api" | "mcp" | "assistant",
+  customFieldViewer: CustomFieldViewer,
 ): Promise<WriteResult | null> {
   if (action !== "submit" && action !== "post") return null;
   try {
@@ -1184,7 +1185,7 @@ async function runDocumentLifecycle(
             ok: true,
             pendingApproval: true,
             requestId: submission.runId,
-            document: await loadDocument(id, user.orgId),
+            document: await loadDocument(id, user.orgId, customFieldViewer),
           },
         };
       }
@@ -1210,7 +1211,7 @@ async function runDocumentLifecycle(
       status,
       body: {
         error: (e as Error).message,
-        document: await loadDocument(id, user.orgId),
+        document: await loadDocument(id, user.orgId, customFieldViewer),
       },
     };
   }
@@ -1305,6 +1306,7 @@ async function createDocument(
   body: DocApiBody,
   source: "api" | "mcp" | "assistant",
   allowedScope?: ReadonlySet<string> | null,
+  customFieldViewer: CustomFieldViewer = fallbackCustomFieldViewer(user),
 ): Promise<WriteResult> {
   body = normalizeExternalRefBody(body);
   if (!(await isDocKindEnabled(user.orgId, docKind)))
@@ -1359,7 +1361,7 @@ async function createDocument(
       draftId,
       current,
       { ...body, expectedUpdatedAt: current.updatedAt },
-      { orgId: user.orgId, userId: user.id, source, precomputedTotals },
+      { orgId: user.orgId, userId: user.id, source, precomputedTotals, customFieldViewer },
     );
   } catch (e) {
     const mapped = docEditError(e);
@@ -1374,9 +1376,10 @@ async function createDocument(
     docKind,
     body.action,
     source,
+    customFieldViewer,
   );
   if (life) return life;
-  return { status: 201, body: await loadDocument(draftId, user.orgId) };
+  return { status: 201, body: await loadDocument(draftId, user.orgId, customFieldViewer) };
 }
 
 async function updateDocument(
@@ -1386,6 +1389,7 @@ async function updateDocument(
   body: DocApiBody,
   source: "api" | "mcp" | "assistant",
   allowedScope?: ReadonlySet<string> | null,
+  customFieldViewer: CustomFieldViewer = fallbackCustomFieldViewer(user),
 ): Promise<WriteResult> {
   body = normalizeExternalRefBody(body);
   const owned = await db.execute<DocumentEditCurrent>(sql`
@@ -1432,6 +1436,7 @@ async function updateDocument(
       orgId: user.orgId,
       userId: user.id,
       source,
+      customFieldViewer,
     });
   } catch (e) {
     const mapped = docEditError(e);
@@ -1444,9 +1449,9 @@ async function updateDocument(
   const life =
     row.status === "posted"
       ? null
-      : await runDocumentLifecycle(user, id, docKind, body.action, source);
+      : await runDocumentLifecycle(user, id, docKind, body.action, source, customFieldViewer);
   if (life) return life;
-  return { status: 200, body: await loadDocument(id, user.orgId) };
+  return { status: 200, body: await loadDocument(id, user.orgId, customFieldViewer) };
 }
 
 async function deleteDocumentWriter(
@@ -1518,6 +1523,7 @@ export async function createRecord(
           body as DocApiBody,
           options.source ?? "api",
           options.allowedSubsidiaryIds,
+          options.customFieldViewer ?? fallbackCustomFieldViewer(user),
         );
       case "readonly":
         return err(405, `${resolved.key} is read-only through the API`);
@@ -1558,6 +1564,7 @@ export async function updateRecord(
           body as DocApiBody,
           options.source ?? "api",
           options.allowedSubsidiaryIds,
+          options.customFieldViewer ?? fallbackCustomFieldViewer(user),
         );
       case "readonly":
         return err(405, `${resolved.key} is read-only through the API`);

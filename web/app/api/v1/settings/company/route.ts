@@ -58,7 +58,11 @@ async function handleV1PATCH(request: Request): Promise<NextResponse> {
       idempotencyKey: requireV1IdempotencyKey(request),
       request: { changes },
       execute: async () => settleWrite(await updateCompanySettings(
-        { orgId: context.authz.user.orgId, id: context.authz.user.id },
+        {
+          orgId: context.authz.user.orgId,
+          id: context.authz.user.id,
+          allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+        },
         changes,
       )),
     });

@@ -3,10 +3,11 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
+import { db, withBypass } from "@openbooks/engine/platform/db";
 import { getAuthz } from "../../../lib/authz";
 import { isLocale } from "../../../i18n/config";
 import { isNavMode } from "../../../lib/nav-mode";
+import { preferenceUserIdentity } from "../../../lib/user-preference-identity";
 
 const requestBodySchema = z.object({
   locale: z.string().refine(isLocale, "unsupported locale").nullable().optional(),
@@ -33,6 +34,7 @@ export const PATCH = defineRoute({
     const authz = await getAuthz();
     if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;
+    const preferenceUser = preferenceUserIdentity(user);
 
 
 
@@ -62,16 +64,18 @@ export const PATCH = defineRoute({
       changes.navMode = navMode;
     }
 
-    // The preference belongs to the identity the request acts as; a write
-    // that reaches no row saved nothing, so it is refused, not reported saved.
-    const saved = await db.transaction(async (tx) => {
-      const updated = await tx.execute(sql`
+    // The verified preference identity may belong to the home organization
+    // during production workspace switching. Keep the update and its audit
+    // record atomic while checking that the identity is still active.
+    const saved = await withBypass(async () => {
+      const result = await db.execute<{ id: string }>(sql`
         update users set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
-         where id = ${user.id} and org_id = ${user.orgId} and is_active`);
-      if (updated.rowCount !== 1) return false;
-      await tx.execute(sql`
+         where id = ${preferenceUser.id} and org_id = ${preferenceUser.orgId} and is_active
+         returning id`);
+      if (result.rows.length !== 1) return false;
+      await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'users', ${user.id}, 'update',
+        values (${preferenceUser.orgId}, 'users', ${preferenceUser.id}, 'update',
                 ${JSON.stringify(changes)}, ${user.id})`);
       return true;
     });

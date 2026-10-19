@@ -22,6 +22,7 @@ import {
   type WriteOutcome,
 } from './types'
 import { isUuid } from '@openbooks/engine/platform/identifiers'
+import type { CustomFieldViewer } from '@openbooks/engine/records/custom-fields'
 
 /**
  * Shared export cap, error, and gate live in the dependency-free
@@ -51,6 +52,8 @@ export interface ReadCtx {
    * new actor-bound reads require it and fail closed when it is absent.
    */
   actorId?: string
+  /** Audience for role-restricted custom fields; omitted callers fail closed. */
+  customFieldViewer?: CustomFieldViewer
 }
 
 export interface WriteCtx {
@@ -62,6 +65,8 @@ export interface WriteCtx {
   actorId: string
   /** The caller's effective grants, used by resources with entity-specific write permissions. */
   permissions?: ReadonlySet<string>
+  /** Audience for role-restricted custom fields; omitted callers fail closed. */
+  customFieldViewer?: CustomFieldViewer
   /** Dry-run: validate + classify insert/update, but write nothing. */
   dryRun: boolean
   /** Transactions only: post to the ledger after creating the draft. */

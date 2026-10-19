@@ -47,6 +47,10 @@ async function recordProjectOverheadAdjustmentWithinTransaction(
   evidence: Record<string, unknown>,
 ): Promise<ProjectOverheadAdjustmentRecord> {
   if (sourceSystem && sourceRef) {
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(
+        ${`project-overhead-adjustment:${input.orgId}:${sourceSystem}:${sourceRef}`}, 0
+      ))`);
     const prior = (await tx.execute<{
         id: string;
         project_id: string;

@@ -11,7 +11,6 @@ import {
 } from "../../../../lib/permissions";
 import {
   permissionsOutsideCeiling,
-  resolveEffectivePermissions,
   resolveKeyScopeAuthority,
 } from "@openbooks/engine/organization/permissions";
 import {
@@ -19,6 +18,7 @@ import {
   subsidiaryScopeWithinCeiling,
 } from "@openbooks/engine/organization/actor-subsidiaries";
 import { isUuid } from "../../../../lib/list-params";
+import { resolveUserAuthz } from "../../../../lib/authz-core";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 
@@ -35,7 +35,7 @@ const createApiKeyBodySchema = z.object({
   scopes: z.array(z.string().trim().min(1), { error: "at least one scope is required" }).min(1, { error: "at least one scope is required" }),
   description: z.string().nullable().optional(),
   expiresAt: apiKeyExpirySchema,
-  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\\d+$/)]).nullable().optional(),
+  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\d*$/)]).nullable().optional(),
 });
 
 const updateApiKeyBodySchema = z.object({
@@ -44,7 +44,7 @@ const updateApiKeyBodySchema = z.object({
   expiresAt: apiKeyExpirySchema,
   isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
   name: z.string().trim().min(1).optional(),
-  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\\d+$/)]).nullable().optional(),
+  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\d*$/)]).nullable().optional(),
   scopes: z.array(z.string().trim().min(1), { error: "at least one scope is required" }).min(1, { error: "at least one scope is required" }).optional(),
 });
 
@@ -148,21 +148,37 @@ async function ownerIsActive(orgId: string, ownerId: string): Promise<boolean> {
  * resume ceiling compares against authority the key would really confer.
  */
 async function ownerEffectivePermissions(orgId: string, ownerId: string): Promise<Set<string>> {
-  const assignments = (await db.execute<{ permissions: unknown }>(sql`
-    select r.permissions
-      from role_assignments a
-      join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-     where a.user_id = ${ownerId} and a.org_id = ${orgId}`));
-  const overrides = (await db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
-    select permission, effect
-      from user_permission_overrides
-     where user_id = ${ownerId} and org_id = ${orgId}`));
-  return resolveEffectivePermissions({
-    rolePermissionSets: assignments.rows.map((r) =>
-      Array.isArray(r.permissions) ? r.permissions.filter((p): p is string => typeof p === "string") : [],
-    ),
-    overrides: overrides.rows,
-  });
+  const identity = (await db.execute<{ isActive: boolean; isSuperAdmin: boolean }>(sql`
+    select is_active as "isActive", is_super_admin as "isSuperAdmin"
+      from users where id = ${ownerId} and org_id = ${orgId}`)).rows[0];
+  if (!identity?.isActive) return new Set();
+  return (await resolveUserAuthz({
+    id: ownerId,
+    email: "",
+    name: "",
+    roles: [],
+    orgId,
+    envKind: "production",
+    productionOrgId: orgId,
+    isSuperAdmin: identity.isSuperAdmin,
+    homeUserId: ownerId,
+    homeOrgId: orgId,
+  }, db)).permissions;
+}
+
+/** A key must be owned by an active identity that belongs to its organization. */
+async function actorIsActiveInOrg(orgId: string, actorId: string): Promise<boolean> {
+  const row = (await db.execute<{ id: string }>(sql`
+    select id from users
+     where id = ${actorId} and org_id = ${orgId} and is_active`)).rows[0];
+  return !!row;
+}
+
+function actorIdentityRefusal() {
+  return NextResponse.json(
+    { error: "API keys can only be owned by an active user in this organization; sign in as an organization user to create one" },
+    { status: 403 },
+  );
 }
 
 /** Normalize a scopes payload to catalogue keys, or null when invalid/empty. */
@@ -256,6 +272,8 @@ export const POST = defineRoute({
     const gate = routeAuthz;
 
     const actor = gate.user;
+
+    if (!(await actorIsActiveInOrg(actor.orgId, actor.id))) return actorIdentityRefusal();
 
 
 

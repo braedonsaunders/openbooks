@@ -115,6 +115,8 @@ export function BillingHistoryClient() {
     : t("unknownValue");
   const [runs, setRuns] = useState<ImportRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const tCommon = useTranslations("common");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("connect");
   const [provider, setProvider] = useState("chargebee");
   const [externalAccount, setExternalAccount] = useState("");
@@ -139,16 +141,19 @@ export function BillingHistoryClient() {
   // Promise chains, not await-then-set: the exemplar console keeps setState
   // out of the synchronous effect path so one fetch cannot cascade renders.
   const refresh = useCallback(() => {
-    fetch("/api/billing-import/runs")
+    return fetch("/api/billing-import/runs")
       .then(async (res) => {
         // The status is checked before the body is parsed: a refusal lands
         // in the toast, never in a JSON parse error.
         if (!res.ok) throw new Error(await readApiErrorMessage(res, t("loadFailed")));
         setRuns((await res.json()) as ImportRun[]);
+        setLoadError(null);
         setLoading(false);
       })
       .catch((error: unknown) => {
-        toast.error(error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error && error.message ? error.message : t("loadFailed");
+        setLoadError(message);
+        toast.error(message);
         setLoading(false);
       });
   }, [t]);
@@ -323,6 +328,18 @@ export function BillingHistoryClient() {
     >
       {loading ? (
         <p className="text-sm text-muted-foreground">{t("loading")}</p>
+      ) : loadError ? (
+        <div className="rounded-lg border border-red-300 p-6 text-center dark:border-red-900" role="alert">
+          <p className="text-sm text-red-700 dark:text-red-300">{loadError}</p>
+          <Button className="mt-4" variant="outline" onClick={() => {
+            setLoading(true);
+            setLoadError(null);
+            void refresh();
+          }}>
+            <RefreshCw className="mr-1 h-4 w-4" />
+            {tCommon("actions.retry")}
+          </Button>
+        </div>
       ) : runs.length === 0 ? (
         <EmptyState
           title={t("emptyTitle")}

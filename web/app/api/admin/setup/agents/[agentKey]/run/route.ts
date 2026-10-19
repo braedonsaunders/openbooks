@@ -30,13 +30,16 @@ async function legacyPOST(_request: Request, { params }: { params: Promise<{ age
     // A disable landing after the preflight refuses by name; only a genuinely
     // unknown key is an invalid agent. Collapsing both into invalid_agent
     // would tell the operator the pack does not exist when the switch is off.
-    if ((error as Error).message === 'feature_disabled') {
+    if (error instanceof Error && error.message === 'feature_disabled') {
       return NextResponse.json({ error: 'feature_disabled' }, { status: 409 })
     }
     if (error instanceof UnrestrictedScopeError) {
       return apiErrorResponse(error)
     }
-    return NextResponse.json({ error: 'invalid_agent' }, { status: 404 })
+    if (error instanceof Error && error.message === 'invalid_agent') {
+      return NextResponse.json({ error: 'invalid_agent' }, { status: 404 })
+    }
+    return apiErrorResponse(error)
   }
   if (result.status === 'claimed_elsewhere') return NextResponse.json(result, { status: 409 })
   return NextResponse.json(result, {

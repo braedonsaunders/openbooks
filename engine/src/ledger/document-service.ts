@@ -10,6 +10,12 @@ import { documentRevisionCounterSql } from '../records/revision.ts'
 import { loadRequiredControlAccounts } from '../records/control-accounts.ts'
 import type { DocumentEditCurrent } from './document-input.ts'
 import { DocumentEditError } from '../records/document-edit-policy.ts'
+import {
+  loadCustomFieldAccessDefs,
+  redactHiddenCustomValues,
+  UNATTRIBUTED_CUSTOM_FIELD_VIEWER,
+  type CustomFieldViewer,
+} from '../records/custom-fields.ts'
 
 function requireOrganization(orgId: string): void {
   if (typeof orgId !== 'string' || !orgId.trim()) {
@@ -32,7 +38,7 @@ export async function controlDeps(orgId: string) {
  * drawer, the customer PDF, and dunning report the same figure by
  * construction. Both stay NULL until the document posts.
  */
-export async function loadDocument(id: string, orgId: string) {
+export async function loadDocument(id: string, orgId: string, customFieldViewer?: CustomFieldViewer) {
   requireOrganization(orgId)
   const doc = (await db.execute<Record<string, unknown> & { documentRevision: string }>(sql`
     select d.*, p.display_name as party_name, e.id as entry_id,
@@ -56,9 +62,17 @@ export async function loadDocument(id: string, orgId: string) {
   // microseconds PostgreSQL retains. Keep the public `updated_at` shape, but
   // replace its lossy Date with the exact canonical token used by OCC.
   const { documentRevision, ...document } = loaded
+  const viewer = customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER
+  const headerDefs = await loadCustomFieldAccessDefs('documents', String(document.kind))
+  const lineDefs = await loadCustomFieldAccessDefs('document_lines', String(document.kind))
   const exactDocument: Record<string, unknown> = {
     ...document,
     updated_at: documentRevision,
+    custom: redactHiddenCustomValues(
+      headerDefs,
+      viewer,
+      document.custom as Record<string, unknown> | null,
+    ),
   }
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.id, l.line_number, l.account_id, l.item_id, l.description, l.quantity, l.unit,
@@ -90,7 +104,15 @@ export async function loadDocument(id: string, orgId: string) {
      where t.document_id = ${id} and t.org_id = ${orgId}
      order by t.position
   `))
-  return { doc: exactDocument, lines: lines.rows, tenders: tenders.rows }
+  const visibleLines = lines.rows.map((line) => ({
+    ...line,
+    custom: redactHiddenCustomValues(
+      lineDefs,
+      viewer,
+      line.custom as Record<string, unknown> | null,
+    ),
+  }))
+  return { doc: exactDocument, lines: visibleLines as typeof lines.rows, tenders: tenders.rows }
 }
 
 /**

@@ -137,6 +137,27 @@ test('extension draft isolation, exact review, atomic activation and immutable r
   } finally { await dropScratchOrg(org.orgId) }
 }))
 
+test('activation requires only the permissions granted to the reviewed package', { skip: !env.OPENBOOKS_DB_URL }, async () => withBypassContext(async () => {
+  const { org, context } = await fixture()
+  try {
+    const { example } = await describeExtensionVocabulary(context)
+    const bundle = { ...example, grantedPermissions: ['records.read'] }
+    const proposal = await draftExtension(context, { bundle, reason: 'Approve only the required read access' })
+    const installer = {
+      ...context,
+      authz: {
+        ...context.authz,
+        permissions: new Set(['apps.manage', 'admin.customization.manage', 'records.read']),
+      },
+    }
+    const activated = await activateExtensionDraft(installer, proposal)
+    assert.equal(activated.activated, true)
+    assert.deepEqual((await getAppByKey(org.orgId, example.manifest.key))?.grantedPermissions, ['records.read'])
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+}))
+
 test('draft revision replaces only its author proposal and failed object install leaves no partial activation', { skip: !env.OPENBOOKS_DB_URL }, async () => withBypassContext(async () => {
   const { org, context } = await fixture()
   try {

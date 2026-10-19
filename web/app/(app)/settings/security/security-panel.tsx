@@ -70,7 +70,7 @@ export function SecurityPanel() {
   const [status, setStatus] = useState<MfaStatus | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [setup, setSetup] = useState<{ secret: string; provisioningUri: string } | null>(null);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -87,10 +87,10 @@ export function SecurityPanel() {
     ]).then(([mfa, sessionResult]) => {
       setStatus(mfa);
       setSessions(sessionResult.sessions);
-      setLoadError(false);
+      setLoadError(null);
       setMessage(null);
     }, (error: unknown) => {
-      setLoadError(true);
+      setLoadError(securityErrorMessage(error, requestFailed));
       throw error;
     });
   }, [requestFailed, lockoutMessage]);
@@ -99,11 +99,24 @@ export function SecurityPanel() {
     void reload().then(
       () => setLoaded(true),
       (error: unknown) => {
-        setMessage(securityErrorMessage(error, requestFailed));
+        setLoadError(securityErrorMessage(error, requestFailed));
         setLoaded(true);
       },
     );
   }, [reload, requestFailed]);
+
+  function retryLoad() {
+    setLoaded(false);
+    setLoadError(null);
+    setMessage(null);
+    void reload().then(
+      () => setLoaded(true),
+      (error: unknown) => {
+        setLoadError(securityErrorMessage(error, requestFailed));
+        setLoaded(true);
+      },
+    );
+  }
 
   async function act(action: () => Promise<void>) {
     setBusy(true);
@@ -123,33 +136,27 @@ export function SecurityPanel() {
         <CardContent className="space-y-5 p-6">
           <div>
             <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t("authenticatorTitle")}</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            <p
+              className={`mt-1 text-sm ${loadError ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-slate-400"}`}
+              role={loadError ? "alert" : undefined}
+            >
               {!loaded
                 ? tCommon("feedback.loading")
                 : loadError
-                  ? requestFailed
-                  : status?.enabled
+                  ? loadError
+                : status?.enabled
                   ? t("enabled", { count: status.recoveryCodesRemaining })
                   : t("disabledDescription")}
             </p>
           </div>
 
-          {loadError ? (
-            <div className="space-y-3" role="alert">
-              <p className="text-sm text-red-600 dark:text-red-400">{message ?? requestFailed}</p>
-              <Button disabled={busy} onClick={() => {
-                void reload().then(
-                  () => setLoaded(true),
-                  (error: unknown) => {
-                    setMessage(securityErrorMessage(error, requestFailed));
-                    setLoaded(true);
-                  },
-                );
-              }}>{tCommon("actions.retry")}</Button>
-            </div>
+          {loaded && loadError ? (
+            <Button variant="outline" disabled={busy} onClick={retryLoad}>
+              {tCommon("actions.retry")}
+            </Button>
           ) : null}
 
-          {loaded && !loadError && !status?.enabled && !setup ? (
+          {loaded && !loadError && status !== null && !status.enabled && !setup ? (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="setup-password">{t("confirmPassword")}</Label>
@@ -271,7 +278,7 @@ export function SecurityPanel() {
               ))
             )}
           </div>
-          {loaded && sessions.length > 1 ? (
+          {loaded && !loadError && sessions.length > 1 ? (
             <Button variant="outline" disabled={busy} onClick={() => void act(async () => {
               await jsonRequest("/api/auth/sessions", { method: "DELETE" }, requestFailed, lockoutMessage);
               await reload();

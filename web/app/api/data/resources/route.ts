@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { defineRoute } from '../../../../lib/api/route'
 import { can } from '../../../../lib/authz'
 import { getResource, listResources } from '../../../../lib/data-io/resources'
+import { customFieldViewerFor } from '../../../../lib/custom-fields'
 
 export const runtime = 'nodejs'
 
@@ -25,7 +26,7 @@ export const GET = defineRoute({
   const key = new URL(req.url).searchParams.get('key')
 
   if (key) {
-    const resource = await getResource(orgId, key)
+    const resource = await getResource(orgId, key, authz.allowedSubsidiaryIds, customFieldViewerFor(authz))
     if (!resource) return notFound("record")
     if (!can(authz, resource.descriptor.readPermission) &&
         !(admitsImport && can(authz, resource.descriptor.writePermission))) {

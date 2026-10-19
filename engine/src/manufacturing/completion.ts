@@ -737,8 +737,10 @@ async function reverseCompletionReceipt(
         ${JSON.stringify({ reason, reversalDate: input.reversalDate, reversalMovementId: reversalId, reversalEntryId })}::jsonb,
         ${actorId}) returning id`)).rows);
     if (movement.serial_id) {
+      const restoreIssuedSerial = order.receipt_rework_inspection_id !== null;
       const serial = await tx.execute<{ id: string }>(sql`
-        update serials set status='registered', current_stock_location_id=null, updated_at=now(), updated_by=${actorId}
+        update serials set status=${restoreIssuedSerial ? "shipped" : "registered"}, current_stock_location_id=null,
+          updated_at=now(), updated_by=${actorId}
          where org_id=${orgId} and id=${movement.serial_id} and status='in_stock'
            and current_stock_location_id=${movement.stock_location_id} returning id`);
       if (serial.rows.length !== 1) throw new InventoryError("Serial " + (movement.serial_number ?? "evidence") + " changed before completion reversal.");

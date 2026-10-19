@@ -21,12 +21,12 @@ type View = {
   fromName?: string
   fromEmail?: string
   replyTo?: string
-  mailgunDomain?: string
-  mailgunRegion?: 'us' | 'eu'
-  smtpHost?: string
-  smtpPort?: number
+  mailgunDomain?: string | null
+  mailgunRegion?: 'us' | 'eu' | null
+  smtpHost?: string | null
+  smtpPort?: number | null
   smtpSecure?: boolean
-  smtpUsername?: string
+  smtpUsername?: string | null
   hasSecret: boolean
   updatedAt: string | null
 }
@@ -184,7 +184,7 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
               {f.kind === 'select' ? (
                 <Select
                   value={(v as Record<string, unknown>)[f.key] as string | undefined ?? ''}
-                  onChange={(e) => set({ [f.key]: e.target.value || undefined } as Partial<View>)}
+                  onChange={(e) => set({ [f.key]: e.target.value || null } as Partial<View>)}
                 >
                   {f.options?.map((o) => <option key={o.value} value={o.value}>{o.value.toUpperCase()}</option>)}
                 </Select>
@@ -201,8 +201,8 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
               ) : (
                 <Input
                   type={f.kind === 'number' ? 'number' : 'text'}
-                  value={(v as Record<string, unknown>)[f.key] as string | number | undefined ?? ''}
-                  onChange={(e) => set({ [f.key]: f.kind === 'number' ? (e.target.value ? Number(e.target.value) : undefined) : e.target.value || undefined } as Partial<View>)}
+                  value={(v as Record<string, unknown>)[f.key] as string | number | null | undefined ?? ''}
+                  onChange={(e) => set({ [f.key]: f.kind === 'number' ? (e.target.value ? Number(e.target.value) : null) : e.target.value } as Partial<View>)}
                   placeholder={copyFor(f.key).placeholder}
                 />
               )}

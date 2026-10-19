@@ -16,6 +16,7 @@ import { loadDocument } from "@openbooks/engine/ledger/document-service";
 import { createPermission, isDocumentCreateKind } from "../../../lib/document-kinds.ts";
 import type { DocumentEditInput } from "@openbooks/engine/ledger/document-input";
 import { notFound } from "@/lib/api/responses";
+import { customFieldViewerFor } from "../../../lib/custom-fields";
 const jsonObjectSchema = z.record(z.string(), z.json());
 const POSTBodySchema1 = z.object({
   kind: z.enum(['customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund', 'vendor_bill', 'vendor_credit', 'card_charge', 'card_refund', 'check', 'deposit', 'transfer'], { error: 'unknown document kind' }),
@@ -163,6 +164,7 @@ export const POST = defineRoute({
           body,
           subsidiaryId,
           requestBody: routeBody,
+          customFieldViewer: customFieldViewerFor(authz),
         })
       } catch (e) {
         if (e instanceof DocumentCreateConflict) {
@@ -180,7 +182,7 @@ export const POST = defineRoute({
         throw e
       }
     if (created.status === 'replayed') {
-        const doc = await loadDocument(created.id, user.orgId)
+        const doc = await loadDocument(created.id, user.orgId, customFieldViewerFor(authz))
         if (!doc) return notFound("record")
         const replayDenied = guardSubsidiaryScope(
           authz,
@@ -193,7 +195,7 @@ export const POST = defineRoute({
     if (created.deferredUpdate) {
         await runRecordFlows(created.deferredUpdate, kind, created.id, { orgId: user.orgId, userId: user.id })
       }
-    const doc = await loadDocument(created.id, user.orgId)
+    const doc = await loadDocument(created.id, user.orgId, customFieldViewerFor(authz))
     if (!doc) return notFound("record")
     const createdDenied = guardSubsidiaryScope(
         authz,

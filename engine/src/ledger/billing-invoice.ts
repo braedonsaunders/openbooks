@@ -331,6 +331,8 @@ export async function generateInvoiceFromBillingRequest(
       workedOn?: string | null
       /** True when the source line carried its own negotiated markup. */
       hasLineMarkup?: boolean
+      /** Synthetic presentation-only markup; never a rate-card pricing basis. */
+      isLumpSumMarkup?: boolean
       /** Document kind the charge came from, for rollup grouping. */
       sourceKind?: string | null
       timeKind?: 'regular' | 'overtime' | 'double_time' | null
@@ -717,7 +719,10 @@ export async function generateInvoiceFromBillingRequest(
         if (line.taxCodeId) {
           throw new BillingError('Taxable markup requires embedded presentation to preserve its tax calculation. Select embedded markup in the project invoicing profile before billing')
         }
-        const key = JSON.stringify([line.accountId, line.departmentId ?? null, line.workedOn ?? null])
+        const key = JSON.stringify([
+          line.accountId, line.departmentId ?? null, line.locationId ?? null,
+          line.classId ?? null, line.subsidiaryId ?? null, line.workedOn ?? null,
+        ])
         const prior = markupLines.get(key)
         if (prior) {
           prior.amount = add(prior.amount, delta)
@@ -727,7 +732,10 @@ export async function generateInvoiceFromBillingRequest(
             itemId: null, accountId: line.accountId, description: 'Markup', quantity: '1',
             unitPrice: delta, amount: delta, taxCodeId: null, employeeId: null,
             timeEntryId: null, timeTypeId: null, sourceCostLineId: null,
-            sourceKind: 'charge', departmentId: line.departmentId, workedOn: line.workedOn,
+            sourceKind: 'charge', departmentId: line.departmentId,
+            locationId: line.locationId, classId: line.classId,
+            subsidiaryId: line.subsidiaryId, workedOn: line.workedOn,
+            isLumpSumMarkup: true,
           })
         }
         line.amount = line.baseAmount
@@ -801,14 +809,15 @@ export async function generateInvoiceFromBillingRequest(
     //      surcharges, negotiated markups, per-diem. Which lines each one
     //      measures, and whether it bills separately at all, is card
     //      configuration; nothing here is specific to a trade or tenant.
-    if (built.length) {
+    const rateableLines = built.filter((line) => !line.isLumpSumMarkup)
+    if (rateableLines.length) {
       // One partition per (department, location, class): a location-A-only
       // card's terms apply to A's work and lapse only A's work, never the
       // unscoped work.
       const partitions = new Map<string, {
         departmentId: string | null; locationId: string | null; classId: string | null; lines: typeof built
       }>()
-      for (const l of built) {
+      for (const l of rateableLines) {
         const key = JSON.stringify([l.departmentId ?? null, l.locationId ?? null, l.classId ?? null])
         const prior = partitions.get(key)
         if (prior) prior.lines.push(l)

@@ -22,6 +22,8 @@ import {
 } from '@openbooks/engine/records/document-edit-policy'
 import { isUuid } from '@/lib/list-params'
 import { inTypeAudience, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql } from '@/lib/records'
+import { customFieldViewerFor, loadCustomFieldAccessDefs } from '@/lib/custom-fields'
+import { redactRecordCustomValues } from '@/lib/custom-field-read'
 
 type PlatformOperation = ApiOperation | 'schema'
 
@@ -117,8 +119,15 @@ function exposedOperations(ctx: AppPlatformContext, type: ApiRecordTypeSchema): 
   })
 }
 
+function customFieldViewer(ctx: AppPlatformContext) {
+  return customFieldViewerFor({
+    user: ctx.user,
+    permissions: new Set(ctx.userCan('admin.custom_fields.manage') ? ['admin.custom_fields.manage'] : []),
+  })
+}
+
 async function schemaForContext(ctx: AppPlatformContext): Promise<ApiRecordTypeSchema[]> {
-  const schema = await loadApiSchema(ctx.orgId)
+  const schema = await loadApiSchema(ctx.orgId, null, customFieldViewer(ctx))
   const visible = await Promise.all(schema.map(async (type) => {
     if (type.dynamic) {
       const recordType = await loadRecordTypeByKey(ctx.orgId, type.key)
@@ -215,7 +224,7 @@ async function listRecords(
   rawOptions: Record<string, unknown>,
 ): Promise<unknown> {
   const resolved = await requireOperation(ctx, typeKey, 'list')
-  const typeSchema = (await loadApiSchema(ctx.orgId)).find((type) => type.key === typeKey)
+  const typeSchema = (await loadApiSchema(ctx.orgId, null, customFieldViewer(ctx))).find((type) => type.key === typeKey)
   if (!typeSchema) throw new AppPlatformError(`schema unavailable for record type: ${typeKey}`, 404)
   const options = rawOptions as ListOptions
   const page = clampInteger(options.page, 1, 10_000, 1)
@@ -262,8 +271,10 @@ async function listRecords(
     db.execute<{ n: string | number }>(sql`select count(*) as n from ${table} where ${where}`),
   ]))
 
+  const definitions = await loadCustomFieldAccessDefs(resolved.table, resolved.documentKinds?.[0])
   return {
-    records: normalizeDocumentRecordRevisions(resolved.table, records.rows),
+    records: normalizeDocumentRecordRevisions(resolved.table, records.rows).map((row) =>
+      redactRecordCustomValues(row, definitions, customFieldViewer(ctx))),
     total: Number(count.rows[0]?.n ?? 0),
     page,
     perPage,
@@ -273,7 +284,7 @@ async function listRecords(
 async function getRecord(ctx: AppPlatformContext, typeKey: string, id: string): Promise<unknown> {
   if (!isUuid(id)) throw new AppPlatformError('invalid record id', 400)
   const resolved = await requireOperation(ctx, typeKey, 'get')
-  const typeSchema = (await loadApiSchema(ctx.orgId)).find((type) => type.key === typeKey)
+  const typeSchema = (await loadApiSchema(ctx.orgId, null, customFieldViewer(ctx))).find((type) => type.key === typeKey)
   const subsidiaryCondition = typeSchema
     ? subsidiaryScopeCondition(ctx, resolved, typeSchema)
     : null
@@ -285,7 +296,10 @@ async function getRecord(ctx: AppPlatformContext, typeKey: string, id: string): 
        ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
        ${subsidiaryCondition ? sql`and ${subsidiaryCondition}` : sql``}
      limit 1`))
-  return normalizeDocumentRecordRevisions(resolved.table, result.rows)[0] ?? null
+  const row = normalizeDocumentRecordRevisions(resolved.table, result.rows)[0]
+  if (!row) return null
+  const definitions = await loadCustomFieldAccessDefs(resolved.table, resolved.documentKinds?.[0])
+  return redactRecordCustomValues(row, definitions, customFieldViewer(ctx))
 }
 
 async function writableFields(ctx: AppPlatformContext, resolved: ResolvedApiType): Promise<ApiField[]> {
@@ -353,7 +367,7 @@ async function assertSubsidiaryWriteScope(
 ): Promise<void> {
   if (!ctx.allowedSubsidiaryIds) return
   const schema = (await loadApiSchema(ctx.orgId)).find((type) => type.key === typeKey)
-  if (!schema?.fields.some((field) => field.name === 'subsidiary_id')) return
+  if (!schema || (!resolved.dynamic && !schema.fields.some((field) => field.name === 'subsidiary_id'))) return
 
   const customData =
     resolved.dynamic && body.data && typeof body.data === 'object' && !Array.isArray(body.data)
@@ -388,14 +402,15 @@ async function assertSubsidiaryWriteScope(
 
   const table = quoteIdentifier(resolved.table)
   const allowed = [...ctx.allowedSubsidiaryIds]
+  const scopeCondition = resolved.dynamic
+    ? recordVisibleInSubsidiaryFenceSql(ctx.allowedSubsidiaryIds, hasSubsidiaryField(schema))
+    : null
   const found = (await db.execute(sql`
     select 1 from ${table}
      where id = ${id} and org_id = ${ctx.orgId}
        ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
        ${resolved.dynamic
-         ? (allowed.length > 0
-           ? sql`and data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral(allowed)}::text[])`
-           : sql`and false`)
+         ? sql`and ${scopeCondition ?? sql`false`}`
          : (allowed.length > 0
            ? sql`and subsidiary_id = any(${pgTextArrayLiteral(allowed)}::uuid[])`
            : sql`and false`)}

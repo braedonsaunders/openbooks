@@ -22,7 +22,6 @@ import {
   BACKUP_FORMAT_VERSION,
   BACKUP_DATA_KEY_CHECK_PLAINTEXT,
   BACKUP_ENCRYPTION,
-  BACKUP_KEY_ID,
   DURABLE_USER_AUTH_BACKUP_TABLES,
   ORGLESS_CHILD_BACKUP_TABLES,
   ORG_SCOPED_BACKUP_EXCLUSIONS,
@@ -30,26 +29,14 @@ import {
   encodeBackupEnvelope,
   type BackupQueryable,
 } from "./format.ts";
-import { sealSecret } from "../platform/secrets.ts";
-
-/** The `.env.example` placeholder, which carries no entropy and encrypts nothing. */
-const DATA_KEY_PLACEHOLDER = "replace-me";
+import { requireDataKey, sealSecret } from "../platform/secrets.ts";
 
 /**
- * Refuse a backup before any export work when the data key is missing or
- * still the documented placeholder. The message names the remedy: without
- * the source deployment key the archive could neither be encrypted nor ever
- * restored.
+ * Resolve the active data key before any export work. The shared key-ring
+ * loader validates both legacy single-key and rotated deployments.
  */
-export function requireBackupDataKey(): void {
-  const raw = process.env.OPENBOOKS_DATA_KEY;
-  if (!raw || raw === DATA_KEY_PLACEHOLDER) {
-    throw new Error(
-      "organization backup refused: OPENBOOKS_DATA_KEY is unset or still the .env.example placeholder " +
-        `"${DATA_KEY_PLACEHOLDER}" — set OPENBOOKS_DATA_KEY to the deployment's 32-byte data key ` +
-        "(hex or base64) from the secret manager before running a backup; restore requires the same key",
-    );
-  }
+export function requireBackupDataKey(): string {
+  return requireDataKey();
 }
 
 export interface EncryptedBackupSink {
@@ -69,7 +56,7 @@ export interface EncryptedBackupSink {
  * is unset or still the placeholder.
  */
 export function beginEncryptedBackup(): EncryptedBackupSink {
-  requireBackupDataKey();
+  const keyId = requireBackupDataKey();
   const contentKey = randomBytes(32);
   const nonce = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", contentKey, nonce);
@@ -77,7 +64,7 @@ export function beginEncryptedBackup(): EncryptedBackupSink {
     format: BACKUP_FORMAT,
     version: BACKUP_FORMAT_VERSION,
     encryption: BACKUP_ENCRYPTION,
-    keyId: BACKUP_KEY_ID,
+    keyId,
     nonce: nonce.toString("base64"),
     // The envelope is org-less (it is written before any org row is read),
     // so the wrap carries the fixed system scope like the data-key canary.

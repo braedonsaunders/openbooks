@@ -19,6 +19,7 @@ import {
   sendWebhookTestPing,
 } from "./endpoints.ts";
 import { runWebhookDeliveryScan, verifyWebhookSignature } from "./deliver.ts";
+import { UnrestrictedScopeError } from "../organization/subsidiary-scope.ts";
 
 /**
  * Outbound webhook transport coverage (integration partition): the
@@ -128,6 +129,25 @@ async function deliveryCount(orgId: string): Promise<number> {
   `)).rows[0]!.n;
 }
 
+test("restricted webhook managers cannot configure organization-wide endpoints", { skip: !DB }, async () => {
+  const { org, adminId } = await setupOrg();
+  try {
+    await db.execute(sql`
+      update app_roles set subsidiary_restriction = '{"mode":"list","subsidiaryIds":[]}'::jsonb
+       where org_id = ${org.orgId} and key = 'webhook_admin'
+    `);
+    await assert.rejects(
+      makeEndpoint(org.orgId, adminId, "http://127.0.0.1:12345/hook", ["item.updated"]),
+      (error: unknown) => error instanceof UnrestrictedScopeError,
+    );
+    assert.equal((await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from webhook_endpoints where org_id = ${org.orgId}
+    `)).rows[0]!.n, 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("an event emitted in a rolled-back transaction is never delivered", { skip: !DB }, async () => {
   const { org, adminId } = await setupOrg();
   const capture = await startCaptureServer();
@@ -162,6 +182,7 @@ test("delivery carries the documented signature, verifiable independently", { sk
     assert.equal(await deliveryCount(org.orgId), 1, "the subscribed emit queued exactly one delivery");
     const scan = await runWebhookDeliveryScan();
     assert.ok(scan.attempted >= 1, "the scan attempted work");
+    assert.equal(scan.delivered, 1, "a 2xx is counted as delivered");
     assert.equal(capture.seen.length, 1, "one POST reached the subscriber");
     const seen = capture.seen[0]!;
     assert.equal(headerValue(seen.headers, "openbooks-event"), "item.updated");
@@ -239,11 +260,15 @@ test("a 410 disables the endpoint with audit evidence and an admin notice", { sk
   const capture = await startCaptureServer();
   capture.respondWith = { status: 410, body: '{"gone":true}' };
   try {
+    const wildcardAdminId = await createScratchUser(org.orgId, "Webhook Owner", "wildcard_webhook_admin");
+    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'wildcard_webhook_admin'`);
+    await db.execute(sql`update app_roles set permissions = '[]'::jsonb where org_id = ${org.orgId} and key = 'webhook_admin'`);
     const endpoint = await makeEndpoint(org.orgId, adminId, capture.url, ["item.updated"], "gone");
     await emitItemUpdated(org.orgId, org.items.service, "gone-probe");
     assert.equal(await deliveryCount(org.orgId), 1, "the subscribed emit queued exactly one delivery");
     const goneScan = await runWebhookDeliveryScan();
     assert.ok(goneScan.attempted >= 1, "the scan attempted work");
+    assert.equal(goneScan.delivered, 0, "a 410 is not counted as delivered");
     const delivery = (await db.execute<{ status: string }>(sql`
       select status from webhook_deliveries where org_id = ${org.orgId}
     `)).rows[0]!;
@@ -265,6 +290,12 @@ test("a 410 disables the endpoint with audit evidence and an admin notice", { sk
          and kind = 'webhook_endpoint_disabled' and href = '/admin/webhooks' and read_at is null
     `)).rows[0]!.n;
     assert.equal(notices, 1, "an admin was notified where they work");
+    const wildcardNotices = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from notifications
+       where org_id = ${org.orgId} and user_id = ${wildcardAdminId}
+         and kind = 'webhook_endpoint_disabled' and href = '/admin/webhooks' and read_at is null
+    `)).rows[0]!.n;
+    assert.equal(wildcardNotices, 1, "a wildcard role was notified");
   } finally {
     await stopCaptureServer(capture);
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -284,6 +315,7 @@ test("repeated failures auto-disable the endpoint at its threshold", { skip: !DB
     assert.equal(await deliveryCount(org.orgId), 1, "the subscribed emit queued exactly one delivery");
     const flakyScan = await runWebhookDeliveryScan();
     assert.ok(flakyScan.attempted >= 1, "the scan attempted work");
+    assert.equal(flakyScan.delivered, 0, "a retryable failure is not counted as delivered");
     const first = (await db.execute<{ failures: number; status: string }>(sql`
       select e.consecutive_failures as failures, e.status
         from webhook_endpoints e where e.id = ${endpoint.id}::uuid
@@ -355,12 +387,19 @@ test("test pings and manual redeliveries run synchronously with audit", { skip: 
     capture.respondWith = { status: 400, body: "bad" };
     const badPing = await sendWebhookTestPing(org.orgId, adminId, endpoint.id);
     assert.equal(badPing.status, "failed");
+    const otherEndpoint = await makeEndpoint(org.orgId, adminId, capture.url, ["item.updated"], "other-endpoint");
+    const otherBadPing = await sendWebhookTestPing(org.orgId, adminId, otherEndpoint.id);
+    await assert.rejects(
+      redeliverWebhookDelivery(org.orgId, adminId, endpoint.id, otherBadPing.deliveryId),
+      (error: unknown) => error instanceof Error && "status" in error && error.status === 404,
+      "an endpoint cannot redeliver another endpoint's delivery",
+    );
     capture.respondWith = { status: 200, body: "{}" };
-    const redelivered = await redeliverWebhookDelivery(org.orgId, adminId, badPing.deliveryId);
+    const redelivered = await redeliverWebhookDelivery(org.orgId, adminId, endpoint.id, badPing.deliveryId);
     assert.equal(redelivered.status, "delivered");
     assert.equal(redelivered.responseCode, 200);
     await assert.rejects(
-      redeliverWebhookDelivery(org.orgId, adminId, redelivered.deliveryId),
+      redeliverWebhookDelivery(org.orgId, adminId, endpoint.id, redelivered.deliveryId),
       /already succeeded/,
       "a delivered delivery refuses redelivery by name",
     );

@@ -6,6 +6,7 @@ import { notFound } from '@/lib/api/responses'
 import { can } from '@/lib/authz'
 import { getResource } from '@/lib/data-io/resources'
 import { templateCsv, templateFields, templateFilename, templateXlsx, type TemplateField } from '@/lib/data-io/templates'
+import { customFieldViewerFor } from '@/lib/custom-fields'
 
 export const runtime = 'nodejs'
 
@@ -20,7 +21,7 @@ export const GET = defineRoute({
   params: z.object({ resource: z.string().min(1).max(200) }),
   handler: async ({ request, authz, params }) => {
     const format = new URL(request.url).searchParams.get('format') === 'csv' ? 'csv' : 'xlsx'
-    const resource = await getResource(authz.user.orgId, params.resource, authz.allowedSubsidiaryIds)
+    const resource = await getResource(authz.user.orgId, params.resource, authz.allowedSubsidiaryIds, customFieldViewerFor(authz))
     if (!resource || !resource.descriptor.supportsImport) return notFound('record')
     if (!can(authz, resource.descriptor.writePermission)) {
       return NextResponse.json({ error: `The ${resource.descriptor.writePermission} permission is required to import this resource.` }, { status: 403 })
