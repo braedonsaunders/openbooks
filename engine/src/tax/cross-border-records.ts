@@ -8,6 +8,7 @@ import {
 import { CrossBorderTaxError } from "./cross-border-place-of-supply.ts";
 import { parseCrossBorderElection } from "./cross-border-posting.ts";
 import { validatePartyTaxId, type TaxIdCredentials } from "./vat-id-validation.ts";
+import { authorityCredentialsForOrg } from "./authority-connections.ts";
 
 /**
  * Operator writes for cross-border tax: recording customer tax IDs and the
@@ -286,9 +287,10 @@ export async function validateStoredTaxId(
       "enable Cross-border tax on Company Settings → Features before validating tax IDs",
     );
   }
+  const credentials = options.credentials ?? await authorityCredentialsForOrg(tx, orgId);
   const outcome = await validatePartyTaxId(tx, orgId, rowId, {
     actorId,
-    credentials: options.credentials,
+    credentials,
     transport: options.transport,
     revalidateAfterDays: options.revalidateAfterDays,
     reason: "operator validation",

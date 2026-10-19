@@ -22,19 +22,22 @@ export const POST = defineRoute({
   handler: async ({ authz: routeAuthz, params }) => {
     const gate = routeAuthz;
     try {
-      const result = await withOrgTransaction(gate.user.orgId, () =>
-        validateStoredTaxId(gate.user.orgId, params.id, gate.user.id),
-      )
-      return NextResponse.json({ ok: true, ...result })
-    } catch (e: unknown) {
-      if (e instanceof VatValidationError) {
-        // The authority's reply can quote the submitted number back, so the
-        // engine message stays server-side; the drawer retries the validation.
+      const outcome = await withOrgTransaction(gate.user.orgId, async () => {
+        try {
+          return { kind: 'validated' as const, result: await validateStoredTaxId(gate.user.orgId, params.id, gate.user.id) }
+        } catch (error) {
+          if (error instanceof VatValidationError) return { kind: 'authority-unavailable' as const }
+          throw error
+        }
+      })
+      if (outcome.kind === 'authority-unavailable') {
         return NextResponse.json(
           { error: "the tax authority could not confirm this number; check the number and retry the validation" },
           { status: 422 },
         )
       }
+      return NextResponse.json({ ok: true, ...outcome.result })
+    } catch (e: unknown) {
       return apiErrorResponse(e, { safeStatus: 422 })
     }
   },

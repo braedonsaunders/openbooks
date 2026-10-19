@@ -71,12 +71,14 @@ describe("validatePartyTaxId", () => {
   });
 
   test("an authority outage keeps the row unverified and raises the failure", async () => {
-    const { tx } = stubExecutor(rowRoutes());
+    const { tx, queries } = stubExecutor(rowRoutes());
     const transport = (async () => new Response("{}", { status: 503 })) as typeof fetch;
     await assert.rejects(
       () => validatePartyTaxId(tx, "org-1", "row-1", { transport, today: "2026-10-05" }),
       VatValidationError,
     );
+    assert.ok(queries.some((query) => /update party_tax_ids/.test(query.sql)), "the failed validation marks the row unverified");
+    assert.ok(queries.some((query) => /insert into audit_log/.test(query.sql)), "the failure state is audited");
   });
 
   test("a missing row refuses instead of reporting success", async () => {
