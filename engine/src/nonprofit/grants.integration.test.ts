@@ -6,7 +6,7 @@ import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/
 import { postEntry } from "../journal/post-entry.ts";
 import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
-import { activateGrant, amendGrant, awardGrant, createGrant, getGrantBudget, recognizeGrantDrawdown, recordGrantDrawdown, satisfyGrantBarrier, type GrantPostingAccounts } from "./grants.ts";
+import { activateGrant, amendGrant, awardGrant, closeGrant, closeOutGrant, createGrant, getGrantBudget, listGrantActivity, recognizeGrantDrawdown, recordGrantDrawdown, satisfyGrantBarrier, voidGrantDrawdown, type GrantPostingAccounts } from "./grants.ts";
 import { createFund } from "./funds.ts";
 import { provisionFundAccounting } from "./provision.ts";
 import { NonprofitError } from "./errors.ts";
@@ -228,6 +228,52 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
       [org.accounts.ar, "25.0000"],
       [org.accounts.revenue, "-25.0000"],
     ]);
+
+    const issuedAmendment = await amendGrant({
+      orgId: org.orgId, grantId: unconditional.id, reason: "Increase the signed grant award.",
+      changes: { awardAmount: "30.00" }, accounts, postingDate: org.date, actorId,
+    });
+    await activateGrant({ orgId: org.orgId, grantId: issuedAmendment.id, actorId });
+    const firstDrawdown = await recordGrantDrawdown({
+      orgId: org.orgId, grantId: issuedAmendment.id, amount: "10.00", kind: "reimbursement",
+      accounts, postingDate: org.date, actorId,
+    });
+    const amendmentAwardEntry = (await withOrgContext(org.orgId, () => db.execute<{ award_entry_id: string }>(sql`
+      select award_entry_id from grants where org_id = ${org.orgId} and id = ${issuedAmendment.id}
+    `))).rows[0]!.award_entry_id;
+    const initialActivity = await listGrantActivity(org.orgId, issuedAmendment.id);
+    const initialActivityIds = new Set(initialActivity.journalEntries.map((entry) => entry.id));
+    assert.ok(initialActivityIds.has(awarded.entryId), "grant activity includes the original award journal entry");
+    assert.ok(initialActivityIds.has(amendmentAwardEntry), "grant activity includes the award amendment journal entry");
+    assert.ok(initialActivityIds.has(firstDrawdown.entryId), "grant activity includes the drawdown journal entry");
+
+    await voidGrantDrawdown({ orgId: org.orgId, drawdownId: firstDrawdown.id, postingDate: org.date,
+      reason: "Correct the first reimbursement", actorId });
+    const firstReversalEntry = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+      select id from journal_entries where org_id = ${org.orgId} and reverses_entry_id = ${firstDrawdown.entryId}
+    `))).rows[0]!.id;
+    const correctedActivity = await listGrantActivity(org.orgId, issuedAmendment.id);
+    assert.ok(correctedActivity.journalEntries.some((entry) => entry.id === firstReversalEntry),
+      "grant activity includes drawdown reversal entries");
+
+    const closedDrawdown = await recordGrantDrawdown({
+      orgId: org.orgId, grantId: issuedAmendment.id, amount: "5.00", kind: "reimbursement",
+      accounts, postingDate: org.date, actorId,
+    });
+    await closeOutGrant({ orgId: org.orgId, grantId: issuedAmendment.id, actorId });
+    await closeGrant({ orgId: org.orgId, grantId: issuedAmendment.id, actorId });
+    await assert.rejects(
+      voidGrantDrawdown({ orgId: org.orgId, drawdownId: closedDrawdown.id, postingDate: org.date,
+        reason: "Correct the closed reimbursement", actorId }),
+      (error: unknown) => error instanceof NonprofitError && error.code === "grant_state_conflict",
+      "a drawdown on a closed grant must remain posted for controlled correction",
+    );
+    const closedDrawdownState = await withOrgContext(org.orgId, () => db.execute<{ drawdown_status: string; entry_status: string }>(sql`
+      select d.status as drawdown_status, je.status as entry_status
+        from grant_drawdowns d join journal_entries je on je.org_id = d.org_id and je.id = d.receivable_entry_id
+       where d.org_id = ${org.orgId} and d.id = ${closedDrawdown.id}
+    `));
+    assert.deepEqual(closedDrawdownState.rows, [{ drawdown_status: "paid", entry_status: "posted" }]);
 
     const draft = await createGrant({
       orgId: org.orgId,
