@@ -79,6 +79,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:business-date',
     `export * from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
+      export { addCalendarDays, civilDateFromParts, endOfMonth } from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
       export async function businessToday() { return '2026-08-28' }`,
   ],
   [
