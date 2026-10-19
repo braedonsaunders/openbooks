@@ -520,8 +520,15 @@ export async function linkCompetency(args: {
         ? (await db.execute<{ id: string; employerSubsidiaryId?: string | null }>(sql`select id from hrm_job_levels where org_id = ${orgId} and id = ${targetId}`)).rows[0]
         : args.targetKind === "position"
           ? (await db.execute<{ id: string; employerSubsidiaryId?: string | null }>(sql`
-              select id, employer_subsidiary_id as "employerSubsidiaryId"
-                from positions where org_id = ${orgId} and id = ${targetId}
+              select p.id, live.employer_subsidiary_id as "employerSubsidiaryId"
+                from positions p
+                join lateral (
+                  select v.employer_subsidiary_id
+                    from position_versions v
+                   where v.org_id = p.org_id and v.position_id = p.id and v.recorded_until is null
+                   order by v.version_no desc limit 1
+                ) live on true
+               where p.org_id = ${orgId} and p.id = ${targetId}
             `)).rows[0]
           : (await db.execute<{ id: string; employerSubsidiaryId?: string | null }>(sql`select id from hrm_review_template_sections where org_id = ${orgId} and id = ${targetId}`)).rows[0];
     if (!target) {
