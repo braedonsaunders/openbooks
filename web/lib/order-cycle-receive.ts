@@ -223,6 +223,7 @@ export async function receivePurchaseOrderInTx(
     const selected: {
       request: (typeof requested)[number]
       line: PurchaseReceiptSourceLineRow
+      billReceived: bigint
       allowanceUnits: bigint
       overReceipt: { excess: string; tolerancePercent: string; toleranceQuantity: string } | null
     }[] = []
@@ -318,7 +319,7 @@ export async function receivePurchaseOrderInTx(
           toleranceQuantity: tolerance?.quantity ?? '0',
         }
       }
-      selected.push({ request, line, allowanceUnits, overReceipt })
+      selected.push({ request, line, billReceived, allowanceUnits, overReceipt })
     }
 
     if (options.inventory === 'none') {
@@ -411,7 +412,7 @@ export async function receivePurchaseOrderInTx(
     if (!reopened) throw new ConversionError('Purchase order changed while it was being received', 409)
 
     let lineNumber = 1
-    for (const { request, line, allowanceUnits, overReceipt } of selected) {
+    for (const { request, line, billReceived, allowanceUnits, overReceipt } of selected) {
       // Received at the order price: the amount is the value the receipt
       // credits to received-not-billed and the bill later clears. A tolerated
       // over-receipt records its excess and the applied policy on the line,
