@@ -14,8 +14,14 @@ interface ViewState {
   filingCount: number
   failedCount: number
   adjustments: unknown
+  forms: Record<string, unknown>[]
+  disabledFormCodes: Set<string>
+  filteredFormsFor: string[]
 }
-const viewState: ViewState = { grants: new Set(), filingCount: 0, failedCount: 0, adjustments: {} }
+const viewState: ViewState = {
+  grants: new Set(), filingCount: 0, failedCount: 0, adjustments: {},
+  forms: [], disabledFormCodes: new Set(), filteredFormsFor: [],
+}
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = viewState
 
 function sqlText(query: unknown): string {
@@ -94,6 +100,7 @@ const mockSources = new Map<string, string>([
         async execute(query) {
           const text = (${sqlText.toString()})(query)
           const state = globalThis[Symbol.for('openbooks.tax-view-grants-test')]
+          if (text.includes('from tax_return_forms')) return { rows: state.forms }
           if (text.includes('where id')) return { rows: [{ ...${JSON.stringify(FILING_ROW)}, adjustments: state.adjustments }] }
           if (text.includes('from users')) return { rows: [{id: '11111111-1111-4111-8111-111111111111', name: 'Tax preparer'}] }
           if (text.includes('count(*)') && text.includes('tax_filings')) return { rows: [{ count: state.filingCount }] }
@@ -110,7 +117,14 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:tax-return',
-    `export async function computeTaxReturn() { throw new Error('unexpected compute') }`,
+    `
+      const state = globalThis[Symbol.for('openbooks.tax-view-grants-test')]
+      export async function computeTaxReturn() { throw new Error('unexpected compute') }
+      export async function filterTaxReturnFormsByFeatures(orgId, forms) {
+        state.filteredFormsFor.push(orgId)
+        return forms.filter((form) => !state.disabledFormCodes.has(form.code))
+      }
+    `,
   ],
   [
     'mock:tax-filing',
@@ -166,6 +180,9 @@ hooks.deregister()
 
 function reset(grants: string[]): void {
   viewState.grants = new Set(grants)
+  viewState.forms = []
+  viewState.disabledFormCodes = new Set()
+  viewState.filteredFormsFor = []
 }
 
 for (const [name, grants, expected] of [
@@ -208,6 +225,21 @@ test('the History badge counts the filings the list shows; Activity counts faile
 test('the prepare surface receives the organization conversion date', async () => {
   reset(['reports.read'])
   assert.equal((await loadTax({})).conversionDate, '2025-09-01')
+})
+
+test('the form selector excludes forms whose owning feature is disabled', async () => {
+  reset(['reports.read'])
+  viewState.forms = [
+    { code: 'CA_GST34', name: 'GST/HST Return', country: 'CA', submission_channel: 'manual', government_format: 'csv', submission_url: null, notice_key: null, has_official: false },
+    { code: 'US_990', name: 'Form 990', country: 'US', submission_channel: 'manual', government_format: 'xml', submission_url: null, notice_key: null, has_official: false },
+  ]
+  viewState.disabledFormCodes = new Set(['US_990'])
+
+  const data = await loadTax({})
+
+  assert.deepEqual(data.forms.map((form) => form.code), ['CA_GST34'])
+  assert.deepEqual(data.history.formOptions, [{ value: 'CA_GST34', label: 'GST/HST Return' }])
+  assert.deepEqual(viewState.filteredFormsFor, ['org-1'])
 })
 
 

@@ -10,6 +10,8 @@ interface TaxPoolRouteState {
   allowedSubsidiaryIds: Set<string> | null;
   explicitSubsidiaryExists: boolean;
   explicitBookExists: boolean;
+  activePrimaryBookId: string | null;
+  activePrimaryBookCalls: string[];
   filterCalls: (string[] | null)[];
   queries: string[];
   runCalls: {
@@ -26,6 +28,8 @@ const routeState: TaxPoolRouteState = {
   allowedSubsidiaryIds: null,
   explicitSubsidiaryExists: true,
   explicitBookExists: true,
+  activePrimaryBookId: 'book-active',
+  activePrimaryBookCalls: [],
   filterCalls: [],
   queries: [],
   runCalls: [],
@@ -148,6 +152,16 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  [
+    "mock:accounting-books",
+    `
+      const state = globalThis[Symbol.for('openbooks.tax-pools-route-test')]
+      export async function activePostingPrimaryBookId(orgId) {
+        state.activePrimaryBookCalls.push(orgId)
+        return state.activePrimaryBookId
+      }
+    `,
+  ],
 ]);
 
 const selfUrl = new URL(import.meta.url).href;
@@ -159,6 +173,7 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", mockUrl("feature-gates")],
   ["../../../../lib/subsidiaries", mockUrl("subsidiaries")],
   ["@openbooks/engine/platform/db", mockUrl("db")],
+  ["@openbooks/engine/platform/database", mockUrl("accounting-books")],
   ["@openbooks/engine/tax-returns/pool-run", mockUrl("tax-pool-run")],
 ]);
 
@@ -186,6 +201,8 @@ function reset(allowed: Set<string> | null): void {
   routeState.allowedSubsidiaryIds = allowed;
   routeState.explicitSubsidiaryExists = true;
   routeState.explicitBookExists = true;
+  routeState.activePrimaryBookId = 'book-active';
+  routeState.activePrimaryBookCalls = [];
   routeState.filterCalls = [];
   routeState.queries = [];
   routeState.runCalls = [];
@@ -250,7 +267,7 @@ test("POST runs an in-scope explicit subsidiary", async () => {
   assert.deepEqual(routeState.runCalls, [
     {
       orgId: "org-1",
-      bookId: "book-1",
+      bookId: "book-active",
       subsidiaryId: SUB_VISIBLE,
       regime: "ca_cca",
       taxYear: 2026,
@@ -282,12 +299,34 @@ test("POST without a subsidiary runs the pool for the root when an older sibling
   assert.deepEqual(routeState.runCalls, [
     {
       orgId: "org-1",
-      bookId: "book-1",
+      bookId: "book-active",
       subsidiaryId: "sub-root",
       regime: "ca_cca",
       taxYear: 2026,
     },
   ]);
+});
+
+test("POST defaults to the active GL-posting primary book", async () => {
+  reset(null);
+  routeState.activePrimaryBookId = 'book-current';
+
+  const response = await post({ taxYear: 2026, subsidiaryId: SUB_VISIBLE });
+
+  assert.equal(response.status, 200);
+  assert.equal(routeState.runCalls[0]?.bookId, 'book-current');
+  assert.deepEqual(routeState.activePrimaryBookCalls, ['org-1']);
+  assert.equal(routeState.queries.some((query) => query.includes('is_primary = true')), false);
+});
+
+test("POST refuses to run when no active GL-posting primary book exists", async () => {
+  reset(null);
+  routeState.activePrimaryBookId = null;
+
+  const response = await post({ taxYear: 2026, subsidiaryId: SUB_VISIBLE });
+
+  assert.equal(response.status, 422);
+  assert.deepEqual(routeState.runCalls, []);
 });
 
 test("POST refuses a custom short tax-year window instead of assuming a full-year factor", async () => {

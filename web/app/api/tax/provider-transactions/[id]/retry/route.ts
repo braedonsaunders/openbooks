@@ -17,6 +17,7 @@ export const runtime = 'nodejs'
 export const POST = defineRoute({
   permission: 'compliance.file',
   feature: { none: 'This route is governed by its permission and service authorization.' },
+  scope: 'unrestricted',
   handler: async ({ authz, params: routeParams }) => {
     const { id } = (routeParams ?? {}) as { id?: string }
     if (!id || !isUuid(id)) return NextResponse.json({ error: 'provider transaction id is required' }, { status: 400 })
