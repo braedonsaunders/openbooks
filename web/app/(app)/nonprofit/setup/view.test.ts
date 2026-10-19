@@ -27,7 +27,7 @@ test('nonprofit setup renders only the selected entity section and carries its n
       { href: '/nonprofit/setup?section=pairs', label: 'Fund pairs', active: true },
       { href: '/nonprofit/setup?section=mappings', label: 'Functional mappings' },
     ],
-  } as Data)
+  } as unknown as Data)
 
   const body = (spec as { body: unknown }).body
   const sections = collect(body, (node) => node.widget === 'setup-section')

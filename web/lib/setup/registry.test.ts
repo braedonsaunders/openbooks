@@ -29,12 +29,11 @@ test('agents is a first-party setup group served by custom pages, not generic en
 })
 
 test('CRM setup lists are registry-backed, archived instead of deleted, and retain CRM authority', () => {
-  const entities = [
-    SETUP_ENTITY_BY_KEY.get('crm-account-statuses'),
-    SETUP_ENTITY_BY_KEY.get('crm-opportunity-statuses'),
-    SETUP_ENTITY_BY_KEY.get('crm-lead-sources'),
-  ]
-  assert.ok(entities.every(Boolean))
+  const entities = ['crm-account-statuses', 'crm-opportunity-statuses', 'crm-lead-sources'].map((key) => {
+    const entity = SETUP_ENTITY_BY_KEY.get(key)
+    assert.ok(entity)
+    return entity
+  })
   for (const entity of entities) {
     assert.equal(entity.groupKey, 'sales')
     assert.equal(entity.featureKey, 'crm')

@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import type { Authz } from '../authz'
 import { isFeatureEnabled } from '../features'
-import type { PaymentProviderSetupData } from './payment-providers-types'
+import type { PaymentProviderAccount, PaymentProviderSetupData } from './payment-providers-types'
 
 /**
  * Shared authorized reader for the payment provider page and its API. Callers
@@ -41,7 +41,7 @@ export async function readPaymentProviderSetupData(authz: Authz): Promise<Paymen
        where org_id = ${orgId} and provider in ('paypal', 'shopify_payments', 'square')
        order by provider
     `),
-    db.execute(sql`
+    db.execute<PaymentProviderAccount>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
        ${accountScope}
@@ -56,13 +56,13 @@ export async function readPaymentProviderSetupData(authz: Authz): Promise<Paymen
         from payment_surcharge_rules where org_id = ${orgId}
        order by effective_from desc
     `),
-    db.execute(sql`
+    db.execute<PaymentProviderAccount>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and type in ('income', 'income_other') and is_active and not is_summary
        ${accountScope}
        order by number nulls last, name
     `),
-    db.execute(sql`
+    db.execute<PaymentProviderAccount>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and is_active and not is_summary
        ${accountScope}

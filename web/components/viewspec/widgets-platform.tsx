@@ -220,6 +220,8 @@ export const PLATFORM_WIDGETS = {
       organizations:
         (props.organizations as ComponentProps<typeof GrantAccessForm>['organizations']) ?? [],
       actingUsers: (props.actingUsers as ComponentProps<typeof GrantAccessForm>['actingUsers']) ?? [],
+      open: true,
+      closeHref: '/platform/users',
     }
     return (
       <GrantAccessForm {...options} defaultMemberUserId={str(props, 'defaultMemberUserId') ?? ''} />

@@ -22,6 +22,7 @@ import type { ModuleHomeTab } from '../../components/module-home/ui'
 import { loadQueueLabels } from './change-requests'
 import { listScopedDepartmentOptions } from '../scoped-options'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
+import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import {
   isProgramEditable,
   parsePortfolioView,
