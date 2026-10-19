@@ -38,6 +38,16 @@ export interface ChannelCard {
   marginRows: MarginChannel[]
 }
 
+/** Exact percentage value with two decimal places, suitable for formatExactPercent. */
+export function channelMarginPercentValue(cm2Minor: string, revenueMinor: string): string | null {
+  const revenue = BigInt(revenueMinor)
+  if (revenue <= 0n) return null
+  const hundredths = (BigInt(cm2Minor) * 10000n) / revenue
+  const negative = hundredths < 0n
+  const magnitude = negative ? -hundredths : hundredths
+  return `${negative ? '-' : ''}${magnitude / 100n}.${(magnitude % 100n).toString().padStart(2, '0')}`
+}
+
 export function channelCards(channels: readonly Channel[], margin: readonly MarginChannel[] | null): ChannelCard[] {
   return channels.map((channel) => ({
     channel,
