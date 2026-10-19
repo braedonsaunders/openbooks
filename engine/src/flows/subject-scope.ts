@@ -103,6 +103,41 @@ export async function resolveSubjectSubsidiaries(
 }
 
 /**
+ * SQL for the owning subsidiary of the subject a row names (a flow run or a
+ * gate), from each registered kind's declared scope, for surfaces that page
+ * in SQL and so cannot resolve entities after the page. Matches
+ * resolveSubjectSubsidiaries kind by kind; custom and org-wide scopes yield
+ * null, so restricted callers fail closed on them.
+ */
+export function subjectSubsidiarySql(
+  kinds: ReadonlyArray<{ subjectKind: string; scope: FlowSubjectScope }>,
+  ref: { kind: SQL; id: SQL; org: SQL },
+): SQL {
+  const arms = kinds.flatMap(({ subjectKind, scope }): SQL[] => {
+    switch (scope.via) {
+      case "document":
+        return [sql`when ${ref.kind} = ${subjectKind} then (select o.subsidiary_id from documents o where o.org_id = ${ref.org} and o.id = ${ref.id})`];
+      case "column":
+        return [sql`when ${ref.kind} = ${subjectKind} then (select o.${sql.identifier(scope.column)} from ${sql.identifier(scope.table)} o where o.org_id = ${ref.org} and o.id = ${ref.id})`];
+      case "party":
+      case "project":
+      case "employment": {
+        const owner = OWNERS[scope.via];
+        return [sql`when ${ref.kind} = ${subjectKind} then (select ${owner.subsidiary} from ${sql.identifier(scope.table)} s
+          join ${owner.table} o on o.id = s.${sql.identifier(scope.column)} and o.org_id = s.org_id
+         where s.org_id = ${ref.org} and s.id = ${ref.id})`];
+      }
+      case "custom":
+      case "none":
+        return [];
+      default:
+        return unreachableScope(scope);
+    }
+  });
+  return arms.length > 0 ? sql`(case ${sql.join(arms, sql` `)} end)` : sql`null::uuid`;
+}
+
+/**
  * Share-lock a subject's canonical scope owner for the rest of the caller's
  * transaction. Throws ScopeNotFoundError when out of the caller's scope and
  * FlowSubjectScopeUnresolvedError when the subject row is missing.

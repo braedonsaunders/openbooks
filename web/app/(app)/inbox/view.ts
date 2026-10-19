@@ -6,6 +6,7 @@ import { inArray, sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db, schema } from '@openbooks/engine/platform/db'
 import { type WorklistGate } from '@openbooks/engine/flows/module'
+import { flowSubjectSubsidiarySql } from '@openbooks/engine/flows/registry'
 import {
   dueBusinessDay,
   type InboxItem,
@@ -109,7 +110,7 @@ const KIND_KEYS = [
 ]
 
 // Approval subjects that are not documents but still carry a catalog label.
-const SUBJECT_LABEL_KEYS = [...KIND_KEYS, 'prebill']
+const SUBJECT_LABEL_KEYS = [...KIND_KEYS, 'prebill', 'equity_action']
 
 export interface SubmittedListRow {
   key: string
@@ -124,6 +125,8 @@ export interface SubmittedListRow {
   waitingSinceDate: string
   kindLabel: string
   statusLabel: string
+  /** Withdraws the submission while it waits, for kinds whose requester may withdraw it. */
+  withdrawEndpoint: string | null
 }
 
 function iso(d: unknown): string {
@@ -172,6 +175,7 @@ export interface ApprovalsData {
   columnPendingWith: string
   columnWaitingSince: string
   columnStatus: string
+  columnActions: string
   submittedRows: SubmittedListRow[]
   approvalRows: ApprovalRow[]
   bulk: boolean
@@ -549,11 +553,15 @@ export async function loadApprovals(
   let submittedRows: SubmittedListRow[] = []
   let submittedTotal = 0
   if (tab === 'submitted') {
+    // Whose submission a run is: a document's creator, the close run's
+    // starter, and for every other subject the user whose submit started the
+    // run. The subject's legal entity comes from its kind's declared scope,
+    // so restricted callers see only submissions inside their entities.
     const flowRes = await db.execute<Record<string, unknown>>(sql`
       select r.id as "runId", f.name as "flowName", r.subject_id as "subjectId",
-             coalesce(d.document_number, cp.name) as "documentNumber",
+             coalesce(d.document_number, cp.name) as "documentNumber", min(g.title) as "gateTitle",
              coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) as kind,
-             d.total, d.subsidiary_id as "subsidiaryId", coalesce(d.status, cr.status) as "docStatus", p.display_name as "partyName",
+             d.total, d.subsidiary_id as "subsidiaryId", coalesce(d.status, cr.status, 'pending_approval') as "docStatus", p.display_name as "partyName",
              min(g.created_at) as "waitingSince",
              string_agg(distinct coalesce(u.name, g.assignee_role), ', ') as "pendingWith",
              count(*) over () as "fullCount"
@@ -566,7 +574,9 @@ export async function loadApprovals(
         left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id
         left join users u on u.id = g.assignee_user_id
        where r.org_id = ${orgId} and r.status = 'waiting'
-         and coalesce(d.created_by, cr.started_by) = ${user.id}
+         and (case when d.id is not null then d.created_by
+                   when cr.id is not null then cr.started_by
+                   when r.trigger = 'on_submit' then r.created_by end) = ${user.id}
          ${kindFilter ? sql`and coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) = ${kindFilter}` : sql``}
          ${
            query
@@ -574,7 +584,7 @@ export async function loadApprovals(
            d.document_number, d.kind, r.subject_kind, f.name, p.display_name, cp.name))) > 0`
              : sql``
          }
-         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
+         ${subsidiaryVisibleFilter(flowSubjectSubsidiarySql({ kind: sql`r.subject_kind`, id: sql`r.subject_id`, org: sql`r.org_id` }), authz.allowedSubsidiaryIds)}
        group by r.id, f.name, r.subject_id, d.document_number, d.kind, d.total,
                 d.subsidiary_id, d.status, cr.id, cr.status, cp.name, p.display_name
        order by min(g.created_at), r.id
@@ -582,17 +592,33 @@ export async function loadApprovals(
     `)
     submittedTotal = Number(flowRes.rows[0]?.fullCount ?? 0)
 
+    // Non-document subjects name their record, party and amount through the
+    // per-kind subject registry, the same one the approval rows read.
+    const submittedSubjects = await resolveApprovalSubjects(
+      orgId,
+      flowRes.rows.flatMap((r) => (r.documentNumber == null ? [{ kind: String(r.kind), subjectId: String(r.subjectId) }] : [])),
+      th,
+    )
+    const submittedFormatters = new Map<string, (value: string) => string>()
+    for (const currency of new Set([...submittedSubjects.values()].flatMap((detail) => (detail.currency ? [detail.currency] : [])))) {
+      submittedFormatters.set(currency, (await getMoneyFormatter(orgId, currency)).money)
+    }
     submittedRows = flowRes.rows.map((r): SubmittedListRow => {
       const kind = String(r.kind)
       const waitingSince = iso(r.waitingSince)
+      const subject = r.documentNumber == null ? submittedSubjects.get(`${kind}:${String(r.subjectId)}`) : undefined
+      const subjectAmount = subject?.amount
+        ? (subject.currency ? submittedFormatters.get(subject.currency) : undefined)?.(subject.amount) ?? formatMoney(subject.amount)
+        : null
       return {
         key: `run:${r.runId}`,
-        documentNumber: String(r.documentNumber),
+        documentNumber: String(r.documentNumber ?? subject?.summary ?? r.gateTitle ?? String(r.subjectId).slice(0, 8)),
         kind,
-        kindLabel: kindLabel(kind),
+        kindLabel: subject?.kindLabel ?? kindLabel(kind),
         href: approvalRecordHref(kind, String(r.subjectId)),
-        party: (r.partyName as string | null) ?? null,
-        amount: r.total != null ? formatMoney(r.total as string) : null,
+        party: (r.partyName as string | null) ?? subject?.partyName ?? null,
+        amount: r.total != null ? formatMoney(r.total as string) : subjectAmount,
+        withdrawEndpoint: subject?.withdrawEndpoint ?? null,
         engineName: String(r.flowName),
         pendingWith: (r.pendingWith as string | null) ?? null,
         waitingSince,
@@ -642,6 +668,7 @@ export async function loadApprovals(
           waitingSince,
           waitingSinceDate: waitingSince.slice(0, 10),
           statusLabel: String(r.docStatus).replace(/_/g, ' '),
+          withdrawEndpoint: null,
         })
       }
     }
@@ -769,7 +796,7 @@ export async function loadApprovals(
     label: kindLabel(kind),
     count,
   }))
-  const submittedKindOptions = [...new Set([...KIND_KEYS, 'pay_run'])].map(
+  const submittedKindOptions = [...new Set([...KIND_KEYS, 'pay_run', 'equity_action'])].map(
     (kind) => ({
       value: kind,
       label: kindLabel(kind),
@@ -851,6 +878,7 @@ export async function loadApprovals(
     columnPendingWith: t('table.pendingWith'),
     columnWaitingSince: t('table.waitingSince'),
     columnStatus: tc('labels.status'),
+    columnActions: tc('labels.actions'),
     submittedRows: visibleSubmitted,
     approvalRows: unionVisible,
     awaitingOthers,
@@ -964,6 +992,14 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
                 column(
                   rootF('columnStatus'),
                   badge(item('statusLabel'), { variant: 'outline' }),
+                ),
+                column(
+                  rootF('columnActions'),
+                  widgetCell('submitted-withdraw-cell', {
+                    endpoint: item('withdrawEndpoint'),
+                    documentNumber: item('documentNumber'),
+                  }),
+                  { align: 'right' },
                 ),
               ],
             }),

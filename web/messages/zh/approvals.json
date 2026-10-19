@@ -15,6 +15,9 @@
     "title": "没有待处理的提交",
     "description": "您提交审批的单据在等待期间将显示在此处。"
   },
+  "submitted": {
+    "withdrawn": "已撤回 {document}，未应用任何内容"
+  },
   "emptyAll": {
     "title": "没有待处理事项",
     "description": "此组织中没有待处理的审批。"
@@ -42,7 +45,8 @@
     "close_run": "期间结账",
     "budget_scenario": "预算",
     "hrm_employment_change_request": "雇佣变更",
-    "prebill": "预开票单"
+    "prebill": "预开票单",
+    "equity_action": "股权操作"
   },
   "decide": {
     "rejectionReason": "驳回原因：",

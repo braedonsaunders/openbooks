@@ -15,6 +15,9 @@
     "title": "Aucune soumission en attente",
     "description": "Les documents que vous soumettez pour approbation apparaîtront ici pendant leur attente."
   },
+  "submitted": {
+    "withdrawn": "{document} retiré — rien n’a été appliqué"
+  },
   "emptyAll": {
     "title": "Rien en attente",
     "description": "Aucune approbation en attente dans cette organisation."
@@ -42,7 +45,8 @@
     "close_run": "clôture de période",
     "budget_scenario": "budget",
     "hrm_employment_change_request": "modification d'emploi",
-    "prebill": "préfacture"
+    "prebill": "préfacture",
+    "equity_action": "opération sur capital"
   },
   "decide": {
     "rejectionReason": "Motif du rejet :",

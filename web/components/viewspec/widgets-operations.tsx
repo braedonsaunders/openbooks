@@ -22,6 +22,7 @@ import {
 import { WaiverNumberCell } from '../../app/(app)/compliance/lien-waivers/sections'
 import { VendorComplianceMatrix } from '../../app/(app)/compliance/vendors/Matrix'
 import { KindChips, ApprovalEngineCell, SubmittedDocumentCell } from '../../app/(app)/inbox/sections'
+import { SubmissionWithdrawCell } from '../../app/(app)/inbox/SubmissionWithdrawCell'
 import { AccountNameCell, AccountRegisterCell } from '../../app/(app)/accounts/sections'
 import { BlockedBillsSection, ComplianceSetupBanner, ExpiringVendorsSection, ReadinessPanel, WaiversPanel } from '../../app/(app)/compliance/sections'
 import { CloseActionCell, CloseReadinessCell, CloseStatusCell, SingleBookLabel } from '../../app/(app)/close/sections'
@@ -58,6 +59,12 @@ export const OPERATIONS_WIDGETS = {
     <SubmittedDocumentCell
       documentNumber={str(props, 'documentNumber') ?? ''}
       href={str(props, 'href') ?? null}
+    />
+  ),
+  'submitted-withdraw-cell': (props) => (
+    <SubmissionWithdrawCell
+      endpoint={str(props, 'endpoint') ?? null}
+      documentNumber={str(props, 'documentNumber') ?? ''}
     />
   ),
   'approvals-table': (props) => (

@@ -26,6 +26,7 @@ import { timesheetApprovalAdapter } from "./adapters/timesheet-approval.ts";
 import { crewTimeBatchAdapter } from "./adapters/crew-time-batch.ts";
 // HR-20 end
 import { closeReopenRequestAdapter } from "./adapters/close-reopen-request.ts";
+import { equityActionAdapter } from "./adapters/equity-action.ts";
 import { registerInboxAdapter } from "./registry.ts";
 
 registerInboxAdapter(flowsApprovalAdapter);
@@ -52,6 +53,7 @@ registerInboxAdapter(payrollAnomalyBlockAdapter);
 registerInboxAdapter(aiCapabilityReviewAdapter);
 // Period reopen requests reach independent approvers holding close.reopen.
 registerInboxAdapter(closeReopenRequestAdapter);
+registerInboxAdapter(equityActionAdapter);
 
 export { actOnInboxItem, countInbox, InboxError, listInbox, type InboxSourceNotice } from "./registry.ts";
 export { markNotificationsRead, writeNotification, type NotificationWrite } from "./adapters/notification.ts";

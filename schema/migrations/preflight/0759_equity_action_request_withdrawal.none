@@ -1,0 +1,1 @@
+Widens two check constraints to admit a new terminal status; every existing row already satisfies the widened checks, so there is no precondition to probe.

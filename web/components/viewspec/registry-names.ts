@@ -602,6 +602,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'stored-value-issue',
   'subcontracts-workspace',
   'submitted-document-cell',
+  'submitted-withdraw-cell',
   'subsidiary-switcher',
   'billing-history-console',
   'sync-console',

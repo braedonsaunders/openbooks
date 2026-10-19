@@ -592,6 +592,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'stored-value-issue': { props: ['issue'] },
   'subcontracts-workspace': { props: [], open: true },
   'submitted-document-cell': { props: ['documentNumber', 'href'] },
+  'submitted-withdraw-cell': { props: ['documentNumber', 'endpoint'] },
   'subsidiary-switcher': { props: ['label', 'picker', 'value'] },
   'sync-console': { props: [] },
   'tab-nav': { props: ['ariaLabel', 'tabs'] },

@@ -18,6 +18,7 @@ export const INBOX_KINDS = [
   "payroll_anomaly_block",
   "ai_capability_review",
   "close_reopen_request",
+  "equity_action",
 ] as const;
 
 export type InboxKind = (typeof INBOX_KINDS)[number];

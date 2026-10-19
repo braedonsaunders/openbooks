@@ -48,6 +48,7 @@ const STATUSES = [
 ] as const;
 
 export const equityActionSubjectProfile: FlowSubjectProfile = {
+  { value: "withdrawn", label: "Withdrawn" },
   subjectKind: EQUITY_ACTION_SUBJECT_KIND,
   pinsSubmissionPolicy: true,
   label: "Equity action",

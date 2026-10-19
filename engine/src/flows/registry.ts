@@ -14,6 +14,7 @@ import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-progr
 import { benefitAwardsFlowAdapter, benefitAwardSubjectProfile } from "./benefit-awards-adapter.ts";
 import { FINANCIAL_CHANGE_SUBJECT_KIND, financialChangeSubjectProfile, financialChangesFlowAdapter } from "./financial-changes-adapter.ts";
 import type { FlowSubjectAdapter } from "./types.ts";
+import { subjectSubsidiarySql } from "./subject-scope.ts";
 import { EQUITY_ACTION_SUBJECT_KIND, equityActionSubjectProfile, equityActionsFlowAdapter } from "./equity-actions-adapter.ts";
 import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from "@openbooks/schema/src/payroll-compensation.ts";
 import { compensationVersionsFlowAdapter, compensationAssignmentsFlowAdapter, compensationVersionSubjectProfile, compensationAssignmentSubjectProfile } from "./compensation-packages-adapter.ts";
@@ -115,7 +116,7 @@ import {
   employmentMigrationSubjectProfile,
 } from "./employment-migration-adapter.ts";
 import { HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND } from "@openbooks/schema/src/hrm.ts";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 
 /**
@@ -188,6 +189,19 @@ export function handlerReleasedSubjectKinds(): string[] {
   return listFlowSubjectProfiles()
     .map((profile) => profile.subjectKind)
     .filter((kind) => getFlowAdapter(kind)?.releaseViaHandler === true);
+}
+
+/**
+ * SQL for the owning subsidiary of the subject a flow run or gate row names,
+ * across every registered subject kind's declared scope (see
+ * subjectSubsidiarySql). Null where no entity is provable.
+ */
+export function flowSubjectSubsidiarySql(ref: { kind: SQL; id: SQL; org: SQL }): SQL {
+  const kinds = listFlowSubjectProfiles().flatMap(({ subjectKind }) => {
+    const scope = getFlowAdapter(subjectKind)?.scope;
+    return scope ? [{ subjectKind, scope }] : [];
+  });
+  return subjectSubsidiarySql(kinds, ref);
 }
 
 /** Document kinds with a dedicated profile; the generic document profile never duplicates them. */

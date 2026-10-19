@@ -40,7 +40,8 @@
     "notification": "Notificación",
     "hrm_feedback_request": "Solicitud de comentarios",
     "crew_time_batch": "Tiempo de cuadrilla",
-    "close_reopen_request": "Reapertura de período"
+    "close_reopen_request": "Reapertura de período",
+    "equity_action": "Acción de capital"
   },
   "emptyTitle": "Todo al día",
   "emptyDescription": "Nada le espera ahora mismo.",

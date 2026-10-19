@@ -15,6 +15,9 @@
     "title": "No pending submissions",
     "description": "Documents you submit for approval will appear here while they wait."
   },
+  "submitted": {
+    "withdrawn": "{document} withdrawn — nothing was applied"
+  },
   "emptyAll": {
     "title": "Nothing pending",
     "description": "There are no pending approvals in this organization."
@@ -42,7 +45,8 @@
     "close_run": "period close",
     "budget_scenario": "budget",
     "hrm_employment_change_request": "employment change",
-    "prebill": "pre-billing worksheet"
+    "prebill": "pre-billing worksheet",
+    "equity_action": "equity action"
   },
   "decide": {
     "rejectionReason": "Rejection reason:",

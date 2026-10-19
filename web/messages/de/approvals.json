@@ -15,6 +15,9 @@
     "title": "Keine ausstehenden Einreichungen",
     "description": "Dokumente, die Sie zur Genehmigung einreichen, werden hier angezeigt, während sie warten."
   },
+  "submitted": {
+    "withdrawn": "{document} zurückgezogen – nichts wurde angewendet"
+  },
   "emptyAll": {
     "title": "Nichts ausstehend",
     "description": "In dieser Organisation gibt es keine ausstehenden Genehmigungen."
@@ -42,7 +45,8 @@
     "close_run": "Periodenabschluss",
     "budget_scenario": "Budget",
     "hrm_employment_change_request": "Beschäftigungsänderung",
-    "prebill": "Vorabrechnung"
+    "prebill": "Vorabrechnung",
+    "equity_action": "Eigenkapitalmaßnahme"
   },
   "decide": {
     "rejectionReason": "Ablehnungsgrund:",

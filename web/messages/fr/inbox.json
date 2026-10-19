@@ -40,7 +40,8 @@
     "notification": "Notification",
     "hrm_feedback_request": "Demande de rétroaction",
     "crew_time_batch": "Temps d'équipe",
-    "close_reopen_request": "Réouverture de période"
+    "close_reopen_request": "Réouverture de période",
+    "equity_action": "Opération sur capital"
   },
   "emptyTitle": "Tout est à jour",
   "emptyDescription": "Rien ne vous attend pour le moment.",

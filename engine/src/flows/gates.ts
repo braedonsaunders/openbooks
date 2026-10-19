@@ -1032,12 +1032,14 @@ const WORKLIST_SUBJECT_JOINS = sql`
       left join provision_obligations fcpv on fcpv.id = fc.subject_id and fcpv.org_id = fc.org_id and fc.domain = 'provision'
       left join subsidiary_ownership_interests fcsoi on fcsoi.id = fc.subject_id and fcsoi.org_id = fc.org_id
       left join subsidiaries fcsub on fcsub.id = fcsoi.subsidiary_id and fcsub.org_id = fcsoi.org_id
+      left join equity_action_requests ear on ear.id = g.subject_id and ear.org_id = g.org_id and g.subject_kind = 'equity_action'
       left join hrm_employment_change_requests hcr on hcr.id = g.subject_id and hcr.org_id = g.org_id and g.subject_kind = 'hrm_employment_change_request'
       left join worker_employments hce on hce.id = hcr.employment_id and hce.org_id = hcr.org_id
       left join parties hcp on hcp.id = hce.worker_party_id and hcp.org_id = hce.org_id`;
 const WORKLIST_SUBJECT_LABEL = sql`
       case when cp.name is not null then cp.name || ' close'
            when g.subject_kind = 'hrm_employment_change_request' then hcp.display_name
+           when g.subject_kind = 'equity_action' then ear.subject_label
            when g.subject_kind = 'financial_change' then case
              when fc.domain = 'payroll' then fcp.display_name
              when fc.domain = 'sales' then fdcd.document_number || ' — line ' || fdcl.line_number

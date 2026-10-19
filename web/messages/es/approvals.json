@@ -15,6 +15,9 @@
     "title": "No hay envíos pendientes",
     "description": "Los documentos que envíe para aprobación aparecerán aquí mientras esperan."
   },
+  "submitted": {
+    "withdrawn": "{document} retirado: no se aplicó nada"
+  },
   "emptyAll": {
     "title": "Nada pendiente",
     "description": "No hay aprobaciones pendientes en esta organización."
@@ -42,7 +45,8 @@
     "close_run": "cierre de período",
     "budget_scenario": "presupuesto",
     "hrm_employment_change_request": "cambio de empleo",
-    "prebill": "prefactura"
+    "prebill": "prefactura",
+    "equity_action": "acción de capital"
   },
   "decide": {
     "rejectionReason": "Motivo del rechazo:",

@@ -40,7 +40,8 @@
     "notification": "Notificação",
     "hrm_feedback_request": "Solicitação de feedback",
     "crew_time_batch": "Horas da equipe",
-    "close_reopen_request": "Reabertura de período"
+    "close_reopen_request": "Reabertura de período",
+    "equity_action": "Ação de capital"
   },
   "emptyTitle": "Tudo em dia",
   "emptyDescription": "Nada aguarda você no momento.",

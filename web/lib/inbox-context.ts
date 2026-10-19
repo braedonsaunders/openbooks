@@ -74,6 +74,8 @@ export const INBOX_FILTER_KINDS: Record<string, InboxKind[]> = {
     "ai_capability_review",
     // Period reopen requests awaiting an independent close.reopen approver.
     "close_reopen_request",
+    // Equity actions held by an Equity action Flow, for approvers outside the approvals union.
+    "equity_action",
   ],
   signatures: ["field_ticket_signature", "document_signature"],
   notices: ["notification"],

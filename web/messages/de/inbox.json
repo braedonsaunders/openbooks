@@ -40,7 +40,8 @@
     "notification": "Benachrichtigung",
     "hrm_feedback_request": "Feedback-Anfrage",
     "crew_time_batch": "Teamzeiten",
-    "close_reopen_request": "Periodenwiedereröffnung"
+    "close_reopen_request": "Periodenwiedereröffnung",
+    "equity_action": "Eigenkapitalmaßnahme"
   },
   "emptyTitle": "Alles erledigt",
   "emptyDescription": "Im Moment wartet nichts auf Sie.",

@@ -15,6 +15,9 @@
     "title": "保留中の申請はありません",
     "description": "承認のために提出した書類が、承認待ちの間ここに表示されます。"
   },
+  "submitted": {
+    "withdrawn": "{document} を取り下げました。何も適用されていません"
+  },
   "emptyAll": {
     "title": "保留中の項目はありません",
     "description": "この組織には保留中の承認はありません。"
@@ -42,7 +45,8 @@
     "close_run": "期間決算",
     "budget_scenario": "予算",
     "hrm_employment_change_request": "雇用変更",
-    "prebill": "事前請求"
+    "prebill": "事前請求",
+    "equity_action": "株式関連アクション"
   },
   "decide": {
     "rejectionReason": "却下理由:",

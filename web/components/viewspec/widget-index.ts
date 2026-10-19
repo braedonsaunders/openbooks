@@ -620,6 +620,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'stored-value-issue': 'commerce',
   'subcontracts-workspace': 'commerce',
   'submitted-document-cell': 'operations',
+  'submitted-withdraw-cell': 'operations',
   'subsidiary-switcher': 'home',
   'sync-console': 'home',
   'tab-nav': 'agents',

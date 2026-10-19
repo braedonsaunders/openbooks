@@ -15,6 +15,9 @@
     "title": "Nenhuma submissão pendente",
     "description": "Documentos que você enviar para aprovação aparecerão aqui enquanto aguardam."
   },
+  "submitted": {
+    "withdrawn": "{document} retirado — nada foi aplicado"
+  },
   "emptyAll": {
     "title": "Nada pendente",
     "description": "Não há aprovações pendentes nesta organização."
@@ -42,7 +45,8 @@
     "close_run": "fechamento de período",
     "budget_scenario": "orçamento",
     "hrm_employment_change_request": "alteração de emprego",
-    "prebill": "pré-fatura"
+    "prebill": "pré-fatura",
+    "equity_action": "ação de capital"
   },
   "decide": {
     "rejectionReason": "Motivo da rejeição:",

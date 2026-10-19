@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/platform/db'
 import {
   financialChangeEventLabel,
@@ -34,6 +35,12 @@ export interface ApprovalSubjectDetail {
   amount?: string | null
   /** Currency of `amount` (org base applies when absent). */
   currency?: string | null
+  /**
+   * The command endpoint that withdraws the subject while it awaits a
+   * decision, for kinds whose requester may withdraw it (the endpoint
+   * itself verifies the requester and the pending state).
+   */
+  withdrawEndpoint?: string | null
 }
 
 export interface ApprovalSubjectText {
@@ -193,9 +200,50 @@ async function resolveFinancialChanges(
   return out
 }
 
+/**
+ * Governed equity actions: the action and the record it concerns, the
+ * holder it affects, and the amount it carries, from the request as its
+ * requester recorded it. A pending request names its withdrawal endpoint.
+ */
+async function resolveEquityActions(
+  orgId: string,
+  subjectIds: string[],
+): Promise<Map<string, ApprovalSubjectDetail>> {
+  const out = new Map<string, ApprovalSubjectDetail>()
+  const ids = [...new Set(subjectIds)].filter((id) => isUuid(id))
+  if (ids.length === 0) return out
+  const t = await getTranslations('equity')
+  const rows = (await db.execute<{
+    id: string
+    action: string
+    subjectLabel: string
+    status: string
+    holderName: string | null
+    amount: string | null
+    currency: string | null
+  }>(sql`
+    select id::text as id, action, subject_label as "subjectLabel", status,
+           summary->>'holderName' as "holderName", summary->>'amount' as amount, summary->>'currency' as currency
+      from equity_action_requests
+     where org_id = ${orgId} and id = any(${pgTextArrayLiteral(ids)}::uuid[])
+  `)).rows
+  for (const row of rows) {
+    const action = t.has(`approval.action.${row.action}`) ? t(`approval.action.${row.action}` as never) : row.action
+    out.set(String(row.id), {
+      partyName: row.holderName,
+      summary: `${action} · ${row.subjectLabel}`,
+      amount: row.amount && /^-?\d+(\.\d+)?$/.test(row.amount) ? row.amount : null,
+      currency: row.currency,
+      withdrawEndpoint: row.status === 'pending_approval' ? `/api/equity/requests/${row.id}/withdraw` : null,
+    })
+  }
+  return out
+}
+
 const SUBJECT_RESOLVERS: Record<string, SubjectResolver> = {
   hrm_employment_change_request: resolveHrmChangeRequests,
   financial_change: (orgId, subjectIds) => resolveFinancialChanges(orgId, subjectIds),
+  equity_action: (orgId, subjectIds) => resolveEquityActions(orgId, subjectIds),
 }
 
 /**

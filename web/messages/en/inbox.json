@@ -40,7 +40,8 @@
     "notification": "Notification",
     "hrm_feedback_request": "Feedback request",
     "crew_time_batch": "Crew time",
-    "close_reopen_request": "Period reopen"
+    "close_reopen_request": "Period reopen",
+    "equity_action": "Equity action"
   },
   "emptyTitle": "All clear",
   "emptyDescription": "Nothing waits on you right now.",
