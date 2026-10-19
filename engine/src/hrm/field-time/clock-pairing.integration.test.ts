@@ -309,10 +309,11 @@ test("auto-close keeps the latest switched project on the final segment", { skip
         select hours::text as hours, project_id::text as project_id from time_entries
          where org_id = ${org.orgId} and employee_party_id = ${worker}
          order by project_id`)).rows;
-      assert.deepEqual(rows, [
+      const expectedRows = [
         { hours: "2.0000", project_id: projectA },
         { hours: "2.0000", project_id: projectB },
-      ]);
+      ].sort((left, right) => left.project_id.localeCompare(right.project_id));
+      assert.deepEqual(rows, expectedRows);
     });
   } finally {
     await dropScratchOrg(org.orgId);
