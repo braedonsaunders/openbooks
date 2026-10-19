@@ -147,7 +147,7 @@ test('proration preview equals the engine amendment', { skip: !DB }, async () =>
     const subscription = (await withBypassContext(() => db.execute<{ quantity: string; price_override: string | null }>(sql`
       select quantity::text as quantity, price_override::text as price_override
         from subscriptions where org_id = ${org.orgId} and id = ${subscriptionId}`))).rows[0]!
-    assert.equal(subscription.quantity, '2.00000000')
+    assert.equal(subscription.quantity, '2.0000')
     assert.equal(subscription.price_override, null)
     const downgrade = await applySubscriptionChange(org.orgId, org.customerId, linkId, {
       subscriptionId, quantity: '1', effectiveOn: AS_OF,
