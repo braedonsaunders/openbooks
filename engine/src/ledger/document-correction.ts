@@ -191,6 +191,7 @@ interface CorrectionSourceHeader {
   subsidiaryId: string | null;
   documentNumber: string;
   documentDate: string;
+  postingDate: string | null;
   custom: Record<string, unknown>;
   extraDims: Record<string, unknown>;
   [field: string]: unknown;
@@ -417,6 +418,7 @@ export async function refuseClosedOriginalPeriod(
     id: plan.sourceId,
     kind: plan.source.kind,
     documentDate: plan.source.documentDate,
+    postingDate: plan.source.postingDate,
     subsidiaryId: plan.source.subsidiaryId,
   });
   if (suggestion.suggestedOpen && !suggestion.fallbackToOpenPeriod &&

@@ -12,6 +12,7 @@ import { arePeriodModulesOpen, assertPeriodModulesOpen, canonicalPeriodLabel, Cl
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
+import { effectivePostingDate } from "../journal/posting-contracts.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { reversalPostEntryLine } from "../journal/reversal-posting-lines.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
@@ -231,11 +232,32 @@ async function releaseCarriedCreditAllocations(
   `);
 }
 
+export async function resolveVoidCalendarSubsidiaryId(
+  executor: { execute: typeof db.execute },
+  orgId: string,
+  documentId: string,
+  subsidiaryId: string | null,
+): Promise<string | null> {
+  const row = (await executor.execute<{ id: string | null }>(sql`
+    select coalesce(
+      ${subsidiaryId}::uuid,
+      (select e.subsidiary_id from journal_entries e
+        where e.org_id = ${orgId} and e.source_document_id = ${documentId} and e.status = 'posted'
+        order by e.book_id, e.id limit 1),
+      (select s.id from subsidiaries s
+        where s.org_id = ${orgId} and s.parent_id is null and s.is_active
+        order by s.id limit 1)
+    )::text as id
+  `)).rows[0];
+  return row?.id ?? null;
+}
+
 async function resolveVoidReversalPeriod(
   executor: { execute: typeof db.execute },
   orgId: string,
   reversalPeriodId: string,
   reversalDate: string,
+  subsidiaryId: string | null,
 ): Promise<string> {
   if (!isUuid(reversalPeriodId)) {
     throw new DocumentVoidError(
@@ -244,17 +266,26 @@ async function resolveVoidReversalPeriod(
       "reversal-period-uncovered",
     );
   }
+  if (!subsidiaryId) {
+    throw new DocumentVoidError(
+      "the posting subsidiary could not be resolved for this void — select an active subsidiary before choosing an adjustment period",
+      422,
+      "reversal-period-uncovered",
+    );
+  }
   const row = (await executor.execute<{ id: string }>(sql`
-    select id
-      from accounting_periods
-     where id = ${reversalPeriodId} and org_id = ${orgId}
-       and is_adjustment
-       and starts_on <= ${reversalDate} and ends_on >= ${reversalDate}
+    select p.id
+      from accounting_periods p
+      join lateral accounting_period_posting_window(${orgId}::uuid, p.id) w on true
+     where p.id = ${reversalPeriodId} and p.org_id = ${orgId}
+       and w.is_adjustment
+       and w.window_start <= ${reversalDate}::date and w.window_end >= ${reversalDate}::date
+       and p.fiscal_calendar_id = public.subsidiary_posting_calendar(${orgId}::uuid, ${subsidiaryId}::uuid, ${reversalDate}::date)
      limit 1
   `)).rows[0];
   if (!row) {
     throw new DocumentVoidError(
-      `reversal period ${reversalPeriodId} is not an adjustment period covering ${reversalDate} — name an adjustment period covering the reversal date, or omit the override to reverse in the regular covering period`,
+      `reversal period ${reversalPeriodId} is not an adjustment period in the subsidiary's effective fiscal calendar covering ${reversalDate} — name an adjustment period in that calendar, or omit the override to reverse in the regular covering period`,
       422,
       "reversal-period-uncovered",
     );
@@ -373,10 +404,12 @@ export interface VoidReversalSuggestion {
 export async function suggestVoidReversalDate(
   runner: SqlExecutor,
   orgId: string,
-  doc: { id: string; kind: string; documentDate: string; subsidiaryId: string | null },
+  doc: { id: string; kind: string; documentDate: string; postingDate?: string | null; subsidiaryId: string | null },
 ): Promise<VoidReversalSuggestion> {
-  const originalDate = doc.documentDate;
-  const covering = await resolveCoveringPeriod(runner, orgId, originalDate, doc.subsidiaryId);
+  const originalDate = effectivePostingDate({
+    postingDate: doc.postingDate,
+    documentDate: doc.documentDate,
+  });
   const uncovered: VoidReversalSuggestion = {
     originalDate,
     suggestedDate: originalDate,
@@ -387,6 +420,9 @@ export async function suggestVoidReversalDate(
     suggestedPeriodName: null,
     suggestedOpen: false,
   };
+  const calendarSubsidiaryId = await resolveVoidCalendarSubsidiaryId(runner, orgId, doc.id, doc.subsidiaryId);
+  if (!calendarSubsidiaryId) return uncovered;
+  const covering = await resolveCoveringPeriod(runner, orgId, originalDate, calendarSubsidiaryId);
   if (!covering) return uncovered;
   // The covering and later candidates are regular periods.
   const coveringLabel = canonicalPeriodLabel({
@@ -413,6 +449,7 @@ export async function suggestVoidReversalDate(
         .filter((value): value is string => value != null),
     ),
   ];
+  if (subsidiaryIds.length === 0) subsidiaryIds.push(calendarSubsidiaryId);
   const openIn = async (periodId: string): Promise<boolean> => {
     for (const bookId of bookIds) {
       if (!(await arePeriodModulesOpen(runner, { orgId, periodId, bookId, subsidiaryIds, modules }))) return false;
@@ -436,7 +473,8 @@ export async function suggestVoidReversalDate(
       from accounting_periods p
       join fiscal_calendars fc
         on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-       and fc.is_default and fc.is_active
+       and fc.is_active
+       and fc.id = public.subsidiary_posting_calendar(${orgId}::uuid, ${calendarSubsidiaryId}::uuid, p.starts_on)
      where p.org_id = ${orgId} and not p.is_adjustment
        and p.starts_on > ${covering.ends_on}
      order by p.starts_on, p.ends_on, p.id
@@ -509,7 +547,13 @@ export async function requestDocumentVoid(
       input.reversalDate ?? (await suggestVoidReversalDate(db, input.orgId, current)).suggestedDate,
     );
     const reversalPeriodId = input.reversalPeriodId != null && input.reversalPeriodId !== ""
-      ? await resolveVoidReversalPeriod(db, input.orgId, input.reversalPeriodId, reversalDate)
+      ? await resolveVoidReversalPeriod(
+          db,
+          input.orgId,
+          input.reversalPeriodId,
+          reversalDate,
+          await resolveVoidCalendarSubsidiaryId(db, input.orgId, current.id, current.subsidiaryId),
+        )
       : null;
     // A released payroll bank file refuses here, before the reservation:
     // the pay-run document sits in draft while committed, so the zero-row
@@ -1745,10 +1789,10 @@ export async function completeRequestedDocumentVoid(
         }
         const reversalDate = String(doc.void_reversal_date);
         // Reversals are ordinary corrections, so the reversal period resolves
-        // through the shared covering-period resolver (default calendar,
-        // regular periods only): a void can no longer land in an adjustment
-        // period by date. An adjustment-period reversal names its period
-        // explicitly through the stored document override, revalidated here —
+        // through the shared covering-period resolver (the entry subsidiary's
+        // effective calendar, regular periods only): a void can no longer
+        // land in an adjustment period by date. An adjustment-period reversal
+        // names its period explicitly through the stored document override, revalidated here —
         // the validation at request time fails fast, but this one is
         // authoritative: the period may have closed or changed while gates
         // waited. The openness fence below then applies to the override
@@ -1757,7 +1801,7 @@ export async function completeRequestedDocumentVoid(
           ? String(doc.void_reversal_period_id)
           : null;
         const period = overridePeriodId
-          ? { id: await resolveVoidReversalPeriod(tx, orgId, overridePeriodId, reversalDate) }
+          ? { id: await resolveVoidReversalPeriod(tx, orgId, overridePeriodId, reversalDate, String(entry.subsidiary_id)) }
           : await resolveCoveringPeriod(tx, orgId, reversalDate, String(entry.subsidiary_id));
         if (!period) {
           throw new DocumentVoidError(
