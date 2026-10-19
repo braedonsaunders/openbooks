@@ -590,7 +590,7 @@ test("consolidation retains inclusive tax inputs and resolves the invoice curren
     const subscriptionId = await seedSubscription(org, actorId, planId, child, org.date);
     const { invoiceId: sourceId } = await billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null);
     await db.execute(sql`
-      update document_lines set tax_group_id = ${taxGroupId}, tax_overridden = true
+      update document_lines set tax_code_id = null, tax_group_id = ${taxGroupId}, tax_overridden = true
        where org_id = ${org.orgId} and document_id = ${sourceId}
     `);
     await db.execute(sql`
