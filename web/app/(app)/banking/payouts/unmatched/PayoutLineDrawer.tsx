@@ -86,6 +86,10 @@ export function PayoutLineDrawer({ line }: { line: PayoutLineDrawerData }) {
 
   React.useEffect(() => {
     let live = true
+    setSuggestion(null)
+    setLoadError(null)
+    setLoading(true)
+    setRank(0)
     fetch(`/api/psp/settlement-lines/${line.id}/suggestion`, { cache: 'no-store' })
       .then(async (res) => {
         if (!res.ok) {

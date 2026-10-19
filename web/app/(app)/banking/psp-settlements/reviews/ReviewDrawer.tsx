@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Label } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 export interface ReviewHistoryEntry {
   status: string
@@ -80,15 +81,12 @@ export function PspDisputeReviewDrawer({ review }: { review: ReviewDrawerData })
             : { action, disputeId: review.id, reason: reason.trim() },
         ),
       })
-      // The refusal names the state (already posted, already rejected);
-      // parsing the body first would turn it into a JSON error about nothing.
+      // Preserve an actionable domain refusal even when an intermediary returns a non-JSON body.
       if (!response.ok) {
-        const data = (await response.json().catch(() => null)) as { error?: unknown } | null
-        const message = data?.error
-        setErr(typeof message === 'string' && message ? message : strings.rejectedMessage)
+        setErr(await readApiErrorMessage(response, strings.rejectedMessage))
         return
       }
-      setMsg(action === 'approve' ? strings.approvedMessage : strings.rejectedMessage)
+      setMsg(action === 'approve' ? strings.approvedMessage : strings.decidedNote)
       setReason('')
       router.refresh()
     } catch {

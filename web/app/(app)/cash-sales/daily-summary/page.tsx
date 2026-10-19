@@ -8,7 +8,7 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { DOC_KINDS } from '../../../../lib/document-kinds'
 import { accountOptions, taxCodeOptions } from '../../../../lib/documents'
 import { listScopedPartyOptions } from '../../../../lib/scoped-options'
-import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
+import { isMultiSubsidiary, subsidiaryOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { ModuleView } from '@/components/viewspec/module-view'
 import { page, pageHeader, widgetBlock } from '@braedonsaunders/appkit-viewspec'
 
@@ -39,6 +39,7 @@ export default async function CashDailySummary() {
       select id, number, name from accounts
        where org_id = ${authz.user.orgId} and is_active and not is_summary
          and type in ('asset_bank', 'asset_current_other')
+         ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope, { orgWideNull: true })}
        order by number nulls last, name`).then((r) =>
       r.rows.map((row) => ({
         value: row.id,
