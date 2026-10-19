@@ -193,6 +193,7 @@ export async function computeUsNexusStatus(
     amount: string
     marketplace_amount: string
     is_invoice: number
+    marketplace_invoice: number
     as_of: string
   }>(sql`
     select case when upper(${resolvedCountry}) = 'US'
@@ -205,6 +206,17 @@ export async function computeUsNexusStatus(
            -- whose rule excludes facilitator sales measure without them.
            coalesce(m.marketplace_amount, '0') as marketplace_amount,
            case when d.kind in ('customer_invoice', 'cash_sale') then 1 else 0 end as is_invoice,
+           case when d.kind in ('customer_invoice', 'cash_sale')
+                     and exists (
+                       select 1 from document_lines md
+                        where md.org_id = d.org_id and md.document_id = d.id and md.amount <> 0
+                     )
+                     and not exists (
+                       select 1 from document_lines md
+                        where md.org_id = d.org_id and md.document_id = d.id
+                          and md.amount <> 0 and md.marketplace_facilitator is null
+                     )
+                then 1 else 0 end as marketplace_invoice,
            coalesce(d.posting_date, d.document_date)::text as as_of
       from documents d
       join orgs o on o.id = d.org_id
@@ -246,7 +258,7 @@ export async function computeUsNexusStatus(
        )
   `))
 
-  const byState = new Map<string, { sales: string; marketplace: string; txnCount: number }>()
+  const byState = new Map<string, { sales: string; marketplace: string; txnCount: number; marketplaceTxnCount: number }>()
   const rateCache = new Map<string, Promise<string>>()
 
   const rateToTarget = (fromCurrency: string, asOf: string): Promise<string> => {
@@ -290,11 +302,12 @@ export async function computeUsNexusStatus(
     const converted = await convert(row.amount, row)
     const convertedMarketplace = await convert(row.marketplace_amount, row)
     const key = row.state.trim()
-    const prev = byState.get(key) ?? { sales: '0', marketplace: '0', txnCount: 0 }
+    const prev = byState.get(key) ?? { sales: '0', marketplace: '0', txnCount: 0, marketplaceTxnCount: 0 }
     byState.set(key, {
       sales: add(prev.sales, converted),
       marketplace: add(prev.marketplace, convertedMarketplace),
       txnCount: prev.txnCount + Number(row.is_invoice),
+      marketplaceTxnCount: prev.marketplaceTxnCount + Number(row.marketplace_invoice ?? 0),
     })
   }
 
@@ -322,7 +335,7 @@ export async function computeUsNexusStatus(
     attributed.push({
       state: upper,
       salesUsd: rule.includeInThreshold ? agg.sales : add(agg.sales, neg(agg.marketplace)),
-      txnCount: agg.txnCount,
+      txnCount: rule.includeInThreshold ? agg.txnCount : agg.txnCount - agg.marketplaceTxnCount,
     })
   }
 

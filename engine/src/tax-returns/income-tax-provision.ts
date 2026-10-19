@@ -912,6 +912,7 @@ export type ProvisionRunDetail = ProvisionRunRow & {
     ratePercent: string;
     taxEffect: string;
     source: string;
+    currency: string;
   }[];
 };
 
@@ -1105,17 +1106,21 @@ export async function getProvisionRun(
     allowedSubsidiaryIds == null
       ? sql``
       : allowedSubsidiaryIds.size > 0
-        ? sql` and subsidiary_id in (${sql.join(
+        ? sql` and td.subsidiary_id in (${sql.join(
             [...allowedSubsidiaryIds].map((id) => sql`${id}`),
             sql`, `,
           )})`
         : sql` and false`;
   const diffs = (await db.execute<(ProvisionRunDetail["differences"])[number]>(sql`
-    select id, category, description, book_basis as "bookBasis", tax_basis as "taxBasis",
-           difference, rate_percent as "ratePercent", tax_effect as "taxEffect", source
-      from temporary_differences where org_id = ${orgId} and run_id = ${runId}
+    select td.id, td.category, td.description, td.book_basis as "bookBasis", td.tax_basis as "taxBasis",
+           td.difference, td.rate_percent as "ratePercent", td.tax_effect as "taxEffect", td.source,
+           subsidiary.base_currency as currency
+      from temporary_differences td
+      join subsidiaries subsidiary
+        on subsidiary.org_id = td.org_id and subsidiary.id = td.subsidiary_id
+     where td.org_id = ${orgId} and td.run_id = ${runId}
        ${differenceScope}
-     order by category, description
+     order by td.category, td.description
   `));
   run.differences = diffs.rows;
   return run;

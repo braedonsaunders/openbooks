@@ -12,6 +12,7 @@ type LedgerRow = {
   amount: string;
   marketplace_amount: string;
   is_invoice: number;
+  marketplace_invoice: number;
   as_of: string;
 };
 
@@ -38,6 +39,7 @@ const visibleSale: LedgerRow = {
   amount: "10000.0000",
   marketplace_amount: "0",
   is_invoice: 1,
+  marketplace_invoice: 0,
   as_of: "2026-07-10",
 };
 
@@ -86,4 +88,30 @@ test("unrestricted nexus aggregation retains all organization sales", async (t) 
 
   assert.equal(result.states[0]?.salesUsd, "260000.0000");
   assert.equal(result.states[0]?.txnCount, 2);
+});
+
+test("marketplace-excluded rules omit fully facilitated invoices from the transaction threshold", async (t) => {
+  const marketplaceInvoices = Array.from({ length: 200 }, (_, index) => ({
+    ...visibleSale,
+    state: "FL",
+    amount: "1000.0000",
+    marketplace_amount: "1000.0000",
+    is_invoice: 1,
+    marketplace_invoice: 1,
+    as_of: `2026-07-${String((index % 28) + 1).padStart(2, "0")}`,
+  }));
+  t.mock.method(db, "execute", async (query: unknown) => {
+    const text = sqlText(query);
+    if (text.includes(NO_MARKETPLACE_RULES)) {
+      return { rows: [{ state: "FL", includeInThreshold: false, needsReview: false, source: "verified" }] };
+    }
+    return { rows: marketplaceInvoices };
+  });
+
+  const result = await computeUsNexusStatus("org-1", "2026-07-01", "2026-07-31");
+  const florida = result.states.find((state) => state.state === "FL");
+  assert.ok(florida);
+  assert.equal(florida.salesUsd, "0.0000");
+  assert.equal(florida.txnCount, 0);
+  assert.equal(florida.status, "none");
 });

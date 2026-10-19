@@ -30,7 +30,7 @@ registerHooks({
       return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__taxPageScope.user}' }
     }
     if (specifier === '@/lib/money-server') {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}' }
+      return { shortCircuit: true, url: 'data:text/javascript,export async function getMoneyFormatter(){return {money:(value,options)=>String(options?.currency??"missing")+":"+String(value),moneyCompact:String}}' }
     }
     const app = resolveAppModule(specifier, context, next, root)
     if (app) return app
@@ -171,11 +171,21 @@ test('/tax/provisions/[id] projects the run to the caller\'s entities and gates 
     await withBypassContext(() =>
       db.execute(sql`insert into income_tax_rates(org_id,jurisdiction,rate_percent,effective_from) values (${org.orgId},'Audit rate','20','2000-01-01')`),
     )
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into currencies(code,name,minor_units) values ('USD','US Dollar',2),('GBP','Pound Sterling',2) on conflict(code) do nothing`)
+      await db.execute(sql`update orgs set base_currency='USD' where id=${org.orgId}`)
+      await db.execute(sql`update subsidiaries set base_currency='GBP' where org_id=${org.orgId}`)
+      await db.execute(sql`insert into fx_rates(org_id,from_currency,to_currency,as_of,rate_type,rate,source)
+        values (${org.orgId},'GBP','USD',${org.date},'spot','1.2500000000','manual')`)
+    })
     const runId = await withBypassContext(() =>
       computeProvisionRun(
         org.orgId,
         Number(org.date.slice(0, 4)),
-        { permanentDifferences: [{ description: 'Root', amount: '100' }, { description: 'Hidden', amount: '200', subsidiaryId: hidden }] },
+        {
+          permanentDifferences: [{ description: 'Root', amount: '100' }, { description: 'Hidden', amount: '200', subsidiaryId: hidden }],
+          additionalDifferences: [{ category: 'other', description: 'Root temporary difference', bookBasis: '50000', taxBasis: '0', difference: '50000', source: 'manual' }],
+        },
         actor,
       ),
     )
@@ -187,6 +197,13 @@ test('/tax/provisions/[id] projects the run to the caller\'s entities and gates 
       await restrict(null)
       const all = await loadProvisionDetail({}, runId)
       assert.ok(JSON.stringify(all).includes(whole.totalExpense))
+      assert.deepEqual(
+        [all.differences[0]?.bookBasis, all.differences[0]?.taxBasis, all.differences[0]?.difference, all.differences[0]?.taxEffect]
+          .map((value) => value?.split(':', 1)[0]),
+        ['GBP', 'GBP', 'GBP', 'GBP'],
+        'temporary difference rows use the subsidiary functional currency',
+      )
+      assert.ok(all.summaries.some((summary) => summary.value.startsWith('USD:')), 'consolidated figures use the presentation currency')
       assert.equal(all.canPost, true, 'an unrestricted gl.post holder may post')
 
       await restrict([org.subsidiaryId])

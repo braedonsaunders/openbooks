@@ -65,6 +65,7 @@ async function seedMarketplaceInvoice(
   marketplace = true,
   currency = "USD",
   fxRate = "1",
+  marketplaceOnly = false,
 ): Promise<string> {
   const documentId = randomUUID();
   const merchantLineId = randomUUID();
@@ -96,6 +97,11 @@ async function seedMarketplaceInvoice(
       await tx.execute(sql`
         update document_lines set marketplace_facilitator = 'Amazon'
          where id = ${marketLineId} and org_id = ${org.orgId}`);
+      if (marketplaceOnly) {
+        await tx.execute(sql`
+          update document_lines set marketplace_facilitator = 'Amazon'
+           where id = ${merchantLineId} and org_id = ${org.orgId}`);
+      }
     }
     await tx.execute(sql`
       insert into document_line_tax_components
@@ -239,13 +245,17 @@ test("nexus excludes marketplace sales where the state rule excludes them and fl
     const { codeId } = await seedSetup(org, actorId);
     const documentId = await seedMarketplaceInvoice(org, actorId, "INV-MKT-2", codeId);
     await postDocument(documentId, { control: CONTROL(org) });
+    const facilitatedOnlyId = await seedMarketplaceInvoice(
+      org, actorId, "INV-MKT-ONLY", codeId, "FL", true, "USD", "1", true,
+    );
+    await postDocument(facilitatedOnlyId, { control: CONTROL(org) });
     // A second invoice — merchant-only, shipping to a state with no
     // verified rule — proves the include-pending-review default on a real row.
     const wyomingId = await seedMarketplaceInvoice(org, actorId, "INV-MKT-3", codeId, "WY", false);
     await postDocument(wyomingId, { control: CONTROL(org) });
 
-    // The invoice ships to Florida, whose seeded rule excludes facilitator
-    // sales: the threshold measures the merchant's 100 alone.
+    // The mixed invoice retains one transaction, while the fully facilitated
+    // invoice adds sales evidence but no transaction under Florida's rule.
     const to = org.date;
     const from = org.date.slice(0, 8) + "01";
     const status = await computeUsNexusStatus(org.orgId, from, to);
@@ -253,8 +263,9 @@ test("nexus excludes marketplace sales where the state rule excludes them and fl
     assert.ok(florida, "florida is measured");
     assert.equal(florida.marketplace.included, false);
     assert.equal(florida.marketplace.needsReview, false);
-    assert.equal(florida.marketplace.marketplaceSalesUsd, "200.0000");
-    // 300 of sales, 200 of them facilitator-collected: Florida measures 100.
+    assert.equal(florida.marketplace.marketplaceSalesUsd, "500.0000");
+    assert.equal(florida.txnCount, 1);
+    // 600 of sales, 500 facilitator-collected: Florida measures 100.
     assert.equal(florida.salesUsd, "100.0000");
 
     const wyoming = status.states.find((s) => s.state === "WY");

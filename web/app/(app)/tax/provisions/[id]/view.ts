@@ -65,8 +65,8 @@ export async function loadProvisionDetail(
   // indistinguishable from a missing one.
   const run = await getProvisionRun(authz.user.orgId, id, authz.allowedSubsidiaryIds)
   if (!run) notFound()
-  const m = (v: string) => money(v, { currency: org?.base_currency })
   const payload = run.payload as {
+    presentationCurrency?: string
     framework?: 'asc740' | 'ias12'
     pretaxBookIncome: string
     enactedRatePercent: string
@@ -77,6 +77,8 @@ export async function loadProvisionDetail(
     balances: { dtaGross: string; dtlGross: string; valuationAllowance: string }
     rateReconciliation: { key: string; label: string; amount: string; percent: string | null }[]
   }
+  const presentationCurrency = payload.presentationCurrency ?? org?.base_currency
+  const m = (v: string) => money(v, { currency: presentationCurrency })
   const framework = payload.framework ?? 'asc740'
   const recon = payload.rateReconciliation ?? []
   // Posting is the gl.post route's authority, and it refuses restricted callers
@@ -129,10 +131,10 @@ export async function loadProvisionDetail(
       id: d.id,
       description: d.description,
       categorySourceLabel: `${t(`categories.${d.category}`)} · ${d.source === 'auto' ? t('detail.auto') : t('detail.manual')}`,
-      bookBasis: m(d.bookBasis),
-      taxBasis: m(d.taxBasis),
-      difference: m(d.difference),
-      taxEffect: m(d.taxEffect),
+      bookBasis: money(d.bookBasis, { currency: d.currency }),
+      taxBasis: money(d.taxBasis, { currency: d.currency }),
+      difference: money(d.difference, { currency: d.currency }),
+      taxEffect: money(d.taxEffect, { currency: d.currency }),
     })),
   }
 }
