@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { fromUnits } from '@openbooks/engine/money'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
@@ -32,16 +33,18 @@ export const GET = defineRoute({
     // The party gate above is not enough: each credit carries its own
     // entity, and a restricted caller reads only the entities they may see.
     const credits = (await db.execute<{
-      accountId: string; codeLast4: string; currency: string; balance: string
+      accountId: string; codeLast4: string; currency: string; balanceMinor: string
     }>(sql`
       select id as "accountId", code_last4 as "codeLast4", currency,
-             (balance_minor::numeric / 10000)::text as balance
+             balance_minor::text as "balanceMinor"
         from stored_value_accounts
        where org_id = ${authz.user.orgId} and customer_party_id = ${partyId}
          and status in ('active', 'frozen') and balance_minor > 0
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by currency, code_last4
     `)).rows
-    return NextResponse.json({ credits })
+    return NextResponse.json({
+      credits: credits.map(({ balanceMinor, ...credit }) => ({ ...credit, balance: fromUnits(BigInt(balanceMinor)) })),
+    })
   },
 })

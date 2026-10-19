@@ -2,10 +2,12 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
+import { fromUnits } from '@openbooks/engine/money'
 import { loadPaymentDocument, openItemsForParty, receiptFundingSubsidiaryOptions, PAYMENT_KIND_SIDE, type PaymentKind } from '@openbooks/engine/payments/documents'
 import { receiptAccountOptions } from '@/lib/documents'
 import { businessToday } from '@openbooks/engine/platform/business-date'
 import { paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
+import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
 import { resolveFormLayout } from '@/lib/customization/resolve'
 import type { FormLayoutConfig } from '@openbooks/customization'
 import { isFeatureEnabled } from '@/lib/features'
@@ -43,7 +45,7 @@ export interface PaymentFlyoutCreate {
   bankAccounts: { id: string; number: string | null; name: string }[]
   side: 'ap' | 'ar'
   layout: FormLayoutConfig
-  storedValue: null
+  storedValue: PaymentFlyoutRecord['storedValue']
 }
 
 export type PaymentFlyout = PaymentFlyoutRecord | PaymentFlyoutCreate
@@ -138,15 +140,18 @@ export async function loadPaymentFlyout({
       ? (((openPayment.doc.custom ?? {}) as { storedValueTenders?: unknown }).storedValueTenders as
         | { accountId: string; codeLast4: string; amount: string }[] ?? [])
       : []
+  const storedValuePartyId = creating ? selectedParty?.id : openPayment?.doc.party_id as string | undefined
   const storedValueCredits =
-    storedValueEnabled && openPayment?.doc.party_id
-      ? (await db.execute<{ accountId: string; codeLast4: string; currency: string; balance: string }>(sql`
+    storedValueEnabled && storedValuePartyId
+      ? (await db.execute<{ accountId: string; codeLast4: string; currency: string; balanceMinor: string }>(sql`
         select id as "accountId", code_last4 as "codeLast4", currency,
-               (balance_minor::numeric / 10000)::text as balance
+               balance_minor::text as "balanceMinor"
           from stored_value_accounts
-         where org_id = ${orgId} and customer_party_id = ${openPayment.doc.party_id as string}
+         where org_id = ${orgId} and customer_party_id = ${storedValuePartyId}
            and status in ('active', 'frozen') and balance_minor > 0
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
          order by currency, code_last4`)).rows
+        .map((row) => ({ ...row, balance: fromUnits(BigInt(row.balanceMinor)) }))
       : []
   const resolvedForm = await resolveFormLayout({
     orgId,
@@ -241,7 +246,7 @@ export async function loadPaymentFlyout({
       bankAccounts: banks.rows,
       side,
       layout: resolvedForm.layout,
-      storedValue: null,
+      storedValue: storedValueEnabled ? { tenders: [], customerCredits: storedValueCredits } : null,
     }
   }
   return {

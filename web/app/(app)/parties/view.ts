@@ -4,6 +4,7 @@ import { registeredListTable } from '../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { fromUnits } from '@openbooks/engine/money'
 import {
   pagination,
   badge,
@@ -360,13 +361,14 @@ export async function loadParties(
     isFeatureEnabled(orgId, 'crossBorderTax'),
     isFeatureEnabled(orgId, 'storedValue'),
     partyId && partyId !== 'new' && isUuid(partyId)
-      ? db.execute<{ currency: string; total: string }>(sql`
-          select currency, (sum(balance_minor)::numeric / 10000)::text as total
+      ? db.execute<{ currency: string; totalMinor: string }>(sql`
+          select currency, sum(balance_minor)::text as "totalMinor"
             from stored_value_accounts
            where org_id = ${orgId} and customer_party_id = ${partyId}
              and status in ('active', 'frozen')
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
            group by currency`)
-      : { rows: [] as { currency: string; total: string }[] },
+      : { rows: [] as { currency: string; totalMinor: string }[] },
     isFeatureEnabled(orgId, 'consolidatedBilling'),
   ])
   const resolvedPartyForm =
@@ -529,7 +531,7 @@ export async function loadParties(
             ? {
               balances: storeCreditBalances.rows.map((row) => ({
                 currency: String(row.currency),
-                total: String(row.total),
+                total: fromUnits(BigInt(row.totalMinor)),
               })),
             }
             : null,
