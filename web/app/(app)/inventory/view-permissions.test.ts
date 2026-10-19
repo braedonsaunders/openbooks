@@ -33,6 +33,7 @@ stubModules({
     "./counts/CountsList": "export function CountsList(p) { globalThis.__inventoryViewPermissions.pickerSubsidiaries = p.subsidiaries; return null } export function NewCountButton() { return null }",
     "./InventoryActionDrawer": "export function InventoryActionDrawer() { return null }",
     "./ReceiveAgainstPoDrawer": "export function ReceiveAgainstPoDrawer() { return null }",
+    "../../../lib/receivable-purchase-orders": "export async function listReceivablePurchaseOrders() { return { rows: [] } }",
     "./StockControls": "export function StockControls() { return null }",
     "./LayerInquiry": "export function LayerInquiry() { return null }",
     "./NewMovementButton": "export function NewMovementButton() { return null }",

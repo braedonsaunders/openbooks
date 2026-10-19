@@ -22,16 +22,13 @@ import { BomWorkspace, NewBomButton, type BomAssembly } from './BomWorkspace'
 import { CountsList, NewCountButton } from './counts/CountsList'
 import { InventoryActionDrawer } from './InventoryActionDrawer'
 import { NewMovementButton } from './NewMovementButton'
-import { ReceiveAgainstPoDrawer, type ReceivablePurchaseOrder } from './ReceiveAgainstPoDrawer'
+import { ReceiveAgainstPoDrawer } from './ReceiveAgainstPoDrawer'
 import { canPostInventoryMovement } from './movement-permissions'
 import { ReverseLandedVoucherAction } from './ReverseLandedVoucherAction'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { listReceivablePurchaseOrders } from '../../../lib/receivable-purchase-orders'
 
 export const dynamic = 'force-dynamic'
-
-type ReceivablePurchaseOrderRow = {
-  [Field in keyof ReceivablePurchaseOrder]: ReceivablePurchaseOrder[Field]
-}
 
 type InventoryView = 'onhand' | 'movements' | 'counts' | 'locations' | 'bom' | 'holds' | 'consignment' | 'cycles'
 
@@ -110,21 +107,10 @@ export default async function Inventory({
       ])
     : null
 
-  // Approved purchase orders still waiting for stock: the standalone
-  // receive entry offers exactly the orders the receive route will accept.
+  // Approved purchase orders with open stocked lines, excluding direct
+  // vendor shipments that the stock receipt path cannot receive.
   const receivablePos = showReceivePicker
-    ? await db.execute<ReceivablePurchaseOrderRow>(sql`
-        select d.id, d.document_number as "number", p.display_name as "vendor",
-               count(*)::int as "openLines"
-          from documents d
-          join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
-          left join parties p on p.id = d.party_id and p.org_id = d.org_id
-         where d.org_id = ${orgId} and d.kind = 'purchase_order' and d.status = 'approved'
-           and dl.quantity > dl.quantity_fulfilled + dl.quantity_cancelled
-           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-         group by d.id, d.document_number, d.document_date, p.display_name
-         order by d.document_date desc, d.document_number, d.id
-         limit 100`)
+    ? await listReceivablePurchaseOrders(orgId, authz.allowedSubsidiaryIds)
     : null
 
   const countData = view === 'counts'
