@@ -25,6 +25,7 @@ test("a hand-coded bill for received stock auto-matches on post and refuses dupl
     import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
     import { postDocument } from "./engine/src/ledger/posting-document.ts";
     import { toUnits } from "./engine/src/money/money.ts";
+    import { toQuantityUnits } from "./engine/src/money/quantity.ts";
     import { createOrderDraft, receivePurchaseOrder } from "./web/lib/order-cycle.ts";
     import { createScratchOrg, createScratchUser, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
 
@@ -93,7 +94,7 @@ test("a hand-coded bill for received stock auto-matches on post and refuses dupl
       const partialBilled = (await db.execute(sql\`
         select quantity_billed::text as billed from document_lines where id = \${partialSource}
       \`)).rows[0].billed;
-      assert.equal(partialBilled, "0", "a refused multi-line match leaves billed quantity unchanged");
+      assert.equal(toQuantityUnits(partialBilled), toQuantityUnits("0"), "a refused multi-line match leaves billed quantity unchanged");
 
       const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null));
       const sourceA = randomUUID();
