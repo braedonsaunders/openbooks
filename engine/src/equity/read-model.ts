@@ -43,6 +43,7 @@ import type { RoundModelResult } from "./round-model.ts";
 import { bookBeforeRound } from "./round-conversion.ts";
 import { formatLedger } from "./securities.ts";
 import { restatePrice } from "./splits.ts";
+import { roundPreMoneyDrift } from "./structure.ts";
 import { applyRoundAmendments, EVENT_COLUMNS, loadEquityBook, loadRoundAmendments, SECURITY_COLUMNS, securityFromRow, type RoundAmendmentRecord } from "./store.ts";
 import { REVERSIBLE_EVENT_KINDS, type EquityBook, type SecurityKind } from "./types.ts";
 import { vestingInstallments } from "./vesting.ts";
@@ -414,6 +415,12 @@ export interface StructureView {
     /** Fully diluted shares before the round on its closing date, and the pre-money valuation they imply at the round price. */
     fullyDilutedBefore: string;
     impliedPreMoney: string;
+    /**
+     * The pre-money valuation no longer agrees with the price times the fully
+     * diluted shares before the round as the book now reads, and no basis is
+     * recorded: corrected by a governed amendment of the valuation or its basis.
+     */
+    preMoneyDrift: { fullyDilutedBefore: string; impliedPreMoney: string } | null;
     /** Live securities issued in the round or converted into it: while any stand, its price and date cannot change and it cannot be voided. */
     liveSecurities: { id: string; securityNumber: string }[];
     amendments: RoundAmendmentRecord[];
@@ -472,6 +479,7 @@ export async function loadStructure(input: ReadInput & { subsidiaryId: string; a
           ...round, raised: formatLedger(raised), sharesIssued: shares.toString(),
           fullyDilutedBefore: fullyDilutedBefore.toString(),
           impliedPreMoney: formatMoney(multiplyRational(parsePrice(round.pricePerShare, "the round price"), rational(fullyDilutedBefore))),
+          preMoneyDrift: roundPreMoneyDrift(book, round),
           liveSecurities: issued.map((row) => ({ id: row.id, securityNumber: row.securityNumber })),
           amendments: amendments.filter((row) => row.roundId === round.id),
         };

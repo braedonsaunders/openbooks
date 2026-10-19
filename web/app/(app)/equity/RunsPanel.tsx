@@ -15,6 +15,7 @@ import type { RunsViewData } from './view'
 import { CELL, CommandRefusal, DATE_CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, Refusal, postCommand, useCivilDate, useShares, withParams } from './shared'
 
 const BASE = '/equity'
+const NOTICE = 'rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
 
 /** A posted run, or a run an Equity action Flow holds for approval. */
 type GovernedRun<T> = (T & { status: 'applied' }) | { status: 'pending_approval'; throughDate: string }
@@ -94,7 +95,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
         <OpenReport href={view.reportHref} label={t('compensation.report')} />
         <Button asChild variant="outline" size="sm"><Link href={view.historyHref}>{t('runs.history')}</Link></Button>
         {context.canManage && view.throughDate && preview && (
-          <Button size="sm" onClick={post} disabled={busy || alreadyRun || backdated || !preview.due}>
+          <Button size="sm" onClick={post} disabled={busy || alreadyRun || backdated || !preview.due || view.blocked !== null}>
             {compensation ? t('runs.postCompensation', { period: period?.label ?? date(view.throughDate) }) : t('runs.postInterest', { period: period?.label ?? date(view.throughDate) })}
           </Button>
         )}
@@ -106,6 +107,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
     <p className="text-sm text-slate-500 dark:text-slate-400">
       {t('runs.through', { date: date(view.throughDate) })} · {lastRunThrough ? t('compensation.lastRun', { date: date(lastRunThrough) }) : t('compensation.noRuns')} ·{' '}
       {t('compensation.total')}: <strong>{money(compensation && view.lines === 'releases' ? view.compensation!.releaseTotal : preview.total, { currency: preview.currency })}</strong>
+      {compensation && view.lines === 'expense' && /[1-9]/.test(view.compensation!.catchUpTotal) && ` · ${t('runs.includesCatchUp', { amount: money(view.compensation!.catchUpTotal, { currency: preview.currency }), date: date(lastRunThrough) })}`}
       {alreadyRun ? ` · ${t('runs.alreadyPosted')}` : backdated ? ` · ${t('runs.backdated', { date: date(lastRunThrough) })}` : ` · ${t('runs.closeTask')}`}{' '}
       {!alreadyRun && !backdated && period && <Link className={LINK} href={period.closeHref as never}>{t('runs.openClose', { period: period.label })}</Link>}
     </p>
@@ -115,6 +117,9 @@ function RunsBody({ view }: { view: RunsViewData }) {
     <div className="space-y-3">
       <PendingActions context={context} filter={(request) => request.action === (compensation ? 'compensation_run' : 'interest_run')} />
       <CommandRefusal refusal={refusal} fallback={failed} />
+      {/* Recorded after the last run for the periods it measured, and why the selected period cannot post yet. */}
+      {view.catchUp && <p role="status" className={NOTICE}>{view.catchUp}</p>}
+      {view.blocked && !alreadyRun && !backdated && <p role="status" className={NOTICE}>{view.blocked.message} {view.blocked.remedy}</p>}
       {view.periods.length === 0 ? (
         <>
           {toolbar}

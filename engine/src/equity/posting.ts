@@ -16,7 +16,8 @@ import { PostingError } from "../journal/posting-contracts.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
-import type { SqlExecutor } from "../platform/db.ts";
+import { businessTodayInTx } from "../platform/business-date.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 import { loadControlAccountsForRoles } from "../records/control-accounts.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { EQUITY_ACCOUNTS_REMEDY, EquityError } from "./errors.ts";
@@ -210,9 +211,10 @@ function refusal(error: unknown, what: string): never {
   throw error;
 }
 
-async function primaryBook(runner: SqlExecutor, orgId: string): Promise<string> {
+/** The primary book; a posting holds it shared so it cannot be retired underneath, while a probe only reads it. */
+async function primaryBook(runner: SqlExecutor, orgId: string, lock = true): Promise<string> {
   const book = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share`)).rows[0];
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 ${lock ? sql`for share` : sql``}`)).rows[0];
   if (!book) {
     throw new EquityError("The organization has no active primary book that posts to the general ledger.", {
       code: "equity_book_missing",
@@ -239,8 +241,8 @@ async function coveringPeriod(runner: SqlExecutor, orgId: string, subsidiaryId: 
  * run records what it measured into its period, so it is dated into an open
  * one, exactly as its entry would be.
  */
-export async function assertPostingPeriodOpen(runner: SqlExecutor, orgId: string, subsidiaryId: string, on: string, what: string): Promise<void> {
-  const bookId = await primaryBook(runner, orgId);
+export async function assertPostingPeriodOpen(runner: SqlExecutor, orgId: string, subsidiaryId: string, on: string, what: string, options: { lock?: boolean } = {}): Promise<void> {
+  const bookId = await primaryBook(runner, orgId, options.lock !== false);
   const periodId = await coveringPeriod(runner, orgId, subsidiaryId, on);
   try {
     await assertPeriodModulesOpen(runner, { orgId, periodId, bookId, subsidiaryIds: [subsidiaryId], modules: ["gl"] });
@@ -258,10 +260,76 @@ export async function assertPostingPeriodOpen(runner: SqlExecutor, orgId: string
   }
 }
 
+/**
+ * Refuse a periodic run through a date whose accounting period has not yet
+ * ended on the organization's business date (the calendar day in its time
+ * zone), or that falls in a closed period. A run measures a period once it
+ * is over: cost or interest recognized for it later (a backdated grant, an
+ * issue recorded after a run) is caught up by the next run, which can only
+ * be dated after the last one.
+ */
+export async function assertRunPeriodPostable(runner: SqlExecutor, orgId: string, subsidiaryId: string, throughDate: string, what: string, options: { lock?: boolean } = {}): Promise<void> {
+  const period = await resolveCoveringPeriod(runner, orgId, throughDate, subsidiaryId);
+  if (!period) {
+    throw new EquityError(`No accounting period covers ${throughDate}.`, {
+      code: "equity_period_missing",
+      remedy: `Generate the accounting period covering ${throughDate} (Accounting → Period Close), then try again.`,
+      field: "throughDate",
+    });
+  }
+  const today = await businessTodayInTx(runner, orgId);
+  if (period.ends_on > today) {
+    throw new EquityError(`The ${what} through ${throughDate} falls in ${period.name}, which ends on ${period.ends_on}, after today (${today}).`, {
+      status: 409,
+      code: "equity_run_period_not_ended",
+      remedy: `Run through the end of a period that has ended by today (${today}); the runs view offers the next one with activity due, and anything recognized since the last run is caught up in it.`,
+      field: "throughDate",
+    });
+  }
+  await assertPostingPeriodOpen(runner, orgId, subsidiaryId, throughDate, what, options);
+}
+
+/** The refusal a run through the date would raise for its period (not ended, closed or missing), or null when it can post. */
+export async function runBlocked(orgId: string, subsidiaryId: string, throughDate: string, what: string): Promise<{ code: string; message: string; remedy: string } | null> {
+  try {
+    await assertRunPeriodPostable(db, orgId, subsidiaryId, throughDate, what, { lock: false });
+    return null;
+  } catch (error) {
+    if (!(error instanceof EquityError)) throw error;
+    return { code: error.code, message: error.message, remedy: error.remedy };
+  }
+}
+
+export interface RunPeriodAfter {
+  periodId: string;
+  name: string;
+  endsOn: string;
+  /** Whether the period has ended by the organization's business date, so a run through it can post now. */
+  ended: boolean;
+}
+
+/**
+ * The period the next run after `after` is dated to: the first accounting
+ * period of the default calendar ending after it that is open for posting.
+ */
+export async function nextRunPeriodAfter(runner: SqlExecutor, orgId: string, subsidiaryId: string, after: string): Promise<RunPeriodAfter | null> {
+  const periods = (await runner.execute<{ id: string; name: string; ends_on: string }>(sql`
+    select p.id, p.name, p.ends_on::text as ends_on from accounting_periods p
+     where p.org_id = ${orgId} and not p.is_adjustment and p.ends_on > ${after}::date
+       and p.fiscal_calendar_id in (select id from fiscal_calendars where org_id = ${orgId} and is_default and is_active)
+     order by p.ends_on, p.id
+     limit 36`)).rows;
+  const today = await businessTodayInTx(runner, orgId);
+  for (const period of periods) {
+    if (await postingPeriodOpen(runner, orgId, subsidiaryId, period.ends_on)) return { periodId: period.id, name: period.name, endsOn: period.ends_on, ended: period.ends_on <= today };
+  }
+  return null;
+}
+
 /** Whether the accounting period covering a date is open for general ledger posting in the primary book. */
 export async function postingPeriodOpen(runner: SqlExecutor, orgId: string, subsidiaryId: string, on: string): Promise<boolean> {
   try {
-    await assertPostingPeriodOpen(runner, orgId, subsidiaryId, on, "posting");
+    await assertPostingPeriodOpen(runner, orgId, subsidiaryId, on, "posting", { lock: false });
     return true;
   } catch (error) {
     if (error instanceof EquityError && (error.code === "equity_period_closed" || error.code === "equity_period_missing")) return false;

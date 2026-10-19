@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { applied, equityRefusal as refusal, seedHolder, setEquityFeature, setupEquityWorld, type EquityWorld } from "../testing/equity-world.ts";
@@ -84,8 +85,11 @@ test("the overview reads the capitalization, ownership, latest round, money rais
     assert.ok(december.attention.some((item) => item.kind === "interest_due" && item.date === "2026-11-30"));
     assert.equal(december.compensationPosted.amount, "0.0000");
 
-    const run = applied(await postCompensationRun({ ...entity(w), throughDate: "2026-11-30" }));
-    applied(await postInterestRun({ ...entity(w), throughDate: "2026-11-30" }));
+    const run = await withSimClock("2026-12-01T12:00:00Z", async () => {
+      const posted = applied(await postCompensationRun({ ...entity(w), throughDate: "2026-11-30" }));
+      applied(await postInterestRun({ ...entity(w), throughDate: "2026-11-30" }));
+      return posted;
+    });
     const posted = await loadEquityOverview({ ...entity(w), asOf: "2026-12-15", yearStart: "2026-01-01" });
     assert.equal(posted.compensationPosted.amount, run.total, "the year's posted stock compensation is the runs dated in it");
     assert.ok(!posted.attention.some((item) => item.kind === "compensation_due" || item.kind === "interest_due"), "posted runs are current");
@@ -118,11 +122,11 @@ test("the close checklist counts each legal entity whose stock compensation or n
     const before = await equityPostingsDue(w.org.orgId, w.org.subsidiaryId, currency, through);
     assert.ok(before.compensation.due && /[1-9]/.test(before.compensation.amount));
 
-    applied(await postCompensationRun({ ...entity(w), throughDate: through }));
+    await withSimClock("2026-12-01T12:00:00Z", async () => applied(await postCompensationRun({ ...entity(w), throughDate: through })));
     const afterCompensation = await closeEquityPostings(w.org.orgId, { through, subsidiaryIds: [w.org.subsidiaryId] });
     assert.deepEqual(afterCompensation.compensation, [], "the posted run resolves the compensation step");
     assert.equal(afterCompensation.interest.length, 1, "note interest stays due until its own run posts");
-    applied(await postInterestRun({ ...entity(w), throughDate: through }));
+    await withSimClock("2026-12-01T12:00:00Z", async () => applied(await postInterestRun({ ...entity(w), throughDate: through })));
     assert.deepEqual(await closeEquityPostings(w.org.orgId, { through, subsidiaryIds: [] }), { compensation: [], interest: [] });
     assert.equal((await closeEquityPostings(w.org.orgId, { through: "2026-12-31", subsidiaryIds: [] })).compensation.length, 1, "the next period end is due again");
 

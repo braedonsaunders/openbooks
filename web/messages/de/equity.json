@@ -358,7 +358,11 @@
     "amendHelp": "Korrigieren Sie Name, Preis oder Pre-Money-Bewertung der Runde. Ein leeres Feld behält seinen Wert; die Änderung ist ein genehmigungspflichtiger Vorgang.",
     "voidLocked": "Eine Runde kann nur storniert werden, wenn kein aktives Wertpapier in ihr besteht: Stornieren Sie zuerst diese Wertpapiere oder machen Sie sie rückgängig.",
     "voidHelp": "Stornieren Sie eine irrtümlich erfasste Runde. Sie bleibt zur Historie gelistet und fließt in keine Kennzahl ein; die Stornierung ist ein genehmigungspflichtiger Vorgang.",
-    "priceLocked": "Aktive Wertpapiere bestehen zu diesem Preis."
+    "priceLocked": "Aktive Wertpapiere bestehen zu diesem Preis.",
+    "driftBadge": "Pre-Money weicht ab",
+    "preMoneyDrift": "Die Pre-Money-Bewertung von {preMoney} stimmt nicht mehr mit dem Preis der Runde mal den {shares} voll verwässerten Anteilen vor ihr überein ({implied}): Vor der Runde datierte Anteile wurden nach ihr erfasst.",
+    "preMoneyDriftRemedy": "Berichtigen Sie die Pre-Money-Bewertung unten auf {implied}, oder erfassen Sie unter „Grundlage der Pre-Money-Bewertung“, worauf sie beruht.",
+    "preMoneyDriftReadOnly": "Ein Equity-Verwalter kann die Bewertung berichtigen oder ihre Grundlage erfassen."
   },
   "model": {
     "description": "Bepreist eine Runde nach der Pre-Money-Methode anhand der Kapitaltabelle zum Stichtag: Ausstehende SAFEs und Wandeldarlehen werden gewandelt, geschützte Klassen erhalten ihre Verwässerungsschutzanteile und der Pool wird innerhalb der Pre-Money-Bewertung auf sein Ziel aufgefüllt. Es wird nichts erfasst.",
@@ -580,7 +584,7 @@
     "outstandingPrincipal": "Ausstehend",
     "convertedInto": "Umgewandelt in",
     "invalidConversionTitle": "Diese Umwandlung nutzte von {source} übernommene Bedingungen; {source} wurde am {date} storniert.",
-    "invalidConversionRemedy": "Stornieren Sie Zertifikat {certificate} zum {date}, dem Abschlussdatum der Runde, um die Umwandlung aufzuheben, und wandeln Sie das Instrument dann zu seinen eigenen Bedingungen erneut um."
+    "invalidConversionRemedy": "Stornieren Sie Zertifikat {certificate} zum {date}, dem Abschlussdatum der Runde, um die Umwandlung aufzuheben; machen Sie die MFN-Wahl mit Datum spätestens {date} rückgängig; wandeln Sie das Instrument dann zu seinen eigenen Bedingungen erneut um."
   },
   "events": {
     "saved": "{kind} erfasst",
@@ -823,8 +827,15 @@
       "interestRefused": "Die Darlehenszinsen bis {date} können nicht bemessen werden: {message}",
       "pending": "{count, plural, one {# Eigenkapitalvorgang wartet auf Genehmigung} other {# Eigenkapitalvorgänge warten auf Genehmigung}}",
       "policyMissing": "Zum {date} gilt keine Kontenregel für Eigenkapital; bis eine eingerichtet ist, kann nichts gebucht werden",
-      "conversionTermsVoid": "{holder} · {number} wurde zu den Bedingungen von {source} in {certificate} umgewandelt; {source} wurde inzwischen storniert. Öffnen Sie {number}, um die MFN-Wahl rückgängig zu machen und die Umwandlung zu berichtigen.",
-      "electionTermsVoid": "{holder} · {number} hat die Bedingungen von {source} übernommen; {source} wurde inzwischen storniert. Öffnen Sie {number}, um die MFN-Wahl vor der Umwandlung rückgängig zu machen."
+      "conversionTermsVoid": "{holder} · {number} wurde zu den Bedingungen von {source} in {certificate} umgewandelt; {source} ist storniert. Öffnen Sie {number}, um das Zertifikat zu stornieren, die MFN-Wahl rückgängig zu machen und erneut umzuwandeln.",
+      "electionTermsVoid": "{holder} · {number} hat die Bedingungen von {source} übernommen; {source} ist storniert. Öffnen Sie {number}, um die MFN-Wahl vor der Umwandlung rückgängig zu machen.",
+      "compensationCatchUp": "{amount} Aktienvergütung bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht; sie werden mit dem Lauf bis {through} gebucht, sobald diese Periode endet",
+      "compensationCatchUpNow": "{amount} Aktienvergütung bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht; buchen Sie den Lauf bis {through}, um sie nachzuholen",
+      "compensationCatchUpNoPeriod": "{amount} Aktienvergütung bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht; öffnen oder erzeugen Sie die nächste Buchungsperiode, um sie zu buchen",
+      "interestCatchUp": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht; sie werden mit dem Lauf bis {through} gebucht, sobald diese Periode endet",
+      "interestCatchUpNow": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht; buchen Sie den Lauf bis {through}, um sie nachzuholen",
+      "interestCatchUpNoPeriod": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht; öffnen oder erzeugen Sie die nächste Buchungsperiode, um sie zu buchen",
+      "roundPreMoneyDrift": "Runde {name} nennt eine Pre-Money-Bewertung von {preMoney}, aber ihr Preis mal die {shares} voll verwässerten Anteile vor ihr ergibt jetzt {implied}; berichtigen Sie die Bewertung oder erfassen Sie ihre Grundlage"
     },
     "activity": {
       "title": "Letzte Aktivität",
@@ -878,7 +889,16 @@
     "nothingDueCompensation": "Kein Lauf zur aktienbasierten Vergütung ist fällig.",
     "nothingDueInterest": "Kein Lauf für Wandeldarlehenszinsen ist fällig.",
     "nothingDueRemedy": "Läufe sind bis {date} gebucht; seitdem hat keine offene Periode zu buchende Vorgänge. Wählen Sie eine Periode, um sie zu prüfen.",
-    "nothingDueRemedyFirst": "Noch hat keine offene Periode zu buchende Vorgänge. Wählen Sie eine Periode, um sie zu prüfen."
+    "nothingDueRemedyFirst": "Noch hat keine offene Periode zu buchende Vorgänge. Wählen Sie eine Periode, um sie zu prüfen.",
+    "includesCatchUp": "enthält {amount} bis {date}, die nach diesem Lauf erfasst wurden",
+    "catchUp": {
+      "compensation": "{amount} Aktienvergütung bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Sie werden mit dem Lauf bis {through} gebucht, sobald diese Periode endet.",
+      "compensationNow": "{amount} Aktienvergütung bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Der Lauf bis {through} holt sie nach.",
+      "compensationNoPeriod": "{amount} Aktienvergütung bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Öffnen oder erzeugen Sie die nächste Buchungsperiode, um sie zu buchen.",
+      "interest": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Sie werden mit dem Lauf bis {through} gebucht, sobald diese Periode endet.",
+      "interestNow": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Der Lauf bis {through} holt sie nach.",
+      "interestNoPeriod": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Öffnen oder erzeugen Sie die nächste Buchungsperiode, um sie zu buchen."
+    }
   },
   "preferenceBasis": {
     "amount_paid": "Gezahlter Betrag je Zertifikat",

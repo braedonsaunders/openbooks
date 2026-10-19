@@ -6,6 +6,7 @@ import { installEngineSeams } from "../composition/install.ts";
 import { EQUITY_ACTION_SUBJECT_KIND } from "../flows/equity-actions-adapter.ts";
 import { decideGate } from "../flows/gates.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
+import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 import { dropScratchOrgReporting, seedApprovalFlow, seedPostingAccount } from "../testing/fixtures.ts";
@@ -64,6 +65,10 @@ async function preferred(w: EquityWorld, code: string) {
   })).id;
 }
 
+async function equityActionRequestCount(w: EquityWorld): Promise<number> {
+  return (await db.execute<{ n: number }>(sql`select count(*)::int as n from equity_action_requests where org_id = ${w.org.orgId}`)).rows[0]!.n;
+}
+
 async function openGate(w: EquityWorld, requestId: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     select id from flow_gates where org_id = ${w.org.orgId} and subject_id = ${requestId} and status in ('pending', 'escalated')`)).rows[0]!.id;
@@ -91,7 +96,7 @@ test("an early-exercise deposit reads as of the date on the ledger and on the ve
     assert.equal(today.depositHeld, "18000.0000", "the runs through February released 138,000 shares' deposit");
     assert.equal(today.depositUnvested, "12240.0000", "the schedule has vested 186,000 shares by today");
 
-    applied(await postCompensationRun({ ...entity(w), throughDate: "2026-12-31" }));
+    await withSimClock("2027-01-04T12:00:00Z", async () => applied(await postCompensationRun({ ...entity(w), throughDate: "2026-12-31" })));
     assert.equal((await deposit("2026-10-19")).depositHeld, "18000.0000", "a later run does not reach back before its date");
     assert.equal((await deposit("2026-12-31")).depositHeld, "10800.0000", "the December run releases 60,000 more shares' deposit");
     assert.equal((await deposit("2026-12-31")).depositUnvested, "10800.0000");
@@ -140,7 +145,7 @@ test("the instrument an MFN election adopted cannot be voided while the election
     const better = await issueSecurity({ ...entity(w), kind: "safe", holderPartyId: w.holderId, issueDate: "2026-07-05", considerationAmount: "100000", considerationAccountId: w.org.accounts.bank, safeType: "post_money", valuationCap: "400000", discountPercent: "20" });
     await assert.rejects(
       electMfnTerms({ ...manage(w), securityId: mfn.id, sourceSecurityId: better.id, effectiveOn: "2026-07-03", reason: "Holder adopts the later SAFE's terms" }),
-      (error: unknown) => error instanceof EquityError && error.code === "equity_mfn_not_better" && error.remedy.includes("on or after 2026-07-05"),
+      (error: unknown) => error instanceof EquityError && error.code === "equity_mfn_not_better" && error.field === "effectiveOn" && error.remedy.includes("on or after 2026-07-05"),
       "an election dated before the later SAFE was issued names the date it can take effect",
     );
     const election = await electMfnTerms({ ...manage(w), securityId: mfn.id, sourceSecurityId: better.id, effectiveOn: "2026-07-10", reason: "Holder adopts the later SAFE's terms" });
@@ -160,27 +165,36 @@ test("the instrument an MFN election adopted cannot be voided while the election
     assert.deepEqual(reversed.mfn!.elections.map((row) => [row.kind, row.standing, row.reversedOn]), [["mfn_election", "reversed", "2026-07-12"], ["mfn_reversal", null, null]]);
     applied(await recordSecurityEvent(voidBetter));
 
-    // A conversion recorded on terms whose source was voided before the rule is flagged and corrected by voiding its certificate.
+    // A conversion recorded on terms whose source was already void (the void dated the day before it and recorded
+    // ahead of it, as history recorded before conversions were held back from such terms) is flagged, and is
+    // corrected by voiding its certificate, reversing the election and converting again.
     const second = await issueSecurity({ ...entity(w), kind: "safe", holderPartyId: w.holderId, issueDate: "2026-07-15", considerationAmount: "50000", considerationAccountId: w.org.accounts.bank, safeType: "pre_money", mfn: true });
     const capped = await issueSecurity({ ...entity(w), kind: "safe", holderPartyId: w.holderId, issueDate: "2026-07-16", considerationAmount: "100000", considerationAccountId: w.org.accounts.bank, safeType: "post_money", valuationCap: "400000" });
-    await electMfnTerms({ ...manage(w), securityId: second.id, sourceSecurityId: capped.id, effectiveOn: "2026-07-17", reason: "Holder adopts the capped SAFE's terms" });
+    const secondElection = await electMfnTerms({ ...manage(w), securityId: second.id, sourceSecurityId: capped.id, effectiveOn: "2026-07-17", reason: "Holder adopts the capped SAFE's terms" });
     const round = await createRound({ ...entity(w), name: "Seed", shareClassId: seriesSeed, closedOn: "2026-08-31", pricePerShare: "1.00", preMoneyValuation: "1000000" });
     const converted = await recordSecurityEvent({ ...manage(w), securityId: second.id, kind: "convert", effectiveOn: "2026-08-31", roundId: round.id, reason: "Converted in the Seed" });
     const onCap = (await loadSecurityDetail({ ...manage(w), securityId: converted.resultingSecurityId!, asOf: "2026-08-31" })).security.quantity;
-    // The capped SAFE's void is recorded as history recorded before the rule held it back.
     await db.execute(sql`
-      insert into equity_security_events (org_id, subsidiary_id, security_id, kind, effective_on, reason, created_by)
-      values (${w.org.orgId}, ${w.org.subsidiaryId}, ${capped.id}, 'void', '2026-09-01', 'Recorded in error', ${w.managerId})`);
+      insert into equity_security_events (org_id, subsidiary_id, security_id, kind, effective_on, reason, created_by, created_at)
+      values (${w.org.orgId}, ${w.org.subsidiaryId}, ${capped.id}, 'void', '2026-08-30', 'Recorded in error', ${w.managerId},
+        (select created_at - interval '1 minute' from equity_security_events where org_id = ${w.org.orgId} and security_id = ${second.id} and kind = 'convert'))`);
     const flagged = await loadSecurityDetail({ ...manage(w), securityId: second.id, asOf: "2026-09-02" });
-    assert.equal(flagged.convertible!.invalidConversionTerms?.sourceSecurityId, capped.id);
+    assert.deepEqual([flagged.convertible!.invalidConversionTerms?.sourceSecurityId, flagged.convertible!.invalidConversionTerms?.sourceVoidedOn], [capped.id, "2026-08-30"], "a void dated before the conversion still flags it");
     const overview = await loadEquityOverview({ ...entity(w), asOf: "2026-09-02", yearStart: "2026-01-01" });
     assert.equal(overview.attention[0]?.kind, "conversion_terms_void", "the inconsistent conversion leads the work needing attention");
     applied(await recordSecurityEvent({ ...manage(w), securityId: converted.resultingSecurityId!, kind: "void", effectiveOn: "2026-08-31", reason: "Converted on terms that were voided" }));
+    await assert.rejects(
+      recordSecurityEvent({ ...manage(w), securityId: second.id, kind: "convert", effectiveOn: "2026-08-31", roundId: round.id, reason: "Converted on the SAFE's own terms" }),
+      (error: unknown) => error instanceof EquityError && error.code === "equity_conversion_terms_void" && /Reverse the MFN election on .* dated on or before 2026-08-31/.test(error.remedy),
+      "a SAFE does not convert while its election names a void instrument's terms",
+    );
+    applied(await reverseMfnElection({ ...manage(w), securityId: second.id, amendmentId: secondElection.amendmentId!, effectiveOn: "2026-08-31", reason: "Adopted terms were entered in error" }));
     const again = await recordSecurityEvent({ ...manage(w), securityId: second.id, kind: "convert", effectiveOn: "2026-08-31", roundId: round.id, reason: "Converted on the SAFE's own terms" });
     const ownTerms = (await loadSecurityDetail({ ...manage(w), securityId: again.resultingSecurityId!, asOf: "2026-09-02" })).security.quantity;
     assert.equal(ownTerms, "50000", "an uncapped SAFE without discount converts at the round price");
     assert.notEqual(onCap, ownTerms);
     assert.equal((await loadSecurityDetail({ ...manage(w), securityId: second.id, asOf: "2026-09-03" })).convertible!.invalidConversionTerms, null);
+    assert.ok(!(await loadEquityOverview({ ...entity(w), asOf: "2026-09-03", yearStart: "2026-01-01" })).attention.some((item) => item.kind === "conversion_terms_void"));
 
     // Converted instruments show nothing outstanding and name what they became.
     const safes = await listSecurities({ ...entity(w), asOf: "2026-09-03", kind: "safe" });
@@ -248,7 +262,18 @@ test("runs are offered and posted only for open periods with activity due, and a
     await closeGl(w, "2026-07");
     assert.equal((await run("compensation", "2026-10-19"))?.name, "2026-08", "the closed month is skipped");
     await assert.rejects(postCompensationRun({ ...entity(w), throughDate: "2026-07-31" }), refusal("equity_period_closed"));
-    applied(await postCompensationRun({ ...entity(w), throughDate: "2026-12-31" }));
+    // A period still under way on the organization's business date is not run.
+    await withSimClock("2026-12-20T12:00:00Z", async () => {
+      const requests = await equityActionRequestCount(w);
+      await assert.rejects(postCompensationRun({ ...entity(w), throughDate: "2026-12-31" }), (error: unknown) => error instanceof EquityError
+        && error.code === "equity_run_period_not_ended" && error.field === "throughDate" && error.message.includes("after today (2026-12-20)"));
+      assert.equal((await previewCompensationRun({ ...entity(w), throughDate: "2026-12-31" })).blocked?.code, "equity_run_period_not_ended", "the preview names why it cannot post yet");
+      assert.equal(await equityActionRequestCount(w), requests, "nothing is submitted for a period that has not ended");
+    });
+    await withSimClock("2027-01-04T12:00:00Z", async () => {
+      assert.equal((await previewCompensationRun({ ...entity(w), throughDate: "2026-12-31" })).blocked, null);
+      applied(await postCompensationRun({ ...entity(w), throughDate: "2026-12-31" }));
+    });
     assert.equal(await run("compensation", "2026-10-19"), null, "after a run through December nothing earlier is offered");
     await assert.rejects(previewCompensationRun({ ...entity(w), throughDate: "2026-09-30" }), refusal("equity_compensation_run_backdated"));
 
@@ -259,7 +284,7 @@ test("runs are offered and posted only for open periods with activity due, and a
 
     // A note's interest runs reach past an as-of date without the overview reading them as of today.
     await issueSecurity({ ...entity(w), kind: "note", holderPartyId: w.holderId, issueDate: "2026-08-01", considerationAmount: "100000", considerationAccountId: w.org.accounts.bank, interestRatePercent: "8", interestBasis: "simple", interestDayCount: "actual_365" });
-    applied(await postInterestRun({ ...entity(w), throughDate: "2026-10-31" }));
+    await withSimClock("2026-11-02T12:00:00Z", async () => applied(await postInterestRun({ ...entity(w), throughDate: "2026-10-31" })));
     const past = await loadEquityOverview({ ...entity(w), asOf: "2026-09-15", yearStart: "2026-01-01" });
     assert.equal(past.postings?.interest.refusal, null, "runs through a later date are not compared with the as-of date's accrual");
     assert.equal(past.postings?.interest.due, false);

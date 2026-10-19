@@ -37,11 +37,12 @@ import {
   writeEquityAudit,
   type EquityPermission,
 } from "./internal.ts";
-import { compareRational, divideRational, formatMoney, formatPrice, multiplyRational, parseDecimal, parsePrice, parseShares, PERCENT_SCALE, formatUnits, quantize, rational, subtractRational, type Rational } from "./quantities.ts";
-import { validateSplitRatio } from "./splits.ts";
+import { compareRational, divideRational, formatMoney, formatPrice, multiplyRational, parseDecimal, parsePrice, parseShares, PERCENT_SCALE, PRICE_SCALE, formatUnits, quantize, rational, subtractRational, type Rational } from "./quantities.ts";
+import { bookBeforeRound } from "./round-conversion.ts";
+import { restatePrice, validateSplitRatio } from "./splits.ts";
 import { syncPositionLedger } from "./positions.ts";
 import { loadEquityBook } from "./store.ts";
-import { LIQUIDATION_PREFERENCE_BASES, type AntiDilution, type EquityBook, type LiquidationPreferenceBasis, type Participation, type ShareClassKind } from "./types.ts";
+import { LIQUIDATION_PREFERENCE_BASES, type AntiDilution, type EquityBook, type LiquidationPreferenceBasis, type Participation, type FinancingRoundRecord, type ShareClassKind, type ShareClassRecord } from "./types.ts";
 
 export interface EquityCommand {
   orgId: string;
@@ -633,44 +634,99 @@ export interface CreateRoundInput extends EquityCommand {
   preMoneyBasisReason?: string | null;
 }
 
-/** A price rounded half up to four places, as a decimal string. */
-const fourPlaces = (value: Rational): string => formatUnits(quantize(value, 4, "half_up"), 4);
+/** A price rounded half up to `scale` places, as a decimal string. */
+const pricePlaces = (value: Rational, scale: number): string => formatUnits(quantize(value, scale, "half_up"), scale);
 
 /** A four-place round price carries this much rounding per share. */
 const PRE_MONEY_TOLERANCE = rational(1n, 20000n);
 
 /**
+ * A round's pre-money valuation measured against its price times the fully
+ * diluted shares before it on its closing date: consistent within the
+ * rounding of a four-place price. With no shares before the round there is
+ * nothing to measure against, and the valuation reads as inconsistent so
+ * its basis is recorded.
+ */
+export function preMoneyCheck(before: EquityBook, input: { closedOn: string; price: Rational; preMoney: Rational }): { fullyDiluted: bigint; implied: Rational; consistent: boolean } {
+  const fullyDiluted = BigInt(buildCapTable(before, input.closedOn).totals.fullyDiluted);
+  const implied = multiplyRational(input.price, rational(fullyDiluted));
+  if (fullyDiluted <= 0n) return { fullyDiluted, implied, consistent: false };
+  const gap = subtractRational(divideRational(input.preMoney, rational(fullyDiluted)), input.price);
+  const magnitude = gap.numerator < 0n ? rational(-gap.numerator, gap.denominator) : gap;
+  return { fullyDiluted, implied, consistent: compareRational(magnitude, PRE_MONEY_TOLERANCE) <= 0 };
+}
+
+/**
+ * A recorded round whose pre-money valuation no longer agrees with its
+ * price times the fully diluted shares before it, as the book now reads
+ * (activity recorded later and dated before the round changes that count),
+ * and which records no basis for the difference. Null when it agrees.
+ */
+export function roundPreMoneyDrift(book: EquityBook, round: FinancingRoundRecord): { fullyDilutedBefore: string; impliedPreMoney: string } | null {
+  if (round.preMoneyBasisReason) return null;
+  const check = preMoneyCheck(bookBeforeRound(book, round.id), {
+    closedOn: round.closedOn, price: parsePrice(round.pricePerShare, "the round price"), preMoney: parseDecimal(round.preMoneyValuation, "the pre-money valuation", 4),
+  });
+  return check.consistent ? null : { fullyDilutedBefore: check.fullyDiluted.toString(), impliedPreMoney: formatMoney(check.implied) };
+}
+
+/**
+ * The price per share consistent with a pre-money valuation, offered only
+ * where it could be recorded: four places where that is not zero, else the
+ * full price precision, and never below the class's par value (shares cannot
+ * be issued below par) or at zero.
+ */
+function consistentPrice(preMoney: Rational, fullyDiluted: bigint, parValue: Rational): string | null {
+  const exact = divideRational(preMoney, rational(fullyDiluted));
+  for (const scale of [4, PRICE_SCALE]) {
+    const units = quantize(exact, scale, "half_up");
+    if (units <= 0n) continue;
+    const price = rational(units, 10n ** BigInt(scale));
+    return compareRational(price, parValue) >= 0 ? pricePlaces(exact, scale) : null;
+  }
+  return null;
+}
+
+/**
  * A round's pre-money valuation must equal its price times the fully
  * diluted shares before the round, within the rounding of a four-place
- * price. A valuation stated on another basis is accepted with the reason
- * recorded; without one it refuses with the figures that would agree.
+ * price. A valuation stated on another basis is accepted with the basis
+ * recorded; without one it refuses with the figures that would agree, and
+ * proposes only changes the round can take: a price is not proposed while
+ * live securities stand at the round's price, nor one below par or at zero.
  */
 export function assertPreMoneyConsistent(
   before: EquityBook,
-  input: { closedOn: string; price: Rational; preMoney: Rational; currency: string; basisReason: string | null },
+  input: { closedOn: string; price: Rational; preMoney: Rational; currency: string; basisReason: string | null; parValue: Rational; priceLocked: boolean },
 ): void {
-  const fullyDiluted = BigInt(buildCapTable(before, input.closedOn).totals.fullyDiluted);
-  const implied = multiplyRational(input.price, rational(fullyDiluted));
-  if (fullyDiluted > 0n) {
-    const gap = subtractRational(divideRational(input.preMoney, rational(fullyDiluted)), input.price);
-    const magnitude = gap.numerator < 0n ? rational(-gap.numerator, gap.denominator) : gap;
-    if (compareRational(magnitude, PRE_MONEY_TOLERANCE) <= 0) return;
-  }
-  if (input.basisReason) return;
+  const { fullyDiluted, implied, consistent } = preMoneyCheck(before, input);
+  if (consistent || input.basisReason) return;
+  const impliedPrice = fullyDiluted > 0n && !input.priceLocked ? consistentPrice(input.preMoney, fullyDiluted, input.parValue) : null;
+  const basis = "if the valuation is stated on another basis (a pool increase or conversions counted in it), state that basis under Pre-money basis.";
+  const remedy = fullyDiluted <= 0n
+    ? "No shares are outstanding before the round, so the valuation cannot be checked against the price; state the basis of the valuation under Pre-money basis."
+    : impliedPrice
+      ? `Enter a pre-money valuation of {implied}, or a price per share of {impliedPrice}; ${basis}`
+      : input.priceLocked
+        ? `Enter a pre-money valuation of {implied} (the price stays at {price}, since live securities were issued or converted at it); ${basis}`
+        : `Enter a pre-money valuation of {implied}; ${basis}`;
   throw new EquityError("A pre-money valuation of {preMoney} does not match the round price of {price} times the {fullyDiluted} fully diluted shares before the round ({implied}).", {
     code: "equity_round_pre_money_inconsistent",
-    remedy: fullyDiluted > 0n
-      ? "Enter a pre-money valuation of {implied}, or a price per share of {impliedPrice}; if the valuation is stated on another basis (a pool increase or conversions counted in it), record that basis in the reason."
-      : "No shares are outstanding before the round, so the valuation cannot be checked against the price; record the basis of the valuation in the reason.",
+    remedy,
     field: "preMoneyValuation",
     values: {
       preMoney: { kind: "money", value: formatMoney(input.preMoney), currency: input.currency },
       price: { kind: "decimal", value: formatPrice(input.price) },
       fullyDiluted: { kind: "shares", value: fullyDiluted },
       implied: { kind: "money", value: formatMoney(implied), currency: input.currency },
-      impliedPrice: { kind: "decimal", value: fullyDiluted > 0n ? fourPlaces(divideRational(input.preMoney, rational(fullyDiluted))) : "0" },
+      ...(impliedPrice ? { impliedPrice: { kind: "decimal" as const, value: impliedPrice } } : {}),
     },
   });
+}
+
+/** A share class's par value per share on a date, restated for its splits. */
+export function parValueOn(book: EquityBook, shareClass: ShareClassRecord, on: string): Rational {
+  return restatePrice(book.splits, shareClass.id, parsePrice(shareClass.parValue, "the par value"), shareClass.effectiveOn, on);
 }
 
 /** An optional basis reason: blank is none; a written one needs five characters. */
@@ -709,7 +765,7 @@ export async function createRound(input: CreateRoundInput): Promise<{ id: string
     if ((await usedRoundNames(input.orgId, input.subsidiaryId)).some((row) => row.name.toLowerCase() === name.toLowerCase())) {
       throw new EquityError(`A round named ${name} already exists for this legal entity, or did before it was renamed or voided.`, { status: 409, code: "equity_round_name_taken", remedy: "Choose a different round name.", field: "name" });
     }
-    assertPreMoneyConsistent(book, { closedOn, price, preMoney: pre, currency, basisReason });
+    assertPreMoneyConsistent(book, { closedOn, price, preMoney: pre, currency, basisReason, parValue: parValueOn(book, shareClass, closedOn), priceLocked: false });
     const row = (await db.execute<{ id: string }>(sql`
       insert into equity_financing_rounds (org_id, subsidiary_id, name, share_class_id, closed_on, price_per_share, pre_money_valuation, currency, pre_money_basis_reason, created_by)
       values (${input.orgId}, ${input.subsidiaryId}, ${name}, ${shareClass.id}, ${closedOn}::date, ${input.pricePerShare.trim()}::numeric,

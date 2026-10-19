@@ -16,8 +16,9 @@ export function typedRefusal(error: unknown, safeStatus?: number): error is Erro
 }
 
 /**
- * A refusal that names figures (share counts, amounts) renders them in the
- * reader's locale; outside a request it keeps its own rendering.
+ * A refusal that names figures (share counts, amounts) and civil dates
+ * renders them in the reader's locale; outside a request it keeps its own
+ * rendering.
  */
 export async function readerRefusalText(error: Error): Promise<{ message: string; remedy: string } | null> {
   const localized = (error as Error & { localized?: unknown }).localized

@@ -9,11 +9,11 @@
 import { sql } from "drizzle-orm";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { compensationRunChange, compensationRunChanges } from "./compensation-run.ts";
+import { compensationCatchUp, compensationRunChange, compensationRunChanges } from "./compensation-run.ts";
 import { EQUITY_FEATURE_KEY, EquityError } from "./errors.ts";
 import { assertEquityReadable, requireEquityReader } from "./internal.ts";
-import { interestRunChange, interestRunChanges } from "./interest-run.ts";
-import { postingPeriodOpen } from "./posting.ts";
+import { interestCatchUp, interestRunChange, interestRunChanges } from "./interest-run.ts";
+import { postingPeriodOpen, type RunPeriodAfter } from "./posting.ts";
 
 export interface EquityPostingDue {
   /** A run through the date would post a change no run has posted yet. */
@@ -26,6 +26,21 @@ export interface EquityPostingDue {
   currency: string;
   /** A run that cannot be measured (a missing exchange rate, say) is due with its refusal. */
   refusal: { message: string; remedy: string } | null;
+  /**
+   * Once the runs have reached the date: what was recognized through the
+   * last run after it was posted (a backdated grant or issue), which the next
+   * run catches up, and the period that run is dated to. It does not hold
+   * back the close of a period already run.
+   */
+  catchUp: EquityCatchUp | null;
+}
+
+export interface EquityCatchUp {
+  recognizedThrough: string;
+  amount: string;
+  currency: string;
+  /** The period the catching-up run is dated to, and whether it has ended so the run can post now. */
+  postsWith: RunPeriodAfter | null;
 }
 
 export interface EquityPostingsDue {
@@ -36,13 +51,22 @@ export interface EquityPostingsDue {
 
 const nonZero = (amount: string): boolean => /[1-9]/.test(amount);
 
-async function measured(work: () => Promise<Omit<EquityPostingDue, "due" | "refusal">>, alreadyRun: (last: string | null) => boolean, changed: (row: Omit<EquityPostingDue, "due" | "refusal">) => boolean, currency: string): Promise<EquityPostingDue> {
+type Measured = Omit<EquityPostingDue, "due" | "refusal" | "catchUp">;
+
+async function measured(
+  work: () => Promise<Measured>,
+  alreadyRun: (last: string | null) => boolean,
+  changed: (row: Measured) => boolean,
+  catchUp: () => Promise<EquityCatchUp | null>,
+  currency: string,
+): Promise<EquityPostingDue> {
   try {
     const row = await work();
-    return { ...row, due: !alreadyRun(row.lastRunThrough) && changed(row), refusal: null };
+    const reached = alreadyRun(row.lastRunThrough);
+    return { ...row, due: !reached && changed(row), refusal: null, catchUp: reached ? await catchUp() : null };
   } catch (error) {
     if (!(error instanceof EquityError)) throw error;
-    return { amount: "0.0000", releaseLines: 0, lastRunThrough: null, currency, due: true, refusal: { message: error.message, remedy: error.remedy } };
+    return { amount: "0.0000", releaseLines: 0, lastRunThrough: null, currency, due: true, refusal: { message: error.message, remedy: error.remedy }, catchUp: null };
   }
 }
 
@@ -54,12 +78,36 @@ export async function equityPostingsDue(orgId: string, subsidiaryId: string, cur
     compensation: await measured(async () => {
       const change = await compensationRunChange(orgId, subsidiaryId, throughDate);
       return { amount: change.expense, releaseLines: change.releaseLines, lastRunThrough: change.lastRunThrough, currency: change.currency };
-    }, reached, (row) => nonZero(row.amount) || row.releaseLines > 0, currency),
+    }, reached, (row) => nonZero(row.amount) || row.releaseLines > 0, async () => {
+      const late = await compensationCatchUp(orgId, subsidiaryId);
+      return late ? { recognizedThrough: late.recognizedThrough, amount: late.expense, currency: late.currency, postsWith: late.postsWith } : null;
+    }, currency),
     interest: await measured(async () => {
       const change = await interestRunChange(orgId, subsidiaryId, throughDate);
       return { amount: change.total, releaseLines: 0, lastRunThrough: change.lastRunThrough, currency: change.currency };
-    }, reached, (row) => nonZero(row.amount), currency),
+    }, reached, (row) => nonZero(row.amount), async () => {
+      const late = await interestCatchUp(orgId, subsidiaryId);
+      return late ? { recognizedThrough: late.recognizedThrough, amount: late.total, currency: late.currency, postsWith: late.postsWith } : null;
+    }, currency),
   };
+}
+
+/**
+ * What the next stock compensation or note interest run would catch up:
+ * recognized through the last posted run after that run was posted
+ * (equity.read). Null when nothing is pending.
+ */
+export async function equityRunCatchUp(input: { orgId: string; actorId: string; subsidiaryId: string; kind: "compensation" | "interest" }): Promise<EquityCatchUp | null> {
+  await assertEquityReadable(input.orgId);
+  return withOrgTransaction(input.orgId, async () => {
+    await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
+    if (input.kind === "compensation") {
+      const late = await compensationCatchUp(input.orgId, input.subsidiaryId);
+      return late ? { recognizedThrough: late.recognizedThrough, amount: late.expense, currency: late.currency, postsWith: late.postsWith } : null;
+    }
+    const late = await interestCatchUp(input.orgId, input.subsidiaryId);
+    return late ? { recognizedThrough: late.recognizedThrough, amount: late.total, currency: late.currency, postsWith: late.postsWith } : null;
+  }, { isolationLevel: "REPEATABLE READ" });
 }
 
 export interface CloseEquityPostings {

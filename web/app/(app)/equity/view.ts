@@ -20,6 +20,8 @@ import {
   pendingEquityActions,
   loadSecurityDetail,
   loadStructure,
+  equityRunCatchUp,
+  localizeRefusalDates,
   nextEquityRunPeriod,
   previewCompensationRun,
   previewInterestRun,
@@ -212,6 +214,10 @@ export interface RunsViewData {
   compensation: CompensationPreview | null
   interest: InterestPreview | null
   refusal: { message: string; remedy: string } | null
+  /** What the next run catches up (recorded after the last run for the periods it measured), in the reader's words. */
+  catchUp: string | null
+  /** Why the selected period cannot be posted yet (not ended, or closed), in the reader's locale. */
+  blocked: { message: string; remedy: string } | null
   compensationRuns: CompensationRunRow[]
   interestRuns: InterestRunRow[]
   parties: Record<string, string>
@@ -724,19 +730,37 @@ async function overviewData(
       case 'compensation_due':
         return {
           tone: 'warning', href: keep({ view: 'compensation', run: undefined, new: undefined }),
-          text: item.refusal ? t('overview.attention.compensationRefused', { date: date(item.date), message: item.refusal }) : t('overview.attention.compensationDue', { date: date(item.date), amount: money(item.amount, { currency: item.currency }) }),
+          text: item.refusal ? t('overview.attention.compensationRefused', { date: date(item.date), message: localizeRefusalDates(item.refusal, locale) }) : t('overview.attention.compensationDue', { date: date(item.date), amount: money(item.amount, { currency: item.currency }) }),
         }
       case 'interest_due':
         return {
           tone: 'warning', href: keep({ view: 'compensation', run: 'interest', new: undefined }),
-          text: item.refusal ? t('overview.attention.interestRefused', { date: date(item.date), message: item.refusal }) : t('overview.attention.interestDue', { date: date(item.date), amount: money(item.amount, { currency: item.currency }) }),
+          text: item.refusal ? t('overview.attention.interestRefused', { date: date(item.date), message: localizeRefusalDates(item.refusal, locale) }) : t('overview.attention.interestDue', { date: date(item.date), amount: money(item.amount, { currency: item.currency }) }),
+        }
+      case 'compensation_catch_up':
+      case 'interest_catch_up': {
+        const key = item.kind === 'compensation_catch_up' ? 'compensation' : 'interest'
+        const values = { amount: money(item.amount, { currency: item.currency }), date: date(item.date), through: item.postsThrough ? date(item.postsThrough) : '' }
+        return {
+          tone: 'warning', href: keep({ view: 'compensation', run: key === 'interest' ? 'interest' : undefined, period: undefined, new: undefined }),
+          text: !item.postsThrough ? t(`overview.attention.${key}CatchUpNoPeriod`, values)
+            : item.postsNow ? t(`overview.attention.${key}CatchUpNow`, values) : t(`overview.attention.${key}CatchUp`, values),
+        }
+      }
+      case 'round_pre_money_drift':
+        return {
+          tone: 'negative', href: keep({ view: 'rounds', round: item.roundId, new: undefined }),
+          text: t('overview.attention.roundPreMoneyDrift', {
+            name: item.roundName, preMoney: money(item.preMoneyValuation, { currency: item.currency }), implied: money(item.impliedPreMoney, { currency: item.currency }),
+            shares: shares(item.fullyDilutedBefore),
+          }),
         }
     }
   })
   if (input.pending.length > 0) attention.unshift({ tone: 'warning', href: APPROVALS_HOME_HREF, text: t('overview.attention.pending', { count: input.pending.length }) })
   if (!input.hasAccountPolicy) attention.unshift({ tone: 'negative', href: '/admin/setup/equity-account-policies', text: t('overview.attention.policyMissing', { date: date(data.asOf) }) })
 
-  const compensationDue = data.postings?.compensation.due === true
+  const compensationDue = data.postings?.compensation.due === true || data.postings?.compensation.catchUp != null
   const directory: DirectoryItem[] = [
     { href: keep({ view: 'captable', new: undefined }), label: t('tabs.captable'), iconKey: 'layers', badge: { value: shares(String(data.holders)), hint: t('overview.directory.holders') } },
     { href: keep({ view: 'securities', new: undefined }), label: t('tabs.securities'), iconKey: 'file', badge: { value: shares(String(data.convertiblesOutstanding)), hint: t('overview.directory.convertibles') } },
@@ -908,6 +932,19 @@ async function runsData(
       refusal = error.localized(await getLocale())
     }
   }
+  // Recorded after the last run for the periods it measured: the next run catches it up.
+  const readerLocale = await getLocale()
+  const late = await equityRunCatchUp({ ...actor, subsidiaryId, kind: run })
+  let catchUp: string | null = null
+  if (late) {
+    const t = await getTranslations('equity')
+    const { money } = await getMoneyFormatter(orgId, late.currency)
+    const values = { amount: money(late.amount, { currency: late.currency }), date: formatCivilDate(late.recognizedThrough, readerLocale), through: late.postsWith ? formatCivilDate(late.postsWith.endsOn, readerLocale) : '' }
+    const key = run === 'compensation' ? 'compensation' : 'interest'
+    catchUp = !late.postsWith ? t(`runs.catchUp.${key}NoPeriod`, values) : late.postsWith.ended ? t(`runs.catchUp.${key}Now`, values) : t(`runs.catchUp.${key}`, values)
+  }
+  const pendingBlock = (compensation ?? interest)?.blocked ?? null
+  const blocked = pendingBlock ? { message: localizeRefusalDates(pendingBlock.message, readerLocale), remedy: localizeRefusalDates(pendingBlock.remedy, readerLocale) } : null
   const holderIds = [
     ...(compensation?.lines.map((line) => line.holderPartyId) ?? []),
     ...(compensation?.releases.map((line) => line.holderPartyId) ?? []),
@@ -923,6 +960,8 @@ async function runsData(
     compensation,
     interest,
     refusal,
+    catchUp,
+    blocked,
     compensationRuns,
     interestRuns,
     parties: await partyNames(orgId, holderIds),

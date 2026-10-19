@@ -68,7 +68,11 @@ export function compareMfnTerms(current: ConvertibleTerms, later: ReturnType<typ
   const laterCap = cap(later.valuationCap);
   if (laterCap && (!currentCap || compareRational(laterCap, currentCap) < 0)) improves.push("cap");
   else if (currentCap && (!laterCap || compareRational(laterCap, currentCap) > 0)) concedes.push("cap");
-  const discount = (value: string | null) => (value ? parsePercent(value, "the discount") : null);
+  // A 0% discount is recorded as stated, but betters nothing and concedes nothing against no discount.
+  const discount = (value: string | null) => {
+    const parsed = value ? parsePercent(value, "the discount") : null;
+    return parsed && parsed.numerator > 0n ? parsed : null;
+  };
   const currentDiscount = discount(current.discountPercent);
   const laterDiscount = discount(later.discountPercent);
   if (laterDiscount && (!currentDiscount || compareRational(laterDiscount, currentDiscount) > 0)) improves.push("discount");
@@ -199,7 +203,7 @@ export async function applyMfnElection(input: ElectMfnInput): Promise<{ amendmen
 
 /** Why an instrument's terms cannot be adopted on the date, with the remedy for that reason. */
 function notBetter(book: EquityBook, security: SecurityRecord, sourceSecurityId: string, effectiveOn: string): EquityError {
-  const refuse = (message: string, remedy: string) => new EquityError(message, { status: 409, code: "equity_mfn_not_better", remedy, field: "sourceSecurityId" });
+  const refuse = (message: string, remedy: string, field: "sourceSecurityId" | "effectiveOn" = "sourceSecurityId") => new EquityError(message, { status: 409, code: "equity_mfn_not_better", remedy, field });
   const source = book.securities.find((row) => row.id === sourceSecurityId);
   if (!source || (source.kind !== "safe" && source.kind !== "note") || source.id === security.id) {
     return refuse("The instrument is not a SAFE or note of this legal entity.", "Choose a SAFE or convertible note issued after this SAFE.");
@@ -208,7 +212,7 @@ function notBetter(book: EquityBook, security: SecurityRecord, sourceSecurityId:
     return refuse(`${source.securityNumber} was issued on ${source.issueDate}, not after ${security.securityNumber} (${security.issueDate}).`, "Choose an instrument issued after this SAFE; the MFN term covers later instruments only.");
   }
   if (source.issueDate > effectiveOn) {
-    return refuse(`${source.securityNumber} was not yet issued on ${effectiveOn}.`, `Date the election on or after ${source.issueDate}, when ${source.securityNumber} was issued.`);
+    return refuse(`${source.securityNumber} was not yet issued on ${effectiveOn}.`, `Date the election on or after ${source.issueDate}, when ${source.securityNumber} was issued.`, "effectiveOn");
   }
   if (source.currency !== security.currency) {
     return refuse(`${source.securityNumber} is stated in ${source.currency}, not ${security.currency}.`, `Choose an instrument stated in ${security.currency}.`);

@@ -358,7 +358,11 @@
     "amendHelp": "記録されたラウンドの名称・価格・プレマネー評価額を訂正します。空欄の項目は現在の値を維持します。修正は承認対象の操作です。",
     "voidLocked": "有効な証券がないラウンドのみ無効化できます。先にそれらの証券を無効化または取り消してください。",
     "voidHelp": "誤って記録したラウンドを無効化します。履歴として一覧に残り、すべての数値から除外されます。無効化は承認対象の操作です。",
-    "priceLocked": "この価格で有効な証券があります。"
+    "priceLocked": "この価格で有効な証券があります。",
+    "driftBadge": "プレマネー不一致",
+    "preMoneyDrift": "プレマネー評価額 {preMoney} が、ラウンド価格にラウンド前の完全希薄化後株式数 {shares} を掛けた額（{implied}）と一致しなくなりました。ラウンド前の日付の株式がラウンド後に記録されました。",
+    "preMoneyDriftRemedy": "下でプレマネー評価額を {implied} に訂正するか、「プレマネー評価の根拠」にその評価の根拠を記録してください。",
+    "preMoneyDriftReadOnly": "エクイティ管理者が評価額を訂正するか、その根拠を記録できます。"
   },
   "model": {
     "description": "基準日時点の資本政策表に対し、プレマネー方式でラウンドの価格を算定します。発行済の SAFE とノートは転換され、保護されたクラスには希薄化防止株式が割り当てられ、プールはプレマネーの範囲内で目標まで補充されます。記録は行われません。",
@@ -580,7 +584,7 @@
     "outstandingPrincipal": "未決済残高",
     "convertedInto": "転換先",
     "invalidConversionTitle": "この転換は{source}から採用した条件を使用しましたが、{source}は{date}に取り消されました。",
-    "invalidConversionRemedy": "ラウンドの締結日である{date}付で証書{certificate}を取り消して転換を取り消し、その後この商品を自身の条件で再度転換してください。"
+    "invalidConversionRemedy": "ラウンドの締結日である{date}付で証書{certificate}を取り消して転換を取り消し、{date}以前の日付で MFN 選択を取り消してから、この商品を自身の条件で再度転換してください。"
   },
   "events": {
     "saved": "{kind}を記録しました",
@@ -823,8 +827,15 @@
       "interestRefused": "{date} までのノート利息を測定できません：{message}",
       "pending": "{count} 件の資本取引が承認待ちです",
       "policyMissing": "{date} 時点で有効な資本勘定ポリシーがありません。設定するまで転記できません",
-      "conversionTermsVoid": "{holder}・{number} は {source} の条件で {certificate} に転換されましたが、{source} はその後無効化されました。{number} を開いて MFN 選択を取り消し、転換を訂正してください。",
-      "electionTermsVoid": "{holder}・{number} は {source} の条件を採用しましたが、{source} はその後無効化されました。転換前に {number} を開いて MFN 選択を取り消してください。"
+      "conversionTermsVoid": "{holder}・{number} は {source} の条件で {certificate} に転換されましたが、{source} は無効です。{number} を開いて証書を取り消し、MFN 選択を取り消してから再度転換してください。",
+      "electionTermsVoid": "{holder}・{number} は {source} の条件を採用しましたが、{source} は無効です。転換前に {number} を開いて MFN 選択を取り消してください。",
+      "compensationCatchUp": "{date} までに認識された株式報酬 {amount} がその実行後に記録され、未転記です。その期間の終了後、{through} までの実行で転記されます",
+      "compensationCatchUpNow": "{date} までに認識された株式報酬 {amount} がその実行後に記録され、未転記です。{through} までの実行を転記して追加計上してください",
+      "compensationCatchUpNoPeriod": "{date} までに認識された株式報酬 {amount} がその実行後に記録され、未転記です。転記するには次の会計期間を開くか作成してください",
+      "interestCatchUp": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。その期間の終了後、{through} までの実行で転記されます",
+      "interestCatchUpNow": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。{through} までの実行を転記して追加計上してください",
+      "interestCatchUpNoPeriod": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。転記するには次の会計期間を開くか作成してください",
+      "roundPreMoneyDrift": "ラウンド {name} のプレマネー評価額は {preMoney} ですが、価格にラウンド前の完全希薄化後株式数 {shares} を掛けると現在 {implied} です。評価額を訂正するか、その根拠を記録してください"
     },
     "activity": {
       "title": "最近のアクティビティ",
@@ -878,7 +889,16 @@
     "nothingDueCompensation": "実行が必要な株式報酬の処理はありません。",
     "nothingDueInterest": "実行が必要な転換社債の利息処理はありません。",
     "nothingDueRemedy": "{date}までの処理は計上済みで、それ以降の未締めの期間に計上すべき取引はありません。確認する期間を選択してください。",
-    "nothingDueRemedyFirst": "計上すべき取引のある未締めの期間はまだありません。確認する期間を選択してください。"
+    "nothingDueRemedyFirst": "計上すべき取引のある未締めの期間はまだありません。確認する期間を選択してください。",
+    "includesCatchUp": "{date} までに認識され、その実行後に記録された {amount} を含みます",
+    "catchUp": {
+      "compensation": "{date} までに認識された株式報酬 {amount} がその実行後に記録され、未転記です。その期間の終了後、{through} までの実行で転記されます。",
+      "compensationNow": "{date} までに認識された株式報酬 {amount} がその実行後に記録され、未転記です。{through} までの実行で追加計上されます。",
+      "compensationNoPeriod": "{date} までに認識された株式報酬 {amount} がその実行後に記録され、未転記です。転記するには次の会計期間を開くか作成してください。",
+      "interest": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。その期間の終了後、{through} までの実行で転記されます。",
+      "interestNow": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。{through} までの実行で追加計上されます。",
+      "interestNoPeriod": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。転記するには次の会計期間を開くか作成してください。"
+    }
   },
   "preferenceBasis": {
     "amount_paid": "証書ごとの払込額",

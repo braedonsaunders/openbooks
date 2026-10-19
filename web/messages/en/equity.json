@@ -358,7 +358,11 @@
     "amendHelp": "Correct the round’s name, price or pre-money valuation as recorded. A blank field keeps its value; the amendment is a governed action.",
     "voidLocked": "A round can be voided only when no live security stands in it: void or reverse those securities first.",
     "voidHelp": "Void a round recorded in error. It stays listed for history and leaves every figure; the void is a governed action.",
-    "priceLocked": "Live securities stand at this price."
+    "priceLocked": "Live securities stand at this price.",
+    "driftBadge": "Pre-money differs",
+    "preMoneyDrift": "The pre-money valuation of {preMoney} no longer agrees with the round's price times the {shares} fully diluted shares before it ({implied}): shares dated before the round were recorded after it.",
+    "preMoneyDriftRemedy": "Amend the pre-money valuation to {implied} below, or record the basis it is stated on under Pre-money basis.",
+    "preMoneyDriftReadOnly": "An equity manager can amend the valuation or record its basis."
   },
   "model": {
     "description": "Prices a round on the pre-money method against the cap table on the as-of date: outstanding SAFEs and notes convert, protected classes take their anti-dilution shares, and the pool is topped up to its target inside the pre-money. Nothing is recorded.",
@@ -580,7 +584,7 @@
     "outstandingPrincipal": "Outstanding",
     "convertedInto": "Converted into",
     "invalidConversionTitle": "This conversion used terms adopted from {source}, which was voided on {date}.",
-    "invalidConversionRemedy": "Void certificate {certificate} dated {date}, the round's closing date, to undo the conversion, then convert the instrument again on its own terms."
+    "invalidConversionRemedy": "Void certificate {certificate} dated {date}, the round's closing date, to undo the conversion; reverse the MFN election dated on or before {date}; then convert the instrument again on its own terms."
   },
   "events": {
     "saved": "{kind} recorded",
@@ -823,8 +827,15 @@
       "interestRefused": "Note interest through {date} cannot be measured: {message}",
       "pending": "{count, plural, one {# equity action awaits approval} other {# equity actions await approval}}",
       "policyMissing": "No equity account policy is in force on {date}; nothing can post until one is set up",
-      "conversionTermsVoid": "{holder} · {number} converted into {certificate} on the terms of {source}, which has since been voided. Open {number} to reverse its MFN election and correct the conversion.",
-      "electionTermsVoid": "{holder} · {number} adopted the terms of {source}, which has since been voided. Open {number} to reverse its MFN election before it converts."
+      "conversionTermsVoid": "{holder} · {number} converted into {certificate} on the terms of {source}, which is void. Open {number} to void the certificate, reverse its MFN election and convert it again.",
+      "electionTermsVoid": "{holder} · {number} adopted the terms of {source}, which is void. Open {number} to reverse its MFN election before it converts.",
+      "compensationCatchUp": "{amount} of stock compensation recognized through {date} was recorded after the run through that date and has not posted; it posts with the run through {through}, once that period ends",
+      "compensationCatchUpNow": "{amount} of stock compensation recognized through {date} was recorded after the run through that date and has not posted; post the run through {through} to catch it up",
+      "compensationCatchUpNoPeriod": "{amount} of stock compensation recognized through {date} was recorded after the run through that date and has not posted; open or generate the next accounting period to post it",
+      "interestCatchUp": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted; it posts with the run through {through}, once that period ends",
+      "interestCatchUpNow": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted; post the run through {through} to catch it up",
+      "interestCatchUpNoPeriod": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted; open or generate the next accounting period to post it",
+      "roundPreMoneyDrift": "Round {name} states a pre-money valuation of {preMoney}, but its price times the {shares} fully diluted shares before it is now {implied}; amend the valuation or record its basis"
     },
     "activity": {
       "title": "Recent activity",
@@ -878,7 +889,16 @@
     "nothingDueCompensation": "No stock compensation run is due.",
     "nothingDueInterest": "No note interest run is due.",
     "nothingDueRemedy": "Runs are posted through {date}; no open period since then has activity to post. Choose a period to review it.",
-    "nothingDueRemedyFirst": "No open period has activity to post yet. Choose a period to review it."
+    "nothingDueRemedyFirst": "No open period has activity to post yet. Choose a period to review it.",
+    "includesCatchUp": "includes {amount} recognized through {date} and recorded after the run through that date",
+    "catchUp": {
+      "compensation": "{amount} of stock compensation recognized through {date} was recorded after the run through that date and has not posted. It posts with the run through {through}, once that period ends.",
+      "compensationNow": "{amount} of stock compensation recognized through {date} was recorded after the run through that date and has not posted. The run through {through} catches it up.",
+      "compensationNoPeriod": "{amount} of stock compensation recognized through {date} was recorded after the run through that date and has not posted. Open or generate the next accounting period to post it.",
+      "interest": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted. It posts with the run through {through}, once that period ends.",
+      "interestNow": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted. The run through {through} catches it up.",
+      "interestNoPeriod": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted. Open or generate the next accounting period to post it."
+    }
   },
   "preferenceBasis": {
     "amount_paid": "Amount paid per certificate",

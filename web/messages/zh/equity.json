@@ -358,7 +358,11 @@
     "amendHelp": "更正已记录的融资轮名称、价格或投前估值。留空的字段保持原值；修改为受控操作。",
     "voidLocked": "只有在没有有效证券时才能作废融资轮：请先作废或撤销这些证券。",
     "voidHelp": "作废误录的融资轮。它保留在历史列表中并不再计入任何数字；作废为受控操作。",
-    "priceLocked": "已有有效证券按此价格发行。"
+    "priceLocked": "已有有效证券按此价格发行。",
+    "driftBadge": "投前估值不一致",
+    "preMoneyDrift": "投前估值 {preMoney} 与本轮价格乘以本轮之前 {shares} 股完全稀释股份的结果（{implied}）不再一致：日期早于本轮的股份在本轮之后才登记。",
+    "preMoneyDriftRemedy": "请在下方将投前估值修正为 {implied}，或在“投前估值依据”中记录其所依据的基础。",
+    "preMoneyDriftReadOnly": "股权管理员可以修正估值或记录其依据。"
   },
   "model": {
     "description": "以截至日期的股权结构表为基础，按投前法为融资轮次定价：流通中的 SAFE 和票据转换，受保护类别获得反稀释股份，期权池在投前估值内补足至目标比例。不会记录任何内容。",
@@ -580,7 +584,7 @@
     "outstandingPrincipal": "未结余额",
     "convertedInto": "已转换为",
     "invalidConversionTitle": "此次转换使用了从{source}采用的条款，而{source}已于{date}作废。",
-    "invalidConversionRemedy": "以本轮交割日{date}为日期作废证书{certificate}以撤销转换，然后按该工具自身条款重新转换。"
+    "invalidConversionRemedy": "以本轮交割日{date}为日期作废证书{certificate}以撤销转换；以不晚于{date}的日期撤销 MFN 选择；然后按该工具自身条款重新转换。"
   },
   "events": {
     "saved": "已记录{kind}",
@@ -823,8 +827,15 @@
       "interestRefused": "无法计量截至 {date} 的票据利息：{message}",
       "pending": "{count} 项股权操作待审批",
       "policyMissing": "{date} 没有生效的股权科目政策；设置之前无法过账",
-      "conversionTermsVoid": "{holder} · {number} 按 {source} 的条款转换为 {certificate}，但 {source} 此后已作废。打开 {number} 撤销其 MFN 选择并更正转换。",
-      "electionTermsVoid": "{holder} · {number} 采用了 {source} 的条款，但 {source} 此后已作废。请在转换前打开 {number} 撤销其 MFN 选择。"
+      "conversionTermsVoid": "{holder} · {number} 按 {source} 的条款转换为 {certificate}，但 {source} 已作废。打开 {number} 作废该证书、撤销其 MFN 选择并重新转换。",
+      "electionTermsVoid": "{holder} · {number} 采用了 {source} 的条款，但 {source} 已作废。请在转换前打开 {number} 撤销其 MFN 选择。",
+      "compensationCatchUp": "截至 {date} 确认的股权激励 {amount} 在该次运行后才登记，尚未过账；该期间结束后，将随截至 {through} 的运行过账",
+      "compensationCatchUpNow": "截至 {date} 确认的股权激励 {amount} 在该次运行后才登记，尚未过账；请过账截至 {through} 的运行以补记",
+      "compensationCatchUpNoPeriod": "截至 {date} 确认的股权激励 {amount} 在该次运行后才登记，尚未过账；请打开或生成下一个会计期间以过账",
+      "interestCatchUp": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账；该期间结束后，将随截至 {through} 的运行过账",
+      "interestCatchUpNow": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账；请过账截至 {through} 的运行以补记",
+      "interestCatchUpNoPeriod": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账；请打开或生成下一个会计期间以过账",
+      "roundPreMoneyDrift": "{name} 轮的投前估值为 {preMoney}，但其价格乘以该轮之前的 {shares} 股完全稀释股份现为 {implied}；请修正估值或记录其依据"
     },
     "activity": {
       "title": "最近活动",
@@ -878,7 +889,16 @@
     "nothingDueCompensation": "没有到期的股权激励运行。",
     "nothingDueInterest": "没有到期的票据利息运行。",
     "nothingDueRemedy": "运行已过账至{date}；此后没有待过账活动的未关闭期间。请选择一个期间进行查看。",
-    "nothingDueRemedyFirst": "尚无有待过账活动的未关闭期间。请选择一个期间进行查看。"
+    "nothingDueRemedyFirst": "尚无有待过账活动的未关闭期间。请选择一个期间进行查看。",
+    "includesCatchUp": "含截至 {date} 确认、在该次运行后登记的 {amount}",
+    "catchUp": {
+      "compensation": "截至 {date} 确认的股权激励 {amount} 在该次运行后才登记，尚未过账。该期间结束后，将随截至 {through} 的运行过账。",
+      "compensationNow": "截至 {date} 确认的股权激励 {amount} 在该次运行后才登记，尚未过账。截至 {through} 的运行将予以补记。",
+      "compensationNoPeriod": "截至 {date} 确认的股权激励 {amount} 在该次运行后才登记，尚未过账。请打开或生成下一个会计期间以过账。",
+      "interest": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账。该期间结束后，将随截至 {through} 的运行过账。",
+      "interestNow": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账。截至 {through} 的运行将予以补记。",
+      "interestNoPeriod": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账。请打开或生成下一个会计期间以过账。"
+    }
   },
   "preferenceBasis": {
     "amount_paid": "每份证书的实付金额",

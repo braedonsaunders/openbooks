@@ -10,7 +10,8 @@ export type EquityErrorStatus = 403 | 404 | 409 | 422;
 export type RefusalValue =
   | { kind: "shares"; value: bigint | string }
   | { kind: "money"; value: string; currency: string }
-  | { kind: "decimal"; value: string };
+  | { kind: "decimal"; value: string }
+  | { kind: "date"; value: string };
 
 /** The locale the refusal's own message and remedy are rendered in for logs and callers without a reader. */
 const DEFAULT_REFUSAL_LOCALE = "en-US";
@@ -31,8 +32,30 @@ function roundDecimal(value: string, scale: number): { negative: boolean; whole:
   return { negative: negative && units !== 0n, whole: scale > 0 ? text.slice(0, -scale) : text, fraction: scale > 0 ? text.slice(-scale) : "" };
 }
 
+/** A civil YYYY-MM-DD date read whole: anything else (an entry number such as EQ-SBC-2026-12-31, a period key) is left as written. */
+const CIVIL_DATE_IN_TEXT = /(?<![\w-])(\d{4})-(\d{2})-(\d{2})(?![\w-])/g;
+
+/**
+ * A civil date as a medium date in the locale (the form every date in the
+ * product reads in), from its own year, month and day at UTC noon so no
+ * server time zone moves the day. An impossible date is left as written.
+ */
+export function formatRefusalDate(isoDate: string, locale: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!match) return isoDate;
+  const instant = new Date(`${isoDate}T12:00:00Z`);
+  if (Number.isNaN(instant.getTime()) || instant.toISOString().slice(0, 10) !== isoDate) return isoDate;
+  return new Intl.DateTimeFormat(locale, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }).format(instant);
+}
+
+/** Every civil date written into a refusal's text, in the locale. */
+export function localizeRefusalDates(text: string, locale: string): string {
+  return text.replace(CIVIL_DATE_IN_TEXT, (whole) => formatRefusalDate(whole, locale));
+}
+
 /** One refusal figure in a locale. */
 export function formatRefusalValue(value: RefusalValue, locale: string): string {
+  if (value.kind === "date") return formatRefusalDate(value.value, locale);
   if (value.kind === "shares") {
     const text = String(value.value);
     if (!/^-?\d+$/.test(text)) return text;
@@ -98,10 +121,14 @@ export class EquityError extends Error {
     }
   }
 
-  /** The message and remedy with their figures in the reader's locale. */
+  /**
+   * The message and remedy for a reader: figures in the locale's digits and
+   * currency, and every civil date the text names as a date in the locale.
+   */
   localized(locale: string): { message: string; remedy: string } {
-    if (!this.templates || !this.values) return { message: this.message, remedy: this.remedy };
-    return { message: renderRefusal(this.templates.message, this.values, locale), remedy: renderRefusal(this.templates.remedy, this.values, locale) };
+    const message = this.templates && this.values ? renderRefusal(this.templates.message, this.values, locale) : this.message;
+    const remedy = this.templates && this.values ? renderRefusal(this.templates.remedy, this.values, locale) : this.remedy;
+    return { message: localizeRefusalDates(message, locale), remedy: localizeRefusalDates(remedy, locale) };
   }
 }
 

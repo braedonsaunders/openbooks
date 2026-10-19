@@ -1,5 +1,5 @@
 /** Equity and cap table: the public engine contract for the application. */
-export { EquityError, EQUITY_FEATURE_KEY, EQUITY_FEATURE_REMEDY, EQUITY_ACCOUNTS_REMEDY, type RefusalValue } from "./errors.ts";
+export { EquityError, EQUITY_FEATURE_KEY, EQUITY_FEATURE_REMEDY, EQUITY_ACCOUNTS_REMEDY, localizeRefusalDates, type RefusalValue } from "./errors.ts";
 export { equityAccountPolicyRefusal, EQUITY_POLICY_ACCOUNT_FIELDS, EQUITY_POLICY_OPTIONAL_ACCOUNT_FIELDS } from "./account-policy.ts";
 export { EQUITY_JOURNAL_ORIGIN, CONSIDERATION_ACCOUNT_TYPES } from "./posting.ts";
 export {
@@ -91,7 +91,7 @@ export {
   type EquityActivity,
   type OwnershipSlice,
 } from "./overview.ts";
-export { nextEquityRunPeriod, type EquityPostingDue, type EquityPostingsDue, type EquityRunPeriod } from "./period-postings.ts";
+export { equityRunCatchUp, nextEquityRunPeriod, type EquityCatchUp, type EquityPostingDue, type EquityPostingsDue, type EquityRunPeriod } from "./period-postings.ts";
 export type { CapTable, ClassRow, HolderRow, PlanRow, HoldingRow, ConvertibleRow, UnallocatedPoolRow } from "./cap-table.ts";
 export type { RoundModelResult, RoundModelDilutionRow } from "./round-model.ts";
 export type { WaterfallResult, WaterfallClassRow, WaterfallPayout, WaterfallSafeRow } from "./waterfall.ts";

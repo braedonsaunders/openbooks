@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCapTable, conversionRatio, conversionPrice, convertibleState, convertibleTerms, electionInForce, eventsOf, holdingState } from "./cap-table.ts";
+import { buildCapTable, conversionOnVoidedTerms, conversionRatio, conversionPrice, convertibleState, convertibleTerms, electionInForce, electionOnVoidedSource, eventsOf, holdingState } from "./cap-table.ts";
 import { compensationTranches } from "./compensation.ts";
 import { EquityError } from "./errors.ts";
 import { days360, noteInterest, yearFraction } from "./interest.ts";
@@ -115,6 +115,45 @@ test("an MFN SAFE carries an election only while it stands: a reversal returns t
   assert.equal(convertibleState(voided, mfn, "2026-04-09").terms.valuationCap, null, "terms adopted from an instrument entered in error never apply");
   assert.equal(convertibleState(voided, mfn, "2026-04-10").terms.valuationCap, null);
   assert.equal(electionInForce(voided, mfn, "2026-04-10", { includeVoidedSources: true })?.id, election.id, "the recorded election is still found for review");
+});
+
+test("a conversion on terms adopted from a voided instrument is flagged whether the void is dated before or after it", () => {
+  const mfn = security({ id: "s-mfn", kind: "safe", shareClassId: null, quantity: null, considerationAmount: "100000.0000", safeType: "pre_money", mfn: true });
+  const later = security({ id: "s-later", kind: "safe", shareClassId: null, quantity: null, considerationAmount: "50000.0000", issueDate: "2026-02-01", safeType: "post_money", valuationCap: "4000000.0000" });
+  const election = { id: "am-1", securityId: mfn.id, kind: "mfn_election" as const, effectiveOn: "2026-02-10", sourceSecurityId: later.id, valuationCap: "4000000.0000", discountPercent: null, safeType: "post_money" as const, reversesAmendmentId: null };
+  const voidLater = event({ id: "e-void", securityId: later.id, kind: "void", effectiveOn: "2026-02-27" });
+  const convert = event({ id: "e-convert", securityId: mfn.id, kind: "convert", effectiveOn: "2026-02-28", resultingSecurityId: "s-cert", roundId: "r-1" });
+
+  // Recorded in this order: the source voided on February 27, then the SAFE converted on February 28 on its terms.
+  const voidedFirst = book({ securities: [mfn, later], securityAmendments: [election], events: [voidLater, convert] });
+  assert.deepEqual(conversionOnVoidedTerms(voidedFirst, mfn, "2026-03-01"), { electionId: election.id, sourceSecurityId: later.id, sourceVoidedOn: "2026-02-27", resultingSecurityId: "s-cert" });
+  assert.equal(conversionOnVoidedTerms(voidedFirst, mfn, "2026-02-26"), null, "nothing has converted on the as-of date");
+
+  const voidedAfter = book({ securities: [mfn, later], securityAmendments: [election], events: [convert, { ...voidLater, effectiveOn: "2026-03-05" }] });
+  assert.equal(conversionOnVoidedTerms(voidedAfter, mfn, "2026-03-04"), null, "the source still stands on the as-of date");
+  assert.equal(conversionOnVoidedTerms(voidedAfter, mfn, "2026-03-05")?.sourceVoidedOn, "2026-03-05");
+
+  // Reversing the election by the conversion date and converting again clears the flag.
+  const reversal = { ...election, id: "am-2", kind: "mfn_reversal" as const, effectiveOn: "2026-02-28", valuationCap: null, safeType: "pre_money" as const, reversesAmendmentId: election.id };
+  const corrected = book({
+    securities: [mfn, later],
+    securityAmendments: [election, reversal],
+    events: [voidLater, convert, event({ id: "e-void-cert", securityId: "s-cert", kind: "void", effectiveOn: "2026-02-28" }), { ...convert, id: "e-convert-2", resultingSecurityId: "s-cert-2" }],
+  });
+  assert.equal(conversionOnVoidedTerms(corrected, mfn, "2026-03-01"), null);
+  assert.equal(electionOnVoidedSource(corrected, mfn, "2026-02-28"), null, "a reversed election no longer holds a conversion back");
+  assert.equal(electionOnVoidedSource(voidedFirst, mfn, "2026-02-28")?.election.id, election.id, "an unreversed election naming a void instrument holds a conversion back");
+
+  // An election whose adopted terms equal the SAFE's own terms changes no conversion, so nothing is flagged.
+  const same = book({ securities: [mfn, later], securityAmendments: [{ ...election, valuationCap: null, safeType: "pre_money" }], events: [voidLater, convert] });
+  assert.equal(conversionOnVoidedTerms(same, mfn, "2026-03-01"), null);
+});
+
+test("a stated 0% discount neither betters nor concedes against no discount", () => {
+  const current = { id: "s-mfn", kind: "safe" as const, issueDate: "2026-01-01", principal: "100000", safeType: "pre_money" as const, valuationCap: null, discountPercent: null, interestRatePercent: null, interestBasis: null, interestDayCount: null, currency: "USD" };
+  assert.deepEqual(compareMfnTerms(current, { valuationCap: null, discountPercent: "0.0000", safeType: "pre_money" }), { improves: [], concedes: [] });
+  assert.deepEqual(compareMfnTerms({ ...current, discountPercent: "0.0000" }, { valuationCap: null, discountPercent: "10.0000", safeType: "pre_money" }), { improves: ["discount"], concedes: [] });
+  assert.deepEqual(compareMfnTerms({ ...current, discountPercent: "15.0000" }, { valuationCap: null, discountPercent: "0.0000", safeType: "pre_money" }), { improves: [], concedes: ["discount"] });
 });
 
 test("a common split adjusts the conversion price of preferred converting into it, from the split date only", () => {

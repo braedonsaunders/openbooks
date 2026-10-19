@@ -28,7 +28,7 @@ import { governEquityAction } from "./governance.ts";
 import { EquityError } from "./errors.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, writeEquityAudit } from "./internal.ts";
 import { restate } from "./fx.ts";
-import { assertPostingPeriodOpen, instrumentBalance, postEquityEntry, requirePolicyAccount, resolveAccountPolicy, type EquityLeg } from "./posting.ts";
+import { assertRunPeriodPostable, instrumentBalance, nextRunPeriodAfter, postEquityEntry, requirePolicyAccount, resolveAccountPolicy, runBlocked, type EquityLeg, type RunPeriodAfter } from "./posting.ts";
 import { ledgerUnits } from "./quantities.ts";
 import { earlyExerciseSource, measureRelease } from "./restricted-stock.ts";
 import { formatLedger, newEquityId } from "./securities.ts";
@@ -45,6 +45,12 @@ export interface CompensationLine {
   cumulative: string;
   previous: string;
   period: string;
+  /**
+   * The part of the period's change recognized through the last posted run
+   * but recorded after it (a backdated grant, a forfeiture dated before the
+   * run): caught up by this run.
+   */
+  catchUp: string;
 }
 
 export interface ReleaseLine {
@@ -72,6 +78,10 @@ export interface CompensationPreview {
   releases: ReleaseLine[];
   /** Whether a run through the date would post anything. */
   due: boolean;
+  /** The expense change recognized through the last posted run and caught up by this one. */
+  catchUpTotal: string;
+  /** Why the run cannot be posted through the date yet (its period has not ended, or is closed). */
+  blocked: { code: string; message: string; remedy: string } | null;
 }
 
 type PreviousLine = {
@@ -98,23 +108,36 @@ async function previousCumulative(orgId: string, subsidiaryId: string, through?:
   return new Map(rows.map((row) => [row.security_id, toUnits(row.cumulative_amount)]));
 }
 
-function measure(book: EquityBook, throughDate: string, exponent: number, previous: ReadonlyMap<string, bigint>): { lines: (CompensationLine & { units: { cumulative: bigint; previous: bigint; period: bigint } })[]; total: bigint } {
-  const lines: (CompensationLine & { units: { cumulative: bigint; previous: bigint; period: bigint } })[] = [];
+type MeasuredLine = CompensationLine & { units: { cumulative: bigint; previous: bigint; period: bigint; catchUp: bigint } };
+
+/**
+ * Each award's cumulative cost through the date against the cost runs have
+ * recorded for it. With the last run's date, the part of each change that
+ * was recognized through that date (cost recorded after the run for the
+ * periods it measured) is reported as the award's catch-up.
+ */
+function measure(book: EquityBook, throughDate: string, exponent: number, previous: ReadonlyMap<string, bigint>, lastRunThrough: string | null = null): { lines: MeasuredLine[]; total: bigint; catchUp: bigint } {
+  const lines: MeasuredLine[] = [];
   let total = 0n;
+  let catchUpTotal = 0n;
   for (const security of book.securities) {
     if (!isCompensatory(security) || security.issueDate > throughDate) continue;
     const cumulative = ledgerUnits(restate(cumulativeCompensation(book, security, throughDate), security.fxRate), exponent);
     const before = previous.get(security.id) ?? 0n;
     const period = cumulative - before;
     if (cumulative === 0n && before === 0n) continue;
+    const catchUp = lastRunThrough && lastRunThrough < throughDate && security.issueDate <= lastRunThrough
+      ? ledgerUnits(restate(cumulativeCompensation(book, security, lastRunThrough), security.fxRate), exponent) - before
+      : 0n;
     total += period;
+    catchUpTotal += catchUp;
     lines.push({
       securityId: security.id, securityNumber: security.securityNumber, holderPartyId: security.holderPartyId, kind: security.kind as "option" | "rsu",
-      cumulative: formatLedger(cumulative), previous: formatLedger(before), period: formatLedger(period),
-      units: { cumulative, previous: before, period },
+      cumulative: formatLedger(cumulative), previous: formatLedger(before), period: formatLedger(period), catchUp: formatLedger(catchUp),
+      units: { cumulative, previous: before, period, catchUp },
     });
   }
-  return { lines, total };
+  return { lines, total, catchUp: catchUpTotal };
 }
 
 interface PreviousRelease {
@@ -195,14 +218,17 @@ export async function previewCompensationRun(input: { orgId: string; actorId: st
     const last = await lastRun(input.orgId, input.subsidiaryId);
     const refusal = backdated(last, throughDate);
     if (refusal) throw refusal;
-    const { lines, total } = measure(book, throughDate, exponent, await previousCumulative(input.orgId, input.subsidiaryId));
+    const { lines, total, catchUp } = measure(book, throughDate, exponent, await previousCumulative(input.orgId, input.subsidiaryId), last?.through_date ?? null);
     const releases = await measureReleases(book, throughDate, exponent, await previousReleases(input.orgId, input.subsidiaryId));
+    const alreadyRun = last?.through_date === throughDate;
     return {
       subsidiaryId: input.subsidiaryId, throughDate, currency: entity.currency, lastRunThrough: last?.through_date ?? null,
       total: formatLedger(total), lines: lines.map(({ units: _units, ...line }) => line),
       releaseTotal: formatLedger(releases.total),
       releases: releases.lines.map(({ units: _units, shareClassKind: _kind, ...line }) => line),
-      due: last?.through_date !== throughDate && posts(total, releases),
+      due: !alreadyRun && posts(total, releases),
+      catchUpTotal: formatLedger(catchUp),
+      blocked: alreadyRun ? null : await runBlocked(input.orgId, input.subsidiaryId, throughDate, "stock compensation run"),
     };
   }, { isolationLevel: "REPEATABLE READ", readOnly: true });
 }
@@ -243,6 +269,35 @@ export async function compensationRunChange(orgId: string, subsidiaryId: string,
   return change!;
 }
 
+/**
+ * Stock compensation recognized through the last posted run that no run has
+ * posted: cost recorded after the run for the periods it measured (a grant
+ * or issue dated before it, a forfeiture or void dated before it). The next
+ * run, through the end of the period after the last one, posts it as a
+ * catch-up; until then it is due here with its amount. Null when there is
+ * no run yet or nothing to catch up. Reads within the caller's organization
+ * transaction and checks no actor (the overview and the runs view).
+ */
+export async function compensationCatchUp(orgId: string, subsidiaryId: string): Promise<{
+  recognizedThrough: string; expense: string; releaseLines: number; currency: string; awards: { securityId: string; securityNumber: string; amount: string }[]; postsWith: RunPeriodAfter | null;
+} | null> {
+  return withOrgTransaction(orgId, async () => {
+    const last = await lastRun(orgId, subsidiaryId);
+    if (!last) return null;
+    const entity = await loadLegalEntity(db, orgId, subsidiaryId);
+    const exponent = await currencyExponent(db, entity.currency);
+    const book = await loadEquityBook(db, orgId, subsidiaryId);
+    const { lines, total } = measure(book, last.through_date, exponent, await previousCumulative(orgId, subsidiaryId, last.through_date));
+    const releases = await measureReleases(book, last.through_date, exponent, await previousReleases(orgId, subsidiaryId, last.through_date));
+    if (!posts(total, releases)) return null;
+    return {
+      recognizedThrough: last.through_date, expense: formatLedger(total), releaseLines: releases.lines.length, currency: entity.currency,
+      awards: lines.filter((line) => line.units.period !== 0n).map((line) => ({ securityId: line.securityId, securityNumber: line.securityNumber, amount: line.period })),
+      postsWith: await nextRunPeriodAfter(db, orgId, subsidiaryId, last.through_date),
+    };
+  });
+}
+
 export interface CompensationRunResult {
   runId: string;
   throughDate: string;
@@ -269,6 +324,8 @@ export async function postCompensationRun(input: EquityCommand & { subsidiaryId:
     select id from equity_compensation_runs
      where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`)).rows.length > 0);
   if (posted) return { ...(await applyCompensationRun(input)), status: "applied", requestId: null };
+  // A date whose period has not ended or is closed refuses before anything is submitted for approval.
+  await withOrgTransaction(input.orgId, () => assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "stock compensation run"));
   const outcome = await governEquityAction({
     orgId: input.orgId, actorId: input.actorId, subsidiaryId: input.subsidiaryId, action: "compensation_run",
     subjectId: null, subjectLabel: `Stock compensation through ${throughDate}`, effectiveOn: throughDate, reason: null,
@@ -298,7 +355,7 @@ export async function applyCompensationRun(input: EquityCommand & { subsidiaryId
     const last = await lastRun(input.orgId, input.subsidiaryId);
     const refusal = backdated(last, throughDate);
     if (refusal) throw refusal;
-    await assertPostingPeriodOpen(db, input.orgId, input.subsidiaryId, throughDate, "stock compensation run");
+    await assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "stock compensation run");
     const exponent = await currencyExponent(db, currency);
     const { lines, total } = measure(book, throughDate, exponent, await previousCumulative(input.orgId, input.subsidiaryId));
     const releases = await measureReleases(book, throughDate, exponent, await previousReleases(input.orgId, input.subsidiaryId));

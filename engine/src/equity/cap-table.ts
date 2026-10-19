@@ -503,9 +503,35 @@ export function electionInForce(
 }
 
 /**
+ * An MFN election in force on `on` whose adopted terms came from an
+ * instrument that is void (whenever the void is dated), and whose terms
+ * differ from those the SAFE carries without it. A conversion on that date
+ * must not proceed until the election is reversed, and a conversion
+ * recorded while it stood is flagged by conversionOnVoidedTerms.
+ */
+export function electionOnVoidedSource(
+  book: Pick<EquityBook, "securityAmendments" | "events">,
+  security: SecurityRecord,
+  on: string,
+  asOf = "9999-12-31",
+): { election: EquityBook["securityAmendments"][number]; sourceVoidedOn: string } | null {
+  if (security.kind !== "safe") return null;
+  const election = electionInForce(book, security, on, { includeVoidedSources: true });
+  if (!election) return null;
+  const voided = book.events.find((event) => event.kind === "void" && event.securityId === election.sourceSecurityId && event.effectiveOn <= asOf);
+  if (!voided) return null;
+  const { terms: standing } = effectiveConvertibleTerms(book, security, on);
+  const same = (a: string | null, b: string | null) => (a === null || b === null ? a === b : compareRational(parseMoney(a, "the term"), parseMoney(b, "the term")) === 0);
+  if (same(standing.valuationCap, election.valuationCap) && same(standing.discountPercent, election.discountPercent) && (standing.safeType ?? "pre_money") === election.safeType) return null;
+  return { election, sourceVoidedOn: voided.effectiveOn };
+}
+
+/**
  * A conversion recorded on terms an MFN election adopted from an instrument
- * voided after the conversion was recorded: the terms no longer stand, so
- * the conversion is corrected by voiding the certificate it produced and
+ * that is void: voided on or before the conversion date (a conversion
+ * recorded before conversions were held back from such terms) or after it.
+ * Either way the terms no longer stand, so the conversion is corrected by
+ * voiding the certificate it produced, reversing the election and
  * converting again. Null for any conversion on terms that stand.
  */
 export function conversionOnVoidedTerms(
@@ -514,14 +540,11 @@ export function conversionOnVoidedTerms(
   asOf: string,
 ): { electionId: string; sourceSecurityId: string; sourceVoidedOn: string; resultingSecurityId: string | null } | null {
   if (security.kind !== "safe") return null;
-  const order = new Map(book.events.map((event, index) => [event.id, index]));
   const conversion = eventsOf(book, security.id, asOf).find((event) => event.kind === "convert");
   if (!conversion) return null;
-  const election = electionInForce(book, security, conversion.effectiveOn, { includeVoidedSources: true });
-  if (!election) return null;
-  const voided = book.events.find((event) => event.kind === "void" && event.securityId === election.sourceSecurityId && event.effectiveOn <= asOf);
-  if (!voided || (order.get(voided.id) ?? 0) < (order.get(conversion.id) ?? 0)) return null;
-  return { electionId: election.id, sourceSecurityId: election.sourceSecurityId, sourceVoidedOn: voided.effectiveOn, resultingSecurityId: conversion.resultingSecurityId };
+  const relied = electionOnVoidedSource(book, security, conversion.effectiveOn, asOf);
+  if (!relied) return null;
+  return { electionId: relied.election.id, sourceSecurityId: relied.election.sourceSecurityId, sourceVoidedOn: relied.sourceVoidedOn, resultingSecurityId: conversion.resultingSecurityId };
 }
 
 /**

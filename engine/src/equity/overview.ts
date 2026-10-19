@@ -16,6 +16,7 @@ import { floorShares, formatPercent, rational } from "./quantities.ts";
 import { earlyExerciseSource, election83bStatus, releasedUnits, restrictedPortion } from "./restricted-stock.ts";
 import { formatLedger } from "./securities.ts";
 import { loadEquityBook } from "./store.ts";
+import { roundPreMoneyDrift } from "./structure.ts";
 import type { SecurityEventKind, SecurityKind, ShareClassKind } from "./types.ts";
 import { vestingInstallments } from "./vesting.ts";
 
@@ -43,7 +44,10 @@ export type EquityAttention =
   | { kind: "departed"; holderPartyId: string; holderName: string; date: string; units: string; securityId: string }
   | { kind: "expiring"; securityId: string; securityNumber: string; securityKind: SecurityKind; holderName: string; date: string; quantity: string }
   | { kind: "conversion_terms_void"; securityId: string; securityNumber: string; holderName: string; sourceSecurityNumber: string; certificateId: string | null; certificateNumber: string | null }
+  | { kind: "round_pre_money_drift"; roundId: string; roundName: string; date: string; preMoneyValuation: string; impliedPreMoney: string; fullyDilutedBefore: string; currency: string }
   | { kind: "compensation_due"; date: string; amount: string; currency: string; refusal: string | null }
+  | { kind: "compensation_catch_up"; date: string; amount: string; currency: string; postsThrough: string | null; postsNow: boolean }
+  | { kind: "interest_catch_up"; date: string; amount: string; currency: string; postsThrough: string | null; postsNow: boolean }
   | { kind: "interest_due"; date: string; amount: string; currency: string; refusal: string | null };
 
 export interface EquityActivity {
@@ -214,6 +218,16 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
         certificateNumber: invalid.resultingSecurityId ? numberOf.get(invalid.resultingSecurityId) ?? null : null,
       });
     }
+    // A round whose pre-money no longer agrees with its price and the shares before it, as later backdated activity reads them.
+    for (const round of book.rounds) {
+      if (round.closedOn > asOf) continue;
+      const drift = roundPreMoneyDrift(book, round);
+      if (!drift) continue;
+      attention.push({
+        kind: "round_pre_money_drift", roundId: round.id, roundName: round.name, date: round.closedOn, preMoneyValuation: round.preMoneyValuation,
+        impliedPreMoney: drift.impliedPreMoney, fullyDilutedBefore: drift.fullyDilutedBefore, currency: round.currency,
+      });
+    }
     for (const [holderPartyId, row] of departedUnits) {
       attention.push({ kind: "departed", holderPartyId, holderName: nameOf(holderPartyId), date: departures.get(holderPartyId)!, units: row.units.toString(), securityId: row.securityId });
     }
@@ -222,6 +236,12 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
     }
     if (postings?.interest.due) {
       attention.push({ kind: "interest_due", date: postings.throughDate, amount: postings.interest.amount, currency: postings.interest.currency, refusal: postings.interest.refusal?.message ?? null });
+    }
+    // Cost or interest recorded after a posted run for the periods it measured: the next run catches it up.
+    for (const [kind, due] of [["compensation_catch_up", postings?.compensation], ["interest_catch_up", postings?.interest]] as const) {
+      const late = due?.catchUp;
+      if (!late) continue;
+      attention.push({ kind, date: late.recognizedThrough, amount: late.amount, currency: late.currency, postsThrough: late.postsWith?.endsOn ?? null, postsNow: late.postsWith?.ended ?? false });
     }
     // A conversion on terms that no longer stand misstates the cap table, so it leads.
     const urgency = (item: EquityAttention): string => (item.kind === "conversion_terms_void" ? "0000-01-01" : "date" in item ? item.date : "9999-12-31");

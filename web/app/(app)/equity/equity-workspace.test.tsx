@@ -198,9 +198,10 @@ const runsView = (overrides: Record<string, unknown> = {}) => ({
   context: context(), run: 'compensation' as const, lines: 'expense' as const, periods, periodId: 'p11', throughDate: '2026-11-30',
   compensation: {
     subsidiaryId: SUB, throughDate: '2026-11-30', currency: 'USD', lastRunThrough: '2026-10-31', total: '1250.0000', releaseTotal: '0.0000', releases: [], due: true,
-    lines: [{ securityId: 'o1', securityNumber: 'OPT-0001', holderPartyId: EMPLOYEE, kind: 'option' as const, cumulative: '5250.0000', previous: '4000.0000', period: '1250.0000' }],
+    catchUpTotal: '0.0000', blocked: null,
+    lines: [{ securityId: 'o1', securityNumber: 'OPT-0001', holderPartyId: EMPLOYEE, kind: 'option' as const, cumulative: '5250.0000', previous: '4000.0000', period: '1250.0000', catchUp: '0.0000' }],
   },
-  interest: null, refusal: null,
+  interest: null, refusal: null, catchUp: null, blocked: null,
   compensationRuns: [{
     id: 'run1', throughDate: '2026-10-31', total: '4000.0000', currency: 'USD', journalEntryId: 'je1', entryNumber: 'EQ-SBC-2026-10-31',
     releaseTotal: '1800.0000', releaseJournalEntryId: 'je2', releaseEntryNumber: 'EQ-RSR-2026-10-31', createdAt: '2026-11-02',
@@ -242,12 +243,29 @@ test('stock compensation posts as a period run from its table toolbar, with run 
   } finally {
     await posted.close()
   }
-  const interest = await mount(<EquityRunsPanel view={runsView({ run: 'interest', compensation: null, interest: { subsidiaryId: SUB, throughDate: '2026-11-30', currency: 'USD', lastRunThrough: null, total: '82.1900', lines: [], due: true } })} />)
+  const interest = await mount(<EquityRunsPanel view={runsView({ run: 'interest', compensation: null, interest: { subsidiaryId: SUB, throughDate: '2026-11-30', currency: 'USD', lastRunThrough: null, total: '82.1900', lines: [], due: true, blocked: null } })} />)
   try {
     assert.ok([...interest.host.querySelectorAll('button')].some((button) => text(button) === 'Post note interest for P11 FY2026'))
     assert.ok(![...interest.host.querySelectorAll('label span')].some((span) => text(span) === 'Lines'), 'note interest has no release lines')
   } finally {
     await interest.close()
+  }
+  const blocked = { message: 'The stock compensation run through Nov 30, 2026 falls in P11 FY2026, which ends on Nov 30, 2026, after today (Nov 20, 2026).', remedy: 'Run through the end of a period that has ended by today.' }
+  const early = await mount(<EquityRunsPanel view={runsView({ blocked, catchUp: '$106.70 of stock compensation recognized through Oct 31, 2026 was recorded after the run through that date and has not posted.' })} />)
+  try {
+    const post = [...early.host.querySelectorAll('button')].find((button) => text(button).startsWith('Post stock compensation'))!
+    assert.equal(post.disabled, true, 'a period that has not ended cannot post')
+    const notices = [...early.host.querySelectorAll('[role=status]')].map((node) => text(node))
+    assert.ok(notices.some((notice) => notice.includes('after today (Nov 20, 2026)') && notice.includes('Run through the end of a period that has ended')), 'the run says why it cannot post yet')
+    assert.ok(notices.some((notice) => notice.startsWith('$106.70 of stock compensation')), 'cost recorded after the last run is due with its amount')
+  } finally {
+    await early.close()
+  }
+  const caughtUp = await mount(<EquityRunsPanel view={runsView({ compensation: { ...runsView().compensation, catchUpTotal: '106.7000' } })} />)
+  try {
+    assert.ok(text(caughtUp.host).includes('includes $106.70 recognized through Oct 31, 2026 and recorded after the run through that date'), 'the run names what it catches up')
+  } finally {
+    await caughtUp.close()
   }
   const unconfigured = await mount(<EquityRunsPanel view={runsView({ periods: [], periodId: null, throughDate: null, compensation: null })} />)
   try {

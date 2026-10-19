@@ -54,10 +54,12 @@ import {
   conversionClassOf,
   conversionRatio,
   convertibleState,
+  electionOnVoidedSource,
   eventCeiling,
   eventsOf,
   holdingState,
   reversedElections,
+  vestingTermsOf,
 } from "./cap-table.ts";
 import { EquityError, type RefusalValue } from "./errors.ts";
 import { functionalUnits, restate, spotRate } from "./fx.ts";
@@ -99,6 +101,7 @@ import {
 } from "./securities.ts";
 import { settleConvertible, type Settlement } from "./settlement.ts";
 import { restatePrice, splitFactor } from "./splits.ts";
+import { vestingInstallments } from "./vesting.ts";
 import { assertPoolsCovered, assertWithinAuthorized, inEquityCommand, requireDate, type EquityCommand } from "./structure.ts";
 import { REVERSIBLE_EVENT_KINDS, type EquityBook, type SecurityEventKind, type SecurityEventRecord, type SecurityRecord } from "./types.ts";
 
@@ -395,6 +398,28 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         const vestedCeiling = eventCeiling(book, security, state.exact.vestedAvailable, effectiveOn);
         const early = kind === "exercise" && security.kind === "option" && security.earlyExercise;
         const ceiling = early ? eventCeiling(book, security, state.exact.outstanding, effectiveOn) : vestedCeiling;
+        if (units > ceiling && ceiling === 0n && !early) {
+          // Nothing is available yet: name when the schedule next vests, or that nothing more will.
+          const installments = vestingInstallments(vestingTermsOf(security));
+          const next = state.exact.outstanding.numerator > 0n ? installments.find((installment) => installment.date > effectiveOn) : undefined;
+          const vestedBefore = installments.some((installment) => installment.date <= effectiveOn);
+          const verb = kind === "exercise" ? "exercised" : "settled";
+          const noun = kind === "exercise" ? "exercise" : "settlement";
+          if (next) {
+            refuse(
+              vestedBefore
+                ? `Every unit of ${security.securityNumber} vested by ${effectiveOn} is already ${verb} or no longer outstanding; the next units vest on ${next.date}.`
+                : `Nothing on ${security.securityNumber} is vested yet on ${effectiveOn}; the first units vest on ${next.date}.`,
+              `Date the ${noun} on or after ${next.date}, when the next units vest.`,
+              { field: "effectiveOn", status: 409, code: "equity_event_nothing_vested" },
+            );
+          }
+          refuse(
+            `No units of ${security.securityNumber} are vested and un${verb} on ${effectiveOn}, and no further units vest under its schedule.`,
+            "Review the award's history: every vested unit is already exercised, settled, forfeited or expired.",
+            { field: "quantity", status: 409, code: "equity_event_nothing_vested" },
+          );
+        }
         if (units > ceiling) {
           refuse(
             early ? `Only {ceiling} units are outstanding on ${effectiveOn}.` : `Only {ceiling} units are vested and unexercised on ${effectiveOn}.`,
@@ -611,6 +636,16 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         if (!round) refuse("Choose the round the instrument converts in.", "Choose a round of the legal entity.", { field: "roundId" });
         if (effectiveOn !== round!.closedOn) refuse(`The round closed on ${round!.closedOn}.`, `Date the conversion on ${round!.closedOn}.`, { field: "effectiveOn" });
         assertConvertibleOutstanding();
+        // An election naming a void instrument's terms is reversed on the record before the SAFE converts.
+        const relied = electionOnVoidedSource(book, security, effectiveOn);
+        if (relied) {
+          const source = book.securities.find((row) => row.id === relied.election.sourceSecurityId);
+          refuse(
+            `${security.securityNumber}'s MFN election of ${relied.election.effectiveOn} adopted the terms of ${source?.securityNumber ?? "an instrument"}, which is void as of ${relied.sourceVoidedOn}.`,
+            `Reverse the MFN election on ${security.securityNumber}, dated on or before ${round!.closedOn} (Securities → ${security.securityNumber} → MFN terms), then convert it again on the terms that stand.`,
+            { status: 409, code: "equity_conversion_terms_void" },
+          );
+        }
         const roundClass = book.classes.find((row) => row.id === round!.shareClassId)!;
         const rates = new Map<string, string>();
         const exponents = new Map<string, number>();

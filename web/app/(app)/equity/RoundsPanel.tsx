@@ -40,7 +40,7 @@ export function EquityRoundsPanel({ view }: { view: RoundsViewData | null }) {
     ...view.structure.voidedRounds.map((row) => ({
       id: row.id, name: row.name, shareClassId: '', closedOn: row.closedOn, pricePerShare: row.pricePerShare, preMoneyValuation: row.preMoneyValuation,
       currency: row.currency, raised: '0.0000', sharesIssued: '0', preMoneyBasisReason: null, fullyDilutedBefore: '0', impliedPreMoney: '0.0000',
-      liveSecurities: [], amendments: [], voidedOn: row.voidedOn,
+      preMoneyDrift: null, liveSecurities: [], amendments: [], voidedOn: row.voidedOn,
     })),
   ]
   const selected = view.structure.rounds.find((row) => row.id === view.roundId) ?? null
@@ -67,6 +67,7 @@ export function EquityRoundsPanel({ view }: { view: RoundsViewData | null }) {
               <span className="flex items-center gap-2">
                 <Link className={LINK} href={withParams('/equity', view.context.params, { view: 'rounds', round: row.id, model: undefined }) as never}>{row.name}</Link>
                 {row.voidedOn && <Badge variant="outline">{t('rounds.voidedBadge')}</Badge>}
+                {row.preMoneyDrift && <Badge variant="warning">{t('rounds.driftBadge')}</Badge>}
               </span>
             ),
           },
@@ -143,6 +144,15 @@ function RoundDrawer({ round, context, classCode, closeHref }: { round: RoundRow
           <Stat label={t('rounds.fullyDilutedBefore')} value={shares(round.fullyDilutedBefore)} />
         </section>
         {round.preMoneyBasisReason && <p className="text-sm">{t('rounds.basisReason', { reason: round.preMoneyBasisReason })}</p>}
+        {round.preMoneyDrift && (
+          <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            {t('rounds.preMoneyDrift', {
+              preMoney: money(round.preMoneyValuation, { currency: round.currency }), implied: money(round.preMoneyDrift.impliedPreMoney, { currency: round.currency }),
+              shares: shares(round.preMoneyDrift.fullyDilutedBefore),
+            })}{' '}
+            {context.canManage ? t('rounds.preMoneyDriftRemedy', { implied: money(round.preMoneyDrift.impliedPreMoney, { currency: round.currency }) }) : t('rounds.preMoneyDriftReadOnly')}
+          </p>
+        )}
         {locked && (
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {t('rounds.lockedBy', { count: round.liveSecurities.length })}{' '}

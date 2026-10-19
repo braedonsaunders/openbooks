@@ -358,7 +358,11 @@
     "amendHelp": "Corrigez le nom, le prix ou la valorisation pré-money enregistrés. Un champ vide conserve sa valeur ; la modification est une opération encadrée.",
     "voidLocked": "Une levée ne peut être annulée que si aucun titre en vigueur n’en relève : annulez d’abord ces titres.",
     "voidHelp": "Annulez une levée enregistrée par erreur. Elle reste listée pour l’historique et sort de tous les chiffres ; l’annulation est une opération encadrée.",
-    "priceLocked": "Des titres en vigueur sont émis à ce prix."
+    "priceLocked": "Des titres en vigueur sont émis à ce prix.",
+    "driftBadge": "Pré-money divergente",
+    "preMoneyDrift": "La valorisation pré-money de {preMoney} ne correspond plus au prix du tour multiplié par les {shares} actions entièrement diluées qui le précèdent ({implied}) : des actions datées d’avant le tour ont été saisies après lui.",
+    "preMoneyDriftRemedy": "Corrigez ci-dessous la valorisation pré-money à {implied}, ou consignez sous « Base de la valorisation pré-money » la base sur laquelle elle est exprimée.",
+    "preMoneyDriftReadOnly": "Un gestionnaire du capital peut corriger la valorisation ou consigner sa base."
   },
   "model": {
     "description": "Fixe le prix d’une levée selon la méthode pré-money à partir de la table de capitalisation à la date retenue : les SAFE et obligations en circulation sont convertis, les catégories protégées reçoivent leurs actions anti-dilution et la réserve est complétée jusqu’à sa cible au sein de la valorisation pré-money. Rien n’est enregistré.",
@@ -580,7 +584,7 @@
     "outstandingPrincipal": "En cours",
     "convertedInto": "Converti en",
     "invalidConversionTitle": "Cette conversion a utilisé des conditions reprises de {source}, annulé le {date}.",
-    "invalidConversionRemedy": "Annulez le certificat {certificate} à la date du {date}, date de clôture du tour, pour défaire la conversion, puis convertissez à nouveau l'instrument selon ses propres conditions."
+    "invalidConversionRemedy": "Annulez le certificat {certificate} à la date du {date}, date de clôture du tour, pour défaire la conversion ; annulez l’élection NPF à une date au plus tard le {date} ; puis convertissez à nouveau l’instrument selon ses propres conditions."
   },
   "events": {
     "saved": "{kind} enregistré",
@@ -823,8 +827,15 @@
       "interestRefused": "Les intérêts des obligations jusqu’au {date} ne peuvent pas être évalués : {message}",
       "pending": "{count, plural, one {# opération sur capital attend une approbation} other {# opérations sur capital attendent une approbation}}",
       "policyMissing": "Aucune règle de comptes de capitaux propres n’est en vigueur au {date} ; rien ne peut être comptabilisé avant sa configuration",
-      "conversionTermsVoid": "{holder} · {number} a été converti en {certificate} aux conditions de {source}, annulé depuis. Ouvrez {number} pour annuler son élection NPF et corriger la conversion.",
-      "electionTermsVoid": "{holder} · {number} a adopté les conditions de {source}, annulé depuis. Ouvrez {number} pour annuler son élection NPF avant la conversion."
+      "conversionTermsVoid": "{holder} · {number} a été converti en {certificate} aux conditions de {source}, qui est annulé. Ouvrez {number} pour annuler le certificat, annuler son élection NPF et le convertir à nouveau.",
+      "electionTermsVoid": "{holder} · {number} a adopté les conditions de {source}, qui est annulé. Ouvrez {number} pour annuler son élection NPF avant la conversion.",
+      "compensationCatchUp": "{amount} de rémunération en actions comptabilisée jusqu’au {date} a été saisie après ce traitement et n’est pas comptabilisée ; elle le sera avec le traitement jusqu’au {through}, une fois cette période terminée",
+      "compensationCatchUpNow": "{amount} de rémunération en actions comptabilisée jusqu’au {date} a été saisie après ce traitement et n’est pas comptabilisée ; comptabilisez le traitement jusqu’au {through} pour la rattraper",
+      "compensationCatchUpNoPeriod": "{amount} de rémunération en actions comptabilisée jusqu’au {date} a été saisie après ce traitement et n’est pas comptabilisée ; ouvrez ou générez la période comptable suivante pour la comptabiliser",
+      "interestCatchUp": "{amount} d’intérêts sur billets courus jusqu’au {date} ont été saisis après ce traitement et ne sont pas comptabilisés ; ils le seront avec le traitement jusqu’au {through}, une fois cette période terminée",
+      "interestCatchUpNow": "{amount} d’intérêts sur billets courus jusqu’au {date} ont été saisis après ce traitement et ne sont pas comptabilisés ; comptabilisez le traitement jusqu’au {through} pour les rattraper",
+      "interestCatchUpNoPeriod": "{amount} d’intérêts sur billets courus jusqu’au {date} ont été saisis après ce traitement et ne sont pas comptabilisés ; ouvrez ou générez la période comptable suivante pour les comptabiliser",
+      "roundPreMoneyDrift": "Le tour {name} indique une valorisation pré-money de {preMoney}, mais son prix multiplié par les {shares} actions entièrement diluées qui le précèdent donne désormais {implied} ; corrigez la valorisation ou consignez sa base"
     },
     "activity": {
       "title": "Activité récente",
@@ -878,7 +889,16 @@
     "nothingDueCompensation": "Aucune exécution de rémunération en actions n'est due.",
     "nothingDueInterest": "Aucune exécution d'intérêts sur billets n'est due.",
     "nothingDueRemedy": "Les exécutions sont comptabilisées jusqu'au {date} ; aucune période ouverte depuis n'a d'activité à comptabiliser. Choisissez une période pour la consulter.",
-    "nothingDueRemedyFirst": "Aucune période ouverte n'a encore d'activité à comptabiliser. Choisissez une période pour la consulter."
+    "nothingDueRemedyFirst": "Aucune période ouverte n'a encore d'activité à comptabiliser. Choisissez une période pour la consulter.",
+    "includesCatchUp": "dont {amount} comptabilisés jusqu’au {date} et saisis après ce traitement",
+    "catchUp": {
+      "compensation": "{amount} de rémunération en actions comptabilisée jusqu’au {date} a été saisie après ce traitement et n’est pas comptabilisée. Elle le sera avec le traitement jusqu’au {through}, une fois cette période terminée.",
+      "compensationNow": "{amount} de rémunération en actions comptabilisée jusqu’au {date} a été saisie après ce traitement et n’est pas comptabilisée. Le traitement jusqu’au {through} la rattrape.",
+      "compensationNoPeriod": "{amount} de rémunération en actions comptabilisée jusqu’au {date} a été saisie après ce traitement et n’est pas comptabilisée. Ouvrez ou générez la période comptable suivante pour la comptabiliser.",
+      "interest": "{amount} d’intérêts sur billets courus jusqu’au {date} ont été saisis après ce traitement et ne sont pas comptabilisés. Ils le seront avec le traitement jusqu’au {through}, une fois cette période terminée.",
+      "interestNow": "{amount} d’intérêts sur billets courus jusqu’au {date} ont été saisis après ce traitement et ne sont pas comptabilisés. Le traitement jusqu’au {through} les rattrape.",
+      "interestNoPeriod": "{amount} d’intérêts sur billets courus jusqu’au {date} ont été saisis après ce traitement et ne sont pas comptabilisés. Ouvrez ou générez la période comptable suivante pour les comptabiliser."
+    }
   },
   "preferenceBasis": {
     "amount_paid": "Montant payé par certificat",

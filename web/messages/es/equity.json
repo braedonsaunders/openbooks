@@ -358,7 +358,11 @@
     "amendHelp": "Corrija el nombre, el precio o la valoración pre-money registrados. Un campo vacío conserva su valor; la modificación es una acción gobernada.",
     "voidLocked": "Una ronda solo puede anularse cuando no tiene títulos vigentes: anule o revierta primero esos títulos.",
     "voidHelp": "Anule una ronda registrada por error. Sigue en el historial y queda fuera de todas las cifras; la anulación es una acción gobernada.",
-    "priceLocked": "Hay títulos vigentes a este precio."
+    "priceLocked": "Hay títulos vigentes a este precio.",
+    "driftBadge": "Pre-money distinto",
+    "preMoneyDrift": "La valoración pre-money de {preMoney} ya no coincide con el precio de la ronda por las {shares} acciones totalmente diluidas anteriores ({implied}): se registraron después acciones con fecha anterior a la ronda.",
+    "preMoneyDriftRemedy": "Corrija abajo la valoración pre-money a {implied}, o registre en «Base de la valoración pre-money» la base sobre la que se expresa.",
+    "preMoneyDriftReadOnly": "Un gestor de capital puede corregir la valoración o registrar su base."
   },
   "model": {
     "description": "Fija el precio de una ronda con el método pre-money sobre la tabla de capitalización a la fecha de corte: los SAFE y notas en circulación se convierten, las clases protegidas reciben sus acciones antidilución y la reserva se completa hasta su objetivo dentro de la valoración pre-money. No se registra nada.",
@@ -580,7 +584,7 @@
     "outstandingPrincipal": "Pendiente",
     "convertedInto": "Convertido en",
     "invalidConversionTitle": "Esta conversión usó condiciones adoptadas de {source}, anulado el {date}.",
-    "invalidConversionRemedy": "Anule el certificado {certificate} con fecha {date}, la fecha de cierre de la ronda, para deshacer la conversión y vuelva a convertir el instrumento con sus propias condiciones."
+    "invalidConversionRemedy": "Anule el certificado {certificate} con fecha {date}, la fecha de cierre de la ronda, para deshacer la conversión; revierta la elección MFN con fecha igual o anterior al {date}; luego vuelva a convertir el instrumento con sus propias condiciones."
   },
   "events": {
     "saved": "{kind} registrado",
@@ -823,8 +827,15 @@
       "interestRefused": "Los intereses de notas hasta el {date} no se pueden medir: {message}",
       "pending": "{count, plural, one {# acción de patrimonio espera aprobación} other {# acciones de patrimonio esperan aprobación}}",
       "policyMissing": "No hay una política de cuentas de patrimonio vigente al {date}; nada puede contabilizarse hasta configurarla",
-      "conversionTermsVoid": "{holder} · {number} se convirtió en {certificate} con los términos de {source}, que después se anuló. Abra {number} para revertir su elección MFN y corregir la conversión.",
-      "electionTermsVoid": "{holder} · {number} adoptó los términos de {source}, que después se anuló. Abra {number} para revertir su elección MFN antes de la conversión."
+      "conversionTermsVoid": "{holder} · {number} se convirtió en {certificate} con los términos de {source}, que está anulado. Abra {number} para anular el certificado, revertir su elección MFN y convertirlo de nuevo.",
+      "electionTermsVoid": "{holder} · {number} adoptó los términos de {source}, que está anulado. Abra {number} para revertir su elección MFN antes de la conversión.",
+      "compensationCatchUp": "{amount} de compensación en acciones reconocida hasta el {date} se registró después de esa ejecución y no está contabilizada; se contabiliza con la ejecución hasta el {through}, cuando termine ese período",
+      "compensationCatchUpNow": "{amount} de compensación en acciones reconocida hasta el {date} se registró después de esa ejecución y no está contabilizada; contabilice la ejecución hasta el {through} para ponerla al día",
+      "compensationCatchUpNoPeriod": "{amount} de compensación en acciones reconocida hasta el {date} se registró después de esa ejecución y no está contabilizada; abra o genere el siguiente período contable para contabilizarla",
+      "interestCatchUp": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados; se contabilizan con la ejecución hasta el {through}, cuando termine ese período",
+      "interestCatchUpNow": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados; contabilice la ejecución hasta el {through} para ponerlos al día",
+      "interestCatchUpNoPeriod": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados; abra o genere el siguiente período contable para contabilizarlos",
+      "roundPreMoneyDrift": "La ronda {name} indica una valoración pre-money de {preMoney}, pero su precio por las {shares} acciones totalmente diluidas anteriores ahora da {implied}; corrija la valoración o registre su base"
     },
     "activity": {
       "title": "Actividad reciente",
@@ -878,7 +889,16 @@
     "nothingDueCompensation": "No hay ninguna ejecución de compensación en acciones pendiente.",
     "nothingDueInterest": "No hay ninguna ejecución de intereses de notas pendiente.",
     "nothingDueRemedy": "Las ejecuciones están contabilizadas hasta el {date}; ningún período abierto desde entonces tiene actividad que contabilizar. Elija un período para revisarlo.",
-    "nothingDueRemedyFirst": "Ningún período abierto tiene todavía actividad que contabilizar. Elija un período para revisarlo."
+    "nothingDueRemedyFirst": "Ningún período abierto tiene todavía actividad que contabilizar. Elija un período para revisarlo.",
+    "includesCatchUp": "incluye {amount} reconocidos hasta el {date} y registrados después de esa ejecución",
+    "catchUp": {
+      "compensation": "{amount} de compensación en acciones reconocida hasta el {date} se registró después de esa ejecución y no está contabilizada. Se contabiliza con la ejecución hasta el {through}, cuando termine ese período.",
+      "compensationNow": "{amount} de compensación en acciones reconocida hasta el {date} se registró después de esa ejecución y no está contabilizada. La ejecución hasta el {through} la pone al día.",
+      "compensationNoPeriod": "{amount} de compensación en acciones reconocida hasta el {date} se registró después de esa ejecución y no está contabilizada. Abra o genere el siguiente período contable para contabilizarla.",
+      "interest": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados. Se contabilizan con la ejecución hasta el {through}, cuando termine ese período.",
+      "interestNow": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados. La ejecución hasta el {through} los pone al día.",
+      "interestNoPeriod": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados. Abra o genere el siguiente período contable para contabilizarlos."
+    }
   },
   "preferenceBasis": {
     "amount_paid": "Importe pagado por certificado",

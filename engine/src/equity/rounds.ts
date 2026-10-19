@@ -24,7 +24,7 @@ import { requireReason, writeEquityAudit } from "./internal.ts";
 import { compareRational, parseDecimal, parsePrice, rational } from "./quantities.ts";
 import { bookBeforeRound } from "./round-conversion.ts";
 import { newEquityId } from "./securities.ts";
-import { assertPreMoneyConsistent, inEquityCommand, optionalBasisReason, requireDate, usedRoundNames, type EquityCommand } from "./structure.ts";
+import { assertPreMoneyConsistent, inEquityCommand, optionalBasisReason, parValueOn, requireDate, usedRoundNames, type EquityCommand } from "./structure.ts";
 import type { EquityBook, FinancingRoundRecord } from "./types.ts";
 
 export interface AmendRoundInput extends EquityCommand {
@@ -149,9 +149,11 @@ export async function applyRoundAmendment(input: AmendRoundInput): Promise<{ id:
     const nextPrice = price ?? parsePrice(round.pricePerShare, "the round price");
     const nextPreMoney = preMoney ?? parseDecimal(round.preMoneyValuation, "the pre-money valuation", 4);
     if (changes.price || changes.preMoney || basisReason) {
+      const shareClass = book.classes.find((row) => row.id === round.shareClassId)!;
       assertPreMoneyConsistent(bookBeforeRound(book, round.id), {
         closedOn: round.closedOn, price: nextPrice, preMoney: nextPreMoney, currency: round.currency,
         basisReason: basisReason ?? (changes.price || changes.preMoney ? null : round.preMoneyBasisReason),
+        parValue: parValueOn(book, shareClass, round.closedOn), priceLocked: liveRoundSecurities(book, round.id).length > 0,
       });
     }
     const id = await newEquityId(db);

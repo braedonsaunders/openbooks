@@ -366,9 +366,10 @@ export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: st
     const discountPercent = convertible ? blankToNull(input.discountPercent) : null;
     if (!convertible && (blankToNull(input.valuationCap) || blankToNull(input.discountPercent))) refuse("Only SAFEs and notes carry a cap or discount.", "valuationCap", "Clear the cap and discount.");
     if (valuationCap && parseMoney(valuationCap, "the valuation cap").numerator <= 0n) refuse("The valuation cap must be greater than zero.", "valuationCap", "Enter the cap or clear it.");
+    // A stated 0% discount is a term as written (it converts at the round price); blank records no discount.
     if (discountPercent) {
       const discount = parsePercent(discountPercent, "the discount");
-      if (discount.numerator <= 0n || compareRational(discount, rational(1n)) >= 0) refuse("The discount must be above 0% and below 100%.", "discountPercent", "Enter the discount percentage.");
+      if (discount.numerator < 0n || compareRational(discount, rational(1n)) >= 0) refuse("The discount must be at least 0% and below 100%.", "discountPercent", "Enter a discount from 0% up to, but not including, 100%, or leave it blank for none.");
     }
     const interestRatePercent = kind === "note" ? blankToNull(input.interestRatePercent) : null;
     const interestBasis = kind === "note" ? input.interestBasis ?? null : null;
