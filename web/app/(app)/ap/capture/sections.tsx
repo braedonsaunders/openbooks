@@ -81,7 +81,7 @@ export function CaptureList({
     setBulkResult(null)
     try {
       const ids = [...selected]
-      const aggregated: Array<{ id: string; ok: boolean; error?: string; errorCode?: string; details?: { line?: number } }> = []
+      const aggregated: Array<{ id: string; ok: boolean; error?: string; errorCode?: string; details?: { line?: unknown } }> = []
       // A failed or lost chunk must not discard the confirmed verdicts of
       // completed chunks: this chunk's ids are marked unknown (kept
       // selected, with the named outcome) instead of replaying blindly.
