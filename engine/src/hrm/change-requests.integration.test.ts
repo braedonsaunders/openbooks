@@ -542,7 +542,7 @@ test("identity separation: the submitter cannot decide their own submission", { 
   await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     // The submitter is a routed approver here, so the refusal comes from
     // separation of duties — not from missing gate assignment.
-    await seedFlow(h.org.orgId, h.submitterId);
+    await seedFlow(h.org.orgId, [h.submitterId, h.approver1Id]);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, employeeRole: true, displayName: "Hired Worker" });
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,

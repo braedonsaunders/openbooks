@@ -79,6 +79,7 @@ test(
           scheduleId, subsidiaryId: org.subsidiaryId, name, country: "CA", province: "ON",
           payBasis: "salary", currency: "CAD", rate: "78000", rateBasis: "year",
           annualHours: "2080", federalClaimCode: 1, provincialClaimCode: 1, hiredOn,
+          wcbExempt: true, wcbExemptReason: "The declared employee is outside the employer workers-compensation coverage.",
         });
         return employeeId;
       };

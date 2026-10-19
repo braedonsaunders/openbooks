@@ -72,8 +72,8 @@ const TREE: SubsidiaryTreeNode[] = [
   { id: LEAF, parentId: CHILD },
 ];
 
-test("restriction resolution: only explicit null is legacy-all; malformed fails closed", () => {
-  assert.equal(restrictionSubsidiaryScope(null, TREE), null);
+test("restriction resolution requires an explicit policy; malformed fails closed", () => {
+  assert.equal(restrictionSubsidiaryScope(null, TREE), undefined);
   assert.equal(restrictionSubsidiaryScope({ mode: "all" }, TREE), null);
   assert.equal(restrictionSubsidiaryScope(undefined, TREE), undefined);
   assert.deepEqual(
@@ -92,7 +92,7 @@ test("restriction resolution: only explicit null is legacy-all; malformed fails 
 
 test("edit additions: narrowing adds nothing; finite to all is unbounded", () => {
   const empty = new Set<string>();
-  assert.deepEqual(restrictionScopeAdditions(null, { mode: "list", subsidiaryIds: [ROOT] }, TREE), empty);
+  assert.equal(restrictionScopeAdditions(null, { mode: "list", subsidiaryIds: [ROOT] }, TREE), undefined);
   assert.deepEqual(restrictionScopeAdditions({ mode: "all" }, { mode: "all" }, TREE), empty);
   assert.deepEqual(
     restrictionScopeAdditions({ mode: "list", subsidiaryIds: [ROOT] }, { mode: "list", subsidiaryIds: [ROOT] }, TREE),

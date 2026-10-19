@@ -33,7 +33,7 @@ test('net-investment OCI preserves standalone FX, attributes each native source 
       await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,posts_gl,replication_mode,replication_from)
         values(${fullBookId},${ledger.orgId},'FULL','Full statutory book',false,true,'full','2026-01-01')`)
       const reverseId=await proposeNetInvestmentReversal(ledger.orgId,change.id,change.submitted_by,{effectiveOn:'2026-07-31',reason:'Correct the qualification after a revised treasury settlement decision',idempotencyKey:randomUUID()})
-      await assert.rejects(applyNetInvestmentReversal(ledger.orgId,reverseId,change.submitted_by),/independent approval/)
+      await assert.rejects(applyNetInvestmentReversal(ledger.orgId,reverseId,change.submitted_by),/Submit this change through Flows and obtain a decision permitted by its approval policy/)
       await submitFinancialChange(ledger.orgId,reverseId,change.submitted_by)
       const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${reverseId} and status='pending'`)).rows[0]!
       await decideGate({gateId:gate.id,userId:change.approved_by,decision:'approved'})

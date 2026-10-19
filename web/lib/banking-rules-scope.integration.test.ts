@@ -162,7 +162,7 @@ test('previewRules refuses an out-of-scope account without reading lines', { ski
     await assertUniformNotFound(
       previewRules(fx.orgId, fx.bankA, { onlyUnmatched: true, allowedSubsidiaryIds: new Set([fx.subB]) }),
     )
-    const preview = await previewRules(fx.orgId, fx.bankA, { onlyUnmatched: true, allowedSubsidiaryIds: new Set([fx.subA]) })
+    const preview = await previewRules(fx.orgId, fx.bankA, { onlyUnmatched: true, windowDays: 366, allowedSubsidiaryIds: new Set([fx.subA]) })
     assert.equal(preview.scanned, 1)
   } finally { await dropScratchOrg(fx.orgId) }
 })
@@ -265,7 +265,7 @@ const consolidatedRows = [
                 const actorId = (await seedFlowActors(org.orgId)).adminId;
                 // Categorizing journals post to the ledger, so the applier holds gl.post
                 // (76a56b8fef); scratch roles start with no permissions.
-                await db.execute(sql\`update app_roles set permissions = '["gl.post"]'::jsonb
+                await db.execute(sql\`update app_roles set permissions = '["gl.post","banking.reconcile"]'::jsonb
                   where org_id = \${org.orgId} and key = 'admin'\`);
                 await db.execute(sql\`
                   update accounts
@@ -411,7 +411,7 @@ const consolidatedRows = [
                 const actorId = (await seedFlowActors(org.orgId)).adminId;
                 // Categorizing journals post to the ledger, so the applier holds gl.post
                 // (76a56b8fef); scratch roles start with no permissions.
-                await db.execute(sql\`update app_roles set permissions = '["gl.post"]'::jsonb
+                await db.execute(sql\`update app_roles set permissions = '["gl.post","banking.reconcile"]'::jsonb
                   where org_id = \${org.orgId} and key = 'admin'\`);
                 await db.execute(sql\`
                   update accounts
@@ -637,7 +637,7 @@ const consolidatedRows = [
                 const actorId = (await seedFlowActors(org.orgId)).adminId;
                 // Categorizing journals post to the ledger, so the applier holds gl.post
                 // (76a56b8fef); scratch roles start with no permissions.
-                await db.execute(sql\`update app_roles set permissions = '["gl.post"]'::jsonb
+                await db.execute(sql\`update app_roles set permissions = '["gl.post","banking.reconcile"]'::jsonb
                   where org_id = \${org.orgId} and key = 'admin'\`);
                 await db.execute(sql\`
                   update accounts
@@ -678,6 +678,7 @@ const consolidatedRows = [
                 \`);
 
                 const preview = await previewRules(org.orgId, org.accounts.bank, {
+                  windowDays: 366,
                   draftRule: {
                     criteria: {
                       version: 2,
@@ -711,7 +712,7 @@ test('applyRulesToAccount reports a refused line and still applies the rest', { 
   try {
     // Categorizing journals post to the ledger, so the applier holds gl.post;
     // scratch roles start with no permissions.
-    await withBypass(() => db.execute(sql`update app_roles set permissions = '["gl.post"]'::jsonb
+    await withBypass(() => db.execute(sql`update app_roles set permissions = '["gl.post","banking.reconcile"]'::jsonb
       where org_id = ${fx.orgId} and key = 'admin'`))
     await seedExcludeRule(fx.orgId, fx.actor)
     await importStatement(

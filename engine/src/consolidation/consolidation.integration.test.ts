@@ -2178,8 +2178,14 @@ for (const phase of ["ownership", "elimination"] as const) {
             (select count(*)::int from ownership_consolidation_runs where org_id=${org.orgId} and status<>'failed') as runs`)).rows[0]!;
         assert.deepEqual(state,{journals:2,runs:0});
         await db.execute(sql`update accounting_books set ${sql.raw(flag)}=true where org_id=${org.orgId} and id=${org.bookId}`);
-        const posted=await run();
-        assert.ok("entryIds" in posted ? posted.entryIds.length>0 : posted.entryId);
+        if (phase === "elimination") {
+          await assert.rejects(run(), /no approved historical contribution basis/);
+          const retained = (await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!;
+          assert.equal(retained.n, 2, "an active book still cannot substitute for approved historical evidence");
+        } else {
+          const posted = await run();
+          assert.ok("entryIds" in posted ? posted.entryIds.length > 0 : posted.entryId);
+        }
       } finally {await dropScratchOrg(org.orgId);}
     });
   }
@@ -2352,7 +2358,7 @@ for (const phase of ["ownership","combined"] as const) {
         if (phase === "ownership") await runOwnershipConsolidation(org.orgId,org.periodId,actorId);
         else await runCombinedConsolidation(org.orgId,org.periodId,actorId);
       }),
-      /must own its source-snapshot transaction/);
+      /requires a serializable source snapshot/);
       const posted = await db.execute<{n: number}>(sql`
         select count(*)::int as n from ownership_consolidation_runs where org_id=${org.orgId}`);
       assert.equal(posted.rows[0]!.n,0,'the refused caller owns rollback of all attempted consolidation evidence');

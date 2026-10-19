@@ -10,6 +10,7 @@ import {
   ensureAllocationRunOutboxRows,
   processAllocationRunOutboxRow,
 } from "../allocations/scheduling.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { db, type SqlExecutor, withBypassContext, withOrgContext } from "../platform/db.ts";
 import {
   MAX_SCHEDULER_OUTBOX_ATTEMPTS,
@@ -443,6 +444,11 @@ async function resolveScanFailureNotices(kind: string): Promise<void> {
  * stored is logged, never fatal — the thrown row error still carries every
  * failure.
  */
+/** Tenant configuration failures remain retryable without exhausting shared scan delivery. */
+export class SchedulerScanOrganizationError extends Error {
+  readonly name = "SchedulerScanOrganizationError";
+}
+
 async function surfaceScanOrgFailures(args: {
   scan: string;
   noticeKind: string;
@@ -475,7 +481,9 @@ async function surfaceScanOrgFailures(args: {
     parts.push(`org ${orgId}: ${detail}`);
   }
   parts.push(...args.unattributed);
-  throw new Error(`${args.scan} scan completed with failures: ${parts.join(" | ")}`.slice(0, 2000));
+  const message = `${args.scan} scan completed with failures: ${parts.join(" | ")}`.slice(0, 2000);
+  if (args.unattributed.length) throw new Error(message);
+  throw new SchedulerScanOrganizationError(message);
 }
 
 async function runOutboxWork(row: OutboxRow): Promise<void> {
@@ -867,11 +875,15 @@ async function markFailed(row: OutboxRow, error: unknown, now: Date): Promise<vo
   // the final failure so a crash between them is impossible — and write the
   // append-only evidence row inside that same transaction (migration 0026):
   // terminalization cannot commit without durable evidence.
-  const terminal = row.attempt_count >= MAX_SCHEDULER_OUTBOX_ATTEMPTS;
+  const tenantFailure = row.org_id === null
+    && (SCHEDULER_OUTBOX_SCAN_KINDS as readonly string[]).includes(row.kind)
+    && error instanceof SchedulerScanOrganizationError;
+  const terminal = !tenantFailure && row.attempt_count >= MAX_SCHEDULER_OUTBOX_ATTEMPTS;
   const marked = await db.transaction(async (tx) => {
     const result = await tx.execute<{ becameTerminal: boolean }>(sql`
       update scheduler_outbox
          set status='failed',
+             attempt_count=${tenantFailure ? 0 : row.attempt_count},
              error=${message},
              locked_at=null,
              lease_token=null,
@@ -1064,14 +1076,14 @@ export async function replayTerminalSchedulerOutbox(input: {
     throw new SchedulerOutboxReplayError("replay reason must be between 10 and 1000 characters");
   }
   const now = input.now ?? new Date();
-  await withOrgContext(input.orgId, () => db.transaction(async (tx) => {
-    const actor = await tx.execute<{ exists: boolean }>(sql`
-      select exists (
-        select 1 from users
-         where id=${input.actorId} and org_id=${input.orgId} and is_active
-      ) as exists
+  // bypass: cross-org-by-design — one replay command handles tenant work and system scans after live actor authorization.
+  await withBypassContext(() => db.transaction(async (tx) => {
+    const actor = await tx.execute<{ is_super_admin: boolean }>(sql`
+      select is_super_admin from users
+       where id=${input.actorId} and org_id=${input.orgId} and is_active
+       for share
     `);
-    if (!actor.rows[0]?.exists) {
+    if (!actor.rows[0]) {
       throw new SchedulerOutboxReplayError("replay actor is not an active user in the organization");
     }
     const selected = await tx.execute<{
@@ -1088,12 +1100,19 @@ export async function replayTerminalSchedulerOutbox(input: {
       select id, org_id, kind, subject_id, occurrence_key, attempt_count,
              error, terminal_failed_at, terminal_failed_by
         from scheduler_outbox
-       where id=${input.id} and org_id=${input.orgId}
+       where id=${input.id} and (org_id=${input.orgId} or org_id is null)
          and terminal_failed_at is not null
        for update
     `);
     const before = selected.rows[0];
     if (!before) throw new SchedulerOutboxReplayError("only terminal-failed scheduler outbox rows can be replayed");
+    if (before.org_id === null) {
+      if (!actor.rows[0].is_super_admin) {
+        throw new SchedulerOutboxReplayError("system scheduler replay requires an active platform administrator");
+      }
+    } else if (!await actorHasPermission(tx, input.orgId, input.actorId, "admin.setup.manage")) {
+      throw new SchedulerOutboxReplayError("scheduler replay requires admin.setup.manage");
+    }
     const evidence = await tx.execute<{ exists: boolean }>(sql`
       select exists (
         select 1 from scheduler_outbox_terminal_audit
@@ -1108,7 +1127,7 @@ export async function replayTerminalSchedulerOutbox(input: {
     // unless both precede it inside this transaction.
     await insertSchedulerOutboxReplayAudit(tx, before, { reason, actorId: input.actorId, at: now });
     await tx.execute(sql`
-      select set_config('openbooks.scheduler_outbox_replay_org', ${input.orgId}::text, true)
+      select set_config('openbooks.scheduler_outbox_replay_org', ${before.org_id ?? '__system__'}::text, true)
     `);
     const reset = await tx.execute(sql`
       update scheduler_outbox
@@ -1116,7 +1135,7 @@ export async function replayTerminalSchedulerOutbox(input: {
              locked_at=null, lease_token=null, last_attempt_at=null,
              finished_at=null, error=null,
              terminal_failed_at=null, terminal_failed_by=null, updated_at=now()
-       where id=${input.id} and org_id=${input.orgId}
+       where id=${input.id} and org_id is not distinct from ${before.org_id}::uuid
          and terminal_failed_at is not null
     `);
     if (reset.rowCount !== 1) throw new SchedulerOutboxReplayError("the terminal row was not replayable");

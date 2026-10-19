@@ -564,7 +564,7 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
       values (${org.orgId}, ${stubPrev}, 'earning', 'Base salary', 80, 62.5, 5000, 100),
              (${org.orgId}, ${stubCur}, 'earning', 'Base salary', 80, 70, 5600, 100)`);
     const before = await decisionCount(org.orgId);
-    const trace = await explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId });
+    const trace = await explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId, stubId: stubCur });
     assert.equal(trace.stubId, stubCur);
     assert.equal(trace.gross, "5600.0000");
     assert.equal(trace.netPay, "4200.0000");

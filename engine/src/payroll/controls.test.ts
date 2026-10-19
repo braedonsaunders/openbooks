@@ -379,15 +379,12 @@ test(
         documentId: current.documentId,
       } as const;
       const caYtd = await employeeYtd(context);
-      const usYtd = await usEmployeeYtd(context, "ON");
+      await assert.rejects(usEmployeeYtd(context, "ON"), /actual pay-run USD currency basis/);
       assert.equal(cmp(caYtd.pensionable, "1000"), 0,
         "Canada YTD ignores an uncommitted calculated stub");
       assert.equal(cmp(caYtd.cpp, "1000"), 0,
         "Canada statutory factors ignore an uncommitted calculated stub");
-      assert.equal(cmp(usYtd.fica, "0"), 0,
-        "Canadian committed or calculated history cannot consume a US employer wage base");
-      assert.equal(cmp(usYtd.fica_tax, "0"), 0,
-        "Canadian factors cannot become US FICA history");
+
     } finally {
       await dropScratchOrgReporting(current.orgId);
     }
@@ -412,6 +409,8 @@ test("an employee's pay bank terms stale only the runs that pay that employee", 
   // withdraw them; a change to an employee on the run still does.
   const run = await seedPayRun();
   try {
+    await seedCommittedStub(run, "2400.0000");
+    await db.execute(sql`update pay_runs set calculated_at=clock_timestamp() where org_id=${run.orgId} and document_id=${run.documentId}`);
     assert.deepEqual((await payRunStaleness(run.orgId, run.documentId)).reasons, []);
     const outsiderId = randomUUID();
     await seedPayrollPerson(run.orgId, outsiderId, 'Outside Worker', { subsidiaryId: run.subsidiaryId });

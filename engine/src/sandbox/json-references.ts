@@ -8,7 +8,6 @@ import { db } from "../platform/db.ts";
 /** JSON identities do not participate in the catalog's scalar FK rebasing.
  * Resolve them through proven tenant-owned counterparts, never a UUID guess. */
 export function remapRoleRestriction(value: unknown, ids: ReadonlyMap<string, string>, label: string): SubsidiaryRestriction {
-  if (value === null) return { mode: "all" };
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label}: invalid subsidiary restriction`);
   const restriction = value as Record<string, unknown>;
   const mapped = (id: unknown): string => {

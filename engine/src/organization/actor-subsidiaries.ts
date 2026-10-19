@@ -32,14 +32,9 @@ export type SubsidiaryTreeNode = {
   parentId: string | null;
 };
 
-/**
- * Only an explicit SQL null is legacy-all. An absent (undefined) or
- * malformed row never confers authority — without this, a missing field in
- * a mock or a corrupt row would read as unrestricted.
- */
+/** Only an explicit all policy grants unrestricted role authority. */
 function isUnrestrictedRestriction(row: SubsidiaryRestriction | null | undefined): boolean {
-  if (row === null) return true;
-  if (typeof row !== "object") return false;
+  if (row === null || typeof row !== "object") return false;
   return row.mode === "all";
 }
 
@@ -66,9 +61,8 @@ export function expandSubsidiarySubtree(
 
 /**
  * Canonical resolution of one role restriction against a subsidiary tree.
- * Only an explicit null is legacy-all (exactly as the actor resolver treats
- * it); `{mode:"all"}` is unrestricted (null); list/subtree resolve to
- * explicit id sets. Undefined (absent/unknown) and any malformed shape
+ * `{mode:"all"}` resolves to unrestricted (null); list/subtree resolve to
+ * explicit id sets. A missing policy and any malformed shape
  * resolve to undefined so callers fail closed — never guessed, never
  * treated as unrestricted.
  */
@@ -76,8 +70,7 @@ export function restrictionSubsidiaryScope(
   restriction: SubsidiaryRestriction | null | undefined,
   subsidiaries: readonly SubsidiaryTreeNode[],
 ): Set<string> | null | undefined {
-  if (restriction === null) return null;
-  if (restriction === undefined) return undefined;
+  if (restriction == null) return undefined;
   if (restriction.mode === "all") return null;
   if (restriction.mode === "list") {
     if (!Array.isArray(restriction.subsidiaryIds)) return undefined;
@@ -112,12 +105,12 @@ export function restrictionScopeAdditions(
   next: SubsidiaryRestriction | undefined,
   subsidiaries: readonly SubsidiaryTreeNode[],
 ): Set<string> | null | undefined {
-  if (previous === undefined || next === undefined) return undefined;
+  if (previous == null || next === undefined) return undefined;
   if (next.mode === "all") {
-    if (previous === null || previous.mode === "all") return new Set<string>();
+    if (previous.mode === "all") return new Set<string>();
     return null;
   }
-  if (previous === null || previous.mode === "all") return new Set<string>();
+  if (previous.mode === "all") return new Set<string>();
   if (next.mode === "list") {
     if (!Array.isArray(next.subsidiaryIds)) return undefined;
     const before = restrictionSubsidiaryScope(previous, subsidiaries);
@@ -207,7 +200,7 @@ export async function loadSubsidiaryGrantCoverage(
 
 /**
  * Whether a granted RAW restriction sits inside the actor's policy
- * portfolio. `all` (or legacy null) needs an all-row on the actor side — a
+ * portfolio. `all` needs an all-row on the actor side — a
  * finite list covering every entity today is never equivalent. A list needs
  * every id inside the actor's enumerated union. A subtree needs actor `all`
  * or an actor subtree covering its root, because the grant's future
@@ -219,8 +212,8 @@ export function grantedRestrictionWithinCoverage(
   coverage: SubsidiaryGrantCoverage,
   granted: SubsidiaryRestriction | null | undefined,
 ): boolean {
-  if (granted === undefined) return false;
-  if (granted === null || granted.mode === "all") {
+  if (granted == null) return false;
+  if (granted.mode === "all") {
     return coverage.actorRestrictions.some(isUnrestrictedRestriction);
   }
   if (granted.mode === "list") {
@@ -263,7 +256,7 @@ export function grantedScopeSetWithinCoverage(
 function actorCoverageUnion(coverage: SubsidiaryGrantCoverage): Set<string> | null | undefined {
   return unionSubsidiaryScopes(
     coverage.actorRestrictions.map((row) =>
-      row === null ? null : restrictionSubsidiaryScope(row, coverage.subsidiaries),
+      restrictionSubsidiaryScope(row, coverage.subsidiaries),
     ),
   );
 }
@@ -332,8 +325,7 @@ export async function actorAllowedSubsidiaryIds(
      where a.user_id = ${userId} and a.org_id = ${orgId}
   `);
   const restrictions = roles.rows.map(row => row.restriction);
-  // Only a stored null is legacy-all, exactly as restrictionSubsidiaryScope
-  // treats it; an absent field never confers unrestricted visibility.
+  // Stored policies must explicitly grant unrestricted visibility.
   if (restrictions.some(isUnrestrictedRestriction)) return null;
   const subsidiaries = await exec.execute<SubsidiaryTreeNode>(sql`
     select id, parent_id as "parentId" from subsidiaries where org_id = ${orgId}

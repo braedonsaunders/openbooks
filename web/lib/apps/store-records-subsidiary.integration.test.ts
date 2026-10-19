@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 
 const { installApp, runBridgeMethod } = await import('./store')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
+const { createScratchOrg, dropScratchOrg, seedFlowActors, grantScratchPermissions } = await import(
   '@openbooks/engine/testing/fixtures',
 )
 
@@ -37,6 +37,7 @@ async function makeFixture(): Promise<Fixture> {
   return await withBypass(async () => {
     const org = await createScratchOrg()
     const { adminId } = await seedFlowActors(org.orgId)
+    await grantScratchPermissions(org.orgId, adminId, ["records.read"])
     const branch = randomUUID()
     const scopedTypeId = randomUUID()
     const plainTypeId = randomUUID()
@@ -197,6 +198,7 @@ test('bridge records.list/get still hide stored JSON subsidiary_id after the typ
   const fx = await withBypass(async () => {
     const org = await createScratchOrg()
     const { adminId } = await seedFlowActors(org.orgId)
+    await grantScratchPermissions(org.orgId, adminId, ["records.read"])
     const branch = randomUUID()
     const typeId = randomUUID()
     const fields = [{

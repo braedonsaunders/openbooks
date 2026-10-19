@@ -135,7 +135,7 @@ test("racing document posts retain one posted primary and one posted allocation 
     const successful = outcomes.filter(result => result.status === "fulfilled") as PromiseFulfilledResult<string>[];
     assert.equal(successful.length, 1);
     const refused = outcomes.find(result => result.status === "rejected") as PromiseRejectedResult;
-    assert.ok(refused.reason instanceof PostingError);
+    assert.ok(refused.reason instanceof PostingError, new Error("The competing post must return a typed posting refusal", { cause: refused.reason }));
     await withOrgContext(org.orgId, async () => {
       await assertPostedBooks(org, documentId, successful[0]!.value, secondaryBookId, mappedAccountId);
       assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and status='draft'`)).rows.length, 0);

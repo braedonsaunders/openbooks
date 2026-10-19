@@ -26,11 +26,13 @@ import {
   deliverFlowEmail,
   ensureScanOutboxRows,
   SCHEDULER_OUTBOX_SCAN_KINDS,
+  SchedulerScanOrganizationError,
   type FlowEmailQueueEnqueuer,
 } from "./outbox.ts";
 import {
   createScratchOrg,
   createScratchUser,
+  grantScratchPermissions,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
 import {
@@ -975,6 +977,7 @@ test("an authorized replay audits before/after and the failure evidence survives
   const gateId = randomUUID();
   try {
     const actorId = await createScratchUser(org.orgId, "Ops Admin", "admin");
+    await grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]);
     await enqueueApprovalEscalation({ orgId: org.orgId, gateId });
     await db.execute(sql`
       update scheduler_outbox set next_attempt_at=${new Date(Date.now() - 1_000)}, attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS - 1}
@@ -1778,6 +1781,53 @@ test("appendOccurrenceEvents reports a missing row instead of dropping logs sile
     }
     assert.equal(await appendOccurrenceEvents(randomUUID(), org.orgId, [{ event: "enqueued" }]), false);
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+
+test("tenant scan failures remain retryable and system recovery requires live platform authority", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const key = `system-scan-${randomUUID()}`;
+  let rowId: string | undefined;
+  try {
+    const operator = await createScratchUser(org.orgId, "Tenant operator", "scheduler_operator");
+    await grantScratchPermissions(org.orgId, operator, ["admin.setup.manage"]);
+    const platformAdmin = await createScratchUser(org.orgId, "Platform operator", "scheduler_platform");
+    await db.execute(sql`update users set is_super_admin=true where org_id=${org.orgId} and id=${platformAdmin}`);
+    rowId = (await db.execute<{ id: string }>(sql`insert into scheduler_outbox(kind,occurrence_key,status,next_attempt_at,attempt_count)
+      values('dunning',${key},'pending','2000-01-01',${MAX_SCHEDULER_OUTBOX_ATTEMPTS-1}) returning id`)).rows[0]!.id;
+    for (let attempt = 0; attempt <= MAX_SCHEDULER_OUTBOX_ATTEMPTS; attempt++) {
+      await db.execute(sql`update scheduler_outbox set next_attempt_at='2000-01-01' where id=${rowId}`);
+      await processDueSchedulerOutbox(new Date(), 200, async (row) => {
+        if (row.id === rowId) throw new SchedulerScanOrganizationError("One organization must configure its billing policy");
+      });
+      const retained = (await db.execute<{attempt_count:number;terminal_failed_at:Date|null;error:string}>(sql`
+        select attempt_count,terminal_failed_at,error from scheduler_outbox where id=${rowId}`)).rows[0]!;
+      assert.equal(retained.attempt_count, 0);
+      assert.equal(retained.terminal_failed_at, null);
+      assert.match(retained.error, /configure its billing policy/);
+    }
+    assert.deepEqual(await readTerminalEvidence(rowId), []);
+    await db.execute(sql`update scheduler_outbox set next_attempt_at='2000-01-01',attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS-1} where id=${rowId}`);
+    await processDueSchedulerOutbox(new Date(), 200, async (row) => {
+      if (row.id === rowId) throw new Error("Scheduler infrastructure is unavailable");
+    });
+    assert.equal((await readTerminalEvidence(rowId)).length, 1);
+    await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:operator,reason:"Infrastructure has recovered and delivery can resume"}), /platform administrator/);
+    assert.equal((await readTerminalEvidence(rowId)).length, 1);
+    await replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:platformAdmin,reason:"Infrastructure has recovered and delivery can resume"});
+    assert.equal((await readTerminalEvidence(rowId)).length, 2);
+    const replayed = (await db.execute<{status:string;attempt_count:number;terminal_failed_at:Date|null}>(sql`
+      select status,attempt_count,terminal_failed_at from scheduler_outbox where id=${rowId}`)).rows[0]!;
+    assert.deepEqual(replayed, {status:"pending",attempt_count:0,terminal_failed_at:null});
+    await db.execute(sql`update users set is_active=false where org_id=${org.orgId} and id=${platformAdmin}`);
+    await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:platformAdmin,reason:"Infrastructure has recovered and delivery can resume"}), /not an active user/);
+  } finally {
+    if (rowId) {
+      await db.execute(sql`delete from scheduler_outbox_terminal_audit where outbox_row_id=${rowId}`);
+      await db.execute(sql`delete from scheduler_outbox where id=${rowId}`);
+    }
     await dropScratchOrg(org.orgId);
   }
 });

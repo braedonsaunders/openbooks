@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
 import { sql, getTableColumns, type Table } from "drizzle-orm";
 import { getTableName } from "drizzle-orm";
-import { employeePayrollProfiles, paySchedules, payComponents, payStubs, payStubLines } from "@openbooks/schema/src/payroll.ts";
+import { employeePayrollProfiles, paySchedules, payComponents, payComponentStatutoryTreatments, payStubs, payStubLines } from "@openbooks/schema/src/payroll.ts";
 import { documents } from "@openbooks/schema/src/documents.ts";
 import { parties, employeeRoles, vendorRoles } from "@openbooks/schema/src/parties.ts";
 import { timeEntries } from "@openbooks/schema/src/time.ts";
@@ -44,6 +44,12 @@ async function insertDeclaredFixture(table: Table, row: Record<string, unknown>)
 export async function seedPayrollComponent(orgId: string, id: string,
   fields: Omit<typeof payComponents.$inferInsert, "orgId" | "id">): Promise<void> {
   await insertDeclaredFixture(payComponents, { orgId, id, ...fields });
+}
+
+/** Dated statutory policy is an explicit fixture fact, independent of component defaults. */
+export async function seedPayrollStatutoryTreatment(orgId: string, payComponentId: string,
+  fields: Omit<typeof payComponentStatutoryTreatments.$inferInsert, "orgId" | "payComponentId">): Promise<void> {
+  await insertDeclaredFixture(payComponentStatutoryTreatments, { orgId, payComponentId, ...fields });
 }
 
 /** Native document ownership, dates, currency and lifecycle are supplied by the scenario. */

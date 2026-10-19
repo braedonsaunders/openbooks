@@ -643,7 +643,7 @@ test(
       // employer CPP2 rows are both exercised by GL and CRA remittance paths.
       await saveOpeningBalances({
         orgId: org.orgId, actorId, taxYear: 2026,
-        rows: [{ employeePartyId: employeeId, amounts: { pensionableYtd: "74000.00" } }],
+        rows: [{ employeePartyId: employeeId, amounts: { pensionableYtd: "74000.00", insurableYtd: "0.00" } }],
       });
 
 

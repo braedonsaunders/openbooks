@@ -1,4 +1,4 @@
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import { seedPayrollAccountingConfiguration, seedPayrollStatutoryTreatment } from '../testing/fixtures.ts';
 import { validateBenefitContributionConfiguration } from "../hrm/benefits/contributions.ts";
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
@@ -57,6 +57,10 @@ test('native recurring elections produce taxable non-cash, employer cost and emp
         tax_treatment,payment_kind,non_cash_account_id,expense_account_id,liability_account_id,basis_cap_hours_per_period)
         values(${componentId},${fx.orgId},${code},${code},${role==='employee_deduction'?'deduction':nonCash?'earning':'employer_contribution'},'CA',
         ${nonCash},${nonCash},false,${code==='MDM_TAX'},${treatment},${nonCash?'non_cash':'cash'},${nonCash?clearing:null},${fx.accounts.burdenExpense},${fx.accounts.otherPayable},${basis==='per_hour'?'40':null})`);
+      await seedPayrollStatutoryTreatment(fx.orgId, componentId, {
+        effectiveFrom: "2026-01-01", programExclusions: [], vacationable: code === "MDM_TAX",
+        createdBy: fx.actorId, updatedBy: fx.actorId,
+      });
       await db.execute(sql`insert into hrm_benefit_contribution_rules(id,org_id,plan_id,rule_key,name,kind,pay_component_id,basis,rate,rate_formula,hours_basis,
         months_per_year,periods_per_year,proration,effective_from,run_applicability)
         values(${ruleId},${fx.orgId},${planId},${code},${code},${role},${componentId},${basis},0,'elected_rate',${basis==='per_hour'?'all_paid':null},
@@ -150,6 +154,10 @@ test('unpaid employer coverage enters the native owe bank and recovers two actua
       const component=kind==='employee_deduction'?deduction:randomUUID(),rule=kind==='employee_deduction'?recovery:randomUUID();
       if (kind!=='employee_deduction') await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,payment_kind,non_cash_account_id,expense_account_id,liability_account_id)
         values(${component},${fx.orgId},${code},${code},${kind==='taxable_non_cash'?'earning':'employer_contribution'},'CA',${kind==='taxable_non_cash'},false,false,false,${kind==='taxable_non_cash'?'non_cash':'cash'},${kind==='taxable_non_cash'?clearing:null},${fx.accounts.burdenExpense},${fx.accounts.otherPayable})`);
+      await seedPayrollStatutoryTreatment(fx.orgId, component, {
+        effectiveFrom: "2026-01-01", programExclusions: [], vacationable: false,
+        createdBy: fx.actorId, updatedBy: fx.actorId,
+      });
       await db.execute(sql`insert into hrm_benefit_contribution_rules(id,org_id,plan_id,rule_key,name,kind,pay_component_id,basis,rate,rate_formula,proration,effective_from,run_applicability,unpaid_period_treatment,arrears_plan_id,arrears_recovery_periods)
         values(${rule},${fx.orgId},${plan},${code},${code},${kind},${component},'per_period',0,'elected_rate','none','2026-01-01','regular_only','carry',${kind==='employee_deduction'?bank:null},${kind==='employee_deduction'?2:null})`);
       await db.execute(sql`insert into hrm_benefit_enrollment_terms(org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from)

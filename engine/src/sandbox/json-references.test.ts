@@ -99,8 +99,8 @@ test("remapScopeFilter refuses unknown keys, non-objects and identities without 
 });
 
 
-test("legacy unrestricted role captures use the current explicit policy while unknown scope refuses", () => {
-  assert.deepEqual(remapRoleRestriction(null, ids.subsidiaries, "role"), { mode: "all" });
+test("role captures require an explicit valid policy", () => {
+  assert.throws(() => remapRoleRestriction(null, ids.subsidiaries, "role"), /invalid subsidiary restriction/);
   assert.deepEqual(remapRoleRestriction({ mode: "all" }, ids.subsidiaries, "role"), { mode: "all" });
   assert.deepEqual(remapRoleRestriction({ mode: "list", subsidiaryIds: [] }, ids.subsidiaries, "role"), { mode: "list", subsidiaryIds: [] });
   assert.throws(() => remapRoleRestriction(undefined, ids.subsidiaries, "role"), /invalid subsidiary restriction/);

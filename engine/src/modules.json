@@ -806,6 +806,7 @@
         "fx",
         "inventory",
         "ledger",
+        "organization",
         "payments",
         "platform",
         "property",

@@ -1,5 +1,5 @@
 import { seedPayrollSettings } from '../testing/fixtures.ts';
-import { seedPayrollComponent } from '../testing/fixtures.ts';
+import { seedPayrollComponent as insertPayrollComponent, seedPayrollStatutoryTreatment } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPayrollProfile, seedPayrollWage,
   createScratchOrg, dropScratchOrg, seedFlowActors, dropScratchOrgReporting, seedWorkerEmployment, assertDedicatedFixtureDatabase,
@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test, { describe } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool, withOrgTransaction } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { PayrollError } from "./error.ts";
@@ -17,6 +17,15 @@ import { calculatedRun, seedAdoption, seedOntarioEhtFixture } from "./filing-tes
 import { commitPayRun } from "./run-commit.ts";
 import { cmp } from "../money/money.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
+async function seedPayrollComponent(...args: Parameters<typeof insertPayrollComponent>): Promise<void> {
+  await insertPayrollComponent(...args);
+  const [orgId, componentId, fields] = args;
+  await seedPayrollStatutoryTreatment(orgId, componentId, {
+    effectiveFrom: "2026-01-01", programExclusions: [], vacationable: true,
+    createdBy: fields.createdBy, updatedBy: fields.updatedBy,
+  });
+}
+
 /** Identical Ontario hourly employment and approved time for lifecycle calculations. */
 async function seedHourlyLifecycle(name: string, options: { monthly?: boolean; scheduleName?: string; terminatedOn?: string } = {}) {
   const org = await createScratchOrg();
@@ -208,7 +217,7 @@ describe("run-assignment-window", () => {
       periodStart: "2026-07-05",
       periodEnd: "2026-07-18",
     });
-    await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+    assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
 
     const lines = (await db.execute<{ code: string; amount: string }>(sql`
       select c.code, l.amount::text as amount
@@ -262,7 +271,7 @@ describe("run-assignment-window", () => {
       periodStart: "2026-07-01",
       periodEnd: "2026-07-31",
     });
-    await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+    assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
 
     const lines = (await db.execute<{ amount: string }>(sql`
       select l.amount::text as amount
@@ -322,7 +331,7 @@ describe("run-entitlement-hours-payout", () => {
       runType: "termination",
       employeePartyIds: [employeeId],
     });
-    await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+    assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
 
     const lines = (await db.execute<{ amount: string }>(sql`
       select l.amount::text as amount
@@ -378,7 +387,7 @@ describe("run-entitlement-hours-payout", () => {
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
         runType: "termination", employeePartyIds: [employeeId],
       });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
       assert.deepEqual(result.errors, []);
       const line = (await db.execute<{ amount: string }>(sql`
         select l.amount::text as amount from pay_stub_lines l
@@ -458,48 +467,37 @@ describe("calculation-rollback", () => {
   test("a caught late payroll commit refusal restores all evidence in an ambient transaction",
     { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
       const fx = await seedAdoption();
-      const blocker = await pool.connect();
-      let pending: Promise<PromiseSettledResult<void>> | undefined;
+      const fault = sql.identifier(`payroll_commit_fault_${randomUUID().replaceAll("-", "")}`);
       try {
+        await assertDedicatedFixtureDatabase("payroll commit rollback verification");
         const { input } = await calculatedRun(fx);
-        const line = (await db.execute<{ id: string }>(sql`insert into document_lines
-          (org_id,document_id,line_number,account_id,description,amount,created_by,updated_by)
-          select ${fx.orgId},${input.documentId},1,id,'Existing draft projection',1,${fx.actorId},${fx.actorId}
-          from accounts where org_id=${fx.orgId} and number='6000' returning id`)).rows[0]!;
         const before = await evidence(fx.orgId);
-        await blocker.query("begin");
-        await blocker.query("select set_config('app.bypass_rls','on',true)");
-        await blocker.query("select id from document_lines where org_id=$1 and id=$2 for update", [fx.orgId, line.id]);
-        const pid = (await blocker.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
-        pending = withOrgTransaction(fx.orgId, async () => {
-          await assert.rejects(commitPayRun(input), /inputs changed after it was last calculated \(roster\)/);
-          assert.deepEqual(await evidence(fx.orgId), before, "caught refusal must restore projection, liabilities, and time claims");
-        }).then((value) => ({ status: "fulfilled", value }), (reason: unknown) => ({ status: "rejected", reason }));
-        let blocked = false;
-        for (let attempt = 0; attempt < 400; attempt++) {
-          const row = (await pool.query<{ blocked: boolean }>("select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked", [pid])).rows[0]!;
-          if (row.blocked) { blocked = true; break; }
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-        assert.ok(blocked, "commit must reach projection replacement after its initial freshness checks");
-        await db.transaction(async (tx) => {
-          await tx.execute(sql`set local lock_timeout='2s'`);
-          // Commit locks org settings and payroll profiles. Employee-role input
-          // remains independently editable and must trip the final freshness gate.
-          const changed = await tx.execute(sql`update employee_roles set updated_at=clock_timestamp()
-            where org_id=${fx.orgId} and party_id=${fx.employeeId} returning id`);
-          assert.equal(changed.rows.length, 1);
+        await withOrgTransaction(fx.orgId, async () => {
+          await db.execute(sql`update parties set custom=custom || '{"callerWork":true}'::jsonb
+            where org_id=${fx.orgId} and id=${fx.employeeId}`);
+          await db.execute(sql`create function ${fault}() returns trigger language plpgsql as $$
+            begin
+              if new.run_status='committed' then
+                raise exception 'Injected late payroll commit refusal' using errcode='23514';
+              end if;
+              return new;
+            end $$`);
+          await db.execute(sql`create trigger ${fault} before update on pay_runs for each row
+            when (new.org_id=${sql.raw(`'${fx.orgId}'::uuid`)}) execute function ${fault}()`);
+          await assert.rejects(commitPayRun(input), (error: unknown) => {
+            assert.ok(errorChainMatches(error, /Injected late payroll commit refusal/));
+            assert.equal(errorChainMatches(error, /current transaction is aborted/), false);
+            return true;
+          });
+          assert.deepEqual(await evidence(fx.orgId), before,
+            "the caught refusal restores projections, liabilities, time claims and calculated evidence");
+          await db.execute(sql`drop trigger ${fault} on pay_runs`);
+          await db.execute(sql`drop function ${fault}()`);
         });
-        await blocker.query("commit");
-        const result = await pending;
-        if (result.status === "rejected") throw result.reason;
-        assert.deepEqual(await evidence(fx.orgId), before);
-        assert.deepEqual((await calculatePayRun(input)).errors, []);
+        assert.equal((await db.execute<{marker:boolean}>(sql`select (custom->>'callerWork')::boolean as marker
+          from parties where org_id=${fx.orgId} and id=${fx.employeeId}`)).rows[0]!.marker, true);
         assert.ok((await commitPayRun(input)).lines > 0);
-      } finally {
-        await blocker.query("rollback"); blocker.release(); await pending;
-        await dropScratchOrgReporting(fx.orgId);
-      }
+      } finally { await dropScratchOrgReporting(fx.orgId); }
     });
 
   for (const mode of ["dry-run", "simulation"] as const) {

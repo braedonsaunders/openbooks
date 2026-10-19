@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { createScratchUser } from "../../testing/fixtures.ts";
@@ -113,17 +114,19 @@ async function whileLocked(lock: SQL, writes: Array<() => Promise<unknown>>, whi
   let settled = 0;
   let waited = false;
   const outcomes: Promise<unknown>[] = [];
+  const runIndependent = AsyncLocalStorage.snapshot();
   await db.transaction(async (tx) => {
     await tx.execute(lock);
     for (const write of writes) {
-      outcomes.push(write().then((value) => value, (error: unknown) => error).finally(() => { settled += 1; }));
+      outcomes.push(runIndependent(write).then((value) => value, (error: unknown) => error).finally(() => { settled += 1; }));
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     waited = settled === 0;
     if (whileHeld) await tx.execute(whileHeld);
   });
-  assert.equal(waited, true, "every write waits behind the held lock");
-  return Promise.all(outcomes);
+  const results = await Promise.all(outcomes);
+  assert.equal(waited, true, `every write waits behind the held lock: ${results.map(String).join("; ")}`);
+  return results;
 }
 
 const fulfilments = (orgId: string, requestId: string) =>
