@@ -12,6 +12,7 @@ import { builtInReportDefinitionId } from '../../../lib/custom-reports'
 import { addCalendarDays } from '@openbooks/engine/platform/civil-date'
 import { businessToday } from '@openbooks/engine/platform/business-date'
 import { findCardsExpiringSoon, getRecoveryMetrics, MISSING_COLLECTION_POLICY } from '@openbooks/engine/payments/autopay'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 
 /** The shell composes shared page chrome, registered lists and domain editors.
  * Permissions and feature dependencies are resolved before reaching the client. */
@@ -151,12 +152,16 @@ export interface CollectionsData {
  * declines with no backup on file. Bounded lists — the Reports hub owns the
  * full history.
  */
-async function loadRecovery(orgId: string, opts?: { canRunReport?: boolean }): Promise<RecoveryDashboardData> {
+async function loadRecovery(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  opts?: { canRunReport?: boolean },
+): Promise<RecoveryDashboardData> {
   const today = await businessToday(orgId)
   const window = { from: addCalendarDays(today, -89), to: addCalendarDays(today, 1) }
   const [metrics, expiringCards, awaitingAuthRows, hardStuckRows] = await Promise.all([
-    getRecoveryMetrics(orgId, window),
-    findCardsExpiringSoon(orgId, { asOf: today }),
+    getRecoveryMetrics(orgId, window, allowedSubsidiaryIds),
+    findCardsExpiringSoon(orgId, { asOf: today, allowedSubsidiaryIds }),
     db.execute<{
       attemptId: string
       invoiceId: string
@@ -176,6 +181,8 @@ async function loadRecovery(orgId: string, opts?: { canRunReport?: boolean }): P
         join parties p on p.id = d.party_id and p.org_id = d.org_id
        where a.org_id = ${orgId} and a.status = 'failed'
          and a.decline_kind = 'needs_authentication' and a.next_retry_on is null
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        order by a.created_at desc
        limit 8
     `),
@@ -195,6 +202,8 @@ async function loadRecovery(orgId: string, opts?: { canRunReport?: boolean }): P
         join parties p on p.id = d.party_id and p.org_id = d.org_id
        where a.org_id = ${orgId} and a.status = 'failed' and a.decline_kind = 'hard'
          and a.next_retry_on is null and a.created_at >= ${addCalendarDays(today, -30)}::timestamptz
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
          and not exists (
            select 1 from customer_payment_methods m
             where m.org_id = a.org_id and m.party_id = d.party_id and m.status = 'active'
@@ -217,8 +226,11 @@ async function loadRecovery(orgId: string, opts?: { canRunReport?: boolean }): P
     const currencyRows = (await db.execute<{ partyId: string; currency: string }>(sql`
       select d.party_id as "partyId", d.currency
         from documents d
+        join parties p on p.org_id = d.org_id and p.id = d.party_id
        where d.org_id = ${orgId} and d.kind = 'customer_invoice'
          and d.party_id = any(${partyIds})
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        order by d.document_date desc, d.created_at desc, d.id desc
     `)).rows
     for (const row of currencyRows) {
@@ -290,12 +302,14 @@ export async function loadCollections(
         db.execute<{ id: string; name: string }>(sql`
           select p.id, p.display_name as "name" from parties p
            where p.org_id = ${authz.user.orgId} and p.is_active
+             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
              and exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id)
            order by p.display_name
         `),
         db.execute<{ id: string; number: string | null; name: string }>(sql`
           select id, number, name from accounts
            where org_id = ${authz.user.orgId} and type in ('income', 'income_other') and is_active
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
            order by number nulls last
         `),
       ])
@@ -309,7 +323,7 @@ export async function loadCollections(
       // The drill link reaches the native report runner, which demands
       // reports.read on top of this page's documents.manage: verify it
       // before linking so the action never leads to a refusal.
-      recovery = await loadRecovery(authz.user.orgId, { canRunReport: can(authz, 'reports.read') })
+      recovery = await loadRecovery(authz.user.orgId, authz.allowedSubsidiaryIds, { canRunReport: can(authz, 'reports.read') })
     } catch (error) {
       if (!isMissingCollectionPolicy(error)) throw error
       policyNotice = {
@@ -343,6 +357,8 @@ export async function loadCollections(
         join parties p on p.id = d.party_id and p.org_id = d.org_id
         left join customer_payment_methods m on m.id = a.payment_method_id and m.org_id = a.org_id
        where a.id = ${attemptId} and a.org_id = ${authz.user.orgId}
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
        limit 1
     `)).rows as AttemptDrawerData['attempt'][]
     const attempt = rows[0]

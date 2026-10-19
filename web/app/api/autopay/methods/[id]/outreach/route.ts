@@ -7,11 +7,13 @@ import {
 } from '@openbooks/engine/payments/autopay'
 import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '@/lib/list-params'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { guardPaymentMethodScope } from '@/lib/autopay-scope'
 
 export const runtime = 'nodejs'
 
 const outreachBody = z.object({
-  sentOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  sentOn: z.string().refine(isIsoCalendarDate, 'must be a valid calendar date in YYYY-MM-DD format').optional(),
 })
 
 /**
@@ -24,13 +26,16 @@ export const POST = defineRoute({
   feature: 'autopay',
   body: outreachBody,
   opaque: {
-    sentOn: "an omitted date records today; the handler defaults an empty body to the current UTC date",
+    sentOn: "an omitted date records the organization's business date",
   },
   handler: async ({ authz, body, params: routeParams }) => {
     const { id } = (routeParams ?? {}) as { id?: string }
     if (!id || !isUuid(id)) return NextResponse.json({ error: 'method id is required' }, { status: 400 })
+    const outOfScope = await guardPaymentMethodScope(authz, id)
+    if (outOfScope) return outOfScope
     try {
-      await markExpiryOutreachSent(authz.user.orgId, [id], body.sentOn ?? new Date().toISOString().slice(0, 10), authz.user.id)
+      const sentOn = body.sentOn ?? await businessToday(authz.user.orgId)
+      await markExpiryOutreachSent(authz.user.orgId, [id], sentOn, authz.allowedSubsidiaryIds, authz.user.id)
       return NextResponse.json({ ok: true })
     } catch (e) {
       if (e instanceof AutopayError) return apiErrorResponse(e, { safeStatus: 422 })
