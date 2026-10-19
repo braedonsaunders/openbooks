@@ -1,9 +1,10 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/platform/db'
 import { listSandboxes } from '@openbooks/engine/sandbox/runtime'
+import { periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
 import { page, pageHeader, ref, textBlock, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import type { PeriodOption, SandboxRow } from './SandboxManager'
@@ -48,12 +49,14 @@ export async function loadSandboxes(): Promise<SandboxesData> {
   // first). The cutoff is a date, not an ordinal: each option carries its end
   // date and calendar so the operator picks the close they mean even when two
   // active calendars give the same fiscal year/period number different dates.
+  // Each option is named by its fiscal label in the viewer's locale.
+  const locale = await getLocale()
   const periodsRes = (await db.execute<PeriodOption>(sql`
-    select p.id, p.name, p.ends_on::text as "endsOn", fc.name as "calendarName"
+    select p.id, ${periodDisplayLabelSql(locale, 'p')} as name, p.ends_on::text as "endsOn", fc.name as "calendarName"
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id
      where p.org_id = ${authz.user.productionOrgId}
-     order by p.ends_on desc, p.name`))
+     order by p.ends_on desc, fc.name, p.period_number desc, p.id`))
 
   return {
     title: 'Environments',

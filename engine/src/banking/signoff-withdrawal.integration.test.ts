@@ -73,7 +73,7 @@ test("a signed-off reconciliation is withdrawn with a reason only while Banking 
     });
     await assert.rejects(
       withdrawReconciliationSignOff(reconId, "Late deposit belongs in this period", ctx),
-      /Banking is closed for .* request a controlled reopen of Banking/,
+      /Banking is closed for P07 FY2026 — request a controlled reopen of Banking/,
     );
     await setPeriodLockState({
       orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, module: "banking",

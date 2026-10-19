@@ -44,8 +44,8 @@ function ctx(over: Partial<RuleVersionValidationContext> = {}): RuleVersionValid
 }
 
 const JAN_FEB = [
-  { name: "2026-01", startsOn: "2026-01-01", endsOn: "2026-01-31" },
-  { name: "2026-02", startsOn: "2026-02-01", endsOn: "2026-02-28" },
+  { label: "P01 FY2026", startsOn: "2026-01-01", endsOn: "2026-01-31" },
+  { label: "P02 FY2026", startsOn: "2026-02-01", endsOn: "2026-02-28" },
 ];
 
 function tgt(over: Partial<AllocationRuleTarget> = {}): AllocationRuleTarget {
@@ -274,17 +274,17 @@ test("period-mode effective dates proven mid-period refuse with the boundary sug
   const flagged = from.find((p) => p.code === "effective_boundary");
   assert.ok(flagged, `expected an effective_boundary problem, got ${JSON.stringify(from)}`);
   assert.equal(flagged?.field, "effectiveFrom");
-  assert.match(flagged?.message ?? "", /2026-01-15 falls inside 2026-01/);
+  assert.match(flagged?.message ?? "", /2026-01-15 falls inside P01 FY2026/);
   assert.match(flagged?.message ?? "", /use 2026-01-01 or 2026-02-01/);
   const to = validateRuleVersion(
     version({ effectiveFrom: "2026-01-01", effectiveTo: "2026-01-14" }),
     [tgt()],
-    ctx({ periods: [{ name: "2025-12", startsOn: "2025-12-01", endsOn: "2025-12-31" }, ...JAN_FEB] }),
+    ctx({ periods: [{ label: "P12 FY2025", startsOn: "2025-12-01", endsOn: "2025-12-31" }, ...JAN_FEB] }),
   );
   const flaggedTo = to.find((p) => p.code === "effective_boundary");
   assert.ok(flaggedTo, `expected an effective_boundary problem, got ${JSON.stringify(to)}`);
   assert.equal(flaggedTo?.field, "effectiveTo");
-  assert.match(flaggedTo?.message ?? "", /2026-01-14 falls inside 2026-01/);
+  assert.match(flaggedTo?.message ?? "", /2026-01-14 falls inside P01 FY2026/);
   assert.match(flaggedTo?.message ?? "", /use 2026-01-31 or 2025-12-31/);
 });
 

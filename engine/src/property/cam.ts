@@ -6,7 +6,7 @@ import { addCalendarDays, businessToday, inclusiveCalendarDays } from "../platfo
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { createSubscriptionInvoice } from "../billing/subscription-billing.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
-import { arePeriodModulesOpen } from "../periods/period-policy.ts";
+import { arePeriodModulesOpen, canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { add, cmp, fromUnits, mulPercent, mulRatio, neg, sum, toUnits } from "../money/money.ts";
 import { assertEnabled, assertLockedSubsidiaryInScope, audit, CAM_VACANCY_TREATMENTS, exactMoney, lockPropertyInScope, PropertyManagementError, validDate, type CamAllocationDbRow, type CamLeaseRow, type CamPoolDbRow, type CamVacancyTreatment } from "./management-foundation.ts";
@@ -238,17 +238,18 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
     //    period_module_is_closed predicate, read in the closed sense. A
     //    source-owned imported lock counts as closed here exactly as before —
     //    finalization only observes closure, it never posts into the period.
-    const gateScopes = (await tx.execute<{ period_id: string; book_id: string; name: string; code: string }>(sql`
-      select p.id as period_id,b.id as book_id,p.name,b.code from accounting_periods p
+    //    The earliest still-open period is the one the refusal names.
+    const gateScopes = (await tx.execute<{ period_id: string; book_id: string; label: string; code: string }>(sql`
+      select p.id as period_id,b.id as book_id,${canonicalPeriodLabelSql("p")} as label,b.code from accounting_periods p
         join accounting_books b on b.org_id=${orgId} and b.id=${bookId}
         where p.org_id=${orgId} and p.starts_on<=${pool.period_ends_on} and p.ends_on>=${pool.period_starts_on}
-        order by p.name,b.code`));
+        order by p.starts_on,p.is_adjustment,p.period_number,p.id,b.code`));
     for (const scope of gateScopes.rows) {
       if (await arePeriodModulesOpen(tx, {
         orgId, periodId: scope.period_id, bookId: scope.book_id,
         subsidiaryIds: [pool.subsidiary_id], modules: ["gl"],
       })) {
-        throw new PropertyManagementError(`Close the GL module for ${scope.name} in book ${scope.code} before finalizing CAM actuals`);
+        throw new PropertyManagementError(`Close the GL module for ${scope.label} in book ${scope.code} before finalizing CAM actuals`);
       }
     }
     // CAM actuals are ledger activity by posting date. A voided cost stays in

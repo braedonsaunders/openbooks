@@ -136,7 +136,7 @@ test("the as-of preflight refusal agrees exactly with the copy filter", { skip: 
       createSandbox({
         productionOrgId: org.orgId, name: sandboxName, tier: "as_of", masked: false, asOfPeriodId: org.periodId,
       }),
-      /period "2026-07" ending 2026-07-31.*calendar "Default".*1 posted entries.*dated after 2026-07-31.*or use a full tier/s,
+      /period P07 FY2026 ending 2026-07-31.*calendar "Default".*1 posted entries.*dated after 2026-07-31.*or use a full tier/s,
     );
     // The refusal is raised, not dropped: the failed sandbox row carries it.
     const failed = (await db.execute<{ status: string; last_error: string | null }>(sql`

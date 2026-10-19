@@ -101,6 +101,26 @@ describe("readiness-levy-scope", () => {
     return staleness.reasons.includes("employerLevyYtd");
   }
 
+  test("a closed pay-date period blocks readiness and is named by its fiscal label", { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      await setup(org.orgId, actorId);
+      const schedule = await makeSchedule(org.orgId, actorId);
+      await makeEmployee(org.orgId, actorId, schedule, "Amy CA", "CA", "ON");
+      const run = await makeRun(org.orgId, actorId, schedule);
+      await db.execute(sql`
+        insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
+        values (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl', 'closed', now(), 'Month-end close')`);
+      const readiness = await payRunReadiness(org.orgId, run.documentId);
+      const closed = readiness.items.find((item) => item.code === "period.closed");
+      assert.equal(closed?.severity, "blocker");
+      assert.equal(closed?.detail, "P07 FY2026");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  });
+
   test("a committed US-pack run does not stale a calculated CA run", { skip: !DB }, async () => {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;

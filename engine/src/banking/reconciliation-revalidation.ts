@@ -7,6 +7,7 @@ import { actorHasPermission } from '../organization/actor-permissions.ts'
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts'
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts'
 import { ScopeNotFoundError, subsidiaryScopeAllows } from '../organization/subsidiary-scope.ts'
+import { canonicalPeriodLabel } from '../periods/period-policy.ts'
 import { resolveCoveringPeriod } from '../periods/period-resolution.ts'
 import { BankingError, type BankingContext } from './banking-core.ts'
 import { lockReconciliationAccount, requireSessionRowInScope } from './reconcilable-account.ts'
@@ -29,7 +30,7 @@ export type SignOffRevalidationPreview = {
 
 async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingContext): Promise<{
   preview: SignOffRevalidationPreview; subject: SignedReviewSubject; subsidiaryId: string | null
-  periods: { id: string; name: string; subsidiaryId:string|null }[]
+  periods: { id: string; label: string; subsidiaryId:string|null }[]
 }> {
   if (!isUuid(id)) throw new ScopeNotFoundError()
   await acquireOrgFeatureGateLock(tx,ctx.orgId)
@@ -74,12 +75,16 @@ async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingCont
       and (je.posted_at>${row.signed_off_at}::timestamptz or jl.reconciled_at is null)
   `)).rows
   const entities = [...new Set([row.subsidiary_id,...affected.map(effect=>effect.subsidiaryId)])]
-  const periods: {id:string;name:string;subsidiaryId:string|null}[] = []
+  const periods: {id:string;label:string;subsidiaryId:string|null}[] = []
   for (const entity of entities) {
     if (!subsidiaryScopeAllows(actualScope,entity) || !subsidiaryScopeAllows(ctx.allowedSubsidiaryIds,entity)) throw new ScopeNotFoundError()
     const period = await resolveCoveringPeriod(tx,ctx.orgId,row.through_date,entity)
     if (!period) throw new BankingError('Configure a covering accounting period for every affected legal entity before recording this review.')
-    periods.push({id:period.id,name:period.name,subsidiaryId:entity})
+    periods.push({
+      id:period.id,
+      label:canonicalPeriodLabel({fiscalYear:period.fiscal_year,periodNumber:period.period_number,adjustment:false}),
+      subsidiaryId:entity,
+    })
   }
   // Share each affected calendar's native close fence in a stable order,
   // before taking journal evidence locks, and retain it through the decision.
@@ -174,7 +179,7 @@ export async function revalidateReconciliationSignOff(id: string, input: {
         select period_module_blocks_write(${ctx.orgId},${period.id},${review.subject.bookId},
           ${period.subsidiaryId},'banking',false) as blocked
       `)).rows[0]?.blocked
-      if (blocked!==false) throw new BankingError(`Banking is closed for ${period.name}. Request its controlled reopening before recording the independent review.`)
+      if (blocked!==false) throw new BankingError(`Banking is closed for ${period.label}. Request its controlled reopening before recording the independent review.`)
     }
     const audit = (await db.execute<{id:string;at:string}>(sql`
       insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)

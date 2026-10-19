@@ -30,3 +30,10 @@ test("allocation runs expose no writable fields and release outside authored act
     /not writable/,
   );
 });
+
+test("an allocation run is titled by its fiscal period label, not its stored name", () => {
+  assert.equal(
+    allocationRunsFlowAdapter.label("run-1", { ruleName: "Rent", periodName: "2026-07", periodLabel: "P07 FY2026" }),
+    "Rent — P07 FY2026",
+  );
+});

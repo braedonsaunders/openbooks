@@ -1369,7 +1369,8 @@ test("mark-filed refuses a filing while its covered period is not closed", { ski
 
     await assert.rejects(
       () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed"
+        && error.message.startsWith("period P07 FY2026 must be closed for gl"),
     );
     assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
 

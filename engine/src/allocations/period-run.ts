@@ -14,7 +14,7 @@ import {
   reverseProjectGlEntryWithinTransaction,
   type GlLine,
 } from "../journal/origin-entry.ts";
-import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, canonicalPeriodLabel, CloseError } from "../periods/period-policy.ts";
 import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
@@ -217,13 +217,24 @@ type TargetRow = {
 type PeriodRow = {
   id: string;
   org_id: string;
+  /** Stored period name: machine identity only (entry numbers, `{{period.name}}`). */
   name: string;
   starts_on: string;
   ends_on: string;
   fiscal_year: number;
+  period_number: number;
   fiscal_calendar_id: string;
   is_adjustment: boolean;
 };
+
+/** Canonical fiscal label naming a period in refusals, memos and audit. */
+function periodLabel(period: PeriodRow): string {
+  return canonicalPeriodLabel({
+    fiscalYear: period.fiscal_year,
+    periodNumber: period.period_number,
+    adjustment: period.is_adjustment,
+  });
+}
 
 type Tx = DbTransaction;
 
@@ -301,7 +312,7 @@ async function assertNoVersionEdgeInsidePeriod(
   })();
   throw new AllocationRunError(
     "INVALID",
-    `allocation rule ${rule.key} cannot run for period ${period.name}: ${subject}, ` +
+    `allocation rule ${rule.key} cannot run for period ${periodLabel(period)}: ${subject}, ` +
       `so the run would price pre-change activity under post-change rules. ` +
       `Retire ${crossing.length === 1 ? describe(crossing[0]!) : "these versions"} and publish ` +
       `boundary-aligned replacements, then re-run.`,
@@ -328,7 +339,7 @@ async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow, requ
     if (!pinned || pinned.rule_id !== rule.id || pinned.status !== "published" || !inWindow(pinned)) {
       throw new AllocationRunError(
         "INVALID",
-        `allocation rule ${rule.key} version ${requestedVersionId} is not published and effective for period ${period.name}`,
+        `allocation rule ${rule.key} version ${requestedVersionId} is not published and effective for period ${periodLabel(period)}`,
       );
     }
     return pinned;
@@ -349,7 +360,7 @@ async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow, requ
        and (effective_to is null or effective_to >= ${period.starts_on})
      order by version_no desc limit 1 for share`)).rows[0];
   if (!published) {
-    throw new AllocationRunError("INVALID", `allocation rule ${rule.key} has no published version in effect for period ${period.name}`);
+    throw new AllocationRunError("INVALID", `allocation rule ${rule.key} has no published version in effect for period ${periodLabel(period)}`);
   }
   return published;
 }
@@ -368,7 +379,7 @@ async function loadTargets(tx: Tx, orgId: string, versionId: string): Promise<Ta
 async function loadPeriod(tx: Tx, orgId: string, periodId: string): Promise<PeriodRow> {
   const rows = (await tx.execute<PeriodRow>(sql`
     select id, org_id, name, starts_on::text, ends_on::text, fiscal_year,
-           fiscal_calendar_id, is_adjustment
+           period_number, fiscal_calendar_id, is_adjustment
       from accounting_periods where id = ${periodId} for share`)).rows;
   const period = rows[0];
   if (!period || period.org_id !== orgId) {
@@ -423,7 +434,7 @@ async function assertPeriodOpen(
       if (error instanceof CloseError) {
         throw new AllocationRunError(
           "INVALID",
-          `the GL period ${period.name} is closed and cannot take allocation postings`,
+          `the GL period ${periodLabel(period)} is closed and cannot take allocation postings`,
         );
       }
       throw error;
@@ -431,13 +442,18 @@ async function assertPeriodOpen(
   }
 }
 
-function renderMemo(
+/**
+ * Line memo for an allocation run. The `{{period.name}}` token substitutes the
+ * stored period name the rule author configured against; the system fallback
+ * names the period by its canonical fiscal label.
+ */
+export function renderMemo(
   template: string | null | undefined,
-  vars: { ruleName: string; periodName: string; targetLabel: string },
+  vars: { ruleName: string; periodName: string; periodLabel: string; targetLabel: string },
 ): string {
   const fallback = vars.targetLabel
-    ? `${vars.ruleName} — ${vars.periodName} — ${vars.targetLabel}`
-    : `${vars.ruleName} — ${vars.periodName}`;
+    ? `${vars.ruleName} — ${vars.periodLabel} — ${vars.targetLabel}`
+    : `${vars.ruleName} — ${vars.periodLabel}`;
   if (!template) return fallback;
   return template
     .split("{{rule.name}}").join(vars.ruleName)
@@ -727,7 +743,7 @@ async function resolveDriverVectorForRun(
   // posting seam uses, against this sweep's period.
   const vintage = await resolveDriverVintage(tx, opts.orgId, driverAsOf(opts.version.driver_as_of), {
     kind: "period",
-    period: { id: opts.period.id, name: opts.period.name, startsOn: opts.period.starts_on, endsOn: opts.period.ends_on },
+    period: { id: opts.period.id, label: periodLabel(opts.period), startsOn: opts.period.starts_on, endsOn: opts.period.ends_on },
   });
   if ("refusal" in vintage) throw new AllocationRunError("INVALID", vintage.refusal);
   const asOf = vintage.asOf;
@@ -1035,7 +1051,7 @@ async function buildComputation(
   if (pool.sources.length === 0) {
     throw new AllocationRunError(
       "INVALID",
-      `allocation rule ${opts.rule.key} found no source lines for period ${opts.period.name}; refusing to post an empty run`,
+      `allocation rule ${opts.rule.key} found no source lines for period ${periodLabel(opts.period)}; refusing to post an empty run`,
     );
   }
   const targetSet = await resolveTargets(
@@ -1099,6 +1115,7 @@ async function buildComputation(
     renderMemo(opts.version.line_description_template ?? opts.version.memo_template, {
       ruleName: opts.rule.name,
       periodName: opts.period.name,
+      periodLabel: periodLabel(opts.period),
       targetLabel: label,
     });
 
@@ -1402,7 +1419,7 @@ async function postStoredJournal(
   }
   // Entry memo from the rule key and period (the per-line memos already carry
   // the rendered memo/line-description templates from preview time).
-  const memo = `Allocation ${opts.ruleKey} — ${opts.period.name}`;
+  const memo = `Allocation ${opts.ruleKey} — ${periodLabel(opts.period)}`;
   const entryId = await postProjectGlEntryWithinTransaction(tx, {
     orgId: opts.orgId,
     actorId: opts.actorId,
@@ -1689,7 +1706,7 @@ export async function previewAllocationRun(
     await writeAudit(tx, opts.orgId, row.id, opts.actorId, {
       mode: "allocation_run_preview",
       rule: rule.key,
-      period: period.name,
+      period: periodLabel(period),
       book: book.code,
       fingerprint: built.fingerprint,
     });

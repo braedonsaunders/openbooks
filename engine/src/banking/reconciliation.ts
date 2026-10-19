@@ -7,6 +7,7 @@ import { db, schema, type SqlExecutor, withOrgTransaction } from "../platform/db
 import { fromUnits, isZero, toUnits } from "../money/money.ts"
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts"
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts"
+import { canonicalPeriodLabel } from "../periods/period-policy.ts"
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts"
 import { applicableSignOffRevalidation, originalSignOffProofAgrees, reconciliationReviewProof, type SignOffRevalidationCertificate } from './reconciliation-review-proof.ts'
 
@@ -866,7 +867,7 @@ export async function withdrawReconciliationSignOff(
       `)).rows[0]?.blocked;
       if (blocked) {
         throw new BankingError(
-          `Banking is closed for ${period.name} — request a controlled reopen of Banking for that period, then withdraw the sign-off`,
+          `Banking is closed for ${canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false })} — request a controlled reopen of Banking for that period, then withdraw the sign-off`,
         );
       }
     }

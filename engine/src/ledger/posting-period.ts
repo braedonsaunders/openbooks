@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { canonicalPeriodLabel } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { type Doc, PostingError } from "../journal/posting-contracts.ts";
 /**
@@ -27,12 +28,11 @@ export async function resolvePostingPeriod(
   if (doc.postingPeriodId) {
     const window = (await runner.execute<{
       is_adjustment: boolean;
-      period_name: string;
       fiscal_year: number;
       window_start: string;
       window_end: string;
     }>(sql`
-        select is_adjustment, period_name, fiscal_year,
+        select is_adjustment, fiscal_year,
                window_start::text as window_start, window_end::text as window_end
           from accounting_period_posting_window(${doc.orgId}, ${doc.postingPeriodId})
       `)).rows[0];
@@ -42,7 +42,7 @@ export async function resolvePostingPeriod(
     if (postingDate < window.window_start || postingDate > window.window_end) {
       throw new PostingError(
         window.is_adjustment
-          ? `adjustment period "${window.period_name}" takes postings dated inside fiscal year ${window.fiscal_year} (${window.window_start} to ${window.window_end}), not ${postingDate} — date the document inside that year or post it to the period that covers ${postingDate}`
+          ? `adjustment period ${canonicalPeriodLabel({ fiscalYear: window.fiscal_year, periodNumber: 0, adjustment: true })} takes postings dated inside fiscal year ${window.fiscal_year} (${window.window_start} to ${window.window_end}), not ${postingDate} — date the document inside that year or post it to the period that covers ${postingDate}`
           : `accounting period ${doc.postingPeriodId} does not cover posting date ${postingDate} — import the document on a date inside its period`,
       );
     }

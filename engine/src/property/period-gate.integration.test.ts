@@ -373,7 +373,7 @@ test("CAM finalization refuses while the period is still open", { skip: !DB }, a
     const poolId = await createJulyPool(fixture, actorId, "open");
     await assert.rejects(
       finalizeCamPool(fixture.org.orgId, actorId, null, poolId),
-      /Close the GL module for .* before finalizing CAM actuals/,
+      /Close the GL module for P07 FY2026 in book .* before finalizing CAM actuals/,
       "finalizing over an open period must be refused",
     );
   } finally {

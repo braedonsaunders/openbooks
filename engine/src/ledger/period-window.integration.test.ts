@@ -73,7 +73,7 @@ test("an adjustment period refuses a posting dated outside its fiscal year, in t
     // Inside FY2026 (the fiscal year spans its regular periods) is admitted.
     assert.ok((await post(org.date)).entryId);
     await assert.rejects(() => post("2025-06-30"),
-      /adjustment period "FY26 ADJ" takes postings dated inside fiscal year 2026 \(2026-07-01 to 2026-12-31\), not 2025-06-30/);
+      /adjustment period FY2026 adjustment takes postings dated inside fiscal year 2026 \(2026-07-01 to 2026-12-31\), not 2025-06-30/);
     await assert.rejects(
       () => withBypass(() => db.execute(sql`
         insert into journal_entries (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)

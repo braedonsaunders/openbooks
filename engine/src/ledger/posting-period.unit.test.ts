@@ -67,7 +67,7 @@ test("an explicit adjustment period admits only postings dated inside its own fi
   const outside = scripted([window(true, "2026-01-01", "2026-12-31")]);
   await assert.rejects(resolvePostingPeriod(outside.runner, document("adj-13"), "2025-06-30"),
     (e: unknown) => e instanceof PostingError
-      && /adjustment period "FY26 ADJ" takes postings dated inside fiscal year 2026 \(2026-01-01 to 2026-12-31\), not 2025-06-30/.test(e.message));
+      && /adjustment period FY2026 adjustment takes postings dated inside fiscal year 2026 \(2026-01-01 to 2026-12-31\), not 2025-06-30/.test(e.message));
 });
 
 test("missing override and uncovered date refuse with the applicable remedy context", async () => {

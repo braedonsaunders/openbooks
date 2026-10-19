@@ -6,6 +6,7 @@ import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./type
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { allocationScopeVisible } from "../organization/allocation-scope.ts";
+import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 
 export const ALLOCATION_RUN_SUBJECT_KIND = "allocation_run";
 
@@ -85,6 +86,7 @@ type AllocationRunRow = {
   definition_hash: string | null;
   period_id: string;
   period_name: string | null;
+  period_label: string | null;
   fiscal_year: number | null;
   book_id: string;
   book_code: string | null;
@@ -100,7 +102,7 @@ async function loadRun(subjectId: string): Promise<AllocationRunRow | null> {
            r.trigger_kind, r.requested_by::text,
            r.rule_id, rule.key as rule_key, rule.name as rule_name,
            r.version_id, r.definition_hash,
-           r.period_id, p.name as period_name, p.fiscal_year,
+           r.period_id, p.name as period_name, ${canonicalPeriodLabelSql("p")} as period_label, p.fiscal_year,
            r.book_id, b.code as book_code
       from allocation_runs r
       left join allocation_rules rule
@@ -153,7 +155,10 @@ export const allocationRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectA
         versionId: run.version_id,
         definitionHash: run.definition_hash,
         periodId: run.period_id,
+        // The stored name stays the condition/template value authors match on;
+        // the canonical label titles the subject in notifications.
         periodName: run.period_name,
+        periodLabel: run.period_label,
         fiscalYear: run.fiscal_year,
         bookId: run.book_id,
         bookCode: run.book_code,
@@ -170,7 +175,8 @@ export const allocationRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectA
 
   label(subjectId: string, values: Record<string, unknown>): string {
     const rule = values.ruleName ?? values.ruleKey ?? "Allocation";
-    const period = values.periodName ? ` — ${String(values.periodName)}` : "";
+    const periodText = values.periodLabel ?? values.periodName;
+    const period = periodText ? ` — ${String(periodText)}` : "";
     return `${String(rule)}${period}` || subjectId;
   },
 

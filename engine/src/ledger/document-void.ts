@@ -8,7 +8,7 @@ import { db, schema, withOrgTransaction, type SqlExecutor } from "../platform/db
 import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
-import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError, closeModuleForDocument, periodClosedDetailsOf, type CloseModule } from "../periods/period-policy.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, canonicalPeriodLabel, CloseError, closeModuleForDocument, periodClosedDetailsOf, type CloseModule } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
@@ -361,8 +361,10 @@ export interface VoidReversalSuggestion {
   suggestedDate: string;
   fallbackToOpenPeriod: boolean;
   originalFiscalYear: number | null;
+  /** Canonical fiscal label (`P08 FY2026`) of the period the document posts in. */
   originalPeriodName: string | null;
   suggestedFiscalYear: number | null;
+  /** Canonical fiscal label of the period the reversal is suggested into. */
   suggestedPeriodName: string | null;
   suggestedOpen: boolean;
 }
@@ -385,6 +387,12 @@ export async function suggestVoidReversalDate(
     suggestedOpen: false,
   };
   if (!covering) return uncovered;
+  // The covering and later candidates are regular periods.
+  const coveringLabel = canonicalPeriodLabel({
+    fiscalYear: covering.fiscal_year,
+    periodNumber: covering.period_number,
+    adjustment: false,
+  });
   const modules = [voidCloseModule(doc.kind)];
   const books = (await runner.execute<{ bookId: string }>(sql`
     select distinct e.book_id as "bookId" from journal_entries e
@@ -416,14 +424,14 @@ export async function suggestVoidReversalDate(
       suggestedDate: originalDate,
       fallbackToOpenPeriod: false,
       originalFiscalYear: covering.fiscal_year,
-      originalPeriodName: covering.name,
+      originalPeriodName: coveringLabel,
       suggestedFiscalYear: covering.fiscal_year,
-      suggestedPeriodName: covering.name,
+      suggestedPeriodName: coveringLabel,
       suggestedOpen: true,
     };
   }
-  const later = (await runner.execute<{ id: string; fiscal_year: number; name: string; starts_on: string }>(sql`
-    select p.id, p.fiscal_year, p.name, p.starts_on::text as starts_on
+  const later = (await runner.execute<{ id: string; fiscal_year: number; period_number: number; starts_on: string }>(sql`
+    select p.id, p.fiscal_year, p.period_number, p.starts_on::text as starts_on
       from accounting_periods p
       join fiscal_calendars fc
         on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
@@ -439,9 +447,13 @@ export async function suggestVoidReversalDate(
         suggestedDate: candidate.starts_on,
         fallbackToOpenPeriod: true,
         originalFiscalYear: covering.fiscal_year,
-        originalPeriodName: covering.name,
+        originalPeriodName: coveringLabel,
         suggestedFiscalYear: candidate.fiscal_year,
-        suggestedPeriodName: candidate.name,
+        suggestedPeriodName: canonicalPeriodLabel({
+          fiscalYear: candidate.fiscal_year,
+          periodNumber: candidate.period_number,
+          adjustment: false,
+        }),
         suggestedOpen: true,
       };
     }
@@ -451,9 +463,9 @@ export async function suggestVoidReversalDate(
     suggestedDate: originalDate,
     fallbackToOpenPeriod: false,
     originalFiscalYear: covering.fiscal_year,
-    originalPeriodName: covering.name,
+    originalPeriodName: coveringLabel,
     suggestedFiscalYear: covering.fiscal_year,
-    suggestedPeriodName: covering.name,
+    suggestedPeriodName: coveringLabel,
     suggestedOpen: false,
   };
 }

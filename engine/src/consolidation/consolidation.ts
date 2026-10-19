@@ -1,7 +1,7 @@
 import { consolidateAssetTransfers } from "./asset-transfers.ts";import { sql, type SQL } from "drizzle-orm";
 import { historicalTranslationAmounts } from "./historical-translation-reader.ts";
 import { HistoricalTranslationEvidenceError } from "../journal/historical-translation-evidence.ts";
-import { periodLockBlocksPosting, type PeriodClosedDetails } from "../periods/period-policy.ts";
+import { canonicalPeriodLabelSql, periodLockBlocksPosting, type PeriodClosedDetails } from "../periods/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 import { averageSpotRateWithinAgeLimit, closingSpotRateWithinAgeLimit } from "../fx/rate-age-policy.ts";
 import { db, orgContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
@@ -992,12 +992,12 @@ async function deriveConsolidatedRatesIn(
     // any earlier adjustment period of the same year); those same-end-date
     // predecessors are ordered by period number instead.
     const historicalPredecessor = (await exec.execute<{
-      period_id: string; period_name: string; historical: string | null; source: string | null;
+      period_id: string; period_label: string; historical: string | null; source: string | null;
     }>(sql`
-      select predecessor.id as period_id, predecessor.name as period_name,
+      select predecessor.id as period_id, ${canonicalPeriodLabelSql("predecessor")} as period_label,
              cf.historical_rate::text as historical, cf.source
         from (
-          select p.id, p.name
+          select p.id, p.fiscal_year, p.period_number, p.is_adjustment
             from accounting_periods p
           where p.org_id = ${orgId}
             and p.id <> ${period.id}
@@ -1018,7 +1018,7 @@ async function deriveConsolidatedRatesIn(
     `)).rows[0];
     if (!historicalPredecessor?.historical) {
       const missingBasis = historicalPredecessor
-        ? `the immediately preceding period ${historicalPredecessor.period_name} has no consolidated historical rate`
+        ? `the immediately preceding period ${historicalPredecessor.period_label} has no consolidated historical rate`
         : "there is no preceding accounting period with an explicit historical basis";
       throw new ConsolidationError(
         `cannot derive the historical rate for ${pair.from}→${pair.to} in period ${periodId}: ${missingBasis}. A closing spot rate does not establish historical equity translation evidence.`,
@@ -1174,8 +1174,11 @@ async function runAutoEliminationIn(
     sql`select pg_advisory_xact_lock(hashtextextended(${`elimination:${orgId}:${periodId}`}, 0))`,
   );
 
-  const periodRes = await tx.execute<{ ends_on: string; name: string }>(sql`
-    select ends_on, name from accounting_periods where id = ${periodId} and org_id = ${orgId}`);
+  // The stored name keys the ELIM- entry numbers; the canonical label names
+  // the period in the memo.
+  const periodRes = await tx.execute<{ ends_on: string; name: string; label: string }>(sql`
+    select p.ends_on, p.name, ${canonicalPeriodLabelSql("p")} as label
+      from accounting_periods p where p.id = ${periodId} and p.org_id = ${orgId}`);
   const period = periodRes.rows[0];
   if (!period)
     throw new ConsolidationError(`period ${periodId} not found`, "not-found");
@@ -1573,7 +1576,7 @@ async function runAutoEliminationIn(
     entryNumber: elimEntryNumber,
     postingDate: period.ends_on,
     periodId,
-    memo: `Auto-elimination ${period.name}`,
+    memo: `Auto-elimination ${period.label}`,
     origin: "intercompany",
     actorId: userId,
     currency: elim.baseCurrency,

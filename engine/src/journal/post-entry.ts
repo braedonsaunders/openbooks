@@ -7,7 +7,7 @@ import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { normalizeDecimal, normalizeMoney } from "../money/money.ts";
-import { assertPeriodModulesOpen, CloseError, periodClosedDetailsOf, type CloseModule } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, canonicalPeriodLabel, CloseError, periodClosedDetailsOf, type CloseModule } from "../periods/period-policy.ts";
 import { inExecutorTransaction, type SqlExecutor } from "../platform/db.ts";
 import { PostingError } from "./posting-contracts.ts";
 import { collectBalancingLegs } from "./balancing-hooks.ts";
@@ -345,12 +345,11 @@ async function writeEntry(
   // is a failure, not a success — prove the row first).
   const period = (await executor.execute<{
     is_adjustment: boolean;
-    period_name: string;
     fiscal_year: number;
     window_start: string;
     window_end: string;
   }>(sql`
-    select is_adjustment, period_name, fiscal_year,
+    select is_adjustment, fiscal_year,
            window_start::text as window_start, window_end::text as window_end
       from accounting_period_posting_window(${orgId}, ${input.periodId})`)).rows[0];
   if (!period)
@@ -360,7 +359,7 @@ async function writeEntry(
   // (the storage guard je_adjustment_period_date enforces the same window).
   if (period!.is_adjustment && (input.postingDate < period!.window_start || input.postingDate > period!.window_end))
     fail(
-      `journal entry ${input.entryNumber}: adjustment period "${period!.period_name}" takes postings dated inside fiscal year ${period!.fiscal_year} (${period!.window_start} to ${period!.window_end}), not ${input.postingDate} — date the entry inside that year or post it to the period that covers ${input.postingDate}`,
+      `journal entry ${input.entryNumber}: adjustment period ${canonicalPeriodLabel({ fiscalYear: period!.fiscal_year, periodNumber: 0, adjustment: true })} takes postings dated inside fiscal year ${period!.fiscal_year} (${period!.window_start} to ${period!.window_end}), not ${input.postingDate} — date the entry inside that year or post it to the period that covers ${input.postingDate}`,
     );
 
   const calendarBasis=(await executor.execute<{calendar:string|null;provided:string;historical:boolean}>(sql`

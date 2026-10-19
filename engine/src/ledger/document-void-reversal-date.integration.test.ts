@@ -159,6 +159,8 @@ test("a closed entry period moves the default to the first open period", { skip:
     assert.equal(suggestion.suggestedDate, "2026-08-01", "the default moves to the first open period");
     assert.equal(suggestion.fallbackToOpenPeriod, true, "the move is flagged for its notice");
     assert.equal(suggestion.suggestedOpen, true);
+    assert.equal(suggestion.originalPeriodName, "P07 FY2026", "periods are named by their fiscal label");
+    assert.equal(suggestion.suggestedPeriodName, "P08 FY2026");
 
     const outcome = await requestDocumentVoid({
       documentId,

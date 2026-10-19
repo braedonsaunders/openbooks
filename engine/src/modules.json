@@ -13,6 +13,7 @@
         "money",
         "navigation",
         "payroll",
+        "periods",
         "platform",
         "records",
         "tax-returns"
@@ -758,6 +759,7 @@
         "money",
         "organization",
         "payroll",
+        "periods",
         "platform",
         "scripting"
       ]

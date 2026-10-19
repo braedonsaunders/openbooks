@@ -24,7 +24,7 @@ function stubRunner(opts: {
   };
 }
 
-const JULY = { id: "jul", name: "2026-07", startsOn: "2026-07-01", endsOn: "2026-07-31" };
+const JULY = { id: "jul", label: "P07 FY2026", startsOn: "2026-07-01", endsOn: "2026-07-31" };
 const JULY_ROW = {
   id: "jul",
   fiscal_calendar_id: "cal",
@@ -81,7 +81,7 @@ test("a vintage with no honest window is a refusal, never a live measure", async
     "prior_period",
     { kind: "posting", postingDate: "2026-07-15", documentDate: "2026-07-15" },
   );
-  assert.deepEqual(noPrior, { refusal: "no prior period exists for driver lookback on 2026-07" });
+  assert.deepEqual(noPrior, { refusal: "no prior period exists for driver lookback on P07 FY2026" });
   const noCover = await resolveDriverVintage(
     stubRunner({ covering: null, priorId: "jun" }),
     "org-1",

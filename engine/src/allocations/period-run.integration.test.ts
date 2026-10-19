@@ -357,6 +357,18 @@ test(
       const posted = await postAllocationRun(preview.id, actorId, "Post monthly cost sweep");
       assert.equal(posted.status, "posted");
       assert.ok(posted.journalEntryId);
+      // The entry number keys on the stored period name and the authored
+      // `{{period.name}}` line memo substitutes it; the system entry memo
+      // names the period by its canonical fiscal label.
+      const ruleKey = (await db.execute<{ key: string }>(sql`
+        select key from allocation_rules where id = ${ruleId}`)).rows[0]!.key;
+      const header = (await db.execute<{ entry_number: string; memo: string }>(sql`
+        select entry_number, memo from journal_entries where id = ${posted.journalEntryId}`)).rows[0]!;
+      assert.ok(header.entry_number.startsWith(`ALLOC-${ruleKey}-2026-07-`), header.entry_number);
+      assert.equal(header.memo, `Allocation ${ruleKey} — P07 FY2026`);
+      const lineMemos = (await db.execute<{ memo: string | null }>(sql`
+        select distinct memo from journal_lines where entry_id = ${posted.journalEntryId}`)).rows.map((row) => row.memo);
+      assert.deepEqual(lineMemos, [`Allocation Rule ${ruleKey} for 2026-07`]);
 
       const after = await accountTotals(org.orgId);
       assert.deepEqual([...after.entries()].sort(), [...before.entries()].sort());

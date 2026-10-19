@@ -1,10 +1,12 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { getLocale } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 import { db } from "@openbooks/engine/platform/db";
 import { NATIVE_MEASURES } from "@openbooks/engine/allocations/driver-admin";
+import { periodDisplayLabelSql } from "@openbooks/engine/periods/period-policy";
 
 export const runtime = "nodejs";
 
@@ -40,6 +42,7 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
   const gate = injectedGate as Authz;
 
   const orgId = gate.user.orgId;
+  const locale = await getLocale();
 
   const named = async (table: string, order: string, hasCode = true): Promise<Option[]> => {
     const label = hasCode
@@ -67,11 +70,11 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
        where org_id = ${orgId} and is_active and posts_gl
        order by is_primary desc, code`),
     db.execute<{ id: string; label: string; extra: string }>(sql`
-      select id::text as id, name as label,
-             starts_on::text || '…' || ends_on::text as extra
-        from accounting_periods
-       where org_id = ${orgId}
-       order by starts_on desc limit 24`),
+      select p.id::text as id, ${periodDisplayLabelSql(locale, "p")} as label,
+             p.starts_on::text || '…' || p.ends_on::text as extra
+        from accounting_periods p
+       where p.org_id = ${orgId}
+       order by p.starts_on desc, p.is_adjustment, p.id limit 24`),
     db.execute<{ id: string; label: string; extra: string }>(sql`
       select id::text as id, name as label, key as extra
         from allocation_rules

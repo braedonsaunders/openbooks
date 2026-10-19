@@ -3,6 +3,7 @@ import { businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
+import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
@@ -162,8 +163,8 @@ export async function financeFindings(
   const revenuePolicy = byKey.get("period_revenue_decline");
   const marginPolicy = byKey.get("gross_margin_decline");
   if (revenuePolicy?.enabled || marginPolicy?.enabled) {
-    const periods = (await db.execute<{ id: string; name: string; starts_on: string; ends_on: string }>(sql`
-    select p.id, p.name, p.starts_on, p.ends_on
+    const periods = (await db.execute<{ id: string; label: string; starts_on: string; ends_on: string }>(sql`
+    select p.id, ${canonicalPeriodLabelSql("p")} as label, p.starts_on, p.ends_on
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
      where p.org_id = ${orgId} and fc.is_default and fc.is_active
@@ -198,8 +199,8 @@ export async function financeFindings(
         minimumRevenueDeclineBps: revenuePolicy?.parameters.minimumDeclinePercent !== undefined ? revenuePolicy.parameters.minimumDeclinePercent * 100 : undefined,
       });
       const comparison = {
-        currentPeriod: current.name,
-      priorPeriod: prior.name,
+        currentPeriod: current.label,
+      priorPeriod: prior.label,
       currentRevenue: currentMetrics.revenue,
       priorRevenue: priorMetrics.revenue,
       currentCogs: currentMetrics.cogs,

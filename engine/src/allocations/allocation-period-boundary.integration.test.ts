@@ -182,7 +182,7 @@ test("a January run crossed by two versions refuses, naming both versions and th
       }),
       (e: unknown) => {
         assert.ok(e instanceof Error, `expected an Error, got ${String(e)}`);
-        assert.match(e.message, /cannot run for period 2026-01/);
+        assert.match(e.message, /cannot run for period P01 FY2026:/);
         assert.match(e.message, /version 1 \(2026-01-01\.\.2026-01-14\)/);
         assert.match(e.message, /version 2 \(2026-01-15\.\.open\)/);
         assert.match(e.message, /2026-01-15/);
@@ -259,7 +259,7 @@ test("a run previewed before a mid-period version appears refuses at post time",
       postAllocationRun(preview.id, actor, "Post monthly cost sweep"),
       (e: unknown) => {
         assert.ok(e instanceof Error, `expected an Error, got ${String(e)}`);
-        assert.match(e.message, /cannot run for period 2026-01/);
+        assert.match(e.message, /cannot run for period P01 FY2026:/);
         assert.match(e.message, /version 2 \(2026-01-15\.\.open\)/);
         return true;
       },
@@ -296,7 +296,7 @@ test("publishing a mid-period effective date refuses with the boundary suggestio
         const flagged = (e.problems ?? []).find((p) => p.code === "effective_boundary");
         assert.ok(flagged, `expected an effective_boundary problem, got ${JSON.stringify(e.problems)}`);
         assert.match(flagged!.message, /must start on a period boundary/);
-        assert.match(flagged!.message, /2026-01-15 falls inside 2026-01/);
+        assert.match(flagged!.message, /2026-01-15 falls inside P01 FY2026/);
         assert.match(flagged!.message, /use 2026-01-01 or 2026-02-01/);
         return true;
       },

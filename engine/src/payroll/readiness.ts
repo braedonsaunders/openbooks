@@ -1,6 +1,7 @@
 import { payrollEmploymentOverlapsPeriod, payrollEpisodeDate } from "./employment-roster.ts";
 import { getTableColumns, sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { PayrollError } from "./error.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
@@ -889,8 +890,8 @@ export async function payRunReadiness(
   // The lock read follows the same period the posting would resolve to
   // (default calendar, regular): with several calendars the covering row
   // would otherwise be whichever the database returns first.
-  const lock = (await db.execute<{ name: string; state: string }>(sql`
-    select p.name, coalesce(l.state, 'open') as state
+  const lock = (await db.execute<{ label: string; state: string }>(sql`
+    select ${canonicalPeriodLabelSql("p")} as label, coalesce(l.state, 'open') as state
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
         and fc.is_default and fc.is_active
@@ -908,7 +909,7 @@ export async function payRunReadiness(
   // every item links to where it is fixed.
   if (!lock.rows[0]) flag("blocker", "period.missing", [], { detail: run.pay_date, href: "/admin/setup/period-close" });
   else if (lock.rows[0].state !== "open") {
-    flag("blocker", "period.closed", [], { detail: lock.rows[0].name, href: "/admin/setup/period-close" });
+    flag("blocker", "period.closed", [], { detail: lock.rows[0].label, href: "/admin/setup/period-close" });
   }
 
   // --- Population ---------------------------------------------------------

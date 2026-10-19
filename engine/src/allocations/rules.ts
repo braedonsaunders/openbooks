@@ -34,6 +34,7 @@ import {
   type SubsidiaryScope,
 } from "../organization/allocation-scope.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 
@@ -1176,9 +1177,9 @@ async function validationContext(
   );
   // Regular periods of every calendar: the period-mode boundary proof needs
   // the org's known calendar, not the version (which names no calendar).
-  const periodRows = await db.execute<{ name: string; starts_on: unknown; ends_on: unknown }>(
-    sql`select name, starts_on, ends_on from accounting_periods
-        where org_id = ${orgId} and not is_adjustment order by starts_on`,
+  const periodRows = await db.execute<{ label: string; starts_on: unknown; ends_on: unknown }>(
+    sql`select ${canonicalPeriodLabelSql()} as label, p.starts_on, p.ends_on from accounting_periods p
+        where p.org_id = ${orgId} and not p.is_adjustment order by p.starts_on`,
   );
   return {
     siblings: siblingRows.rows.map((row) => ({
@@ -1189,7 +1190,7 @@ async function validationContext(
     driver,
     activePostingBookIds: bookRows.rows.map((row) => row.id),
     periods: periodRows.rows.map((row) => ({
-      name: row.name,
+      label: row.label,
       startsOn: asDate(row.starts_on),
       endsOn: asDate(row.ends_on),
     })),

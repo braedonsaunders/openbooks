@@ -25,7 +25,7 @@ import {
 } from "../money/money.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { postEntry } from "../journal/post-entry.ts";
-import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import {
   loadSubsidiaryContext,
   validateSubsidiaryRestrictions,
@@ -213,8 +213,8 @@ export async function consolidateAssetTransfers(
     sql`select pg_advisory_xact_lock(hashtextextended(${`asset-transfer-consolidation:${orgId}`},0))`,
   );
   const period = (
-    await tx.execute<{ starts_on: string; ends_on: string; name: string }>(
-      sql`select starts_on::text,ends_on::text,name from accounting_periods where org_id=${orgId} and id=${periodId}`,
+    await tx.execute<{ starts_on: string; ends_on: string; label: string }>(
+      sql`select p.starts_on::text,p.ends_on::text,${canonicalPeriodLabelSql("p")} as label from accounting_periods p where p.org_id=${orgId} and p.id=${periodId}`,
     )
   ).rows[0];
   if (!period) throw new Error("consolidation period not found");
@@ -593,7 +593,7 @@ export async function consolidateAssetTransfers(
       entryNumber: `AST-ELIM-${id}`,
       postingDate: cutoff,
       periodId,
-      memo: `Asset transfer consolidation ${period.name}`,
+      memo: `Asset transfer consolidation ${period.label}`,
       origin: "translation",
       actorId,
       currency: entity.baseCurrency,

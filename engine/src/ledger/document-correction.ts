@@ -423,11 +423,12 @@ export async function refuseClosedOriginalPeriod(
       suggestion.suggestedDate === suggestion.originalDate) {
     return;
   }
-  const period = suggestion.originalPeriodName ?? plan.source.documentDate;
+  // The period label already names its fiscal year; a bare date carries it.
   const fiscalYear = suggestion.originalFiscalYear != null ? ` FY${suggestion.originalFiscalYear}` : "";
+  const period = suggestion.originalPeriodName ?? `${plan.source.documentDate}${fiscalYear}`;
   throw new PostedCorrectionError(
     422,
-    `the ${plan.source.kind} posts in ${period}${fiscalYear}, which is closed — a posted amendment cannot void and reissue it into another period`,
+    `the ${plan.source.kind} posts in ${period}, which is closed — a posted amendment cannot void and reissue it into another period`,
     "closed-period",
     "request a controlled period reopen, or post a credit note or adjusting entry in an open period instead of amending the locked document",
   );

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { canonicalPeriodLabel } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import type { db } from "../platform/db.ts";
 import type { AllocationDriverAsOf, DriverAsOf } from "./types.ts";
@@ -9,7 +10,8 @@ import type { AllocationDriverAsOf, DriverAsOf } from "./types.ts";
  */
 export interface DriverVintagePeriod {
   id: string;
-  name: string;
+  /** Canonical fiscal label (`P07 FY2026`) used to name the period in refusals. */
+  label: string;
   startsOn: string;
   endsOn: string;
 }
@@ -48,7 +50,16 @@ export async function resolveDriverVintage(
   } else {
     const covering = await resolveCoveringPeriod(runner, orgId, ref.postingDate);
     period = covering
-      ? { id: covering.id, name: covering.name, startsOn: covering.starts_on, endsOn: covering.ends_on }
+      ? {
+          id: covering.id,
+          label: canonicalPeriodLabel({
+            fiscalYear: covering.fiscal_year,
+            periodNumber: covering.period_number,
+            adjustment: false,
+          }),
+          startsOn: covering.starts_on,
+          endsOn: covering.ends_on,
+        }
       : null;
   }
   if (!period) {
@@ -61,7 +72,7 @@ export async function resolveDriverVintage(
        where org_id = ${orgId} and not is_adjustment and ends_on < ${period.startsOn}
        order by ends_on desc limit 1`)
     ).rows[0];
-    if (!prior) return { refusal: `no prior period exists for driver lookback on ${period.name}` };
+    if (!prior) return { refusal: `no prior period exists for driver lookback on ${period.label}` };
     return { asOf: { periodId: prior.id } };
   }
   return { asOf: { periodId: period.id } };

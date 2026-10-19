@@ -10,6 +10,7 @@ import {
   type TaxReturnTranslation,
 } from "./return.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
+import { canonicalPeriodLabel } from "../periods/period-policy.ts";
 import { resolveCoveringPeriodsInWindow } from "../periods/period-resolution.ts";
 import { periodScopeAdvisoryLock } from "../periods/period-locks.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
@@ -356,7 +357,7 @@ async function assertCoveredPeriodsClosed(
       if (!satisfiesFence) {
         throw new TaxFilingError(
           "period-not-closed",
-          `period ${period.name} must be closed for ${module} across every covered subsidiary before the filing can be marked filed`,
+          `period ${canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false })} must be closed for ${module} across every covered subsidiary before the filing can be marked filed`,
         );
       }
     }

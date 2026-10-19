@@ -20,7 +20,8 @@ export interface PublishedSiblingWindow {
 
 /** One regular (non-adjustment) accounting period of the org, any calendar. */
 export interface PeriodBoundary {
-  name: string;
+  /** Canonical fiscal label (`P01 FY2026`) naming the period in problems. */
+  label: string;
   startsOn: string;
   endsOn: string;
 }
@@ -189,7 +190,7 @@ function periodBoundaryProblems(
       problems.push({
         code: "effective_boundary",
         message:
-          `Period-based allocation versions must start on a period boundary — ${from} falls inside ${inside.name}; ` +
+          `Period-based allocation versions must start on a period boundary — ${from} falls inside ${inside.label}; ` +
           (next ? `use ${inside.startsOn} or ${next.startsOn}.` : `use ${inside.startsOn}.`),
         field: "effectiveFrom",
       });
@@ -203,7 +204,7 @@ function periodBoundaryProblems(
       problems.push({
         code: "effective_boundary",
         message:
-          `Period-based allocation versions must end on a period boundary — ${to} falls inside ${inside.name}; ` +
+          `Period-based allocation versions must end on a period boundary — ${to} falls inside ${inside.label}; ` +
           (prev ? `use ${inside.endsOn} or ${prev.endsOn}.` : `use ${inside.endsOn}.`),
         field: "effectiveTo",
       });

@@ -30,7 +30,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { replaceDocumentTenders, type TenderInput } from "../sales/document-tenders.ts";
 import { fromMinorUnits, toMinorUnits } from "../payments/acceptance.ts";
-import { arePeriodModulesOpen, closeModuleForDocument, CloseError } from "../periods/period-policy.ts";
+import { arePeriodModulesOpen, canonicalPeriodLabel, closeModuleForDocument, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
@@ -278,7 +278,7 @@ async function assertRefundPeriodOpen(
   if (!open) {
     park(
       "closed_period",
-      `Refund ${refundId} falls in closed period ${period.name}.`,
+      `Refund ${refundId} falls in closed period ${canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false })}.`,
       "Reopen the period under Period close, or wait for an open-period refund date, then replay the refund.",
     );
   }

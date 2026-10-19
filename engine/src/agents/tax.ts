@@ -6,6 +6,7 @@ import {
 } from "./continuous-close-config.ts";
 import { db } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
+import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import { computeTaxReturn, filterTaxReturnFormsByFeatures, TaxReturnError } from "../tax-returns/return.ts";
 import { absoluteUnits, classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
@@ -187,8 +188,8 @@ export async function taxFindings(
 
   const unlockPolicy = byKey.get("tax_unlocked_period");
   if (unlockPolicy?.enabled && activeForms.length > 0) {
-    const periods = (await db.execute<{ id: string; name: string; starts_on: string; ends_on: string }>(sql`
-      select p.id, p.name, p.starts_on, p.ends_on
+    const periods = (await db.execute<{ id: string; label: string; starts_on: string; ends_on: string }>(sql`
+      select p.id, ${canonicalPeriodLabelSql("p")} as label, p.starts_on, p.ends_on
         from accounting_periods p
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        where p.org_id = ${orgId} and fc.is_default and fc.is_active
@@ -219,7 +220,7 @@ export async function taxFindings(
           subjectType: "accounting_period",
           subjectId: period.id,
           summary: {
-            periodName: period.name,
+            periodName: period.label,
             from: period.starts_on,
             to: period.ends_on,
             href: "/tax",
@@ -229,7 +230,7 @@ export async function taxFindings(
               kind: "accounting_period",
               sourceType: "accounting_period",
               sourceId: period.id,
-              data: { periodName: period.name, from: period.starts_on, to: period.ends_on },
+              data: { periodName: period.label, from: period.starts_on, to: period.ends_on },
             },
           ],
         });

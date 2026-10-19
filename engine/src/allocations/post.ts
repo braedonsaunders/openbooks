@@ -5,6 +5,7 @@ import { resolveAccountGroups } from "../records/account-groups.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { AllocationApportionError, apportionTargets, fixedPercentWeights } from "./apportion.ts";
 import { resolveDriverVintage } from "./driver-asof.ts";
+import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import { selectRule, type AccountGroupResolver } from "./match.ts";
 import { AllocationRuleError, listRulesInEffect } from "./rules.ts";
 import type {
@@ -302,8 +303,9 @@ async function measureDriver(
   // A human label for the vintage, named if the vector carries no weight.
   const asOf = "date" in vintage.asOf
     ? vintage.asOf.date
-    : ((await runner.execute<{ name: string }>(sql`
-        select name from accounting_periods where org_id = ${doc.orgId} and id = ${vintage.asOf.periodId}`)).rows[0]?.name
+    : ((await runner.execute<{ label: string }>(sql`
+        select ${canonicalPeriodLabelSql("p")} as label from accounting_periods p
+         where p.org_id = ${doc.orgId} and p.id = ${vintage.asOf.periodId}`)).rows[0]?.label
         ?? null);
   return { vector, dimension: driver.dimension, asOf };
 }

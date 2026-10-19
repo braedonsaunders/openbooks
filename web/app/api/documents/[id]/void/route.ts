@@ -5,6 +5,7 @@ import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { NextResponse } from 'next/server'
+import { getLocale } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import {
@@ -13,6 +14,7 @@ import {
   requestReceiptVoidWithDependents,
   suggestVoidReversalDate,
 } from '@openbooks/engine/ledger/document-void'
+import { periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { createPermission, postPermission } from "../../../../../lib/document-kinds.ts";
@@ -119,8 +121,11 @@ export const GET = defineRoute({
     const { id } = await params
     const gate = await guardVoidDocument(id)
     if (gate instanceof NextResponse) return gate
+    // Each adjustment period is named by its fiscal label in the viewer's locale.
+    const locale = await getLocale()
     const periods = (await db.execute<{ id: string; name: string; startsOn: string; endsOn: string }>(sql`
-        select p.id, p.name, p.starts_on::text as "startsOn", p.ends_on::text as "endsOn"
+        select p.id, ${periodDisplayLabelSql(locale, 'p')} as name,
+               p.starts_on::text as "startsOn", p.ends_on::text as "endsOn"
           from accounting_periods p
           join fiscal_calendars fc
             on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id

@@ -7,6 +7,7 @@ import { copyS3Blob, deleteS3Blobs, fileCabinetObjectKey, MASKED_STORAGE_KIND } 
 import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
 import { canonicalNonNegativeDecimal } from "../money/exact-decimal.ts";
 import { toUnits } from "../money/money.ts";
+import { canonicalPeriodLabel } from "../periods/period-policy.ts";
 
 /**
  * The deterministic UUID-rebase clone engine. Copies one org's rows into a
@@ -66,6 +67,7 @@ export interface CloneOptions {
  */
 export interface AsOfCutoff {
   periodId: string;
+  /** Canonical fiscal label of the cutoff period (`P07 FY2026`). */
   periodName: string;
   endsOn: string;
   fiscalYear: number;
@@ -105,12 +107,12 @@ export async function resolveAsOfCutoff(
   periodId: string,
 ): Promise<AsOfCutoff> {
   const res = await db.execute<{
-    id: string; name: string; ends_on: string;
-    fiscal_year: number; period_number: number;
+    id: string; ends_on: string;
+    fiscal_year: number; period_number: number; is_adjustment: boolean;
     calendar_id: string; calendar_name: string;
   }>(sql`
-    select p.id, p.name, p.ends_on::text as ends_on,
-           p.fiscal_year, p.period_number,
+    select p.id, p.ends_on::text as ends_on,
+           p.fiscal_year, p.period_number, p.is_adjustment,
            p.fiscal_calendar_id as calendar_id, fc.name as calendar_name
       from accounting_periods p
       join fiscal_calendars fc
@@ -120,7 +122,11 @@ export async function resolveAsOfCutoff(
   if (!row) throw new Error("as-of cutoff period must belong to the production organization");
   return {
     periodId: row.id,
-    periodName: row.name,
+    periodName: canonicalPeriodLabel({
+      fiscalYear: row.fiscal_year,
+      periodNumber: row.period_number,
+      adjustment: row.is_adjustment,
+    }),
     endsOn: assertCutoffDate(row.ends_on),
     fiscalYear: row.fiscal_year,
     periodNumber: row.period_number,
@@ -758,7 +764,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
            and je.posting_date > ${cutoff.endsOn}`)).rows[0]?.count;
       if (beyond !== "0") {
         throw new Error(
-          `as-of sandbox to period "${cutoff.periodName}" ending ${cutoff.endsOn} ` +
+          `as-of sandbox to period ${cutoff.periodName} ending ${cutoff.endsOn} ` +
             `(calendar "${cutoff.calendarName}") excludes ${beyond ?? "?"} posted entries ` +
             `dated after ${cutoff.endsOn}; ` +
             `their documents would reference entries that were never copied — ` +

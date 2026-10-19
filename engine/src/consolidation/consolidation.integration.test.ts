@@ -433,6 +433,11 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
       { number: "1100", amount: "-120.0000" },
       { number: "2000", amount: "120.0000" },
     ]);
+    // The entry number keys on the stored period name; the memo names the
+    // period by its canonical fiscal label.
+    const firstHeader = (await db.execute<{ entry_number: string; memo: string }>(sql`
+      select entry_number, memo from journal_entries where id = ${first.entryId}`)).rows[0];
+    assert.deepEqual(firstHeader, { entry_number: "ELIM-2026-07", memo: "Auto-elimination P07 FY2026" });
 
     const second = await runAutoElimination(org.orgId, org.periodId, actorId);
     assert.equal(second.lineCount, 2);
@@ -2676,7 +2681,7 @@ test("historical derivation cannot skip missing predecessor rates when periods a
       values (${org.orgId},'USD','CAD','2026-07-15','spot','1.2'),
              (${org.orgId},'USD','CAD','2026-08-15','spot','1.3'),
              (${org.orgId},'USD','CAD','2026-09-15','spot','1.4')`);
-    for (const [id,predecessor] of [[septemberId,'2026-08'],[augustId,'2026-07']] as const) {
+    for (const [id,predecessor] of [[septemberId,'P08 FY2026'],[augustId,'P07 FY2026']] as const) {
       await assert.rejects(deriveConsolidatedRates(org.orgId,id,actorId),
         (error: unknown) => error instanceof ConsolidationError && error.code === 'rates-missing'
           && error.message.includes(`immediately preceding period ${predecessor} has no consolidated historical rate`));

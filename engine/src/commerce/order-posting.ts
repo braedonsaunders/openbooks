@@ -29,7 +29,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { issueSalesOrder } from "../sales/sales-orders.ts";
 import { fromMinorUnits } from "../payments/acceptance.ts";
-import { arePeriodModulesOpen, closeModuleForDocument, CloseError } from "../periods/period-policy.ts";
+import { arePeriodModulesOpen, canonicalPeriodLabel, closeModuleForDocument, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
@@ -1046,7 +1046,7 @@ async function assertPostingPeriodOpen(
   if (!open) {
     park(
       "closed_period",
-      `Order ${orderNumber} falls in closed period ${period.name}.`,
+      `Order ${orderNumber} falls in closed period ${canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false })}.`,
       "Reopen the period under Period close, or move the order date into an open period, then replay the order.",
     );
   }

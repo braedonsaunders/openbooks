@@ -156,6 +156,11 @@ test(
       findings = await scan(org.orgId);
       types = findings.map((finding) => finding.findingType).sort();
       assert.deepEqual(types, ["tax_unlocked_period"], `registered posture, got ${types}`);
+      assert.equal(
+        findings.find((finding) => finding.findingType === "tax_unlocked_period")?.summary.periodName,
+        "P07 FY2026",
+        "the unlocked period is named by its fiscal label",
+      );
 
       // Break the box mapping: the registered return no longer computes, and
       // the pack reports the filing engine's own error as evidence.
