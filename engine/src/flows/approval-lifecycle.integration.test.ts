@@ -645,6 +645,7 @@ test("default SoD excludes maker and submitter and blocks them through delegated
       canAct: false,
       signatureRequired: false,
       sodBlocked: true,
+      canDelegate: false,
     });
     await assert.rejects(
       decideGate({ gateId: gate.id, decision: "approved", userId: actors.approver2Id }),
@@ -661,6 +662,7 @@ test("default SoD excludes maker and submitter and blocks them through delegated
       canAct: false,
       signatureRequired: false,
       sodBlocked: true,
+      canDelegate: false,
     });
   });
 });
