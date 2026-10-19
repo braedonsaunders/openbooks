@@ -33,8 +33,10 @@ stubModules({
   },
 })
 
-const { POST } = (await import('./route.ts?quote-to-cash-scope-test')) as typeof import('./route.ts')
-const { PATCH, DELETE } = (await import('./[id]/route.ts?quote-to-cash-scope-test')) as typeof import('./[id]/route.ts')
+const settingsRouteUrl = new URL('./route.ts?quote-to-cash-scope-test', import.meta.url).href
+const currentSettingsRouteUrl = new URL('./[id]/route.ts?quote-to-cash-scope-test', import.meta.url).href
+const { POST } = (await import(settingsRouteUrl)) as typeof import('./route.ts')
+const { PATCH, DELETE } = (await import(currentSettingsRouteUrl)) as typeof import('./[id]/route.ts')
 
 const body = JSON.stringify({
   maxDiscountPercent: '10',

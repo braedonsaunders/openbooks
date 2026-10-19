@@ -31,7 +31,8 @@ stubModules({
   },
 })
 
-const { POST } = (await import('./route.ts?item-shortfalls-route-test')) as typeof import('./route.ts')
+const routeUrl = new URL('./route.ts?item-shortfalls-route-test', import.meta.url).href
+const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 const ITEM_ID = '00000000-0000-4000-8000-000000000101'
 
 async function post(): Promise<Response> {
