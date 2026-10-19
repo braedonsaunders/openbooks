@@ -1,5 +1,5 @@
 /** Contributory-base and slot assertions. Split from packs.ts (pure moves only). */
-import { type PayrollStatutorySlot, type PayrollCountryPack } from "./pack-types"
+import { type PayrollStatutorySlot } from "./pack-types"
 import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry"
 import { sql } from "drizzle-orm"
 import { assertValidControlAccountMappings, type ControlAccountRecord, type OrgControlAccounts } from "../records/control-accounts.ts"
@@ -62,25 +62,17 @@ export function packSlotAppliesToPopulation(
   return false;
 }
 
-/**
- * Installed packs with each slot's current account: the mapped components'
- * liability account when set, else the legacy settings fallback. Slots that
- * do not apply to the given population are absent, not unmapped — an
- * Ontario-only run never sees the Québec slots at all.
- */
+/** Applicable statutory slots read their own country-pack component mappings. */
 export async function packSlotState(
   orgId: string,
   installedCountries: string[],
-  legacySettings: Record<string, unknown>,
   regionsByCountry?: ReadonlyMap<string, ReadonlySet<string | null>>,
 ): Promise<PackSlotState[]> {
-  const packs = installedCountries
-    .map((country) => PAYROLL_COUNTRY_PACKS[country])
-    .filter((pack): pack is PayrollCountryPack => Boolean(pack));
+  const packs = installedCountries.map(payrollPack);
   if (packs.length === 0) return [];
   const components = (await db.execute<{ country: string | null; code: string; liability_account_id: string | null }>(sql`
     select country, code, liability_account_id from pay_components
-     where org_id = ${orgId} and system_key is not null
+     where org_id = ${orgId} and system_key is not null and is_active
   `));
   // Keyed by country as well as code: two packs may declare the same code
   // (Canada and Australia both use WCB, 0248), and a code-only map would
@@ -92,26 +84,8 @@ export async function packSlotState(
     slots: pack.statutorySlots
       .filter((slot) => packSlotAppliesToPopulation(slot, pack.country, regionsByCountry))
       .map((slot) => {
-        // The pay run resolves its own pack's rows plus the shared
-        // NULL-country baseline (run-calculation): a levy mapped on a
-        // baseline component before the pack seeded its country-scoped row
-        // still prices, so the setup view must show that same mapping —
-        // never UNSET beside a run that already clears. The country-scoped
-        // row wins when it names an account; the baseline only fills a gap.
-        // The pay run resolves its own pack's rows plus the shared
-        // NULL-country baseline (run-calculation): a levy mapped on a
-        // baseline component before the pack seeded its country-scoped row
-        // still prices, so the setup view must show that same mapping —
-        // never UNSET beside a run that already clears. The country-scoped
-        // row wins when it names an account; the baseline only fills a gap.
-        const fromComponents = slot.components
-          .map((component) => byCountryCode.get(`${pack.country}:${component.code}`)
-            ?? byCountryCode.get(`:${component.code}`))
-          .find((accountId) => accountId != null);
-        const legacy = slot.legacySettingsKey
-          ? ((legacySettings[slot.legacySettingsKey] as string | null | undefined) ?? null)
-          : null;
-        return { key: slot.key, accountId: fromComponents ?? legacy };
+        const mapped = slot.components.map(component => byCountryCode.get(`${pack.country}:${component.code}`));
+        return { key: slot.key, accountId: mapped.every(account => account != null) ? mapped[0] ?? null : null };
       }),
   }));
 }

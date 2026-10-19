@@ -128,8 +128,8 @@ test(
       // still win because only null rows are filled.
       assert.equal(gbPayeRow.liability_account_id, deductionsId);
       assert.equal(iePayeRow.liability_account_id, deductionsId);
-      const gbSlots = await packSlotState(org.orgId, ["GB"], {});
-      const ieSlots = await packSlotState(org.orgId, ["IE"], {});
+      const gbSlots = await packSlotState(org.orgId, ["GB"]);
+      const ieSlots = await packSlotState(org.orgId, ["IE"]);
       assert.equal(gbSlots.find((p) => p.country === "GB")!.slots.find((s) => s.key === "paye")!.accountId, deductionsId);
       assert.equal(gbSlots.find((p) => p.country === "GB")!.slots.find((s) => s.key === "nic")!.accountId, deductionsId);
       assert.equal(ieSlots.find((p) => p.country === "IE")!.slots.find((s) => s.key === "paye")!.accountId, deductionsId);
@@ -347,7 +347,7 @@ test(
         select liability_account_id from pay_components
          where org_id = ${org.orgId} and code = 'PAYE'`)).rows[0]!.liability_account_id;
       assert.equal(kept, otherId);
-      const state = await packSlotState(org.orgId, ["GB"], {});
+      const state = await packSlotState(org.orgId, ["GB"]);
       assert.equal(state.find((p) => p.country === "GB")!.slots.find((s) => s.key === "paye")!.accountId, otherId);
     } finally {
       await dropScratchOrgReporting(org.orgId);

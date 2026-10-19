@@ -28,8 +28,8 @@ test("a posting-account edit does not stale a calculated run", () => {
 test("wages-to and statutory liability destinations are posting-only", () => {
   assert.equal(
     orgSettingsAuditAffectsCalculation(snapshot(
-      { wagesTo: "expense", cppPayableAccountId: "acct-a" },
-      { wagesTo: "labor_clearing", cppPayableAccountId: "acct-b" },
+      { wagesTo: "expense", netPayAccountId: "acct-a" },
+      { wagesTo: "labor_clearing", netPayAccountId: "acct-b" },
     )),
     false,
   );

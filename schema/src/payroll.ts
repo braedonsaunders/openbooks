@@ -510,7 +510,7 @@ export const employeePayComponents = pgTable(
     id: id(),
     orgId: orgRef(),
     employeePartyId: uuid("employee_party_id").notNull(),
-    /** HRM employment link (0186): null = not yet stamped, never "no employment". */
+    /** Null explicitly scopes the assignment to every employment of this employee. */
     employmentId: uuid("employment_id"),
     componentId: uuid("component_id").notNull(),
     runApplicability: text("run_applicability").notNull().default("standard_runs"),

@@ -8,7 +8,7 @@ import { payrollPeriodOpeningPriors } from './period-opening-source.ts';
 import { mergePeriodOpeningPriors } from './period-opening-contract.ts';
 import { EMPTY_PERIOD_PRIORS } from './period-priors.ts';
 import { reresolveRunToSubsidiary } from "./run-lifecycle.ts";
-import { payrollCalculationPolicyForPayRun, payrollConfigurationInScope, assertPayRunCalculationComponents, ensureStatutoryHolidayComponents, ensureComponents, statutoryComponents } from "./run-setup.ts";
+import { payrollCalculationPolicyForPayRun, payrollConfigurationInScope, assertPayRunCalculationComponents, ensureStatutoryHolidayComponents, ensureComponents, statutoryComponents, payRunComponentDeclarations } from "./run-setup.ts";
 /**
  * Pay-run calculation driver: capture, dry-run/simulation, and the calculating transaction.
  *
@@ -331,16 +331,13 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       assertPayRunCalculationComponents(runContext.country, statHolidayPay, componentRows);
     }
     const components = { rows: componentRows };
-    // Country-scoped resolution (0189): two packs may each own one
-    // `system_key` (CA and JP both declare income_tax), so the run resolves
-    // only its own pack's rows plus the shared NULL-country baseline. Without
-    // this the map below is last-wins across packs and a run can price
-    // against another country's component. A key this run's pack does not
-    // declare fails closed in `need` ("seed payroll components first").
+    // Every system key resolves against its own declaration. A country-less
+    // statutory row cannot substitute for the paying country's component.
     const byKey = new Map<string, Record<string, unknown>>();
-    for (const c of components.rows) {
-      if (c.country != null && c.country !== runContext.country) continue;
-      if (c.system_key) byKey.set(`${c.system_key}:${c.kind}`, c);
+    for (const declaration of payRunComponentDeclarations(runContext.country)) {
+      const component = components.rows.find(row => row.country === (declaration.country ?? null)
+        && row.system_key === declaration.systemKey && row.kind === declaration.kind);
+      if (component) byKey.set(`${declaration.systemKey}:${declaration.kind}`, component);
     }
     const need = (systemKey: string, kind: string) => {
       const c = byKey.get(`${systemKey}:${kind}`);
@@ -602,8 +599,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         const slot = calcPack.statutorySlots.find((candidate) => candidate.components.some(
           (component) => component.systemKey === liability.system_key,
         ));
-        if (slot && !liability.liability_account_id
-          && !calculationPolicy.statutoryLiabilityAccount(liability.system_key, liability.country)) {
+        if (slot && !liability.liability_account_id) {
           throw new PayrollError(
             `payroll setup incomplete: ${runContext.country} ${slot.key} liability account is not configured — `
             + "ask an organization payroll administrator to map it in Payroll setup → Accounts & posting",

@@ -15,7 +15,6 @@ export function statutoryRemittanceDeclaration(country: string): StatutoryRemitt
   const remitted = new Set<string>();
   const vendorKey = new Map<string, string | null>();
   const regionalVendorKey = new Map<string, Readonly<Record<string, string>>>();
-  const legacyKey = new Map<string, string>();
   for (const slot of pack.statutorySlots) {
     for (const component of slot.components) {
       (component.remittance === "internal_accrual" ? internal : remitted)
@@ -42,15 +41,7 @@ export function statutoryRemittanceDeclaration(country: string): StatutoryRemitt
           regionalVendorKey.set(component.systemKey, declared);
         }
       }
-      if (slot.legacySettingsKey) {
-        const existing = legacyKey.get(component.systemKey);
-        if (existing !== undefined && existing !== slot.legacySettingsKey) {
-          throw new PayrollPackError(
-            `the ${country} payroll pack declares different legacy accounts for ${component.systemKey}`,
-          );
-        }
-        legacyKey.set(component.systemKey, slot.legacySettingsKey);
-      }
+
     }
   }
   for (const systemKey of internal) {
@@ -64,7 +55,6 @@ export function statutoryRemittanceDeclaration(country: string): StatutoryRemitt
     internalAccrualSystemKeys: [...internal],
     vendorSettingsKeyBySystemKey: vendorKey,
     regionalVendorSettingsKeyBySystemKey: regionalVendorKey,
-    legacyLiabilitySettingsKeyBySystemKey: legacyKey,
   };
 }
 
@@ -283,30 +273,4 @@ export function packRemittanceVendorSettingsKeys(country: string): string[] {
     }
   }
   return [...keys];
-}
-
-/**
- * The legacy (pre-pack) liability account for a statutory system key, read
- * from the raw orgs.settings.payroll blob via the SLOT's own declaration.
- *
- * This replaces the literal map the GL projection and the remittance summary
- * each carried (`cpp2` merged into the CPP payable, `qpip` into the EI
- * payable, and no row at all for any third pack). The merges themselves were
- * correct — the CA pack DECLARES them, on the cpp and qpip slots — so behavior
- * is identical; what is gone is the generic layer knowing any of it.
- */
-export function legacyStatutoryLiabilityAccount(
-  systemKey: string,
-  payrollSettingsBlob: Record<string, unknown>,
-  country: string | null,
-): string | null {
-  // Country-first: the slot's declaration for the COMPONENT's pack country. A
-  // row naming no country (shared baseline, user components) or a country
-  // with no pack carries no pack declaration — the same null as a system key
-  // no pack declares, resolved by the caller's undeclared paths.
-  if (!country || !PAYROLL_COUNTRY_PACKS[country]) return null;
-  const key = statutoryRemittanceDeclaration(country).legacyLiabilitySettingsKeyBySystemKey.get(systemKey);
-  if (!key) return null;
-  const value = payrollSettingsBlob[key];
-  return typeof value === "string" && value ? value : null;
 }

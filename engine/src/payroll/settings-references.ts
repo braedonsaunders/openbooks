@@ -3,8 +3,6 @@ import { declaredRemittanceVendorSettingsKeys } from "./packs.ts";
 /** Tenant account references stored directly in organization payroll settings. */
 export const PAYROLL_ACCOUNT_SETTING_KEYS = [
   "wageExpenseAccountId", "burdenExpenseAccountId", "netPayAccountId",
-  "cppPayableAccountId", "eiPayableAccountId", "taxPayableAccountId",
-  "vacationPayableAccountId",
 ] as const;
 
 /** Preserve policy values while translating only declared tenant identities.

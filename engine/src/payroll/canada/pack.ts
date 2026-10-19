@@ -182,7 +182,6 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   statutorySlots: [
     {
       key: "income_tax",
-      legacySettingsKey: "taxPayableAccountId",
       components: [
         // T4127 factor T: annual taxable income A is income LESS the
         // factor-F / F2 / U1 deductions, so a pre-tax protected order moves
@@ -212,7 +211,6 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       key: "cpp",
-      legacySettingsKey: "cppPayableAccountId",
       components: [
         // C and C2 are rate × (pensionable income − exemption), capped on
         // YTD contributions. No deduction enters the formula.
@@ -229,7 +227,6 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       key: "ei",
-      legacySettingsKey: "eiPayableAccountId",
       components: [
         // EI is rate × insurable earnings; the employer share is a multiple
         // of the employee's. EI is FEDERAL for every province including
@@ -240,7 +237,6 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       key: "qpip",
-      legacySettingsKey: "eiPayableAccountId",
       // Québec employment only — inert elsewhere, like qc_income_tax above.
       regions: ["QC"],
       components: [
@@ -254,7 +250,6 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       key: "vacation",
-      legacySettingsKey: "vacationPayableAccountId",
       components: [
         // A percentage of vacationable EARNINGS (the entitlement engine
         // emits it, phase 7), never of anything net of a deduction.

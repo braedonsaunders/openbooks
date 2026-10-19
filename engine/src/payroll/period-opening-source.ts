@@ -18,9 +18,7 @@ export async function payrollPeriodOpeningPriors(tx: SqlExecutor, input: {
   periodic: boolean;
 }): Promise<Map<string, PayPeriodPriors>> {
   const result = new Map<string, PayPeriodPriors>();
-  const available = (await tx.execute<{ available: boolean }>(sql`select to_regclass('public.payroll_period_openings') is not null as available`)).rows[0]?.available;
-  // No provider period payments can have been admitted on a pre-rollout schema.
-  if (!available || !input.employeePartyIds.length) return result;
+  if (!input.employeePartyIds.length) return result;
   const columns = sql.join(OPENING_BALANCE_FIELDS.flatMap((field) => [sql`${field.column}::text`, sql`${sql.identifier('b')}.${sql.identifier(field.column)}::text`]), sql`, `);
   const rows = (await tx.execute<{
     record: PayrollPeriodOpeningRecord; employee_name: string; annual_columns: Record<string, string>;

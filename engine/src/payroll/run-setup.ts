@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { cmp, roundMoney } from "../money/money.ts";
-import { assertContributoryBasesDeclared, ensurePackSlotRoleAccounts, legacyStatutoryLiabilityAccount, packStatutoryComponents, payrollPack } from "./packs.ts";
+import { assertContributoryBasesDeclared, ensurePackSlotRoleAccounts, packStatutoryComponents, payrollPack } from "./packs.ts";
 import { type EntitlementPlan } from "./entitlements.ts";
 export interface PayrollSettings {
   /** DR for wages when a component has no expense account of its own. */
@@ -18,11 +18,6 @@ export interface PayrollSettings {
   burdenExpenseAccountId: string | null;
   /** CR net pay owed to employees (relieved by the payment). */
   netPayAccountId: string | null;
-  /** CR statutory withholdings pending remittance to the CRA. */
-  cppPayableAccountId: string | null;
-  eiPayableAccountId: string | null;
-  taxPayableAccountId: string | null;
-  vacationPayableAccountId: string | null;
   /**
    * Where time-driven wages debit. 'labor_clearing' washes the standard cost
    * already posted at time approval (labor costing mode 'post') so the
@@ -79,8 +74,6 @@ export async function payrollCalculationPolicyForPayRun(
   return {
     settings: resolvePayrollSettings(policy),
     statutoryHolidayPay: policy?.statutoryHolidayPay === true || policy?.statutoryHolidayPay === "true",
-    statutoryLiabilityAccount: (systemKey: string, country: string | null) =>
-      legacyStatutoryLiabilityAccount(systemKey, policy ?? {}, country),
   };
 }
 
@@ -156,10 +149,6 @@ function resolvePayrollSettings(blob: Record<string, unknown> | null): PayrollSe
     wageExpenseAccountId: p.wageExpenseAccountId ?? null,
     burdenExpenseAccountId: p.burdenExpenseAccountId ?? null,
     netPayAccountId: p.netPayAccountId ?? null,
-    cppPayableAccountId: p.cppPayableAccountId ?? null,
-    eiPayableAccountId: p.eiPayableAccountId ?? null,
-    taxPayableAccountId: p.taxPayableAccountId ?? null,
-    vacationPayableAccountId: p.vacationPayableAccountId ?? null,
     wagesTo: p.wagesTo === "labor_clearing" ? "labor_clearing" : "expense",
     craRemittancePartyId: p.craRemittancePartyId ?? null,
     rqRemittancePartyId: p.rqRemittancePartyId ?? null,
@@ -227,6 +216,11 @@ export const statutoryComponents = (country: string): SeedComponent[] =>
     code: component.code, name: component.name, kind: component.kind,
     systemKey: component.systemKey, sequence: component.sequence, country,
   }));
+
+/** Canonical system components: shared earnings plus the run country's statutory declaration. */
+export function payRunComponentDeclarations(country: string): readonly SeedComponent[] {
+  return [...BASELINE_COMPONENTS, ...statutoryComponents(country)];
+}
 
 /** One idempotent component insert — the single seeding path. */
 export async function ensureComponents(
@@ -302,7 +296,7 @@ export async function seedPayrollComponents(
   // A pack whose contributory-bases declaration is missing (authored through
   // a cast) must fail before its flags accumulate an unnamed base.
   assertContributoryBasesDeclared(country);
-  await ensureComponents(db, orgId, actorId, [...BASELINE_COMPONENTS, ...statutoryComponents(country)]);
+  await ensureComponents(db, orgId, actorId, payRunComponentDeclarations(country));
   // Role-declared slots land on the chart account their role resolves to
   // (the payroll-deductions account, never a vendor payable) wherever the
   // operator has not mapped the slot yet. An explicit mapping always wins.
@@ -439,11 +433,11 @@ async function seedVacationEntitlementPlan(
     select ${orgId}, 'VAC', 'vacation', 'Vacation', 'money', 'accrue', 'percent_of_earnings',
            ${accrualValue},
            (select id from pay_components
-             where org_id = ${orgId} and system_key = 'vacation_accrual' limit 1),
+             where org_id = ${orgId} and country=${country} and system_key = 'vacation_accrual'),
            (select id from pay_components
-             where org_id = ${orgId} and system_key = 'vacation_payout' limit 1),
-           (select (settings#>>'{payroll,vacationPayableAccountId}')::uuid
-              from orgs where id = ${orgId}),
+             where org_id = ${orgId} and country is null and system_key = 'vacation_payout'),
+           (select liability_account_id from pay_components
+             where org_id=${orgId} and country=${country} and system_key='vacation_accrual' and is_active),
            'warn', true, ${actorId}, ${actorId}
      where not exists (
        select 1 from entitlement_plans where org_id = ${orgId} and system_key = 'vacation'

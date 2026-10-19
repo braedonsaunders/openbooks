@@ -17,15 +17,11 @@ export interface EmployerAssignmentSource {
   workerCompGroupId: string | null; createdAt: string; sourceReference: string;
 }
 type Reader = Pick<SqlExecutor, 'execute'>;
-async function available(tx: Reader): Promise<boolean> {
-  return (await tx.execute<{ available: boolean }>(sql`select to_regclass('public.payroll_employee_employer_assignments') is not null as available`)).rows[0]?.available === true;
-}
-
-/** Read explicit dated evidence; pre-installation databases cannot contain these assignments. */
+/** Read explicit dated employer-assignment evidence. */
 export async function employeeEmployerAssignmentHistory(tx: Reader, input: {
   orgId: string; payDate: string; employeePartyIds: readonly string[]; lockRows?: boolean;
 }): Promise<EmployerAssignmentSource[]> {
-  if (!input.employeePartyIds.length || !await available(tx)) return [];
+  if (!input.employeePartyIds.length) return [];
   return (await tx.execute<EmployerAssignmentSource & Record<string, unknown>>(sql`select id::text, employee_party_id::text as "employeePartyId",
     subsidiary_id::text as "subsidiaryId", assignment_kind as kind, effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
     filing_account_id::text as "filingAccountId",worker_comp_group_id::text as "workerCompGroupId",
@@ -39,7 +35,7 @@ export async function employeeEmployerAssignmentHistory(tx: Reader, input: {
 
 /** Caller owns employee/year fences before locking the current assignment sources. */
 export async function lockEmployerAssignmentProfiles(tx: Reader, orgId: string, employees: readonly string[]): Promise<void> {
-  if (!employees.length || !await available(tx)) return;
+  if (!employees.length) return;
   await tx.execute(sql`select id from employee_payroll_profiles where org_id=${orgId}
     and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employees)}::jsonb)::uuid)
     order by employee_party_id for share`);
@@ -100,7 +96,6 @@ export async function recordHistoricalEmployerAssignment(input: {
   const apply = async (tx: SqlExecutor) => {
     const authority=await lockActorCommandAuthority(tx,input.orgId,input.actorId,null,'payroll.manage');
     await requirePayrollFeature(tx,input.orgId);
-    if (!await available(tx)) throw new PayrollError('Historical employer assignments are not installed — run the authorized database bootstrap before previewing this import.');
     await takeEmployeeTaxYearFences(tx,[employeeTaxYearFenceKey(input.orgId,input.employeePartyId,input.effectiveFrom.slice(0,4))]);
     await lockScopeRows(tx,input.orgId,[{kind:'party',id:input.employeePartyId}],allowedSubsidiaryIds,'share');
     await lockScopeRows(tx,input.orgId,[{kind:'party',id:input.employeePartyId}],authority,'share');

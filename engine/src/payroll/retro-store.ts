@@ -373,7 +373,6 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
   //
   // Use the same dated employment eligibility as calculation and readiness,
   // including recorded earlier episodes under the exact legal employer.
-  // Missing legacy role dates retain their existing population semantics.
   //
   // Cells a committed retro run already settled are deliberately NOT
   // excluded here: quantification subtracts previouslySettled, so a settled

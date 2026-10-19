@@ -474,7 +474,7 @@ export async function payrollSetupState(
   // One roster for the whole setup state: the slot walk above scopes it to
   // regions, and the rate gaps reuse the same rows below.
   const setupPopulation = await activePayrollPopulation(orgId, allowedSubsidiaryIds);
-  for (const pack of await packSlotState(orgId, installed, blob, regionsByCountry(setupPopulation))) {
+  for (const pack of await packSlotState(orgId, installed, regionsByCountry(setupPopulation))) {
     const missing = pack.slots.filter((slot) => !slot.accountId);
     if (missing.length === 0) {
       checks.push({ severity: "blocker", code: "setup.slot", ok: true, detail: pack.country });
@@ -776,7 +776,7 @@ export async function payRunReadiness(
     // Slots that do not apply where this run's people work are absent, not
     // demanded — an Ontario-only run is never blocked on Québec accounts.
     const runRegions = regionsByCountry(people);
-    for (const pack of await packSlotState(orgId, installed, legacy, runRegions)) {
+    for (const pack of await packSlotState(orgId, installed, runRegions)) {
       if (people.length > 0 && !countriesInRun.has(pack.country)) continue;
       for (const slot of pack.slots) {
         if (!slot.accountId) {

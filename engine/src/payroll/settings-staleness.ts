@@ -24,10 +24,6 @@ const PAYROLL_POSTING_ONLY_KEYS: ReadonlySet<string> = new Set([
   "netPayAccountId",
   // Settlement routing is applied after payroll recognition, never calculation.
   "netPaySettlementClearing",
-  "cppPayableAccountId",
-  "eiPayableAccountId",
-  "taxPayableAccountId",
-  "vacationPayableAccountId",
   // Destination of time-driven wages at commit (the labor clearing switch).
   "wagesTo",
   // Pack statutory liability mapping, written onto the seeded components.

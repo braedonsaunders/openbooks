@@ -398,8 +398,6 @@ export interface PayrollStatutorySlot {
   key: string;
   /** The seeded components this slot's account applies to. */
   components: readonly PayrollStatutoryComponent[];
-  /** Pre-pack orgs.settings.payroll key honoured as a read fallback. */
-  legacySettingsKey?: string;
   /**
    * The chart account role this slot's liability defaults to — a ROLE, never
    * an account number: the pack names what the money IS (withheld payroll
@@ -1903,7 +1901,7 @@ export interface PayrollRemittanceSchedule {
 // ---------------------------------------------------------------------------
 
 /**
- * ONE pack's remittance and legacy-account declarations folded into lookups
+ * ONE pack's remittance declarations folded into lookups
  * by system key, for that pack's own country. Never across packs: two
  * sovereign tax authorities routinely give the same withholding the same
  * system key (GB and IE both call theirs `paye`), and those are two correct
@@ -1923,6 +1921,4 @@ export interface StatutoryRemittanceDeclaration {
    * stubs). Consulted per stub region BEFORE the pack-level vendor.
    */
   regionalVendorSettingsKeyBySystemKey: ReadonlyMap<string, Readonly<Record<string, string>>>;
-  /** systemKey → the slot's pre-pack orgs.settings.payroll account key. */
-  legacyLiabilitySettingsKeyBySystemKey: ReadonlyMap<string, string>;
 }

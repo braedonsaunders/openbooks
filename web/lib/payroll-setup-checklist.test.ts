@@ -37,8 +37,8 @@ const checklistHooks = registerHooks({
     if (specifier === '@openbooks/engine/payroll/packs') {
       return {
         shortCircuit: true,
-        url: `data:text/javascript,export { payrollTaxYearForDate } from ${JSON.stringify(new URL("../../engine/src/payroll/pack-tax-years.ts", import.meta.url).href)}; export async function packSlotState(orgId, installed, settings, regions) {
-          globalThis[Symbol.for('openbooks.payroll-checklist-wiring-test')].slotInputs.push({ orgId, installed, settings, regions });
+        url: `data:text/javascript,export { payrollTaxYearForDate } from ${JSON.stringify(new URL("../../engine/src/payroll/pack-tax-years.ts", import.meta.url).href)}; export async function packSlotState(orgId, installed, regions) {
+          globalThis[Symbol.for('openbooks.payroll-checklist-wiring-test')].slotInputs.push({ orgId, installed, regions });
           return globalThis[Symbol.for('openbooks.payroll-checklist-wiring-test')].slots;
         }`,
       }
@@ -129,7 +129,7 @@ test('the overview derives its checklist from pack slot states, not legacy keys'
 
   assert.deepEqual(home.missingSettings, [{ labelKey: 'packAccounts.US.slots.federal-withholding' }])
   assert.equal(checklistState.slotInputs.length, 1, 'the overview walks the installed packs once')
-  const input = checklistState.slotInputs[0] as { orgId: string; installed: unknown; settings: unknown }
+  const input = checklistState.slotInputs[0] as { orgId: string; installed: unknown }
   assert.equal(input.orgId, 'org-1')
   assert.deepEqual(input.installed, ['US'])
   assert.ok(

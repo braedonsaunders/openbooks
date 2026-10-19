@@ -222,15 +222,9 @@ export function employeeSocialInsuranceSystemKeys(): readonly string[] {
  * by owner ruling — keeps two columns. Splitting one derived bucket across
  * two frozen jurisdiction labels needs a rule, and this is it:
  *
- * - `ei` keeps legacy continuity: the old column read the EI factor, so EI
- *   stays EI.
- * - `qpip` joins it as the mandated fold: Québec parental insurance was in
- *   NEITHER register bucket, a silent drop of real withheld money corrected
- *   in this same change. EI is its truthful home, not CPP/FICA: QPIP is
- *   Québec's EI-system counterpart (the CA pack maps both slots to the same
- *   `eiPayableAccountId` fallback, declares them adjacently at sequences
- *   140/150, and Québec employees pay reduced EI precisely because QPIP
- *   covers parental benefits).
+ * - `ei` retains the EI deductions.
+ * - `qpip` joins EI because Québec parental insurance belongs to the same
+ *   employee-insurance reporting group, separately from pension deductions.
  * - Everything else in the derived social set lands in `cpp_fica` by
  *   STRUCTURAL COMPLEMENT (the binder subtracts this pair from the full
  *   set), never by enumeration: a present or future pack's contributions

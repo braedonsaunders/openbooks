@@ -11,7 +11,6 @@ import { db } from "../platform/db.ts";
 import { add, cmp } from "../money/money.ts";
 import {
   assertContributoryBasesDeclared,
-  legacyStatutoryLiabilityAccount,
   packStatutoryComponents,
   PAYROLL_COUNTRY_PACKS,
   PayrollPackError,
@@ -175,7 +174,6 @@ const FREEDONIA: PayrollCountryPack = {
   statutorySlots: [
     {
       key: "payg",
-      legacySettingsKey: "zzPayableAccountId",
       components: [
         { code: "ZTAX", name: "Freedonia PAYG", systemKey: "zz_tax", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
       ],
@@ -291,40 +289,6 @@ test("seeding a third pack provisions exactly its declaration — no Canadian co
 /* GL slot resolution and the remittance declaration                   */
 /* ------------------------------------------------------------------ */
 
-test("statutory liabilities resolve through the slot's own legacy key — synthetic slot included", async () => {
-  const settings = {
-    taxPayableAccountId: "acct-tax",
-    cppPayableAccountId: "acct-cpp",
-    eiPayableAccountId: "acct-ei",
-    vacationPayableAccountId: "acct-vac",
-    zzPayableAccountId: "acct-zz",
-  };
-  await withFreedonia(() => {
-    // The synthetic slot resolves with no generic-layer knowledge of it.
-    assert.equal(legacyStatutoryLiabilityAccount("zz_tax", settings, "ZZ"), "acct-zz");
-    // Its internal accrual has no legacy key: component account or refusal.
-    assert.equal(legacyStatutoryLiabilityAccount("holiday_accrual", settings, "ZZ"), null);
-  });
-  // The CA merges are the PACK's declarations, preserved exactly: CPP2 rides
-  // the CPP payable and QPIP the EI payable, because those slots say so.
-  assert.equal(legacyStatutoryLiabilityAccount("income_tax", settings, "CA"), "acct-tax");
-  assert.equal(legacyStatutoryLiabilityAccount("cpp", settings, "CA"), "acct-cpp");
-  assert.equal(legacyStatutoryLiabilityAccount("cpp2", settings, "CA"), "acct-cpp");
-  assert.equal(legacyStatutoryLiabilityAccount("ei", settings, "CA"), "acct-ei");
-  assert.equal(legacyStatutoryLiabilityAccount("qpip", settings, "CA"), "acct-ei");
-  assert.equal(legacyStatutoryLiabilityAccount("vacation_accrual", settings, "CA"), "acct-vac");
-  // Slots with no legacy key (WCB, EHT, the whole US pack) resolve null.
-  for (const key of ["wcb", "eht", "nonsense"]) {
-    assert.equal(legacyStatutoryLiabilityAccount(key, settings, "CA"), null, key);
-  }
-  for (const key of ["fit", "ss", "medicare", "futa", "suta", "nonsense"]) {
-    assert.equal(legacyStatutoryLiabilityAccount(key, settings, "US"), null, key);
-  }
-  // A row naming no country carries no pack declaration, whatever its key.
-  assert.equal(legacyStatutoryLiabilityAccount("income_tax", settings, null), null);
-  assert.equal(legacyStatutoryLiabilityAccount("income_tax", settings, "XX"), null);
-});
-
 test("'never remitted' is a component declaration, not the spelling of vacation_accrual", async () => {
   assert.deepEqual(statutoryRemittanceDeclaration("CA").internalAccrualSystemKeys, ["vacation_accrual"]);
   assert.deepEqual(statutoryRemittanceDeclaration("US").internalAccrualSystemKeys, []);
@@ -383,7 +347,6 @@ test("two packs sharing a system key resolve country-first — never a cross-pac
       ...FREEDONIA.statutorySlots,
       {
         key: "shared",
-        legacySettingsKey: "zzSharedPayableAccountId",
         components: [
           { code: "ZSH", name: "Shared levy", systemKey: "shared_levy", kind: "deduction", sequence: 120, assessedOn: "taxable_income", remittance: "tax_authority" },
         ],
@@ -398,7 +361,6 @@ test("two packs sharing a system key resolve country-first — never a cross-pac
     statutorySlots: [
       {
         key: "shared",
-        legacySettingsKey: "zySharedPayableAccountId",
         components: [
           { code: "YSH", name: "Shared levy", systemKey: "shared_levy", kind: "deduction", sequence: 120, assessedOn: "taxable_income", remittance: "tax_authority" },
         ],
@@ -410,8 +372,6 @@ test("two packs sharing a system key resolve country-first — never a cross-pac
     const zyp = statutoryRemittanceDeclaration("ZY");
     assert.equal(zz.vendorSettingsKeyBySystemKey.get("shared_levy"), null);
     assert.equal(zyp.vendorSettingsKeyBySystemKey.get("shared_levy"), "zyRemittancePartyId");
-    assert.equal(zz.legacyLiabilitySettingsKeyBySystemKey.get("shared_levy"), "zzSharedPayableAccountId");
-    assert.equal(zyp.legacyLiabilitySettingsKeyBySystemKey.get("shared_levy"), "zySharedPayableAccountId");
     // The installed packs resolve exactly as before the new arrivals.
     assert.equal(
       statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.get("income_tax"),

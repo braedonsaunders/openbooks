@@ -465,59 +465,18 @@ test(
   },
 );
 
-test(
-  "changing a statutory payable mapping returns a typed warning",
-  { skip: !DB },
-  async () => {
-    const fixture = await withBypass(async () => {
-      const org = await createScratchOrg();
-      const wsib = randomUUID();
-      await db.execute(
-        sql`insert into accounts(id,org_id,number,name,type,is_active) values(${wsib},${org.orgId},'2320','WSIB Payable','liability_current_other',true)`,
-      );
-      return {
-        ...org,
-        wsib,
-        actorId: await createScratchUser(
-          org.orgId,
-          "Payroll Admin",
-          "payroll_admin",
-        ),
-      };
-    });
-    await withPayrollActor(fixture, async () => {
-      // Pointing EI payable at a new account is the risk event: the API
-      // still accepts it, but must carry a typed warning.
-      const changed = await PUT(
-        request("PUT", { eiPayableAccountId: fixture.wsib }),
-      );
-      assert.equal(changed.status, 200);
-      const changedBody = (await changed.json()) as {
-        ok: boolean;
-        warnings?: Array<{ code: string; key: string }>;
-      };
-      assert.equal(changedBody.ok, true);
-      const warnings = changedBody.warnings ?? [];
-      assert.ok(
-        warnings.some(
-          (warning) =>
-            warning.code === "statutory_payable_mapping_changed" &&
-            warning.key === "eiPayableAccountId",
-        ),
-        "statutory mapping change carries a typed warning",
-      );
-      // Re-saving the identical mapping is steady state: no warning.
-      const steady = await PUT(
-        request("PUT", { eiPayableAccountId: fixture.wsib }),
-      );
-      assert.equal(steady.status, 200);
-      assert.deepEqual(
-        ((await steady.json()) as { warnings?: unknown[] }).warnings ?? [],
-        [],
-      );
-    });
-  },
-);
+test("statutory liabilities accept only native pack-slot mappings", { skip: !DB }, async () => {
+  const fixture = await scratchPayrollOrg();
+  await withPayrollActor(fixture, async () => {
+    const before = await payrollState(fixture.orgId);
+    for (const key of ["cppPayableAccountId", "eiPayableAccountId", "taxPayableAccountId", "vacationPayableAccountId"]) {
+      const result = await PUT(request("PUT", { [key]: randomUUID() }));
+      assert.equal(result.status, 422);
+      assert.match(String((await result.json()).error), /unknown payroll setting/);
+      assert.deepEqual(await payrollState(fixture.orgId), before, "an unsupported account path saves no configuration");
+    }
+  });
+});
 
 // Collapsed-refusal splits (queue item 28, batch 2). Every refusal below
 // names the cause, the value received, and a remedy that exists; statuses
@@ -571,8 +530,7 @@ test("payroll settings save native PostgreSQL identifiers with scoped accounts, 
     const before = await payrollState(fixture.orgId);
     const selected = {
       wageExpenseAccountId: expenseId, burdenExpenseAccountId: expenseId,
-      netPayAccountId: payableId, cppPayableAccountId: payableId, eiPayableAccountId: payableId,
-      taxPayableAccountId: payableId, vacationPayableAccountId: payableId, craRemittancePartyId: vendorId,
+      netPayAccountId: payableId, craRemittancePartyId: vendorId,
     };
     const slots = { CA: { income_tax: payableId } };
     assert.equal((await PUT(request("PUT", { ...selected, slotAccounts: slots }))).status, 200);

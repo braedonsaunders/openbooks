@@ -236,7 +236,7 @@ export async function AccountsTabSlot() {
   ])
   const blob = blobRes.rows[0]?.p ?? {}
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const packs = await packSlotState(orgId, installed, blob)
+  const packs = await packSlotState(orgId, installed)
   return (
     <PayrollSetupWorkspace
       settings={settings}

@@ -382,7 +382,7 @@ export async function payrollHome(
   if (settings) {
     const installed = await installedPayrollCountries(orgId, payrollBlob, allowedSubsidiaryIds)
     const regions = await payrollPopulationRegions(orgId, allowedSubsidiaryIds)
-    const states = await packSlotState(orgId, installed, settings as unknown as Record<string, unknown>, regions)
+    const states = await packSlotState(orgId, installed, regions)
     missingSettings = missingPayrollControlAccounts({
       wageExpenseAccountId: settings.wageExpenseAccountId,
       netPayAccountId: settings.netPayAccountId,

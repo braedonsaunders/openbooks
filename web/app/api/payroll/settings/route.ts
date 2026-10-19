@@ -51,10 +51,6 @@ const typedPayrollSettingsSchema = z.looseObject({
   wageExpenseAccountId: uuidId.nullable().optional(),
   burdenExpenseAccountId: uuidId.nullable().optional(),
   netPayAccountId: uuidId.nullable().optional(),
-  cppPayableAccountId: uuidId.nullable().optional(),
-  eiPayableAccountId: uuidId.nullable().optional(),
-  taxPayableAccountId: uuidId.nullable().optional(),
-  vacationPayableAccountId: uuidId.nullable().optional(),
   ...remittanceVendorFields,
   ...remittanceFrequencyFields,
   eftFallbackToCheque: z.boolean().optional(),
@@ -107,8 +103,7 @@ export const dynamic = 'force-dynamic'
 
 // Generic (jurisdiction-free) account slots. Statutory liabilities are NOT
 // here: those are pack-declared slots written onto the seeded components
-// (see engine/src/payroll/packs.ts). The old statutory settings keys are
-// still accepted in PUT bodies for back-compat but no UI sends them.
+// (see engine/src/payroll/packs.ts).
 const ACCOUNT_KEYS = PAYROLL_ACCOUNT_SETTING_KEYS
 
 /**
@@ -136,10 +131,6 @@ const ACCOUNT_KEY_LABELS: Record<typeof ACCOUNT_KEYS[number], string> = {
   wageExpenseAccountId: 'Wage expense',
   burdenExpenseAccountId: 'Employer burden expense',
   netPayAccountId: 'Net pay payable',
-  cppPayableAccountId: 'CPP payable',
-  eiPayableAccountId: 'EI payable',
-  taxPayableAccountId: 'Income tax payable',
-  vacationPayableAccountId: 'Vacation payable',
 }
 const EXPENSE_REMEDY = 'an expense or cost-of-sales account'
 const LIABILITY_REMEDY = 'a current liability account (payable or other current liability)'
@@ -147,47 +138,11 @@ const ACCOUNT_TYPE_REMEDY: Record<typeof ACCOUNT_KEYS[number], string> = {
   wageExpenseAccountId: EXPENSE_REMEDY,
   burdenExpenseAccountId: EXPENSE_REMEDY,
   netPayAccountId: `${LIABILITY_REMEDY}; net pay is cleared to the bank when the run's payment is recorded`,
-  cppPayableAccountId: LIABILITY_REMEDY,
-  eiPayableAccountId: LIABILITY_REMEDY,
-  taxPayableAccountId: LIABILITY_REMEDY,
-  vacationPayableAccountId: LIABILITY_REMEDY,
 }
 const ACCOUNT_TYPES_BY_KEY: Record<typeof ACCOUNT_KEYS[number], readonly string[]> = {
   wageExpenseAccountId: ['expense', 'expense_other', 'expense_deferred', 'cogs'],
   burdenExpenseAccountId: ['expense', 'expense_other', 'expense_deferred', 'cogs'],
   netPayAccountId: ['liability_payable', 'liability_current_other'],
-  cppPayableAccountId: ['liability_payable', 'liability_current_other'],
-  eiPayableAccountId: ['liability_payable', 'liability_current_other'],
-  taxPayableAccountId: ['liability_payable', 'liability_current_other'],
-  vacationPayableAccountId: ['liability_payable', 'liability_current_other'],
-}
-
-/**
- * Legacy statutory payable mappings: still accepted for back-compat, but the
- * payroll pack slots (slotAccounts, written onto the components) are the
- * authoritative mapping. Re-pointing one of these keys changes where a
- * statutory liability posts, so the API answers with a typed warning naming
- * the new account — silent acceptance once posted income tax to an RRSP
- * holding account and EI to a WSIB account on a live tenant.
- */
-const STATUTORY_PAYABLE_KEYS = [
-  'cppPayableAccountId',
-  'eiPayableAccountId',
-  'taxPayableAccountId',
-  'vacationPayableAccountId',
-] as const
-const STATUTORY_PAYABLE_LABELS: Record<(typeof STATUTORY_PAYABLE_KEYS)[number], string> = {
-  cppPayableAccountId: 'CPP payable',
-  eiPayableAccountId: 'EI payable',
-  taxPayableAccountId: 'Income tax payable',
-  vacationPayableAccountId: 'Vacation payable',
-}
-export interface PayrollSettingsWarning {
-  code: 'statutory_payable_mapping_changed'
-  key: (typeof STATUTORY_PAYABLE_KEYS)[number]
-  accountId: string
-  accountLabel: string
-  message: string
 }
 
 /**
@@ -208,12 +163,12 @@ const installablePackPairs = installablePayrollPacks
 async function validatePayrollAccounts(
   orgId: string,
   body: Record<string, unknown>,
-): Promise<NextResponse | Map<string, string>> {
+): Promise<NextResponse | null> {
   const requested = ACCOUNT_KEYS.flatMap((key) => {
     const value = body[key]
     return value == null ? [] : [[key, value as string] as const]
   })
-  if (requested.length === 0) return new Map<string, string>()
+  if (requested.length === 0) return null
   const rows = await db.execute<{
     id: string
     type: string
@@ -228,7 +183,6 @@ async function validatePayrollAccounts(
      where org_id = ${orgId}
        and id in (${sql.join(requested.map(([, id]) => sql`${id}`), sql`, `)})`)
   const byId = new Map(rows.rows.map((row) => [row.id, row]))
-  const labels = new Map<string, string>()
   for (const [key, id] of requested) {
     const row = byId.get(id)
     const field = ACCOUNT_KEY_LABELS[key]
@@ -259,9 +213,8 @@ async function validatePayrollAccounts(
         { status: 422 },
       )
     }
-    labels.set(id, row.number ? `${row.number} · ${row.name}` : row.name)
   }
-  return labels
+  return null
 }
 
 async function validateRemittanceVendors(
@@ -380,7 +333,7 @@ export const GET = defineRoute({
     ])
     const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
     const [packs, stubPassword, encryptionAvailable, setup] = await Promise.all([
-      packSlotState(gate.user.orgId, installed, blob),
+      packSlotState(gate.user.orgId, installed),
       stubPasswordPolicy(gate.user.orgId),
       pdfEncryptionAvailable(),
       // The setup wizard's step state — the same org-level checks the pay-run
@@ -628,26 +581,8 @@ export const PUT = defineRoute({
     const before = JSON.parse(JSON.stringify(settings)) as Record<string, unknown>
     const validated = await validatePayrollAccounts(orgId, body)
     if (validated instanceof NextResponse) return validated
-    const warnings: PayrollSettingsWarning[] = []
     for (const key of ACCOUNT_KEYS) {
       if (key in body) settings[key] = body[key] ?? null
-    }
-    // A statutory payable key re-pointed at a new account changes where that
-    // liability posts. Accept it (back-compat) but say so, naming the account:
-    // only an actual change warns, so routine re-saves stay quiet.
-    for (const key of STATUTORY_PAYABLE_KEYS) {
-      if (!(key in body)) continue
-      const next = settings[key] ?? null
-      if (typeof next !== 'string' || (before[key] ?? null) === next) continue
-      warnings.push({
-        code: 'statutory_payable_mapping_changed',
-        key,
-        accountId: next,
-        accountLabel: validated.get(next) ?? next,
-        message: `${STATUTORY_PAYABLE_LABELS[key]} now points at ${validated.get(next) ?? next}. `
-          + 'Statutory liabilities post to this account — confirm it is the intended remittance account '
-          + 'in Payroll setup → Accounts before the next pay run commits.',
-      })
     }
     const vendorError = await validateRemittanceVendors(orgId, body)
     if (vendorError) return vendorError
@@ -740,7 +675,7 @@ export const PUT = defineRoute({
     }
 
     await writePayrollBlob(orgId, gate.user.id, before, settings)
-    return NextResponse.json({ ok: true, warnings })
+    return NextResponse.json({ ok: true })
     })
 
   },

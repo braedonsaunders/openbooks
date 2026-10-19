@@ -7,9 +7,6 @@
  * components it covers. Slot values live on pay_components.liability_account_id
  * (set for every mapped component at once), so the posting path needs no
  * jurisdiction knowledge at all — it just follows the component's account.
- * Legacy orgs configured before packs existed fall back to the old
- * orgs.settings.payroll keys named here; new configuration always writes
- * the components.
  *
  * The pack's component declarations are also the SEED for those components
  * (engine/src/payroll/run.ts `seedPayrollComponents` provisions exactly this
@@ -32,7 +29,7 @@ export { resolvePayrollRunContext, resolveEmployeePayrollContext, declaredPackRa
 export type { PayrollRunContext, EmployeePayrollContext } from "./pack-run-context"
 export { declaredJurisdictions, payrollJurisdiction, jurisdictionKey, countryOfJurisdiction, holidayOccupationClassesOf, labourJurisdictionProblem, payrollJurisdictionDeclared, employmentJurisdictionsOf } from "./pack-jurisdictions"
 export type { RecognisedHolidayOccupation } from "./pack-jurisdictions"
-export { statutoryRemittanceDeclaration, allRemittanceSchedules, remittanceScheduleInForce, remittanceFrequencyBand, remittanceBandForAverage, packRemittanceSchedules, remittanceScheduleForFrequencyKey, declaredRemittanceFrequencySettingsKeys, declaredRemittanceVendorSettingsKeys, packRemittanceVendorSettingsKeys, legacyStatutoryLiabilityAccount } from "./pack-remittance-schedules"
+export { statutoryRemittanceDeclaration, allRemittanceSchedules, remittanceScheduleInForce, remittanceFrequencyBand, remittanceBandForAverage, packRemittanceSchedules, remittanceScheduleForFrequencyKey, declaredRemittanceFrequencySettingsKeys, declaredRemittanceVendorSettingsKeys, packRemittanceVendorSettingsKeys } from "./pack-remittance-schedules"
 export { assertContributoryBasesDeclared, packSlotAppliesToPopulation, packSlotState, uninstallPayrollPack, setPackSlotAccount, ensurePackSlotRoleAccounts } from "./pack-slots"
 export type { PackSlotState } from "./pack-slots"
 export { taxYearFor } from "./tax-year-math.ts"

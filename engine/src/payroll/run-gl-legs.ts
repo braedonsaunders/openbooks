@@ -4,7 +4,6 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
-import { legacyStatutoryLiabilityAccount } from "./packs.ts";
 import { laborCostingSettingsInTx } from "../projects/labor-costing.ts";
 
 /** What a projected leg represents; persisted on the document line. */
@@ -139,17 +138,15 @@ export async function payRunGlLegs(
     let burdenExpense: string | null = null;
     let laborClearing: string | null = null;
     let wagesToClearing = false;
-    let statutoryLiability = (_systemKey: string | null, _country: string | null): string | null => null;
     if (frozen) {
       netPayable = frozen.netPayAccountId;
     } else {
       const settings = await payrollSettingsForPayRun(orgId, documentId, allowedSubsidiaryIds, tx);
       const costing = await laborCostingSettingsInTx(tx, orgId);
-      const control = (await tx.execute<{ c: Record<string, string | null> | null; p: Record<string, unknown> | null }>(sql`
-        select settings->'controlAccounts' as c, settings->'payroll' as p from orgs where id = ${orgId}
+      const control = (await tx.execute<{ c: Record<string, string | null> | null }>(sql`
+        select settings->'controlAccounts' as c from orgs where id = ${orgId}
       `));
       laborClearing = control.rows[0]?.c?.laborClearing ?? null;
-      const rawPayrollSettings = control.rows[0]?.p ?? {};
 
       const requireAccount = (value: string | null, label: string): string => {
         if (!value) throw new PayrollError(`payroll setup incomplete: ${label} account is not configured`);
@@ -158,16 +155,6 @@ export async function payRunGlLegs(
       wageExpense = requireAccount(settings.wageExpenseAccountId, "wage expense");
       netPayable = requireAccount(settings.netPayAccountId, "net pay payable");
       burdenExpense = settings.burdenExpenseAccountId ?? wageExpense;
-      // Statutory liabilities are pack-declared: each seeded component carries
-      // its slot's account (Payroll setup → Accounts & posting). For pre-pack
-      // tenants, the SLOT's own legacySettingsKey names the old org-level
-      // settings key to fall back to — the pack declares which liabilities
-      // share an account (CPP2 rides the CPP payable, QPIP the EI payable);
-      // this projection no longer knows any jurisdiction's mapping itself, and
-      // a third pack's slot with no legacy key simply resolves to the
-      // component account or a named refusal.
-      statutoryLiability = (systemKey: string | null, country: string | null): string | null =>
-        systemKey ? legacyStatutoryLiabilityAccount(systemKey, rawPayrollSettings, country) : null;
       wagesToClearing = settings.wagesTo === "labor_clearing" && costing.mode === "post";
       if (settings.wagesTo === "labor_clearing" && !laborClearing) {
         throw new PayrollError("payroll setup incomplete: labor clearing account is not configured");
@@ -299,7 +286,7 @@ export async function payRunGlLegs(
     const lineDestinations: { lineId: string; partyId: string | null }[] = [];
     const liabilityFor = (line: Record<string, string | null>, label: string): string => {
       if (frozen) return frozenLiability(line);
-      const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null, line.country ?? null);
+      const liability = line.liability_account_id;
       if (!liability) {
         throw new PayrollError(
           `${label} "${line.description}" has no liability account — set it in Payroll setup → Accounts & posting`,

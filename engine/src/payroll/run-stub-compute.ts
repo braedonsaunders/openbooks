@@ -229,10 +229,12 @@ export async function calculateStub(
   // coalesce(employment_id, employee_party_id), so a rehire's stale row under
   // the old employment and the current row under the new one may both be
   // active — and matching on the party alone would sum both into one stub, a
-  // double pay. Rows stamped to another employment are that employment's to
-  // pay; unstamped (pre-stamping legacy) rows still apply, since no backfill
-  // ever attributed them.
-  const rosterEmploymentId = emp.employment_id ?? null;
+  // double pay. A party-wide assignment applies to every employment; an
+  // employment-scoped assignment applies only to its recorded employment.
+  const rosterEmploymentId = emp.employment_id;
+  if (!rosterEmploymentId) {
+    throw new PayrollError(`${emp.display_name ?? employeePartyId}: the payroll employment identity is unavailable — select the employee's native employment before calculating`);
+  }
   const assigned = (await tx.execute<Record<string, unknown>>(sql`
     select a.value as override, a.effective_from, a.effective_to, a.run_applicability, c.*,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
@@ -245,8 +247,7 @@ export async function calculateStub(
        and (c.country is null or c.country = ${country})
        and ${assignmentOverlapsPeriod(sql`a.effective_from`, sql`a.effective_to`, run.period_start!, run.period_end!)}
 
-       and (${rosterEmploymentId}::uuid is null
-            or a.employment_id is null
+       and (a.employment_id is null
             or a.employment_id = ${rosterEmploymentId}::uuid)
      order by c.sequence
   `));

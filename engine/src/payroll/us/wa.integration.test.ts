@@ -260,14 +260,14 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
   test("pack slot presence is obligation-derived without any mapping", async () => {
     const fx = await waPayrollOrg();
     try {
-      const wa = await packSlotState(fx.orgId, ["US"], {}, new Map([["US", new Set(["WA"])]]));
+      const wa = await packSlotState(fx.orgId, ["US"], new Map([["US", new Set(["WA"])]]));
       const waKeys = wa.find((pack) => pack.country === "US")!.slots.map((slot) => slot.key);
       assert.ok(waKeys.includes("wa_pfml") && waKeys.includes("wa_cares"), waKeys.join(","));
       assert.ok(waKeys.includes("suta") && waKeys.includes("futa"), waKeys.join(","));
       assert.ok(waKeys.includes("fit") && waKeys.includes("fica"), waKeys.join(","));
       assert.ok(!waKeys.includes("state_income_tax"), waKeys.join(","));
       assert.ok(!waKeys.includes("local_income_tax"), waKeys.join(","));
-      const oh = await packSlotState(fx.orgId, ["US"], {}, new Map([["US", new Set(["OH"])]]));
+      const oh = await packSlotState(fx.orgId, ["US"], new Map([["US", new Set(["OH"])]]));
       const ohKeys = oh.find((pack) => pack.country === "US")!.slots.map((slot) => slot.key);
       assert.ok(ohKeys.includes("state_income_tax") && ohKeys.includes("local_income_tax"), ohKeys.join(","));
     } finally {
@@ -448,12 +448,9 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
     }
   });
 
-  test("the accounts view follows a baseline mapping the run already resolves", async () => {
+  test("statutory mappings require their native country components", async () => {
     const fx = await waPayrollOrg();
     try {
-      // A levy mapped on the shared NULL-country baseline before the pack
-      // seeded its country-scoped row: the run prices it, so the view must
-      // show it — never UNSET beside a run that already clears.
       const baselineAccount = randomUUID();
       const scopedAccount = randomUUID();
       for (const [id, number, name] of [
@@ -476,16 +473,16 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
                  ${baselineAccount}, ${fx.actorId}, ${fx.actorId}
             from pay_components where org_id = ${fx.orgId} and country = 'US' and code = ${code}`);
       }
-      const shown = await packSlotState(fx.orgId, ["US"], {});
+      const shown = await packSlotState(fx.orgId, ["US"]);
       const us = shown.find((pack) => pack.country === "US")!;
-      assert.equal(us.slots.find((slot) => slot.key === "wa_pfml")?.accountId, baselineAccount);
-      assert.equal(us.slots.find((slot) => slot.key === "wa_cares")?.accountId, baselineAccount);
-      // The country-scoped row wins once the operator maps it there.
+      assert.equal(us.slots.find((slot) => slot.key === "wa_pfml")?.accountId, null);
+      assert.equal(us.slots.find((slot) => slot.key === "wa_cares")?.accountId, null);
+      // Only the declared country components supply the account.
       await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_pfml", scopedAccount);
-      const reshown = await packSlotState(fx.orgId, ["US"], {});
+      const reshown = await packSlotState(fx.orgId, ["US"]);
       const reus = reshown.find((pack) => pack.country === "US")!;
       assert.equal(reus.slots.find((slot) => slot.key === "wa_pfml")?.accountId, scopedAccount);
-      assert.equal(reus.slots.find((slot) => slot.key === "wa_cares")?.accountId, baselineAccount);
+      assert.equal(reus.slots.find((slot) => slot.key === "wa_cares")?.accountId, null);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
