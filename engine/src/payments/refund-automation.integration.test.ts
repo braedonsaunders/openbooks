@@ -7,6 +7,7 @@ import {
   approveDisputeReview,
   rejectDisputeReview,
 } from "./psp-refund-automation.ts";
+import { applyPaymentToOpenItem } from "./psp-automation-postings.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 import { settleHarness, settle, invoiceOpen, disputeRows } from "./refund-test-fixtures.ts";
@@ -114,6 +115,69 @@ test("a dispute opened then lost posts the loss and settles the invoice", { skip
     const rows = await disputeRows(h.orgId);
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.status, "lost");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a lost dispute clears the full hold when the invoice was already settled", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const h = await settleHarness(org, { disputeAccounts: true });
+    await settle(h, 10_000);
+
+    const opened = await h.fire({
+      id: `evt_dp_open_${randomUUID().slice(0, 8)}`,
+      type: "charge.dispute.created",
+      data: { object: { id: "dp_invoice_settled", payment_intent: h.intentId, amount: 10_000, currency: "cad", reason: "fraudulent" } },
+    });
+    assert.equal(opened?.status, "disputed_posted");
+    const dispute = (await disputeRows(h.orgId))[0]!;
+    const documents = dispute.documents_posted as string[];
+    const holdId = documents.at(-1)!;
+    const lines = (await db.execute<{ id: string; document_id: string }>(sql`
+      select jl.id, je.source_document_id as document_id
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where jl.org_id = ${h.orgId} and jl.is_open_item
+         and je.source_document_id in (${holdId}, ${h.invoiceId})
+    `)).rows;
+    const holdLine = lines.find((line) => line.document_id === holdId);
+    const invoiceLine = lines.find((line) => line.document_id === h.invoiceId);
+    assert.ok(holdLine && invoiceLine, "the posted hold and invoice retain their open-item lines");
+
+    await applyPaymentToOpenItem(h.orgId, {
+      fromLineId: holdLine.id,
+      toLineId: invoiceLine.id,
+      amount: "100.0000",
+      currency: "CAD",
+      reference: "settle the invoice before the provider reports the lost dispute",
+    });
+    assert.equal(await invoiceOpen(h.orgId, h.invoiceId), "0.0000");
+
+    const lost = await h.fire({
+      id: `evt_dp_lost_${randomUUID().slice(0, 8)}`,
+      type: "charge.dispute.closed",
+      data: { object: { id: "dp_invoice_settled", payment_intent: h.intentId, amount: 10_000, currency: "cad", status: "lost" } },
+    });
+    assert.equal(lost?.status, "disputed_posted");
+
+    const loss = (await db.execute<{ debit: string }>(sql`
+      select coalesce(sum(case when jl.amount > 0 then jl.amount else 0 end), 0)::text as debit
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+        join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
+       where jl.org_id = ${h.orgId} and a.name = 'Chargeback Losses' and je.status in ('posted', 'reversed')
+    `)).rows[0]!;
+    assert.equal(loss.debit, "100.0000", "the loss reflects the full provider chargeback amount");
+    const clearing = (await db.execute<{ balance: string }>(sql`
+      select coalesce(sum(jl.amount), 0)::text as balance
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+        join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
+       where jl.org_id = ${h.orgId} and a.name = 'Disputed Funds Clearing' and je.status in ('posted', 'reversed')
+    `)).rows[0]!;
+    assert.equal(clearing.balance, "0.0000", "the full disputed-funds balance is cleared");
   } finally {
     await dropScratchOrg(org.orgId);
   }

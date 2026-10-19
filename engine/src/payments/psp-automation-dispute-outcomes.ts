@@ -202,7 +202,7 @@ async function runDisputeLost(
   const { primaryBookId, periodForDate } = await import("./psp-settlement.ts");
   const bookId = await primaryBookId(orgId);
   const postingDate = await businessToday(orgId);
-  const periodId = await periodForDate(orgId, postingDate);
+  const periodId = await periodForDate(orgId, postingDate, ctx.link.subsidiary_id);
   if (!periodId) throw new PspAutomationError(`no open accounting period for ${postingDate}`);
   await assertPeriodModulesOpen(db, {
     orgId,
@@ -264,9 +264,9 @@ async function runDisputeLost(
       ? { custom: { fxEvidence: { rate: holdRate, source: "dispute_hold_receipt", sourceDocumentId: holdId, currency: row.currency, functionalCurrency: holdBasis.functional } } }
       : {}),
     lines: [
-      leg(lossAccount, applied, false, "Chargeback loss"),
+      leg(lossAccount, row.amount, false, "Chargeback loss"),
       ...(cmp(fee, "0") > 0 ? [leg(ctx.disputeAccounts.disputeFeeAccountId!, fee, false, "Provider dispute fee")] : []),
-      leg(ctx.disputeAccounts.disputedFundsAccountId!, applied, true, "Clear dispute hold"),
+      leg(ctx.disputeAccounts.disputedFundsAccountId!, row.amount, true, "Clear dispute hold"),
       ...(cmp(fee, "0") > 0 ? [leg(ctx.bankAccountId, fee, true, "Dispute fee taken")] : []),
     ],
   });
@@ -275,9 +275,7 @@ async function runDisputeLost(
     disputeId,
     "lost",
     [...documents, posted.entryId],
-    cmp(applied, row.amount) < 0
-      ? `invoice owed ${invoice.open_balance}; ${fromUnits(toUnits(row.amount) - toUnits(applied))} of the hold stays open for the operator`
-      : null,
+    null,
   );
   return { status: "posted", disputeId, documents: [...documents, posted.entryId] };
 }

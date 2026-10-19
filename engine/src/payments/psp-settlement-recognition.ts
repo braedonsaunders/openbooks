@@ -43,7 +43,7 @@ export async function clearSettlementBatchJournal(
     // The recognition becomes close evidence at close: lifting it afterwards
     // would rewrite what the close attested, so the payout's own settlement
     // period must still be open for Banking.
-    const periodId = await periodForDate(orgId, batch.settlement_date);
+    const periodId = await periodForDate(orgId, batch.settlement_date, batch.subsidiary_id);
     if (!periodId) {
       throw new PspSettlementError(
         `no accounting period covers the payout date ${batch.settlement_date}; the batch recognition cannot be reversed without a period to attest it`,

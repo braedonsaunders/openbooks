@@ -9,6 +9,7 @@ import {
   importSettlementBatch,
   parseStripeBalanceTransactions,
   postSettlementBatch,
+  reverseSettlementBatch,
 } from "./psp-settlement.ts";
 import { accruePayoutsInTransit } from "./psp-payout-accrual.ts";
 import { createMatch, importStatement, startReconciliation } from "../banking/banking.ts";
@@ -20,16 +21,15 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function ensureOpenPeriod(orgId: string, periodId: string): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10);
-  const [year, month] = today.split("-").map(Number) as [number, number, number];
+async function ensureOpenPeriod(orgId: string, periodId: string, date = new Date().toISOString().slice(0, 10)): Promise<void> {
+  const [year, month] = date.split("-").map(Number) as [number, number, number];
   await db.execute(sql`
     insert into accounting_periods
       (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
        starts_on, ends_on, is_adjustment)
-    select ${orgId}, fiscal_calendar_id, ${year}, ${month}, ${today.slice(0, 7)},
+    select ${orgId}, fiscal_calendar_id, ${year}, ${month}, ${date.slice(0, 7)},
            ${`${year}-${String(month).padStart(2, "0")}-01`},
-           ${endOfMonth(today)}, false
+           ${endOfMonth(date)}, false
       from accounting_periods
      where id = ${periodId}
     on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing
@@ -61,11 +61,12 @@ async function postedBatch(
   actor: string,
   payoutId: string,
   accounts: { bank: string; fee: string; clearing: string },
+  settlementDate = "2026-07-10",
 ): Promise<string> {
   const parsed = parseStripeBalanceTransactions(
     [{ id: `txn_${payoutId}`, type: "charge", amount: 10_000, fee: 290, net: 9_710, currency: "cad" }],
     payoutId,
-    "2026-07-10",
+    settlementDate,
   );
   const imported = await importSettlementBatch(orgId, actor, parsed, {
     bankAccountId: accounts.bank,
@@ -185,6 +186,103 @@ test("in-transit accrual posts a balanced reclass and reverses it next period", 
     `)).rows;
     const combinedTotal = combined.reduce((sum, leg) => sum + units4(leg.amount), 0n);
     assert.equal(combinedTotal, 0n, "accrual plus reversal nets to zero");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("month-end accruals reverse on their stored date and do not overlap the next period", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Payout Clerk", "admin");
+    await db.execute(sql`
+      update orgs set settings = settings || '{"features":{"banking":true}}'::jsonb where id = ${org.orgId}`);
+    for (const date of ["2026-01-30", "2026-01-31", "2026-02-01", "2026-02-28", "2026-03-01"]) {
+      await ensureOpenPeriod(org.orgId, org.periodId, date);
+    }
+    await pullConfig(org.orgId, actor, org.accounts.bank, org.accounts.adjustment, org.accounts.fxGainLoss, org.accounts.clearing);
+    const batchId = await postedBatch(
+      org.orgId,
+      actor,
+      "po_month_end_transit",
+      { bank: org.accounts.bank, fee: org.accounts.adjustment, clearing: org.accounts.clearing },
+      "2026-01-30",
+    );
+
+    const january = await accruePayoutsInTransit(org.orgId, "2026-01-31", actor, null);
+    assert.equal(january.accrued.length, 1);
+    assert.equal(january.accrued[0]!.batchId, batchId);
+
+    const february = await accruePayoutsInTransit(org.orgId, "2026-02-28", actor, null);
+    assert.equal(february.reversed.length, 1);
+    assert.equal(february.accrued.length, 1);
+    const rows = (await db.execute<{
+      accrual_date: string;
+      reversal_date: string;
+      status: string;
+      accrual_status: string;
+      reversal_posting_date: string | null;
+    }>(sql`
+      select a.accrual_date::text, a.reversal_date::text, a.status,
+             source.status as accrual_status, reversal.posting_date::text as reversal_posting_date
+        from psp_payout_accruals a
+        join journal_entries source on source.id = a.accrual_entry_id and source.org_id = a.org_id
+        left join journal_entries reversal on reversal.id = a.reversal_entry_id and reversal.org_id = a.org_id
+       where a.org_id = ${org.orgId} and a.batch_id = ${batchId}
+       order by a.accrual_date
+    `)).rows;
+    assert.deepEqual(rows.map((row) => [row.accrual_date, row.reversal_date, row.status, row.accrual_status, row.reversal_posting_date]), [
+      ["2026-01-31", "2026-02-01", "reversed", "reversed", "2026-02-01"],
+      ["2026-02-28", "2026-03-01", "accrued", "posted", null],
+    ]);
+    const balance = (await db.execute<{ amount: string }>(sql`
+      select coalesce(sum(jl.amount), 0)::text as amount
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where jl.org_id = ${org.orgId} and jl.account_id = ${org.accounts.clearing}
+         and je.origin = 'accrual' and je.posting_date <= '2026-02-28'
+    `)).rows[0]!;
+    assert.equal(balance.amount, "97.1000", "only February's single payout reclass remains at month end");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("reversing a settlement also reverses its outstanding payout accrual", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Payout Clerk", "admin");
+    await db.execute(sql`
+      update orgs set settings = settings || '{"features":{"banking":true}}'::jsonb where id = ${org.orgId}`);
+    await ensureOpenPeriod(org.orgId, org.periodId);
+    await pullConfig(org.orgId, actor, org.accounts.bank, org.accounts.adjustment, org.accounts.fxGainLoss, org.accounts.clearing);
+    const batchId = await postedBatch(
+      org.orgId,
+      actor,
+      "po_reverse_with_accrual",
+      { bank: org.accounts.bank, fee: org.accounts.adjustment, clearing: org.accounts.clearing },
+    );
+    const accrued = await accruePayoutsInTransit(org.orgId, "2026-07-15", actor, null);
+    assert.equal(accrued.accrued.length, 1);
+
+    const reversed = await reverseSettlementBatch(org.orgId, batchId, actor, {
+      reversalDate: "2026-07-16",
+      reason: "Provider confirmed payout cancellation",
+    }, null);
+    const retry = await reverseSettlementBatch(org.orgId, batchId, actor, {
+      reversalDate: "2026-07-16",
+      reason: "Provider confirmed payout cancellation",
+    }, null);
+    assert.equal(retry.entryId, reversed.entryId);
+    const row = (await db.execute<{ status: string; accrual_status: string; reversal_entry_id: string | null }>(sql`
+      select a.status, source.status as accrual_status, a.reversal_entry_id
+        from psp_payout_accruals a
+        join journal_entries source on source.id = a.accrual_entry_id and source.org_id = a.org_id
+       where a.org_id = ${org.orgId} and a.batch_id = ${batchId}
+    `)).rows[0]!;
+    assert.equal(row.status, "reversed");
+    assert.equal(row.accrual_status, "reversed");
+    assert.ok(row.reversal_entry_id);
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -10,6 +10,7 @@ import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { PspSettlementError, isPspProvider } from "./psp-settlement-core.ts";
 import type { PspProvider } from "./psp-settlement-core.ts";
 import { periodForDate, validateSettlementPostingAccounts } from "./psp-settlement-posting-context.ts";
+import { reverseOpenPayoutAccrualsForBatch } from "./psp-payout-accrual-reversal.ts";
 
 /**
  * Controlled correction for a posted PSP batch. Posted evidence is never
@@ -32,8 +33,8 @@ export async function reverseSettlementBatch(
       "reversal reason must be between 5 and 500 characters",
     );
   }
-  return withOrg(orgId, async () => {
-    const batch = (await db.execute<{
+  return withOrg(orgId, () => db.transaction(async (tx) => {
+    const batch = (await tx.execute<{
         status: string;
         journal_entry_id: string | null;
         reversal_entry_id: string | null;
@@ -54,6 +55,22 @@ export async function reverseSettlementBatch(
       if (!b.reversal_entry_id) {
         throw new PspSettlementError("void batch is missing reversal evidence");
       }
+      if (!b.subsidiary_id) {
+        throw new PspSettlementError("void batch is missing its subsidiary for payout-accrual reversal");
+      }
+      const reversal = (await tx.execute<{ posting_date: string }>(sql`
+        select posting_date::text from journal_entries
+         where id = ${b.reversal_entry_id} and org_id = ${orgId}
+      `)).rows[0];
+      if (!reversal) throw new PspSettlementError("void batch reversal journal is missing");
+      await reverseOpenPayoutAccrualsForBatch(tx, {
+        orgId,
+        batchId,
+        actorId,
+        allowedSubsidiaryIds,
+        subsidiaryId: b.subsidiary_id,
+        postingDate: reversal.posting_date,
+      });
       return { entryId: b.reversal_entry_id };
     }
     if (b.status !== "posted" || !b.journal_entry_id || !b.subsidiary_id) {
@@ -62,7 +79,7 @@ export async function reverseSettlementBatch(
       );
     }
 
-    const source = (await db.execute<{
+    const source = (await tx.execute<{
         book_id: string;
         subsidiary_id: string;
         entry_number: string;
@@ -80,20 +97,20 @@ export async function reverseSettlementBatch(
         "settlement source journal is missing or already reversed",
       );
     }
-    const periodId = await periodForDate(orgId, input.reversalDate);
+    const periodId = await periodForDate(orgId, input.reversalDate, original.subsidiary_id, tx);
     if (!periodId) {
       throw new PspSettlementError(
         `no open accounting period for ${input.reversalDate}`,
       );
     }
-    await assertPeriodModulesOpen(db, {
+    await assertPeriodModulesOpen(tx, {
       orgId,
       periodId,
       bookId: original.book_id,
       subsidiaryIds: [original.subsidiary_id],
       modules: ["banking"],
     });
-    const lines = (await db.execute<Record<string, unknown>>(sql`
+    const lines = (await tx.execute<Record<string, unknown>>(sql`
       select line_number, account_id, subsidiary_id, amount::text, currency,
              txn_amount::text, fx_rate::text, memo, party_id, department_id,
              project_id, location_id, class_id, equipment_unit_id,
@@ -109,7 +126,7 @@ export async function reverseSettlementBatch(
     // The reversal mirrors the source lines exactly through the ONE ledger
     // API; the source entry is then marked reversed — never edited.
     const entryId = randomUUID();
-    const postedReversal = await postEntry(db, {
+    const postedReversal = await postEntry(tx, {
       id: entryId,
       orgId,
       bookId: original.book_id,
@@ -143,15 +160,26 @@ export async function reverseSettlementBatch(
     });
     if (postedReversal.entryId !== entryId)
       throw new PspSettlementError("settlement reversal was not posted");
-    await markEntryReversed(db, { orgId, entryId: b.journal_entry_id, actorId });
-    await db.execute(sql`
+    await markEntryReversed(tx, { orgId, entryId: b.journal_entry_id, actorId });
+    await reverseOpenPayoutAccrualsForBatch(tx, {
+      orgId,
+      batchId,
+      actorId,
+      allowedSubsidiaryIds,
+      subsidiaryId: original.subsidiary_id,
+      postingDate: input.reversalDate,
+    });
+    const updated = await tx.execute(sql`
       update psp_settlement_batches
          set status = 'void', reversal_entry_id = ${entryId},
              reversal_reason = ${reason}, reversed_at = now(),
              reversed_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
        where id = ${batchId} and org_id = ${orgId}
     `);
-    await db.execute(sql`
+    if ((updated.rowCount ?? 0) !== 1) {
+      throw new PspSettlementError("settlement batch could not be marked reversed; retry the reversal");
+    }
+    const audited = await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
       values
@@ -162,8 +190,11 @@ export async function reverseSettlementBatch(
            after: { status: "void", reversalEntryId: entryId },
          })}::jsonb, ${actorId})
     `);
+    if ((audited.rowCount ?? 0) !== 1) {
+      throw new PspSettlementError("settlement batch reversal could not be audited; retry the reversal");
+    }
     return { entryId };
-  });
+  }));
 }
 
 /** Providers a scheduled payout pull serves; every other provider imports. */

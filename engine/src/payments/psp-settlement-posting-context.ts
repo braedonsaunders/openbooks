@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -73,11 +73,10 @@ export async function primaryBookId(orgId: string): Promise<string> {
 export async function periodForDate(
   orgId: string,
   date: string,
+  subsidiaryId?: string | null,
+  runner: SqlExecutor = db,
 ): Promise<string | null> {
-  // Through the shared covering-period resolver (default calendar,
-  // deterministic under overlaps); both settlement and reversal callers
-  // keep their signatures.
-  return (await resolveCoveringPeriod(db, orgId, date))?.id ?? null;
+  return (await resolveCoveringPeriod(runner, orgId, date, subsidiaryId))?.id ?? null;
 }
 
 export interface ImportAccounts {

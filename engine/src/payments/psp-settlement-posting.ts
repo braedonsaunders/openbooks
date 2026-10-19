@@ -280,7 +280,7 @@ export async function postSettlementBatch(
     }
     const disputeAcct = b.dispute_account_id ?? b.fee_account_id;
 
-    const periodId = await periodForDate(orgId, b.settlement_date);
+    const periodId = await periodForDate(orgId, b.settlement_date, subsidiaryId);
     if (!periodId)
       throw new PspSettlementError(
         `no open accounting period for ${b.settlement_date}`,

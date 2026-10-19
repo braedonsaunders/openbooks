@@ -9,6 +9,7 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { postEntry } from "../journal/post-entry.ts";
+import { reversePayoutAccrual } from "./psp-payout-accrual-reversal.ts";
 import {
   batchDepositTieout,
   primaryBookId,
@@ -85,20 +86,6 @@ export async function accruePayoutsInTransit(
   await assertNotSandbox(orgId, "accrue payouts in transit");
   return withOrg(orgId, async () => {
     await requireBankingFeature(orgId);
-    const accrualPeriodId = await periodForDate(orgId, accrualDate);
-    if (!accrualPeriodId) {
-      throw new PspSettlementError(
-        `no open accounting period for ${accrualDate}; open the period under Close before accruing in-transit payouts`,
-      );
-    }
-    // The reversal posts the next day, which can fall in the next period: it
-    // must be open too, or the accrual would strand without its reversal.
-    const reversalPeriodId = await periodForDate(orgId, reversalDate);
-    if (!reversalPeriodId) {
-      throw new PspSettlementError(
-        `no open accounting period for ${reversalDate}; the in-transit reversal posts the next day, so open that period under Close before accruing`,
-      );
-    }
     const bookId = await primaryBookId(orgId);
     const ctx = await loadSubsidiaryContext(db, orgId);
     const result: PayoutAccrualRunResult = { accrualDate, reversalDate, accrued: [], reversed: [], skipped: [] };
@@ -108,65 +95,24 @@ export async function accruePayoutsInTransit(
     const due = (await db.execute<{
       id: string;
       batch_id: string;
-      accrual_entry_id: string;
-      amount: string;
-      currency: string;
-      bank_account_id: string | null;
-      transit_account_id: string | null;
       subsidiary_id: string | null;
     }>(sql`
-      select id, batch_id, accrual_entry_id, amount::text, currency,
-             bank_account_id, transit_account_id, subsidiary_id
+      select id, batch_id, subsidiary_id
         from psp_payout_accruals
        where org_id = ${orgId} and status = 'accrued' and reversal_date <= ${accrualDate}
-       order by reversal_date, batch_id
-       for update
+       order by reversal_date, batch_id, id
     `)).rows;
     for (const row of due) {
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)) throw new ScopeNotFoundError();
-      if (!row.bank_account_id || !row.transit_account_id) {
-        throw new PspSettlementError(
-          "in-transit reversal is missing its bank or clearing account; re-accrue the payout after repairing its settlement accounts",
-        );
-      }
       const subsidiaryId: string = row.subsidiary_id ?? ctx.rootId;
-      await assertPeriodModulesOpen(db, {
+      const reversed = await reversePayoutAccrual(db, {
         orgId,
-        periodId: reversalPeriodId,
-        bookId,
-        subsidiaryIds: [subsidiaryId],
-        modules: ["banking"],
-      });
-      // Mirror the accrual legs exactly: what left the bank returns.
-      const posted = await postEntry(db, {
-        orgId,
-        bookId,
-        subsidiaryId,
-        entryNumber: `PSP-INTRANSIT-${row.batch_id}-${accrualDate}-REVERSAL`,
-        postingDate: reversalDate,
-        periodId: reversalPeriodId,
-        memo: `In-transit payout reversal`,
-        origin: "accrual",
-        reversesEntryId: row.accrual_entry_id,
+        accrualId: row.id,
         actorId,
-        currency: row.currency,
-        idempotencyKey: `psp-in-transit|${orgId}|${row.batch_id}|${accrualDate}|reversal`,
-        lines: [
-          { accountId: row.bank_account_id, amount: row.amount, memo: "In-transit payout returned to bank" },
-          { accountId: row.transit_account_id, amount: neg(row.amount), memo: "In-transit clearing released" },
-        ],
+        allowedSubsidiaryIds,
+        subsidiaryId,
       });
-      const stamped = await db.execute(sql`
-        update psp_payout_accruals
-           set status = 'reversed', reversal_entry_id = ${posted.entryId},
-               updated_at = now(), updated_by = ${actorId}
-         where id = ${row.id} and org_id = ${orgId} and status = 'accrued'
-      `);
-      if ((stamped.rowCount ?? 0) !== 1) {
-        throw new PspSettlementError("in-transit accrual could not be marked reversed; run the accrual again");
-      }
-      await auditAccrual(orgId, row.id, "reverse", { reversalEntryId: posted.entryId }, actorId);
-      result.reversed.push({ accrualId: row.id, entryId: posted.entryId });
+      if (reversed.changed) result.reversed.push({ accrualId: reversed.accrualId, entryId: reversed.entryId });
     }
 
     const batches = (await db.execute<AccrualBatchRow>(sql`
@@ -206,6 +152,19 @@ export async function accruePayoutsInTransit(
         continue;
       }
       const subsidiaryId: string = batch.subsidiary_id ?? ctx.rootId;
+      const accrualPeriodId = await periodForDate(orgId, accrualDate, subsidiaryId);
+      if (!accrualPeriodId) {
+        throw new PspSettlementError(
+          `no open accounting period for ${accrualDate} in subsidiary ${subsidiaryId}; open the period under Close before accruing in-transit payouts`,
+        );
+      }
+      // Each subsidiary's next-day reversal must resolve in its own posting calendar.
+      const nextPeriodId = await periodForDate(orgId, reversalDate, subsidiaryId);
+      if (!nextPeriodId) {
+        throw new PspSettlementError(
+          `no open accounting period for ${reversalDate} in subsidiary ${subsidiaryId}; the in-transit reversal posts the next day, so open that period under Close before accruing`,
+        );
+      }
       const functional = ctx.byId.get(subsidiaryId)?.baseCurrency;
       if (batch.currency !== functional) {
         // The accrual reclasses the payout amount as booked; a payout in a
