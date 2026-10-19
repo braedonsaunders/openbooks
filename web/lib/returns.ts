@@ -550,6 +550,7 @@ async function createVendorReturnDrafts(input: {
       userId: input.actorId,
       kind: 'vendor_credit',
       key,
+      nativeCustom: { rmaVendorReturnDraft: { rmaId: input.rma.id } },
       subsidiaryId: input.rma.subsidiaryId,
       requestBody: { kind: 'vendor_credit', rmaId: input.rma.id, vendorId },
       body: {

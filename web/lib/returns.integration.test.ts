@@ -145,8 +145,8 @@ test('RMA inspection issues one original-cost credit, scraps quarantine stock, s
     assert.equal(receipts.length, 3)
     assert.deepEqual(receipts.map((row) => row.total_value), ['4.0000', '4.0000', '4.0000'])
     assert.equal((await getOnHand(org.orgId, org.items.fifo, quarantine)).quantity, '1.0000', 'scrap leaves one vendor-return unit in quarantine')
-    const linkedDraft = (await db.execute<{ id: string; status: string; links: number }>(sql`
-      select d.id, d.status,
+    const linkedDraft = (await db.execute<{ id: string; status: string; links: number; custom: { rmaVendorReturnDraft?: { rmaId?: string } } }>(sql`
+      select d.id, d.status, d.custom,
              (select count(*)::int from document_links l where l.org_id = d.org_id and l.from_document_id = ${rma.id}
                and l.to_document_id = d.id and l.link_type = 'created_from') as links
         from documents d join rma_lines r on r.vendor_credit_id = d.id and r.org_id = d.org_id
@@ -154,6 +154,7 @@ test('RMA inspection issues one original-cost credit, scraps quarantine stock, s
     assert.ok(linkedDraft)
     assert.equal(linkedDraft.status, 'draft')
     assert.equal(linkedDraft.links, 1)
+    assert.equal(linkedDraft.custom.rmaVendorReturnDraft?.rmaId, rma.id)
     const stagedVendorLines = (await db.execute<{ item_id: string; quantity: string; amount: string }>(sql`
       select item_id, quantity::text, amount::text
         from document_lines where org_id = ${org.orgId} and document_id = ${linkedDraft.id}

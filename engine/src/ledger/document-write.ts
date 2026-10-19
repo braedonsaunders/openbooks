@@ -354,6 +354,12 @@ export interface DocumentEditContext {
   deferFlows?: boolean
   /** Internal create-path provider preflight; never supplied by API callers. */
   precomputedTotals?: PreparedDocumentTotals | null
+  /**
+   * An RMA inspection may stage a zero-priced vendor-return draft before an
+   * operator selects the supplier receipt. This is honored only for that
+   * initial create; later line saves and posting still require a disposition.
+   */
+  deferVendorReturnDisposition?: boolean
 }
 
 /** The on_update flow event an edit would fire — returned, not fired, under ctx.deferFlows. */
@@ -2317,10 +2323,11 @@ export async function applyDocumentEdit(
           preparedLines,
         )
         applyInventoryAllowanceSelections(locked.kind, body.lines, preparedLines)
-        // A vendor credit cannot post a stocked line with no choice, so the
-        // save refuses it here — with the receipt-or-allowance message —
-        // instead of failing late at post.
-        if (locked.kind === 'vendor_credit') {
+        // RMA inspection creates an unfinished vendor-return draft before
+        // the operator chooses its supplier receipt. That initial create is
+        // the only save allowed to defer disposition; later line saves still
+        // require a receipt or allowance, and posting always requires one.
+        if (locked.kind === 'vendor_credit' && !ctx.deferVendorReturnDisposition) {
           await assertVendorCreditReturnDispositions(tx, orgId, preparedLines)
         }
       }
@@ -2876,6 +2883,7 @@ export interface DocumentCreateInput {
     }
     storeCreditProgramId?: string
     portalReturnResolution?: 'refund' | 'exchange' | 'store_credit'
+    rmaVendorReturnDraft?: { rmaId: string }
   }
 }
 
@@ -2921,8 +2929,14 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
       ? ['portalRequest']
       : kind === 'customer_credit'
         ? ['storeCreditProgramId', 'portalReturnResolution']
+        : kind === 'vendor_credit'
+          ? ['rmaVendorReturnDraft']
         : []
     if (keys.length === 0 || keys.some((key) => !allowed.includes(key))) {
+      throw new DocumentEditError(422, 'Native return metadata is not valid for this document.')
+    }
+    if (input.nativeCustom.rmaVendorReturnDraft &&
+        (!isUuid(input.nativeCustom.rmaVendorReturnDraft.rmaId) || kind !== 'vendor_credit')) {
       throw new DocumentEditError(422, 'Native return metadata is not valid for this document.')
     }
   }
@@ -3056,7 +3070,15 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
       key,
       current,
       { ...effectiveBody, expectedUpdatedAt: current.updatedAt },
-      { orgId, userId, source: 'ui', deferFlows: true, precomputedTotals, customerPartyId: input.onBehalfOfPartyId ?? undefined },
+      {
+        orgId,
+        userId,
+        source: 'ui',
+        deferFlows: true,
+        precomputedTotals,
+        customerPartyId: input.onBehalfOfPartyId ?? undefined,
+        deferVendorReturnDisposition: Boolean(input.nativeCustom?.rmaVendorReturnDraft),
+      },
       { tx },
     )
     return { status: 'created', id: key, documentNumber, deferredUpdate: deferredUpdate ?? null } as DocumentCreateResult
