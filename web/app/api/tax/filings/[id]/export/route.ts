@@ -12,6 +12,7 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
 import { taxReturnExportData } from '../../../../../../lib/tax-filing'
 import { exportDataToCsv, exportDataToPdf, exportDataToXlsx, orgBranding, resolveLayout, type Translator } from '../../../../../../lib/report-pdf'
+import { xlsxMoneyContext } from '../../../../../../lib/xlsx-money'
 import { notFound } from "@/lib/api/responses";
 
 
@@ -101,6 +102,8 @@ async function legacyGET(req: Request, { params }: { params: Promise<{ id: strin
     reportName: data.title,
     dateRangeLabel: data.dateRangeLabel,
     generatedAt: new Date(`${stamp}T00:00:00Z`),
+    // The boxes were computed in the filing's frozen functional currency.
+    money: await xlsxMoneyContext(gate.user.orgId, row.functional_currency),
   }), filename)
   const branding = await orgBranding(gate.user.orgId)
   const { page, showSummary } = resolveLayout(null)

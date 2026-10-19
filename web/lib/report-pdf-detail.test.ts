@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
+import { XlsxMoneyRefusal } from '@openbooks/office'
 import { generalLedgerExportData, isExactDecimalText, pdfMoney } from './report-pdf-detail.ts'
 
 // `report-pdf` is server-only in production. This suite runs it directly so
@@ -10,6 +11,7 @@ const { exportDataToPdfInput, exportDataToCsv, exportDataToRunResult, exportData
 const { decimalRatio } = await import('./reports/decimals.ts')
 
 const t = (key: string) => key
+const USD = { currency: 'USD', minorUnits: { USD: 2, JPY: 0, BHD: 3 } }
 
 test('project profitability export agrees with the table on decimalRatio margins', () => {
   // The producer stores margin = decimalRatio(net, revenue): a canonical
@@ -180,6 +182,7 @@ test('tabular exports carry the truncation notice instead of dropping the summar
   await workbook.xlsx.load(await exportDataToXlsx(data, {
     reportName: 'General Ledger',
     generatedAt: new Date('2026-01-31T00:00:00Z'),
+    money: USD,
   }) as unknown as ArrayBuffer)
   const sheet = workbook.worksheets[workbook.worksheets.length - 1]
   assert.ok(
@@ -237,12 +240,8 @@ test('general-ledger export preserves exact money strings and their column flags
   assert.equal(data.groups[0]?.rows[1]?.[5], '9007199254740.9938')
 })
 
-async function generalLedgerAdapterValues(value: string): Promise<{
-  csv: string
-  runValue: string | number | null | undefined
-  xlsxValue: ExcelJS.CellValue
-}> {
-  const data = generalLedgerExportData({
+function generalLedgerFixture(value: string) {
+  return generalLedgerExportData({
     from: '2026-01-01',
     to: '2026-01-31',
     truncated: false,
@@ -256,6 +255,15 @@ async function generalLedgerAdapterValues(value: string): Promise<{
       lines: [],
     }],
   }, 'General Ledger', t)
+}
+
+async function generalLedgerAdapterValues(value: string): Promise<{
+  csv: string
+  runValue: string | number | null | undefined
+  xlsxValue: ExcelJS.CellValue
+  xlsxFormat: string
+}> {
+  const data = generalLedgerFixture(value)
 
   const result = exportDataToRunResult(data)
   assert.deepEqual(result.groups[0]?.money, [false, false, false, true, true, true])
@@ -264,33 +272,39 @@ async function generalLedgerAdapterValues(value: string): Promise<{
   await workbook.xlsx.load(await exportDataToXlsx(data, {
     reportName: 'General Ledger',
     generatedAt: new Date('2026-01-31T00:00:00Z'),
+    money: USD,
   }) as unknown as ArrayBuffer)
 
   return {
     csv: exportDataToCsv(data, {}),
     runValue: result.groups[0]?.rows[0]?.[5],
     xlsxValue: workbook.worksheets[0]?.getCell('F5').value ?? null,
+    xlsxFormat: workbook.worksheets[0]?.getCell('F5').numFmt ?? '',
   }
 }
 
-test('general-ledger CSV/XLSX adapters preserve exact money beyond 2^53', async () => {
+test('general-ledger CSV keeps exact money beyond 2^53, and the workbook refuses it rather than rounding', async () => {
   const exact = '9007199254740.9938'
-  const values = await generalLedgerAdapterValues(exact)
-
-  assert.equal(values.runValue, exact)
-  assert.match(values.csv, /\r\n,,generalLedger\.opening,,,9007199254740\.9938\r\n/)
-  assert.equal(values.xlsxValue, exact)
-  assert.equal(typeof values.xlsxValue, 'string')
+  const data = generalLedgerFixture(exact)
+  assert.equal(exportDataToRunResult(data).groups[0]?.rows[0]?.[5], exact)
+  assert.match(exportDataToCsv(data, {}), /\r\n,,generalLedger\.opening,,,9007199254740\.9938\r\n/)
+  // A numeric cell holds 15 significant digits; this amount has 17.
+  await assert.rejects(
+    exportDataToXlsx(data, { reportName: 'General Ledger', generatedAt: new Date('2026-01-31T00:00:00Z'), money: USD }),
+    (error: unknown) => error instanceof XlsxMoneyRefusal && error.code === 'xlsx_money_inexact' && /CSV/.test(error.remedy),
+  )
 })
 
-test('general-ledger CSV/XLSX adapters preserve a normal exact money value', async () => {
+test('general-ledger CSV/XLSX adapters keep a normal exact money value: the workbook cell is that amount in its currency format', async () => {
   const exact = '125.0000'
   const values = await generalLedgerAdapterValues(exact)
 
   assert.equal(values.runValue, exact)
   assert.match(values.csv, /\r\n,,generalLedger\.opening,,,125\.0000\r\n/)
-  assert.equal(values.xlsxValue, exact)
-  assert.equal(typeof values.xlsxValue, 'string')
+  assert.equal(values.xlsxValue, 125, 'a numeric cell, exactly the amount')
+  assert.equal(values.xlsxFormat, '[$USD] #,##0.00;([$USD] #,##0.00)', 'the currency at its minor units')
+  const cents = await generalLedgerAdapterValues('-1234567.8900')
+  assert.equal(cents.xlsxValue, -1234567.89)
 })
 
 test('pdfMoney prints exact ledger decimals IEEE-754 would corrupt', () => {

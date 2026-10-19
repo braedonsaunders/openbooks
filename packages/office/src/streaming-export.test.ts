@@ -216,7 +216,7 @@ test('streamed XLSX carries the same sheets, values, and styles as the buffered 
     summary: [{ label: 'Rows', value: 3 }],
     rowCount: 3,
   }
-  const expected = await reportResultToXlsx(oldInput, { reportName: 'Recall', dateRangeLabel: 'FY2026', generatedAt })
+  const expected = await reportResultToXlsx(oldInput, { reportName: 'Recall', dateRangeLabel: 'FY2026', generatedAt, money: null })
   const measure = (columns: string[], rows: Cell[][]): number[] =>
     columns.map((c, i) => xlsxColumnWidth(Math.max(
       xlsxExportCellLength(c),
@@ -226,6 +226,7 @@ test('streamed XLSX carries the same sheets, values, and styles as the buffered 
     reportName: 'Recall',
     dateRangeLabel: 'FY2026',
     generatedAt,
+    money: null,
     groups: [
       { title: 'Kind: a/b:c*d?e[f]g', subtitle: '2 row(s)', columns: ['Item', 'Qty'], widths: measure(['Item', 'Qty'], [['x', 1.5], ['y', '2.0000']]) },
       { title: 'Kind: a/b:c*d?e[f]g', subtitle: '1 row(s)', columns: ['Item', 'Qty'], widths: measure(['Item', 'Qty'], [['z', null]]) },
@@ -277,9 +278,9 @@ test('streamed XLSX honours subtitles, widths, and the empty-groups contract', a
   const generatedAt = new Date('2026-01-01T00:00:00Z')
   const expected = await reportResultToXlsx(
     { groups: [], summary: [], rowCount: 0 },
-    { reportName: 'Recall', generatedAt },
+    { reportName: 'Recall', generatedAt, money: null },
   )
-  const writer = createStreamingXlsxExport({ reportName: 'Recall', generatedAt, groups: [] })
+  const writer = createStreamingXlsxExport({ reportName: 'Recall', generatedAt, money: null, groups: [] })
   const actual = await writer.finish()
   const oldWb = await readAll(expected)
   const newWb = await readAll(actual)
@@ -287,25 +288,27 @@ test('streamed XLSX honours subtitles, widths, and the empty-groups contract', a
   assert.equal(newWb.worksheets[0]!.getCell(1, 1).value, 'Recall')
 })
 
-test('streamed XLSX formats money columns but leaves counts alone', async () => {
+test('streamed XLSX writes money as numbers in its currency format but leaves counts alone', async () => {
   const writer = createStreamingXlsxExport({
     reportName: 'R',
     generatedAt: new Date('2026-01-01T00:00:00Z'),
+    money: { currency: 'CAD', minorUnits: { CAD: 2 } },
     groups: [{ title: 'Results', columns: ['Lots', 'Amount'], widths: [10, 16], money: [false, true] }],
   })
-  writer.appendRows(0, [[3, 19.99]])
+  writer.appendRows(0, [[3, '19.9900']])
   const back = await readAll(await writer.finish())
   const ws = back.worksheets[0]!
   assert.equal(ws.getCell(5, 1).value, 3)
   assert.equal(ws.getCell(5, 1).numFmt, undefined)
   assert.equal(ws.getCell(5, 2).value, 19.99)
-  assert.equal(ws.getCell(5, 2).numFmt, '#,##0.00;(#,##0.00)')
+  assert.equal(ws.getCell(5, 2).numFmt, '[$CAD] #,##0.00;([$CAD] #,##0.00)')
 })
 
 test('the XLSX stream releases each page: later input mutation cannot corrupt output', async () => {
   const writer = createStreamingXlsxExport({
     reportName: 'R',
     generatedAt: new Date('2026-01-01T00:00:00Z'),
+    money: null,
     groups: [{ title: 'Results', columns: ['A'], widths: [10] }],
   })
   const rows: Cell[][] = [['keep-1'], ['keep-2']]

@@ -86,3 +86,26 @@ test('quantity columns are typed for print and spreadsheets, while identifiers, 
   assert.deepEqual(summary.groups[0]!.align, ['left', 'right', 'right', 'right', 'right'])
   assert.deepEqual(summary.summary.find((item) => item.label === 'Total sum of quantity'), { label: 'Total sum of quantity', value: '12.50', money: false, number: true })
 })
+
+test('rows name the currency of each money column for spreadsheets: a row’s own currency when exported beside it, else unstated', async () => {
+  const ledger: ReportEntity = {
+    key: 'ledger_lines', label: 'Ledger lines', category: 'test', description: 'Test ledger lines', from: 'ledger_lines l', orgColumn: 'l.org_id',
+    currencyColumn: 'currency', baseCurrencyColumn: 'base_currency',
+    columns: [
+      { key: 'memo', label: 'Memo', kind: 'text', expr: 'l.memo' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'l.currency' },
+      { key: 'base_currency', label: 'Base currency', kind: 'text', expr: 'l.base_currency' },
+      { key: 'txn_amount', label: 'Amount (txn)', kind: 'money', expr: 'l.txn_amount', txnCurrency: true },
+      { key: 'amount', label: 'Amount', kind: 'money', expr: 'l.amount', baseMoney: true },
+      { key: 'fee', label: 'Fee', kind: 'money', expr: 'l.fee' },
+    ],
+  }
+  const map = { [ledger.key]: ledger }
+  const client = { query: async () => ({ rows: [{ memo: 'x', currency: 'EUR', base_currency: 'USD', txn_amount: '10.00', amount: '11.00', fee: '1.00' }] }) }
+  const withCurrency = await runCustomQuery(client, validateCustomQuery({ entity: ledger.key, mode: 'rows', columns: ['memo', 'currency', 'txn_amount', 'base_currency', 'amount', 'fee'] }, map), { orgId: ORG, entityMap: map })
+  assert.deepEqual(withCurrency.groups[0]!.moneyCurrencies, [null, null, { column: 1 }, null, { column: 3 }, null])
+  const without = await runCustomQuery(client, validateCustomQuery({ entity: ledger.key, mode: 'rows', columns: ['memo', 'txn_amount', 'amount', 'fee'] }, map), { orgId: ORG, entityMap: map })
+  assert.deepEqual(without.groups[0]!.moneyCurrencies, [null, 'unstated', null, null], 'transaction amounts without their currency are never labelled with the report’s')
+  const noMoney = await runCustomQuery(client, validateCustomQuery({ entity: ledger.key, mode: 'rows', columns: ['memo'] }, map), { orgId: ORG, entityMap: map })
+  assert.equal(noMoney.groups[0]!.moneyCurrencies, undefined)
+})

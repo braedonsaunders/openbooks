@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { db } from '@openbooks/engine/platform/db'
 import { reportResultToCsv, reportResultToXlsx, type ReportRunResult } from '@openbooks/office'
+import { xlsxMoneyContext } from '@/lib/xlsx-money'
 import { can } from '../../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { csvResponse, xlsxResponse } from '../../../../../lib/export'
@@ -107,6 +108,7 @@ export const GET = defineRoute({
     return xlsxResponse(await reportResultToXlsx(result, {
         reportName: scenario.rows[0].name,
         generatedAt: new Date(`${stamp}T00:00:00Z`),
+        money: await xlsxMoneyContext(gate.user.orgId),
       }), filename)
   },
 });

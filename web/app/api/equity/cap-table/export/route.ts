@@ -57,7 +57,8 @@ export const GET = defineRoute({
       return csvResponse(exportDataToCsv(data, { sectionHeader }), filename)
     }
     if (format === 'xlsx') {
-      return xlsxResponse(await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel, generatedAt: new Date(`${stamp}T00:00:00Z`) }), filename)
+      // The cap table holds share counts and percentages, never money.
+      return xlsxResponse(await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel, generatedAt: new Date(`${stamp}T00:00:00Z`), money: null }), filename)
     }
     const page = resolvePdfPageSetup({ paperSize: 'letter', orientation: 'landscape', marginMm: 12, density: 'compact' })
     return pdfResponse(await exportDataToPdf(data, await orgBranding(authz.user.orgId), page, { generatedAt: new Date(`${stamp}T00:00:00Z`) }), filename)

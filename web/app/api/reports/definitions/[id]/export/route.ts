@@ -19,6 +19,7 @@ import {
   resolveLayout,
   type Translator,
 } from '../../../../../../lib/report-pdf'
+import { xlsxMoneyContext } from '../../../../../../lib/xlsx-money'
 import { csvResponse, pdfResponse, reportExportFilename, xlsxResponse } from '../../../../../../lib/export'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 
@@ -66,6 +67,7 @@ export const GET = defineRoute({
             format: format as 'csv' | 'xlsx',
             sectionHeader: (await reportCsvOptions()).sectionHeader,
             generatedAt: new Date(`${stamp}T00:00:00Z`),
+            money: format === 'xlsx' ? await xlsxMoneyContext(user.orgId) : null,
           })
           if (out.format === 'csv') return csvResponse(out.csv, filename(out.asOf))
           return xlsxResponse(out.xlsx, filename(out.asOf))
@@ -94,6 +96,7 @@ export const GET = defineRoute({
           reportName: data.title,
           dateRangeLabel: data.dateRangeLabel,
           generatedAt: new Date(`${stamp}T00:00:00Z`),
+          money: await xlsxMoneyContext(user.orgId),
         })
         return xlsxResponse(buf, filename(data.asOf))
       }

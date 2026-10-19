@@ -11,6 +11,7 @@ import { Writable } from 'node:stream'
 import {
   guardCsvCell,
   reportResultToCsv as _reportResultToCsv,
+  type ReportMoneyCurrency,
   type ReportNumberFormat,
   type ReportRunResult,
 } from '@openbooks/reports'
@@ -65,6 +66,37 @@ export type ReportExportOptions = {
   reportName: string
   dateRangeLabel?: string
   generatedAt?: Date
+  /** How money columns become spreadsheet numbers. Null declares an export
+   *  with no money columns; a money cell met without it is a defect. */
+  money: XlsxMoneyContext | null
+}
+
+/**
+ * The currencies an export's money cells are formatted in: the report's own
+ * currency (the one its viewers show money in) and the minor units of every
+ * currency the export may meet, from the currency registry.
+ */
+export type XlsxMoneyContext = {
+  currency: string
+  minorUnits: Readonly<Record<string, number>>
+}
+
+/**
+ * A money export the spreadsheet cannot hold faithfully: an amount with more
+ * significant digits than a numeric cell keeps exactly, or a currency whose
+ * minor units the registry does not record. The export refuses by name
+ * rather than writing a rounded or mislabelled figure.
+ */
+export class XlsxMoneyRefusal extends Error {
+  readonly name = 'XlsxMoneyRefusal'
+  readonly status = 422
+  constructor(
+    message: string,
+    readonly code: 'xlsx_money_inexact' | 'xlsx_currency_unknown',
+    readonly remedy: string,
+  ) {
+    super(message)
+  }
 }
 
 const MAX_COL_WIDTH = 56
@@ -87,20 +119,106 @@ export function xlsxColumnWidth(maxLen: number): number {
   return Math.min(Math.max(Math.ceil(maxLen * 1.1) + 2, MIN_COL_WIDTH), MAX_COL_WIDTH)
 }
 
-const XLSX_MONEY_NUMBER_FORMAT = '#,##0.00;(#,##0.00)'
-
-/**
- * Number format for one data column: money-kind columns (flagged by the
- * report engine) print as accounting with two places; every other numeric
- * column keeps Excel's General format so counts stay counts (3, never 3.00)
- * and quantities keep their natural precision.
- */
-function xlsxMoneyNumberFormat(money: boolean | undefined): string | undefined {
-  return money === true ? XLSX_MONEY_NUMBER_FORMAT : undefined
-}
-
 /** Excel keeps 15 significant decimal digits in a numeric cell. */
 const XLSX_SIGNIFICANT_DIGITS = 15
+
+const PLAIN_DECIMAL = /^([+-]?)(\d+)(?:\.(\d+))?$/
+
+/** A decimal string's significant digits: leading zeros and trailing fraction zeros carry none. */
+function significantDigits(whole: string, fraction: string): number {
+  return `${whole}${fraction}`.replace(/^0+/, '').replace(/0+$/, '').length
+}
+
+/**
+ * The currency number format a money column prints in: the currency's code
+ * and its minor units (two places for USD, none for JPY, three for BHD),
+ * negatives in parentheses as on the statements. An amount whose currency is
+ * not stated prints at its own precision without a currency label.
+ */
+export function xlsxCurrencyFormat(currency: string | null, places: number): string {
+  const digits = places > 0 ? `#,##0.${'0'.repeat(places)}` : '#,##0'
+  if (!currency) return `${digits};(${digits})`
+  const labelled = `[$${currency}] ${digits}`
+  return `${labelled};(${labelled})`
+}
+
+/**
+ * One money cell as an exact spreadsheet number with its currency format.
+ * The amount stays an exact decimal string until here, and converts to a
+ * number only when that number reads back as the same decimal; an amount
+ * beyond a numeric cell's 15 significant digits refuses the export instead
+ * of rounding. Text that is not a plain decimal (a blank, a dash, an
+ * explanation) returns null and the caller keeps it as text.
+ */
+export function xlsxMoneyCell(
+  raw: string | number | null | undefined,
+  currency: { code: string; minorUnits: number } | null,
+): { value: number; numFmt: string } | null {
+  if (raw === null || raw === undefined) return null
+  if (typeof raw === 'number' && !Number.isFinite(raw)) return null
+  const text = typeof raw === 'number' ? String(raw) : raw.trim()
+  const match = PLAIN_DECIMAL.exec(text)
+  if (!match) return null
+  const fraction = match[3] ?? ''
+  const inexact = () => new XlsxMoneyRefusal(
+    `The amount ${text} has more significant digits than a spreadsheet keeps exactly (${XLSX_SIGNIFICANT_DIGITS}).`,
+    'xlsx_money_inexact',
+    'Export the report as CSV, which keeps every digit, or narrow it so its amounts fit a spreadsheet cell.',
+  )
+  if (significantDigits(match[2]!, fraction) > XLSX_SIGNIFICANT_DIGITS) throw inexact()
+  const value = Number(text)
+  // The shortest decimal that reads back as this number must be the amount
+  // itself; anything else would put a different figure in the cell.
+  if (canonicalDecimal(String(value)) !== canonicalDecimal(text)) throw inexact()
+  const places = currency ? currency.minorUnits : fraction.replace(/0+$/, '').length
+  return { value: Object.is(value, -0) ? 0 : value, numFmt: xlsxCurrencyFormat(currency?.code ?? null, places) }
+}
+
+/** A plain decimal with its sign, leading zeros and trailing fraction zeros normalized. */
+function canonicalDecimal(text: string): string | null {
+  const exponent = /^([+-]?\d+(?:\.\d+)?)e([+-]?\d+)$/i.exec(text)
+  let digits = text
+  if (exponent) {
+    const [whole = '', fraction = ''] = exponent[1]!.replace(/^[+-]/, '').split('.')
+    const shift = Number(exponent[2])
+    const all = `${whole}${fraction}`
+    const point = whole.length + shift
+    const sign = exponent[1]!.startsWith('-') ? '-' : ''
+    digits = point <= 0 ? `${sign}0.${'0'.repeat(-point)}${all}` : point >= all.length ? `${sign}${all}${'0'.repeat(point - all.length)}` : `${sign}${all.slice(0, point)}.${all.slice(point)}`
+  }
+  const match = PLAIN_DECIMAL.exec(digits)
+  if (!match) return null
+  const whole = match[2]!.replace(/^0+(?=\d)/, '')
+  const fraction = (match[3] ?? '').replace(/0+$/, '')
+  const zero = /^0*$/.test(whole) && fraction === ''
+  return `${match[1] === '-' && !zero ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`
+}
+
+/**
+ * The currency of one money cell: the row's own currency when the column
+ * names where it is carried, the column's fixed currency, else the report's.
+ * The registry must record its minor units; an unknown currency refuses.
+ */
+function moneyCellCurrency(
+  row: readonly (string | number | null | undefined)[],
+  spec: ReportMoneyCurrency | null | undefined,
+  context: XlsxMoneyContext | null,
+): { code: string; minorUnits: number } | null {
+  if (!context) throw new Error('A spreadsheet export with money columns needs its money context')
+  if (spec === 'unstated') return null
+  const code = typeof spec === 'object' && spec !== null
+    ? String(row[spec.column] ?? '').trim().toUpperCase()
+    : (spec ?? context.currency).trim().toUpperCase()
+  const minorUnits = context.minorUnits[code]
+  if (!/^[A-Z]{3}$/.test(code) || minorUnits === undefined || !Number.isInteger(minorUnits) || minorUnits < 0) {
+    throw new XlsxMoneyRefusal(
+      code ? `The precision of currency ${code} is not recorded, so its amounts cannot be formatted.` : 'An amount in the export names no currency, so it cannot be formatted.',
+      'xlsx_currency_unknown',
+      'Add the currency with its minor units to the currency list, or export the report as CSV.',
+    )
+  }
+  return { code, minorUnits }
+}
 
 /**
  * A quantity cell of a number- or percent-typed column as a spreadsheet
@@ -127,29 +245,41 @@ export function xlsxQuantityCell(
   return { value: Object.is(value, -0) ? 0 : value, numFmt: format === 'percent' ? `${pattern}"%"` : pattern }
 }
 
-/** Write one data cell: typed quantities become numbers, every other value
- *  keeps the shared formula guard and the money/General formats. Shared by
- *  the buffered and streaming writers so both produce the same cells. */
+/** One group's column typing, as the data-cell writer reads it. */
+type XlsxColumnTyping = {
+  money?: boolean[]
+  moneyCurrencies?: (ReportMoneyCurrency | null)[]
+  numberFormats?: (ReportNumberFormat | null)[]
+}
+
+/** Write one data cell: money becomes an exact number in its currency's
+ *  format, typed quantities become numbers, and every other value keeps the
+ *  shared formula guard and Excel's General format (counts stay counts).
+ *  Shared by the buffered and streaming writers so both produce the same
+ *  cells. */
 function writeXlsxDataCell(
   cell: ExcelJS.Cell,
-  raw: string | number | null | undefined,
-  money: boolean | undefined,
-  numberFormat: ReportNumberFormat | null | undefined,
+  row: readonly (string | number | null | undefined)[],
+  index: number,
+  typing: XlsxColumnTyping,
+  context: XlsxMoneyContext | null,
 ): void {
-  const quantity = money === true ? null : xlsxQuantityCell(raw, numberFormat)
-  if (quantity) {
-    cell.value = quantity.value
+  const raw = row[index]
+  // Only an amount needs its currency: a blank or text cell in a money
+  // column stays text and asks nothing of the registry.
+  const amount = raw !== null && raw !== undefined && PLAIN_DECIMAL.test(String(raw).trim())
+  const typed = typing.money?.[index] === true
+    ? (amount ? xlsxMoneyCell(raw, moneyCellCurrency(row, typing.moneyCurrencies?.[index], context)) : null)
+    : xlsxQuantityCell(raw, typing.numberFormats?.[index])
+  if (typed) {
+    cell.value = typed.value
     cell.alignment = { horizontal: 'right' }
-    cell.numFmt = quantity.numFmt
+    cell.numFmt = typed.numFmt
     return
   }
   const v = guardCsvCell(raw)
   cell.value = v === null || v === undefined ? '' : v
-  if (typeof cell.value === 'number') {
-    cell.alignment = { horizontal: 'right' }
-    const numFmt = xlsxMoneyNumberFormat(money)
-    if (numFmt) cell.numFmt = numFmt
-  }
+  if (typeof cell.value === 'number') cell.alignment = { horizontal: 'right' }
 }
 
 /**
@@ -202,7 +332,7 @@ export async function reportResultToXlsx(
     let dataRow = headerRowNum + 1
     for (const row of group.rows) {
       for (let i = 0; i < group.columns.length; i++) {
-        writeXlsxDataCell(ws.getCell(dataRow, i + 1), row[i], group.money?.[i], group.numberFormats?.[i])
+        writeXlsxDataCell(ws.getCell(dataRow, i + 1), row, i, group, opts.money)
       }
       dataRow++
     }
@@ -301,8 +431,9 @@ export type StreamingXlsxGroup = {
   columns: string[]
   /** Pre-measured widths from xlsxColumnWidth (header + first 400 data cells). */
   widths: number[]
-  /** Per-column money flags from the report engine (see xlsxMoneyNumberFormat). */
+  /** Per-column money flags and currencies from the report engine (see xlsxMoneyCell). */
   money?: boolean[]
+  moneyCurrencies?: (ReportMoneyCurrency | null)[]
   /** Per-column quantity typing from the report engine (see xlsxQuantityCell). */
   numberFormats?: (ReportNumberFormat | null)[]
 }
@@ -327,6 +458,7 @@ export function createStreamingXlsxExport(opts: {
   reportName: string
   dateRangeLabel?: string
   generatedAt?: Date
+  money: XlsxMoneyContext | null
   groups: StreamingXlsxGroup[]
 }): StreamingXlsxWriter {
   const chunks: Buffer[] = []
@@ -366,7 +498,7 @@ export function createStreamingXlsxExport(opts: {
     group.widths.forEach((width, i) => {
       ws.getColumn(i + 1).width = width
     })
-    return { ws, columns: group.columns.length, money: group.money, numberFormats: group.numberFormats, nextRow: XLSX_HEADER_ROW + 1, index }
+    return { ws, columns: group.columns.length, typing: group as XlsxColumnTyping, nextRow: XLSX_HEADER_ROW + 1, index }
   })
 
   return {
@@ -375,7 +507,7 @@ export function createStreamingXlsxExport(opts: {
       if (!sheet) throw new Error(`Streaming XLSX export has no group ${groupIndex}`)
       for (const row of rows) {
         for (let i = 0; i < sheet.columns; i++) {
-          writeXlsxDataCell(sheet.ws.getCell(sheet.nextRow, i + 1), row[i], sheet.money?.[i], sheet.numberFormats?.[i])
+          writeXlsxDataCell(sheet.ws.getCell(sheet.nextRow, i + 1), row, i, sheet.typing, opts.money)
         }
         sheet.nextRow++
       }

@@ -48,6 +48,7 @@ const { readSheet } = await import("@openbooks/office");
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 const GENERATED_AT = new Date("2026-03-01T00:00:00Z");
+const MONEY = { currency: "CAD", minorUnits: { CAD: 2, USD: 2 } };
 const COLUMNS = ["lot_number", "expires_on", "item_code", "item_name", "kind", "moved_at", "quantity", "memo"];
 const plan = (groupBy: string | null = null, lotFilter: string | null = null) => ({
   entity: "inventory_lot_movements",
@@ -115,7 +116,7 @@ async function oldOutputs(fx: Awaited<ReturnType<typeof fixture>>, groupBy: stri
     const data = runResultToExportData(result, { title: "Recall", dateRangeLabel: "" });
     return {
       csv: exportDataToCsv(data, { sectionHeader: "Section" }),
-      xlsx: await exportDataToXlsx(data, { reportName: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT }),
+      xlsx: await exportDataToXlsx(data, { reportName: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY }),
     };
   }));
 }
@@ -162,7 +163,7 @@ test("streamed CSV is byte-identical to the buffered export on a three-page reca
   try {
     const old = await oldOutputs(fx);
     const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportCsv(fx.org.orgId, plan(), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT })));
+      streamPagedReportCsv(fx.org.orgId, plan(), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY })));
     assert.equal(streamed.csv, old.csv);
     assert.equal(streamed.rowCount, 1200);
     assert.equal(streamed.totalRows, 1200);
@@ -175,7 +176,7 @@ test("streamed CSV matches on sections spanning page boundaries", enabled, async
   try {
     const old = await oldOutputs(fx, "kind");
     const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportCsv(fx.org.orgId, plan("kind"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT })));
+      streamPagedReportCsv(fx.org.orgId, plan("kind"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY })));
     assert.equal(streamed.csv, old.csv);
     assert.ok(streamed.csv.startsWith("Section,"));
     assert.equal(streamed.rowCount, 1200);
@@ -187,7 +188,7 @@ test("streamed XLSX carries the same sheets and values as the buffered export", 
   try {
     const old = await oldOutputs(fx);
     const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportXlsx(fx.org.orgId, plan(), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT })));
+      streamPagedReportXlsx(fx.org.orgId, plan(), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY })));
     assert.equal(streamed.rowCount, 1200);
     assert.equal(streamed.truncated, false);
     await assertWorkbooksMatch(streamed.xlsx, old.xlsx);
@@ -203,7 +204,7 @@ test("streamed XLSX matches on sections spanning page boundaries", enabled, asyn
   try {
     const old = await oldOutputs(fx, "kind");
     const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportXlsx(fx.org.orgId, plan("kind"), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT })));
+      streamPagedReportXlsx(fx.org.orgId, plan("kind"), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY })));
     await assertWorkbooksMatch(streamed.xlsx, old.xlsx);
   } finally { await release(fx); }
 });
@@ -213,7 +214,7 @@ test("streamed CSV covers the empty recall exactly", enabled, async () => {
   try {
     const old = await oldOutputs(fx, null, "NOPE-NO-LOT");
     const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportCsv(fx.org.orgId, plan(null, "NOPE-NO-LOT"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT })));
+      streamPagedReportCsv(fx.org.orgId, plan(null, "NOPE-NO-LOT"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY })));
     assert.equal(streamed.csv, old.csv);
     assert.equal(streamed.rowCount, 0);
   } finally { await release(fx); }
@@ -223,7 +224,7 @@ test("the row cap truncates with a disclosed footer instead of materialising eve
   const fx = await fixture(1200);
   try {
     const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportCsv(fx.org.orgId, plan(), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, rowCap: 700 })));
+      streamPagedReportCsv(fx.org.orgId, plan(), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY, rowCap: 700 })));
     assert.equal(streamed.rowCount, 700);
     assert.equal(streamed.totalRows, 1200);
     assert.equal(streamed.truncated, true);
@@ -232,7 +233,7 @@ test("the row cap truncates with a disclosed footer instead of materialising eve
     const last = lines[lines.length - 1] ?? "";
     assert.ok(last.includes("run.exportTruncated"), last);
     const streamedX = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportXlsx(fx.org.orgId, plan(), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, rowCap: 700 })));
+      streamPagedReportXlsx(fx.org.orgId, plan(), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY, rowCap: 700 })));
     assert.equal(streamedX.rowCount, 700);
     assert.equal(streamedX.truncated, true);
     const back = await readSheet(streamedX.xlsx);
@@ -261,7 +262,7 @@ test("a row cap that cuts whole trailing sections still attributes the header an
     assert.deepEqual(oldKinds, ["issue", "receipt"]);
     const sectionTitle = oldLines[1]!.split(",")[0]!;
     const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportCsv(fx.org.orgId, plan("kind"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, rowCap: 10 })));
+      streamPagedReportCsv(fx.org.orgId, plan("kind"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY, rowCap: 10 })));
     assert.equal(streamed.truncated, true);
     assert.equal(streamed.rowCount, 10);
     const lines = streamed.csv.split("\r\n").filter((line) => line !== "");
@@ -283,7 +284,7 @@ test("a row cap that cuts whole trailing sections still emits every sheet", enab
   try {
     const old = await oldOutputs(fx, "kind");
     const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportXlsx(fx.org.orgId, plan("kind"), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, rowCap: 10 })));
+      streamPagedReportXlsx(fx.org.orgId, plan("kind"), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY, rowCap: 10 })));
     assert.equal(streamed.truncated, true);
     assert.equal(streamed.rowCount, 10);
     const load = async (buf: Buffer) => {

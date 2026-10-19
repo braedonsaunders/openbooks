@@ -14,6 +14,7 @@ import {
   resolveLayout,
   runResultToExportData,
 } from '../../../../../lib/report-pdf'
+import { xlsxMoneyContext } from '../../../../../lib/xlsx-money'
 import { reportCsvOptions } from '../../../../../lib/report-labels'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../lib/export'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
@@ -62,6 +63,7 @@ async function legacyGET(req: Request, { params }: { params: Promise<{ id: strin
       reportName: view.name,
       dateRangeLabel: '',
       generatedAt: new Date(`${stamp}T00:00:00Z`),
+      money: await xlsxMoneyContext(user.orgId),
     })
     return xlsxResponse(buf, filename)
   }

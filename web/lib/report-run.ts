@@ -10,6 +10,7 @@ import { ScheduleError } from '@openbooks/engine/schedule-boards/errors'
 import { bookDifferenceSelection, bookDifferencesExportData, BookDifferenceSelectionError } from './book-differences-report'
 import { projectBudgetExportData } from './project-budget-report'
 import { sql } from 'drizzle-orm'
+import type { XlsxMoneyContext } from '@openbooks/office'
 import { db } from '@openbooks/engine/platform/db'
 import {
   applyBuiltInUrlFilters,
@@ -775,6 +776,8 @@ export async function streamDefinitionExport(
     sectionHeader?: string
     generatedAt?: Date
     rowCap?: number
+    /** XLSX: the money context its money cells are formatted with. */
+    money: XlsxMoneyContext | null
   },
 ): Promise<({ format: 'csv'; csv: string } | { format: 'xlsx'; xlsx: Buffer }) & {
   rowCount: number
@@ -804,6 +807,7 @@ export async function streamDefinitionExport(
     dateRangeLabel: plan.dateRangeLabel,
     generatedAt: opts.generatedAt,
     rowCap: opts.rowCap,
+    money: opts.money,
   })
   return { format: 'xlsx' as const, ...out, ...(plan.asOf ? { asOf: plan.asOf } : {}) }
 }

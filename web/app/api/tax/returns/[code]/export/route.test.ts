@@ -126,10 +126,11 @@ stubModules({
       export function ambientTenantOrgId() { return null }
     `,
     "@openbooks/engine/platform/business-date/module": `
+      export * from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
       export async function businessToday() { return '2026-07-31' }
       export function civilDateFromParts() { throw new Error('unexpected civil date') }
     `,
-    "next-intl/server": `export async function getTranslations() { return (key) => key }`,
+    "next-intl/server": `export async function getTranslations() { return (key) => key } export async function getLocale() { return 'en' }`,
     "../../../../../../lib/report-pdf": `
       export function exportDataToCsv() { throw new Error('unexpected csv export') }
       export async function exportDataToPdf() { throw new Error('unexpected pdf export') }

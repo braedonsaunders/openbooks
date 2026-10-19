@@ -22,10 +22,12 @@ import {
   reportResultToCsv,
   statementSheetToXlsx,
   type ReportRunResult,
+  type XlsxMoneyContext,
 } from '@openbooks/office'
 import type {
   ReportGroup,
   ReportLayoutConfig,
+  ReportMoneyCurrency,
   ReportNumberFormat,
   ReportRunLabels,
   ReportSummaryItem,
@@ -46,9 +48,11 @@ export { generalLedgerExportData } from './report-pdf-detail'
  * Money columns carry the ledger's exact decimal STRINGS and are marked with
  * per-group `money` flags (mirroring ReportGroup.money). The PDF formats them
  * through Intl mathematical values — never IEEE-754, which loses precision
- * past 2^53; see report-pdf-detail.ts. Excel/CSV retain those strings verbatim;
- * .xlsx uses text cells when a decimal cannot be represented exactly as a
- * binary float. Counts stay plain numbers.
+ * past 2^53; see report-pdf-detail.ts. CSV retains those strings verbatim;
+ * .xlsx writes each as a numeric cell in its currency's number format, only
+ * when the number reads back as the same decimal, and refuses an amount
+ * beyond a numeric cell's exact precision rather than rounding it. Counts
+ * stay plain numbers.
  *
  * Quantity columns (share counts, hours, percentages) carry per-group
  * `numberFormats` (mirroring ReportGroup.numberFormats): the PDF formats them
@@ -62,7 +66,12 @@ export type Translator = (key: string, values?: Record<string, string | number>)
 /** PdfTableGroup plus per-column currency markers: flagged columns hold exact
  *  ledger decimal strings that must reach print without an IEEE-754 round-trip.
  *  `numberFormats` types the non-money quantity columns the same way. */
-type ExportTableGroup = PdfTableGroup & { money?: boolean[]; numberFormats?: (ReportNumberFormat | null)[] }
+type ExportTableGroup = PdfTableGroup & {
+  money?: boolean[]
+  /** Per money column, its currency when it is not the report's own (see ReportGroup.moneyCurrencies). */
+  moneyCurrencies?: (ReportMoneyCurrency | null)[]
+  numberFormats?: (ReportNumberFormat | null)[]
+}
 
 export type ExportData = {
   title: string
@@ -188,6 +197,7 @@ export function runResultToExportData(
       columns: g.columns,
       rows: g.rows,
       ...(g.money ? { money: g.money } : {}),
+      ...(g.moneyCurrencies ? { moneyCurrencies: g.moneyCurrencies } : {}),
       ...(g.numberFormats ? { numberFormats: g.numberFormats } : {}),
       align: g.align,
       isEmpty: g.isEmpty,
@@ -221,6 +231,7 @@ export function exportDataToRunResult(data: ExportData): ReportRunResult {
     columns: g.columns,
     rows: g.rows.map((row) => row.map(cell => cell !== null && typeof cell === 'object' ? cell.text : cell)),
     ...(g.money ? { money: g.money } : {}),
+    ...(g.moneyCurrencies ? { moneyCurrencies: g.moneyCurrencies } : {}),
     ...(g.numberFormats ? { numberFormats: g.numberFormats } : {}),
     isEmpty: g.isEmpty,
   }))
@@ -268,7 +279,12 @@ export async function exportDataToPdf(data: ExportData, branding: PdfBranding, p
   return renderPdfDocument(exportDataToPdfInput(data, branding, page, { ...opts, locale }))
 }
 
-export async function exportDataToXlsx(data: ExportData, opts: { reportName: string; dateRangeLabel?: string; generatedAt?: Date }): Promise<Buffer> {
+/**
+ * ExportData → .xlsx. `money` names the currency the report's money is in
+ * and the registry's minor units (see xlsxMoneyContext); null declares an
+ * export with no money columns.
+ */
+export async function exportDataToXlsx(data: ExportData, opts: { reportName: string; dateRangeLabel?: string; generatedAt?: Date; money: XlsxMoneyContext | null }): Promise<Buffer> {
   return reportResultToXlsx(exportDataToRunResult(data), opts)
 }
 

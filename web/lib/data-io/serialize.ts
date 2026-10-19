@@ -44,7 +44,8 @@ export function toXlsx(
   rows: Record<string, CellValue>[],
   generatedAt?: Date,
 ): Promise<Buffer> {
-  return reportResultToXlsx(buildRunResult(title, columns, rows), { reportName: title, generatedAt })
+  // Data transfers carry their values as typed by the resource, never money-flagged columns.
+  return reportResultToXlsx(buildRunResult(title, columns, rows), { reportName: title, generatedAt, money: null })
 }
 
 /** Array-of-objects JSON keyed by column key — full-fidelity, human-diffable. */

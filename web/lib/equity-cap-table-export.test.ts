@@ -75,7 +75,7 @@ test('cap table quantities are numbers in Excel, locale-formatted and right-alig
   assert.ok(csvLine.includes(',47.2366,'), csvLine)
 
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(await exportDataToXlsx(data, { reportName: data.title, generatedAt: new Date('2026-07-31T00:00:00Z') }) as unknown as ArrayBuffer)
+  await workbook.xlsx.load(await exportDataToXlsx(data, { reportName: data.title, generatedAt: new Date('2026-07-31T00:00:00Z'), money: null }) as unknown as ArrayBuffer)
   const sheet = workbook.worksheets[0]!
   assert.equal(sheet.getCell(5, outstandingAt + 1).value, 8448000)
   assert.equal(sheet.getCell(5, outstandingAt + 1).numFmt, '#,##0')

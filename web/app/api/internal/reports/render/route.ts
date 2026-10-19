@@ -9,6 +9,7 @@ import type { ReportRuleGroup } from '@openbooks/reports'
 import { getTranslations } from 'next-intl/server'
 import { resolveDefinitionToExportData } from '../../../../../lib/report-run'
 import { exportDataToPdf, exportDataToXlsx, orgBranding, resolveLayout, type Translator } from '../../../../../lib/report-pdf'
+import { xlsxMoneyContext } from '../../../../../lib/xlsx-money'
 import { resolvePeriod } from '../../../../../lib/periods'
 import { parseReportQuery } from '../../../../../lib/report-filters'
 import { internalTokenMatches, parseInternalOrgId } from '../../../../../lib/internal-token'
@@ -155,6 +156,7 @@ export async function GET(req: Request) {
         reportName: data.title,
         dateRangeLabel: data.dateRangeLabel,
         generatedAt: new Date(`${stamp}T00:00:00Z`),
+        money: await xlsxMoneyContext(orgId),
       })
       await recordRender(new Uint8Array(xlsx))
       return new NextResponse(new Uint8Array(xlsx), {

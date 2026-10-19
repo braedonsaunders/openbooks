@@ -32,6 +32,7 @@ import {
   xlsxExportCellLength,
   type PagedCsvPageGroup,
   type StreamingXlsxGroup,
+  type XlsxMoneyContext,
 } from '@openbooks/office'
 import { exportSummaryFooterRows } from './report-pdf'
 import { reportCsvOptions, reportRunLabels, type PagedExportLabels } from './report-labels'
@@ -414,6 +415,8 @@ export type PagedExportOptions = {
   /** Test seam for the cap (a cap-sized fixture is infeasible in-suite). */
   rowCap?: number
   labels?: ReportRunLabels
+  /** XLSX only: the currency and registry minor units money cells are formatted with (see xlsxMoneyContext). */
+  money?: XlsxMoneyContext | null
 }
 
 /** Merge identity for one page group — the same key mergeReportPages
@@ -433,8 +436,9 @@ type ExportPageSlot = {
   key: string
   title: string
   columns: string[]
-  /** Per-column money flags from the first page that declared the slot. */
+  /** Per-column money flags and currencies from the first page that declared the slot. */
   money?: boolean[]
+  moneyCurrencies?: ReportGroup['moneyCurrencies']
   /** Per-column quantity typing from the first page that declared the slot. */
   numberFormats?: ReportGroup['numberFormats']
   /** Emitted-prefix row count (drives subtitles and width sampling). */
@@ -608,6 +612,7 @@ export async function streamPagedReportXlsx(
           title: group.title,
           columns: group.columns,
           money: group.money,
+          moneyCurrencies: group.moneyCurrencies,
           numberFormats: group.numberFormats,
           count: 0,
           widths: group.columns.map((c) => xlsxExportCellLength(c)),
@@ -653,12 +658,14 @@ export async function streamPagedReportXlsx(
     reportName: opts.title,
     dateRangeLabel: opts.dateRangeLabel || undefined,
     generatedAt: opts.generatedAt,
+    money: opts.money ?? null,
     groups: slots.map((slot): StreamingXlsxGroup => ({
       title: slot.title,
       subtitle: subtitles(slot.count),
       columns: slot.columns,
       widths: slot.widths.map((w) => xlsxColumnWidth(w)),
       money: slot.money,
+      moneyCurrencies: slot.moneyCurrencies,
       numberFormats: slot.numberFormats,
     })),
   })

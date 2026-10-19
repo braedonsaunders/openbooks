@@ -22,6 +22,7 @@ import {
   orgBranding,
   type Translator,
 } from "../../../../../lib/report-pdf";
+import { xlsxMoneyContext } from "../../../../../lib/xlsx-money";
 import { reportCsvOptions } from "../../../../../lib/report-labels";
 import {
   csvResponse,
@@ -219,6 +220,7 @@ export const GET = defineRoute({
             reportName: data.title,
             dateRangeLabel: data.dateRangeLabel,
             generatedAt: new Date(`${stamp}T00:00:00Z`),
+            money: await xlsxMoneyContext(gate.user.orgId),
           }),
           filename,
         );

@@ -78,7 +78,8 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:business-date',
-    `export async function businessToday() { return '2026-08-28' }`,
+    `export * from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
+      export async function businessToday() { return '2026-08-28' }`,
   ],
   [
     // Thin re-export-plus-override of the real @openbooks/pdf surface: a

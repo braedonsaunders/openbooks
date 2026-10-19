@@ -34,6 +34,7 @@ import {
   type ReportCustomQuery,
   type ReportGroup,
   type ReportMeasure,
+  type ReportMoneyCurrency,
   type ReportNumberFormat,
   type ReportRunResult,
   type ReportRowScopeRule,
@@ -390,6 +391,25 @@ function shapeRowsResult(
     (c) => entity.columns.find((col) => col.key === c)?.kind === 'money',
   )
   const money = moneyFlags.some(Boolean) ? moneyFlags : undefined
+  // Each row's own currency, where a money column is denominated per row and
+  // the result carries that currency; transaction-currency amounts exported
+  // without it are 'unstated' so no spreadsheet labels them with the wrong
+  // currency. Every other money column reads in the report's currency.
+  const columnIndex = (key: string | undefined) => (key ? requestedColumns.indexOf(key) : -1)
+  const moneyCurrencyFlags = requestedColumns.map((c): ReportMoneyCurrency | null => {
+    const column = entity.columns.find((col) => col.key === c)
+    if (column?.kind !== 'money') return null
+    if (column.txnCurrency) {
+      const at = columnIndex(entity.currencyColumn)
+      return at >= 0 ? { column: at } : 'unstated'
+    }
+    if (column.baseMoney) {
+      const at = columnIndex(entity.baseCurrencyColumn)
+      return at >= 0 ? { column: at } : null
+    }
+    return null
+  })
+  const moneyCurrencies = moneyCurrencyFlags.some((flag) => flag !== null) ? { moneyCurrencies: moneyCurrencyFlags } : {}
   const align = requestedColumns.map((c) => {
     const kind = entity.columns.find((col) => col.key === c)?.kind
     return kind === 'money' || kind === 'number' ? ('right' as const) : ('left' as const)
@@ -432,7 +452,7 @@ function shapeRowsResult(
       byKey.set(k, list)
     }
     if (byKey.size === 0) {
-      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true, money, align, ...numberFormats })
+      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true, money, ...moneyCurrencies, align, ...numberFormats })
     } else {
       for (const [k, list] of [...byKey.entries()].sort()) {
         const cellLinks = linkedCells(list)
@@ -445,6 +465,7 @@ function shapeRowsResult(
           columns: columnLabels,
           rows: list.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
           money,
+          ...moneyCurrencies,
           align,
           ...numberFormats,
           groupKey: { field: groupBy, value: k },
@@ -462,6 +483,7 @@ function shapeRowsResult(
       rows: dataRows.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
       isEmpty: dataRows.length === 0,
       money,
+      ...moneyCurrencies,
       align,
       ...numberFormats,
       ...(cellLinks ? { cellLinks } : {}),

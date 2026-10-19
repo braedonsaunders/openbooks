@@ -94,9 +94,17 @@ stubModules({
           throw new Error('unexpected database query: ' + text.slice(0, 120))
         },
       }
+      export async function withBypassContext(work) { return work() }
+      export async function withBypass(work) { return work() }
+      export async function withOrg(orgId, work) { return work() }
+      export async function withOrgContext(orgId, work) { return work() }
+      export function registerRequestOrgResolver() {}
+      export function currentRequestOrgResolver() { return null }
+      export function ambientTenantOrgId() { return null }
     `,
-    "@openbooks/engine/platform/business-date/module": `export async function businessToday() { return '2026-08-24' }`,
-    "next-intl/server": `export async function getTranslations() { return (key) => key }`,
+    "@openbooks/engine/platform/business-date/module": `export * from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
+      export async function businessToday() { return '2026-08-24' }`,
+    "next-intl/server": `export async function getTranslations() { return (key) => key } export async function getLocale() { return 'en' }`,
     "../../../../../../lib/export": `
       const NextResponse = globalThis.openbooksFilingExportNextResponse
       export function safeName(name) { return name }

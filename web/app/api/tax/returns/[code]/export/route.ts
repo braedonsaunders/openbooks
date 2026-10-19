@@ -20,6 +20,7 @@ import {
   resolveLayout,
   type Translator,
 } from '../../../../../../lib/report-pdf'
+import { xlsxMoneyContext } from '../../../../../../lib/xlsx-money'
 import { taxReturnExportData } from '../../../../../../lib/tax-filing'
 import { renderTaxFormFacsimilePdf } from '../../../../../../lib/tax-form-facsimile'
 import { taxReturnToJsonString } from '../../../../../../lib/tax-return-structured'
@@ -146,6 +147,8 @@ async function legacyGET(req: Request, { params }: { params: Promise<{ code: str
         reportName: data.title,
         dateRangeLabel: data.dateRangeLabel,
         generatedAt: new Date(`${stamp}T00:00:00Z`),
+        // The boxes are computed in the return's functional currency.
+        money: await xlsxMoneyContext(gate.user.orgId, result.functionalCurrency),
       }), filename)
     }
     const branding = await orgBranding()

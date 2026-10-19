@@ -243,6 +243,10 @@ export type ReportGroup = {
   undefinedCells?: (string | null)[][]
   /** Per-column: format as currency in viewers (money-kind columns/measures). */
   money?: boolean[]
+  /** Per money column, the currency its amounts are in, for spreadsheet
+   *  number formats: see ReportMoneyCurrency. Absent (or null) means the
+   *  report's own currency, the one viewers format money in. */
+  moneyCurrencies?: (ReportMoneyCurrency | null)[]
   /** Per-column quantity typing for the columns that are not money: 'number'
    *  cells are exact decimal strings (or numbers) that viewers and print
    *  format per locale and spreadsheets store as numeric cells; 'percent'
@@ -277,6 +281,16 @@ export type ReportRowScopeRule =
   | { field: string; value: string }
   | { field: string; from: string; to: string }
   | { field: string; empty: true }
+
+/**
+ * The currency of one money column: a fixed ISO 4217 code; `{ column }`, the
+ * index of the column carrying each row's currency code (transaction-currency
+ * amounts exported beside their currency); or `'unstated'` when each row
+ * carries its own transaction currency and that currency is not part of the
+ * result, so a spreadsheet keeps the amount at its own precision without a
+ * currency label rather than naming the wrong one.
+ */
+export type ReportMoneyCurrency = string | { column: number } | 'unstated'
 
 /** How a non-money quantity column reads; see ReportGroup.numberFormats. */
 export type ReportNumberFormat = 'number' | 'percent'

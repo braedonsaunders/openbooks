@@ -17,6 +17,7 @@ import {
   type ExportData,
   type Translator,
 } from '../../../../../../lib/report-pdf'
+import { xlsxMoneyContext } from '../../../../../../lib/xlsx-money'
 import { isReportKind, resolveReport, type ReportKind } from '../../../../../../lib/report-run'
 import { resolvePdfPageSetup } from '@openbooks/pdf'
 import { resolvePeriod } from '../../../../../../lib/periods'
@@ -99,6 +100,7 @@ export const GET = defineRoute({
             reportName: data.title,
             dateRangeLabel: data.dateRangeLabel,
             generatedAt,
+            money: await xlsxMoneyContext(gate.user.orgId),
           }), filename)
         }
         const { page, showSummary } = resolveLayout(null)

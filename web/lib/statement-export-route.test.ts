@@ -74,6 +74,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   ['mock:periods', `export async function resolvePeriod() { return {} }`],
+  ['mock:xlsx-money', `export async function xlsxMoneyContext() { return { currency: 'USD', minorUnits: { USD: 2 } } }`],
   [
     'mock:report-filters',
     `export function parseReportQuery() { return { period: 'this-fiscal-year', scale: 'actual' } }`,
@@ -109,6 +110,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../../../lib/report-pdf', 'mock:report-pdf'],
   ['../../../../../../lib/report-run', 'mock:report-run'],
   ['../../../../../../lib/periods', 'mock:periods'],
+  ['../../../../../../lib/xlsx-money', 'mock:xlsx-money'],
   ['../../../../../../lib/report-filters', 'mock:report-filters'],
   ['../../../../../../lib/report-labels', 'mock:report-labels'],
   ['../../../../../../lib/export', 'mock:export'],
