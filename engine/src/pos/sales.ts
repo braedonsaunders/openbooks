@@ -228,6 +228,7 @@ export async function buildPosCart(
   });
   const totals = await precomputeDocumentTotalsForCreate(orgId, "cash_sale", {
     lines: documentLines,
+    currency: register.currency,
     documentDate: input.documentDate,
     partyId: customerId,
     subsidiaryId: register.subsidiaryId,
@@ -600,6 +601,7 @@ export async function completePosSale(input: PosSaleInput, authority: PosAuthori
     const body: DocumentEditInput = {
       partyId: cart.quote.customerId,
       documentDate,
+      currency: register.currency,
       subsidiaryId: register.subsidiaryId,
       locationId: register.locationId,
       memo: `Register ${register.code} · session ${session.sessionNumber}`,
@@ -796,7 +798,7 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
     });
     const documentDate = await businessToday(input.orgId);
     const totals = await precomputeDocumentTotalsForCreate(input.orgId, "cash_refund", {
-      lines: documentLines, documentDate, partyId: original.party_id, subsidiaryId: register.subsidiaryId,
+      lines: documentLines, currency: register.currency, documentDate, partyId: original.party_id, subsidiaryId: register.subsidiaryId,
     });
     if (!totals) throw new Error("refund totals did not resolve");
     const totalUnits = toUnits(totals.total);
@@ -804,6 +806,7 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
     const body: DocumentEditInput = {
       partyId: original.party_id,
       documentDate,
+      currency: register.currency,
       subsidiaryId: register.subsidiaryId,
       locationId: register.locationId,
       referenceNumber: original.document_number,

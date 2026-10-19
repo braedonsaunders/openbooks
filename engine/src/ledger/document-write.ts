@@ -1255,15 +1255,20 @@ export async function applyDocumentEdit(
     }
   }
 
-  if (body.currency !== undefined && !(await isFeatureEnabled(orgId, 'multiCurrency'))) {
-    throw new DocumentEditError(404, 'not found')
-  }
   let currency: string | undefined
   if (body.currency !== undefined) {
     const code = String(body.currency).trim().toUpperCase()
     if (!/^[A-Z]{3}$/.test(code)) throw new DocumentEditError(422, 'invalid currency')
     const found = (await runner.execute(sql`select 1 from currencies where code = ${code}`)) as { rows: unknown[] }
     if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
+    const entityCurrency = referenceSubsidiaryId
+      ? (await runner.execute<{ currency: string | null }>(sql`
+          select nullif(trim(base_currency), '') as currency from subsidiaries
+           where org_id = ${orgId} and id = ${referenceSubsidiaryId} and is_active`)).rows[0]?.currency
+      : undefined
+    if (!(await isFeatureEnabled(orgId, 'multiCurrency')) && code !== entityCurrency) {
+      throw new DocumentEditError(404, 'not found')
+    }
     currency = code
   }
   // Recording an explicit rate is a multi-currency capability; clearing one

@@ -26,13 +26,17 @@ const cashier: PosAuthority = { overridePrice: false, discount: false };
 
 interface Fixture { org: ScratchOrg; actorId: string; registerId: string; sessionId: string; unitsAccountId: string }
 
-async function fixture(options: { noChargeUnits?: boolean } = {}): Promise<Fixture> {
+async function fixture(options: { noChargeUnits?: boolean; subsidiaryCurrency?: string } = {}): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Register Manager", "register_manager"));
   await withBypassContext(() => grantScratchPermissions(org.orgId, actorId, ["pos.sell", "pos.refund", "pos.override", "cash_sales.create", "cash_sales.post"]));
   const registerId = randomUUID();
   const unitsAccountId = await withBypassContext(() => seedPostingAccount(org.orgId, "9100", "Units given at no charge", "statistical"));
   await withBypassContext(async () => {
+    if (options.subsidiaryCurrency) {
+      await db.execute(sql`update orgs set base_currency = 'CAD' where id = ${org.orgId}`);
+      await db.execute(sql`update subsidiaries set base_currency = ${options.subsidiaryCurrency} where org_id = ${org.orgId} and id = ${org.subsidiaryId}`);
+    }
     if (options.noChargeUnits !== false) {
       await db.execute(sql`
         update orgs set settings = jsonb_set(settings, '{controlAccounts,noChargeUnits}', to_jsonb(${unitsAccountId}::text))
@@ -213,6 +217,25 @@ test("voided POS sales do not count toward session totals or expected cash", { s
     assert.deepEqual([summary.saleCount, summary.salesTotalMinor, summary.saleCashMinor, summary.expectedCashMinor], [0, 0n, 0n, 0n]);
     const sessions = await withOrg(f.org.orgId, () => listSessions(db, f.org.orgId, { registerId: f.registerId }, null));
     assert.deepEqual([sessions.rows[0]?.saleCount, sessions.rows[0]?.salesTotalMinor], [0, "0"]);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
+
+test("registers use their subsidiary currency for sessions and POS documents", { skip: !DB }, async () => {
+  const f = await fixture({ subsidiaryCurrency: "USD" });
+  try {
+    const sessionCurrency = (await withOrg(f.org.orgId, () => db.execute<{ currency: string }>(sql`
+      select currency from pos_sessions where org_id = ${f.org.orgId} and id = ${f.sessionId}`))).rows[0]?.currency;
+    assert.equal(sessionCurrency, "USD");
+    const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
+      lines: [{ itemId: f.org.items.fifo, quantity: "1" }],
+      payments: [{ kind: "cash", tendered: "10.00" }],
+      expectedTotal: "10.0000",
+    }), cashier, pricing));
+    const currency = (await withOrg(f.org.orgId, () => db.execute<{ currency: string }>(sql`
+      select currency from documents where org_id = ${f.org.orgId} and id = ${sold.documentId}`))).rows[0]?.currency;
+    assert.equal(currency, "USD");
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }

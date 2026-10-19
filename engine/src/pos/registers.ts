@@ -52,9 +52,10 @@ async function readRegister(runner: SqlExecutor, orgId: string, registerId: stri
            r.card_account_id as "cardAccountId", r.other_account_id as "otherAccountId",
            r.accepts_stored_value as "acceptsStoredValue", r.receipt_header as "receiptHeader",
            r.receipt_footer as "receiptFooter", r.denominations, r.is_active as "isActive",
-           o.base_currency as currency
+           coalesce(nullif(trim(s.base_currency), ''), o.base_currency) as currency
       from pos_registers r
       join orgs o on o.id = r.org_id
+      join subsidiaries s on s.org_id = r.org_id and s.id = r.subsidiary_id
      where r.org_id = ${orgId} and r.id = ${registerId}
      ${lock ? sql`for update of r` : sql``}`)).rows;
   return rows[0] ?? null;
