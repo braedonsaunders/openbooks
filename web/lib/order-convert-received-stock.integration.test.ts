@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { businessToday, endOfMonth, startOfMonth } from "@openbooks/engine/platform/business-date";
 
 // A vendor bill converted from a purchase order's received stock. Its lines
 // keep the purchase-order line provenance that posting reads, and carry the
@@ -259,6 +260,24 @@ test("receiving the purchase-order remainder excludes cancelled quantity", { ski
   try {
     const { org, userId } = fx;
     const { orderId, sourceLineId } = await approvedOrder(fx, "6");
+    const receiptDate = await businessToday(org.orgId);
+    const openPeriod = await db.execute<{ id: string }>(sql`
+      select id from accounting_periods
+       where org_id = ${org.orgId} and starts_on <= ${receiptDate} and ends_on >= ${receiptDate}
+       limit 1
+    `);
+    if (!openPeriod.rows[0]) {
+      const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+        select fiscal_calendar_id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}
+      `)).rows[0]!.fiscal_calendar_id;
+      const periodNumber = Number(receiptDate.slice(5, 7));
+      await db.execute(sql`
+        insert into accounting_periods
+          (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${randomUUID()}, ${org.orgId}, ${Number(receiptDate.slice(0, 4))}, ${periodNumber},
+                ${receiptDate.slice(0, 7)}, ${startOfMonth(receiptDate)}, ${endOfMonth(receiptDate)}, false, ${calendarId})
+      `);
+    }
     await withOrg(org.orgId, () => receivePurchaseOrderRemainder(org.orgId, userId, orderId));
     const facts = await withOrgContext(org.orgId, () => db.execute<{ received: string; moved: string }>(sql`
       select (select quantity_fulfilled::text from document_lines where id = ${sourceLineId}) as received,
