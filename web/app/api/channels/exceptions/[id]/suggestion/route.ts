@@ -30,7 +30,7 @@ export const GET = defineRoute({
     const outOfScope = await guardChannelOrderScope(gate, id);
     if (outOfScope) return outOfScope;
     try {
-      const suggestion = await suggestExceptionFix(gate.user.orgId, id);
+      const suggestion = await suggestExceptionFix(gate.user.orgId, id, gate.allowedSubsidiaryIds);
       const ranking = await explainWithModel(gate.user.orgId, suggestion.explanation);
       return NextResponse.json({ suggestion, ranking });
     } catch (error) {

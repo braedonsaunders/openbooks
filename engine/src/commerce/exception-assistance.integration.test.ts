@@ -159,8 +159,8 @@ test("unmapped SKU suggests deterministically; approval links the variant and po
   const fixture = await setup();
   try {
     const orderId = await parkGhost(fixture, "9001");
-    const first = await withBypass(() => suggestExceptionFix(fixture.org.orgId, orderId));
-    const second = await withBypass(() => suggestExceptionFix(fixture.org.orgId, orderId));
+    const first = await withBypass(() => suggestExceptionFix(fixture.org.orgId, orderId, null));
+    const second = await withBypass(() => suggestExceptionFix(fixture.org.orgId, orderId, null));
     assert.deepEqual(first, second);
     assert.equal(first.code, "unmapped_item");
     assert.ok(first.candidates.length > 0);
@@ -173,7 +173,7 @@ test("unmapped SKU suggests deterministically; approval links the variant and po
     assert.equal(first.modelRanked, false);
     assert.ok(first.explanation.includes("#9001"));
 
-    const approved = await withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, orderId, { rank: 0, applyToSimilar: false }));
+    const approved = await withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, orderId, { rank: 0, applyToSimilar: false, allowedSubsidiaryIds: null }));
     assert.equal(approved.replay.replayed, 1);
     assert.equal(approved.replay.posted, 1);
     const link = await withBypass(() => db.execute<{ native_id: string }>(sql`
@@ -193,11 +193,73 @@ test("approving with apply-to-similar replays every order blocked by the same va
   try {
     const firstId = await parkGhost(fixture, "9101");
     await parkGhost(fixture, "9102");
-    const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, firstId));
+    const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, firstId, null));
     assert.equal(suggestion.similarCount, 2);
-    const approved = await withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, firstId, { rank: 0, applyToSimilar: true }));
+    const approved = await withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, firstId, { rank: 0, applyToSimilar: true, allowedSubsidiaryIds: null }));
     assert.equal(approved.replay.replayed, 2);
     assert.equal(approved.replay.posted, 2);
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
+
+test("similar replay follows the unmapped line and stays in its source channel", { skip: !DB }, async () => {
+  const fixture = await setup();
+  try {
+    const base = ghostOrder("multi-line").lines[0]!;
+    const lines = [
+      { ...base, sku: "NOPE 404", variantExternalId: null, title: "Already mapped", priceMinor: 100n, taxLines: [] },
+      { ...base, sku: "NOPE-404", variantExternalId: "999001", title: "Ghost Tee", priceMinor: 2400n },
+    ];
+    const firstId = await parkGhost(fixture, "multi-line-1", { lines });
+    await parkGhost(fixture, "multi-line-2", { lines });
+
+    const otherChannel = await withBypass(() => createChannel(fixture.org.orgId, fixture.actor, {
+      kind: "shopify",
+      name: "Other Shop",
+      currency: "CAD",
+      externalAccount: "other.myshopify.com",
+      settings: {},
+    }));
+    await withBypass(() => db.execute(sql`
+      insert into channel_orders
+        (org_id, channel_id, external_id, external_number, shop_currency, presentment_currency,
+         subtotal_minor, tax_minor, shipping_minor, total_minor, ordered_at, lines, tenders,
+         posting_status, exception_code, exception_reason, exception_remedy)
+      select org_id, ${otherChannel.channel.id}, 'other-channel-order', 'Other channel order',
+             shop_currency, presentment_currency, subtotal_minor, tax_minor, shipping_minor,
+             total_minor, ordered_at, lines, tenders, 'exception', exception_code,
+             exception_reason, exception_remedy
+        from channel_orders where org_id = ${fixture.org.orgId} and id = ${firstId}`));
+
+    const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, firstId, null));
+    assert.equal(suggestion.similarCount, 2);
+    const approved = await withBypass(() => approveExceptionSuggestion(
+      fixture.org.orgId,
+      fixture.actor,
+      firstId,
+      { rank: 0, applyToSimilar: true, allowedSubsidiaryIds: null },
+    ));
+    assert.equal(approved.replay.replayed, 2);
+    assert.equal(approved.replay.posted, 2);
+    const sibling = (await db.execute<{ posting_status: string }>(sql`
+      select posting_status from channel_orders
+       where org_id = ${fixture.org.orgId} and channel_id = ${otherChannel.channel.id}
+         and external_id = 'other-channel-order'`)).rows[0];
+    assert.equal(sibling?.posting_status, "exception");
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
+
+test("exception assistance refuses an order outside the caller's subsidiary scope", { skip: !DB }, async () => {
+  const fixture = await setup();
+  try {
+    const orderId = await parkGhost(fixture, "restricted-order");
+    await assert.rejects(
+      withBypass(() => suggestExceptionFix(fixture.org.orgId, orderId, new Set([fixture.org.subsidiaryId]))),
+      (error: unknown) => error instanceof CommerceError && error.code === "channel_order_unknown",
+    );
   } finally {
     await dropScratchOrg(fixture.org.orgId);
   }
@@ -219,7 +281,7 @@ test("unknown gateway suggests the clearing account; approval maps it effective 
     const outcome = await withBypass(() => postChannelOrder(fixture.org.orgId, fixture.actor, stored.id));
     assert.equal(outcome.status, "exception");
     assert.equal(outcome.code, "unmapped_account");
-    const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, stored.id));
+    const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, stored.id, null));
     assert.equal(suggestion.code, "unmapped_account");
     const top = suggestion.candidates[0]!;
     assert.equal(top.kind, "map_account");
@@ -228,7 +290,7 @@ test("unknown gateway suggests the clearing account; approval maps it effective 
     assert.equal(top.action.role, "gateway_clearing");
     assert.equal(top.action.key, "walley_pay");
     assert.equal(top.action.accountId, fixture.clearingId);
-    const approved = await withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, stored.id, { rank: 0, applyToSimilar: false }));
+    const approved = await withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, stored.id, { rank: 0, applyToSimilar: false, allowedSubsidiaryIds: null }));
     assert.equal(approved.replay.posted, 1);
   } finally {
     await dropScratchOrg(fixture.org.orgId);
@@ -267,10 +329,10 @@ test("totals that disagree get a manual fix only; approval refuses with the reme
     const outcome = await withBypass(() => postChannelOrder(fixture.org.orgId, fixture.actor, stored.id));
     assert.equal(outcome.status, "exception");
     assert.equal(outcome.code, "tax_mismatch");
-    const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, stored.id));
+    const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, stored.id, null));
     assert.equal(suggestion.candidates[0]?.kind, "manual");
     await assert.rejects(
-      withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, stored.id, { rank: 0, applyToSimilar: false })),
+      withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, stored.id, { rank: 0, applyToSimilar: false, allowedSubsidiaryIds: null })),
       (error: unknown) => error instanceof CommerceError && error.code === "exception_assistance_manual_only",
     );
   } finally {

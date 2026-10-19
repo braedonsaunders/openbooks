@@ -28,6 +28,7 @@ export const POST = defineRoute({
         await approveExceptionSuggestion(gate.user.orgId, gate.user.id, id, {
           rank: body.rank,
           applyToSimilar: body.applyToSimilar,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         }),
       );
     } catch (error) {

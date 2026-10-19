@@ -18,7 +18,7 @@ import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
-import { subsidiaryScopeAllows, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
+import { subsidiaryScopeAllows, subsidiaryVisibleFilter, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
 import type { PayoutSubsidiaryScope } from "./payout-reconciliation.ts";
 import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 
@@ -490,16 +490,29 @@ function suggestManual(order: ChannelOrderDetail): { candidates: SuggestionCandi
  * by observed signals only; the result is identical for identical data, so
  * the model can reword but never reorder by hidden judgment.
  */
-export async function suggestExceptionFix(orgId: string, orderId: string): Promise<ExceptionSuggestion> {
+export async function suggestExceptionFix(
+  orgId: string,
+  orderId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<ExceptionSuggestion> {
   const order = await requireExceptionOrder(orgId, orderId);
   const channel = await loadChannel(orgId, order.channelId);
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds, channel.subsidiary_id)) {
+    refuse(
+      "channel_order_unknown",
+      "This channel order is not available.",
+      "Choose an order in a channel assigned to one of your subsidiaries.",
+    );
+  }
   const code = order.exceptionCode ?? "exception";
   let result: { candidates: SuggestionCandidate[]; groupKey: string };
   if (code === "unmapped_item") result = await suggestUnmappedItem(orgId, channel, order);
   else if (code === "unmapped_account") result = await suggestUnmappedAccount(orgId, channel, order);
   else if (code === "unmapped_location") result = await suggestUnmappedLocation(orgId, channel, order);
   else result = suggestManual(order);
-  const similar = await similarExceptionOrderIds(orgId, code, result.groupKey, 200);
+  const similar = await similarExceptionOrderIds(
+    orgId, order.channelId, code, result.groupKey, allowedSubsidiaryIds, 200,
+  );
   const top = result.candidates[0];
   const explanation = top && top.kind !== "manual"
     ? `Proposed fix for order ${order.externalNumber}: ${top.detail} Evidence: ${top.evidence.join("; ")}. Approving replays ${similar.length === 1 ? "this order" : `${similar.length} similar orders`} — nothing posts until then.`
@@ -517,14 +530,24 @@ export async function suggestExceptionFix(orgId: string, orderId: string): Promi
 }
 
 /** Orders parked under the same code and grouping key, oldest first. */
-export async function similarExceptionOrderIds(orgId: string, code: string, groupKey: string, limit = 200): Promise<string[]> {
+export async function similarExceptionOrderIds(
+  orgId: string,
+  channelId: string,
+  code: string,
+  groupKey: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  limit = 200,
+): Promise<string[]> {
   const rows = (await db.execute<{ id: string; exception_reason: string | null; lines: unknown; tenders: unknown }>(sql`
-    select id, exception_reason, lines, tenders from channel_orders
-     where org_id = ${orgId} and posting_status = 'exception' and exception_code = ${code}
-     order by ordered_at limit ${limit}`)).rows;
+    select o.id, o.exception_reason, o.lines, o.tenders from channel_orders o
+      join sales_channels channel on channel.org_id = o.org_id and channel.id = o.channel_id
+     where o.org_id = ${orgId} and o.channel_id = ${channelId}
+       and o.posting_status = 'exception' and o.exception_code = ${code}
+       ${subsidiaryVisibleFilter(sql`channel.subsidiary_id`, allowedSubsidiaryIds)}
+     order by o.ordered_at limit ${limit}`)).rows;
   const out: string[] = [];
   for (const row of rows) {
-    const key = groupKeyForRow(code, row.exception_reason, row.lines, row.tenders);
+    const key = exceptionGroupKeyForRow(code, row.exception_reason, row.lines, row.tenders);
     if (key === groupKey) out.push(row.id);
   }
   return out;
@@ -537,12 +560,16 @@ function jsonText(value: unknown, field: string): string | null {
   return typeof raw === "string" && raw.trim() !== "" ? raw : null;
 }
 
-function groupKeyForRow(code: string, reason: string | null, lines: unknown, tenders: unknown): string {
+export function exceptionGroupKeyForRow(code: string, reason: string | null, lines: unknown, tenders: unknown): string {
   if (code === "unmapped_item") {
     const items = Array.isArray(lines) ? (lines as Record<string, unknown>[]) : [];
-    const first = items[0];
-    const variant = typeof first?.variantExternalId === "string" ? first.variantExternalId : null;
-    const sku = typeof first?.sku === "string" ? first.sku : null;
+    const namedSku = /names SKU (.*?) with no matching item/.exec(reason ?? "")?.[1]?.trim() ?? null;
+    const line = items.find((item) => {
+      const rawSku = typeof item.sku === "string" && item.sku.trim() !== "" ? item.sku.trim() : null;
+      return namedSku === "(none)" ? rawSku === null : namedSku !== null && rawSku === namedSku;
+    });
+    const variant = typeof line?.variantExternalId === "string" ? line.variantExternalId : null;
+    const sku = typeof line?.sku === "string" ? line.sku : null;
     return exceptionGroupKey(code, { sku, variantExternalId: variant });
   }
   if (code === "unmapped_account") {
@@ -582,7 +609,11 @@ export async function approveExceptionSuggestion(
   orgId: string,
   actor: string,
   orderId: string,
-  input: { rank: number; applyToSimilar: boolean },
+  input: {
+    rank: number;
+    applyToSimilar: boolean;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+  },
 ): Promise<{ applied: string; replay: AssistanceReplay }> {
   if (!Number.isInteger(input.rank) || input.rank < 0) {
     refuse(
@@ -593,7 +624,7 @@ export async function approveExceptionSuggestion(
     );
   }
   return withOrg(orgId, async () => {
-    const suggestion = await suggestExceptionFix(orgId, orderId);
+    const suggestion = await suggestExceptionFix(orgId, orderId, input.allowedSubsidiaryIds);
     const candidate = suggestion.candidates[input.rank];
     if (!candidate) {
       refuse(
@@ -645,7 +676,10 @@ export async function approveExceptionSuggestion(
     }
     await writeApprovalAudit(orgId, actor, orderId, suggestion.code, `${applied} Similar: ${input.applyToSimilar ? suggestion.groupKey : "this order only"}.`);
     const targets = input.applyToSimilar
-      ? await similarExceptionOrderIds(orgId, suggestion.code, suggestion.groupKey, 200)
+      ? await similarExceptionOrderIds(
+          orgId, suggestion.channelId, suggestion.code, suggestion.groupKey,
+          input.allowedSubsidiaryIds, 200,
+        )
       : [orderId];
     const replay: AssistanceReplay = { replayed: 0, posted: 0, parked: 0, waiting: 0 };
     for (const targetId of targets.includes(orderId) ? targets : [orderId, ...targets]) {
