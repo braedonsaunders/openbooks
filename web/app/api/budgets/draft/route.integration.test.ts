@@ -101,9 +101,13 @@ test('draft from source preserves each line legal entity', async () => {
   }
 })
 
-test('draft from source copies only caller-visible entities', async () => {
-  const { org, fy, sourceId } = await fixture()
+test('draft from source allows a scoped copy when all source lines are visible', async () => {
+  const { org, fy, subB, sourceId } = await fixture()
   try {
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      delete from budget_lines
+       where org_id = ${org.orgId} and scenario_id = ${sourceId} and subsidiary_id = ${subB}
+    `))
     state.allowed = new Set([org.subsidiaryId])
     const response = await post({ bookId: org.bookId, fiscalYear: fy, sourceScenarioId: sourceId })
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
