@@ -19,6 +19,7 @@ export interface RecognitionBook {
 
 export interface RecognitionPeriod {
   id: string
+  /** Display label in the viewer's locale (`P07 FY2026 · Jul 2026`). */
   name: string
   startsOn: string
   endsOn: string
@@ -48,6 +49,7 @@ interface PreviewRow {
   obligationId: string
   obligationDescription: string
   contractNumber: string
+  /** Display label in the viewer's locale, set by the preview route. */
   periodName: string
   periodEndsOn: string
   recognitionOn: string | null

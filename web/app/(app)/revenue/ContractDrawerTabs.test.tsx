@@ -82,7 +82,7 @@ function payload(): Payload {
         recognized: "100.0000",
         lines: [
           {
-            period_name: "2026-01",
+            period_name: "P01 FY2026 · Jan 2026",
             period_ends_on: "2026-01-31",
             planned_amount: "100.0000",
             recognized_amount: "100.0000",
@@ -122,7 +122,7 @@ function twoObligationPayload(): Payload {
     recognized: "50.0000",
     lines: [
       {
-        period_name: "2026-02",
+        period_name: "P02 FY2026 · Feb 2026",
         period_ends_on: "2026-02-28",
         planned_amount: "50.0000",
         recognized_amount: "50.0000",
@@ -273,7 +273,7 @@ test("selecting an obligation shows only its recognition schedule", async (t) =>
   );
   assert.match(
     pane.textContent ?? "",
-    /2026-01/,
+    /P01 FY2026/,
     "the focused pane shows the selected obligation's period",
   );
 
@@ -291,12 +291,12 @@ test("selecting an obligation shows only its recognition schedule", async (t) =>
   );
   assert.match(
     pane.textContent ?? "",
-    /2026-02/,
+    /P02 FY2026/,
     "the focused pane shows the newly selected obligation's period",
   );
   assert.doesNotMatch(
     pane.textContent ?? "",
-    /2026-01/,
+    /P01 FY2026/,
     "the previously selected period leaves the focused pane",
   );
 });

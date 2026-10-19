@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { arePeriodModulesOpen } from "../periods/period-policy.ts";
+import { arePeriodModulesOpen, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { add, cmp, isZero } from "../money/money.ts";
 import type { RecognitionMethod } from "./recognition-schedule.ts";
@@ -52,7 +52,10 @@ export interface RecognitionPreviewRow extends FingerprintedRecognitionLine {
   obligationId: string;
   obligationDescription: string;
   contractNumber: string;
+  /** Locale-free label of the line's period (`P07 FY2026`). */
   periodName: string;
+  /** The period's fiscal position and dates, for display labels. */
+  periodRef: PeriodDisplayInput;
   periodEndsOn: string;
   recognitionOn: string | null;
   method: RecognitionMethod;
@@ -73,7 +76,8 @@ export interface RecognitionPreviewRow extends FingerprintedRecognitionLine {
   creditAccountName: string | null;
   /** Null when this line posts. Otherwise the named refusal above. */
   skipReason: RecognitionSkipReason | null;
-  /** Operator-readable detail behind `skipReason` (amounts, period name). */
+  /** Operator-readable detail behind `skipReason` (amounts, or the period
+   *  label for `period_closed`). */
   skipDetail: string | null;
 }
 
@@ -305,7 +309,7 @@ export async function previewRevenueRecognition(
       }))
     ) {
       skipReason = "period_closed";
-      skipDetail = row.period_name;
+      skipDetail = row.period_label;
       amount = "0";
     } else if (cmp(row.planned, "0") > 0) {
       // The same unearned ceiling the run applies, read-only.
@@ -351,7 +355,8 @@ export async function previewRevenueRecognition(
       obligationId: row.obligation_id,
       obligationDescription: row.obligation_desc,
       contractNumber: row.contract_number,
-      periodName: row.period_name,
+      periodName: row.period_label,
+      periodRef: row.period_ref,
       periodEndsOn: row.period_ends_on,
       recognitionOn: row.recognition_on,
       method: row.method,

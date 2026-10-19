@@ -8,7 +8,13 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { featureEnabled, type FeatureState } from "../organization/feature-registry.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions, type SubsidiaryContext } from "../organization/subsidiaries.ts";
-import { assertPeriodModulesOpen, CloseError, periodClosedDetailsOf } from "../periods/period-policy.ts";
+import {
+  assertPeriodModulesOpen,
+  canonicalPeriodLabel,
+  CloseError,
+  periodClosedDetailsOf,
+  type PeriodDisplayInput,
+} from "../periods/period-policy.ts";
 import { loadControlAccounts, ControlAccountsIncompleteError } from "../records/control-accounts.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { eligibleWipSourcesSql } from "./wip-sources.ts";
@@ -90,8 +96,10 @@ export interface UnbilledAccrualLine {
 }
 
 export interface UnbilledAccrualPreview {
-  period: { id: string; name: string; startsOn: string; endsOn: string };
-  reversal: { periodId: string | null; periodName: string | null; date: string | null };
+  /** `name` is the period's locale-free label (`P07 FY2026`); `periodRef`
+   *  lets presenters label it in the viewer's locale. */
+  period: { id: string; name: string; startsOn: string; endsOn: string; periodRef: PeriodDisplayInput };
+  reversal: { periodId: string | null; periodName: string | null; periodRef: PeriodDisplayInput | null; date: string | null };
   /** Per currency: unbilled at period end, accrued so far, still to post. */
   totals: { currency: string; unbilled: string; accrued: string; delta: string }[];
   /** Projects with unbilled work or an accrual to correct. */
@@ -109,15 +117,28 @@ export interface UnbilledAccrualRunResult {
   lines: UnbilledAccrualLine[];
 }
 
-type AccrualPeriod = {
+type AccrualPeriodRow = {
   id: string;
+  /** Stored period name: part of the accrual entry number. */
   name: string;
+  fiscal_year: number;
+  period_number: number;
   starts_on: string;
   ends_on: string;
   is_adjustment: boolean;
   next_period_id: string | null;
   next_starts_on: string | null;
-  next_name: string | null;
+  next_ends_on: string | null;
+  next_fiscal_year: number | null;
+  next_period_number: number | null;
+};
+
+type AccrualPeriod = AccrualPeriodRow & {
+  /** Locale-free label (`P07 FY2026`) for memos, refusals and audit text. */
+  label: string;
+  ref: PeriodDisplayInput;
+  next_label: string | null;
+  next_ref: PeriodDisplayInput | null;
 };
 
 /** One valued group of unbilled sources before account resolution. */
@@ -293,12 +314,13 @@ async function loadAccrualPeriod(executor: SqlExecutor, orgId: string, ref: Unbi
     : sql`p.ends_on = ${ref.periodEnd}::date and not p.is_adjustment
           and exists (select 1 from fiscal_calendars fc where fc.org_id = p.org_id and fc.id = p.fiscal_calendar_id
                        and fc.is_default and fc.is_active)`;
-  const period = (await executor.execute<AccrualPeriod>(sql`
-    select p.id, p.name, p.starts_on::text as starts_on, p.ends_on::text as ends_on, p.is_adjustment,
-           next.id as next_period_id, next.starts_on::text as next_starts_on, next.name as next_name
+  const row = (await executor.execute<AccrualPeriodRow>(sql`
+    select p.id, p.name, p.fiscal_year, p.period_number, p.starts_on::text as starts_on, p.ends_on::text as ends_on, p.is_adjustment,
+           next.id as next_period_id, next.starts_on::text as next_starts_on, next.ends_on::text as next_ends_on,
+           next.fiscal_year as next_fiscal_year, next.period_number as next_period_number
       from accounting_periods p
       left join lateral (
-        select n.id, n.starts_on, n.name from accounting_periods n
+        select n.id, n.starts_on, n.ends_on, n.fiscal_year, n.period_number from accounting_periods n
          where n.org_id = p.org_id and n.starts_on > p.ends_on and not n.is_adjustment
            and n.fiscal_calendar_id = p.fiscal_calendar_id
          order by n.starts_on, n.id limit 1
@@ -306,7 +328,7 @@ async function loadAccrualPeriod(executor: SqlExecutor, orgId: string, ref: Unbi
      where p.org_id = ${orgId} and ${match}
      order by p.starts_on, p.id
      limit 1`)).rows[0];
-  if (!period) {
+  if (!row) {
     throw new UnbilledAccrualError(
       ref.periodId
         ? "That accounting period does not exist in this organization."
@@ -315,13 +337,42 @@ async function loadAccrualPeriod(executor: SqlExecutor, orgId: string, ref: Unbi
       404,
     );
   }
+  const period = accrualPeriod(row);
   if (period.is_adjustment) {
     throw new UnbilledAccrualError(
-      `${period.name} is an adjustment period. Unbilled revenue is accrued at the end of a regular period.`,
+      `${period.label} is an adjustment period. Unbilled revenue is accrued at the end of a regular period.`,
       "adjustment_period",
     );
   }
   return period;
+}
+
+function accrualPeriod(row: AccrualPeriodRow): AccrualPeriod {
+  const ref: PeriodDisplayInput = {
+    fiscalYear: Number(row.fiscal_year),
+    periodNumber: Number(row.period_number),
+    adjustment: row.is_adjustment,
+    startsOn: row.starts_on,
+    endsOn: row.ends_on,
+  };
+  // The following period is always a regular period (the lookup excludes adjustment periods).
+  const nextRef: PeriodDisplayInput | null =
+    row.next_period_id && row.next_starts_on && row.next_ends_on && row.next_fiscal_year != null && row.next_period_number != null
+      ? {
+          fiscalYear: Number(row.next_fiscal_year),
+          periodNumber: Number(row.next_period_number),
+          adjustment: false,
+          startsOn: row.next_starts_on,
+          endsOn: row.next_ends_on,
+        }
+      : null;
+  return {
+    ...row,
+    label: canonicalPeriodLabel(ref),
+    ref,
+    next_label: nextRef ? canonicalPeriodLabel(nextRef) : null,
+    next_ref: nextRef,
+  };
 }
 
 async function primaryBookId(executor: SqlExecutor, orgId: string): Promise<string | null> {
@@ -442,7 +493,7 @@ async function computeAccrual(executor: SqlExecutor, orgId: string, ref: Unbille
   if (needsPosting && (!period.next_period_id || !period.next_starts_on)) {
     problems.push({
       code: "next_period_missing",
-      message: `No accounting period follows ${period.name}, so the accrual has nowhere to reverse. Generate the following periods under Setup → Periods & Close → Periods, then accrue.`,
+      message: `No accounting period follows ${period.label}, so the accrual has nowhere to reverse. Generate the following periods under Setup → Periods & Close → Periods, then accrue.`,
     });
   }
   return { period, ctx, unbilledAccountId, lines: plan.lines, problems };
@@ -459,8 +510,8 @@ function summarize(computation: AccrualComputation): UnbilledAccrualPreview {
     byCurrency.set(line.currency, bucket);
   }
   return {
-    period: { id: period.id, name: period.name, startsOn: period.starts_on, endsOn: period.ends_on },
-    reversal: { periodId: period.next_period_id, periodName: period.next_name, date: period.next_starts_on },
+    period: { id: period.id, name: period.label, startsOn: period.starts_on, endsOn: period.ends_on, periodRef: period.ref },
+    reversal: { periodId: period.next_period_id, periodName: period.next_label, periodRef: period.next_ref, date: period.next_starts_on },
     totals: [...byCurrency].sort(([a], [b]) => a.localeCompare(b)).map(([currency, bucket]) => ({
       currency,
       unbilled: sum(bucket.unbilled),
@@ -562,8 +613,8 @@ export async function runUnbilledRevenueAccrual(
 
     for (const subsidiaryId of bySubsidiary.keys()) {
       for (const [periodId, label, phase] of [
-        [period.id, period.name, "accrual"],
-        [nextPeriodId, period.next_name ?? reversalDate, "reversal"],
+        [period.id, period.label, "accrual"],
+        [nextPeriodId, period.next_label ?? reversalDate, "reversal"],
       ] as const) {
         try {
           await assertPeriodModulesOpen(db, { orgId, periodId, bookId, subsidiaryIds: [subsidiaryId], modules: ["gl"] });
@@ -602,7 +653,7 @@ export async function runUnbilledRevenueAccrual(
       const amount = sum(lines.map((line) => line.delta));
       const entryNumber = `UNBILLED-${period.name}-${randomUUID().slice(0, 8)}`;
       const reversalEntryId = randomUUID();
-      const memo = `Unbilled revenue accrual — ${period.name}`;
+      const memo = `Unbilled revenue accrual — ${period.label}`;
       const accrual = await postEntry(db, {
         orgId,
         bookId,
@@ -620,7 +671,7 @@ export async function runUnbilledRevenueAccrual(
         auditChanges: { mode: "unbilled_revenue_accrual", runId, periodId: period.id, reversalEntryId, amount },
         lines: entryLines.map((line) => ({ ...line, memo })),
       });
-      const reversalMemo = `Unbilled revenue accrual reversal — ${period.name}`;
+      const reversalMemo = `Unbilled revenue accrual reversal — ${period.label}`;
       const reversal = await postEntry(db, {
         orgId,
         bookId,
@@ -671,7 +722,7 @@ export async function runUnbilledRevenueAccrual(
       values (${orgId}, 'project_revenue_accruals', ${runId}, 'insert', ${JSON.stringify({
         mode: "unbilled_revenue_accrual_run",
         periodId: period.id,
-        periodName: period.name,
+        periodName: period.label,
         accrualDate: period.ends_on,
         reversalDate,
         before: { accrued: summarize({ ...computation, lines: changed }).totals.map((t) => ({ currency: t.currency, amount: t.accrued })) },

@@ -1,7 +1,7 @@
 /** Recognition run: due-period posting through the kernel. Split from revenue/recognition.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "../platform/db.ts";
-import { arePeriodModulesOpen } from "../periods/period-policy.ts";
+import { arePeriodModulesOpen, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "../money/money.ts";
@@ -17,6 +17,7 @@ import { recognitionNetRecognized, recognitionObligationScope, recognitionPostin
 
 export interface RevenueRecognitionEntryIdentity {
   contractNumber: string;
+  /** The period's stored name; entry numbers never change with display labels. */
   periodName: string;
   obligationId: string;
   bookId: string;
@@ -48,7 +49,8 @@ export interface RunRecognitionResult {
   posted: number;
   skipped: number;
   totalAmount: string;
-  entries: { contract: string; obligation: string; period: string; amount: string; entryId: string }[];
+  /** `period` is the locale-free period label; `periodRef` lets presenters label it in the viewer's locale. */
+  entries: { contract: string; obligation: string; period: string; periodRef: PeriodDisplayInput; amount: string; entryId: string }[];
   problems: string[];
 }
 /**
@@ -235,7 +237,7 @@ export async function runRevenueRecognition(
           }),
           postingDate,
           periodId: row.period_id,
-          memo: `Revenue recognition — ${row.obligation_desc} (${row.period_name})`,
+          memo: `Revenue recognition — ${row.obligation_desc} (${row.period_label})`,
           origin: "revenue_recognition",
           actorId,
           currency: row.recognition_currency ?? row.base_currency,
@@ -250,7 +252,7 @@ export async function runRevenueRecognition(
             classId: row.class_id,
             equipmentUnitId: row.equipment_unit_id,
             extraDims: row.extra_dims ?? {},
-            memo: `Revenue recognition ${row.period_name}`,
+            memo: `Revenue recognition ${row.period_label}`,
           })),
         });
         const eid = postedRecognition.entryId;
@@ -291,7 +293,7 @@ export async function runRevenueRecognition(
       }
       if (posted.status === "period_closed") {
         result.skipped++;
-        result.problems.push(`${candidate.contract_number} ${candidate.period_name}: GL period closed`);
+        result.problems.push(`${candidate.contract_number} ${candidate.period_label}: GL period closed`);
         continue;
       }
       result.posted++;
@@ -299,13 +301,14 @@ export async function runRevenueRecognition(
       result.entries.push({
         contract: posted.row.contract_number,
         obligation: posted.row.obligation_desc,
-        period: posted.row.period_name,
+        period: posted.row.period_label,
+        periodRef: posted.row.period_ref,
         amount: posted.planned,
         entryId: posted.entryId,
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      result.problems.push(`${candidate.contract_number} ${candidate.period_name}: ${msg.slice(0, 120)}`);
+      result.problems.push(`${candidate.contract_number} ${candidate.period_label}: ${msg.slice(0, 120)}`);
     }
   }
 

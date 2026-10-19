@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+import { getLocale } from 'next-intl/server'
 import { z } from 'zod'
 import { runRevenueRecognition } from '@openbooks/engine/revenue/recognition'
+import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import { syncProjectRevenueContracts } from '@openbooks/engine/projects/revenue'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { defineRoute } from '../../../../lib/api/route'
@@ -98,7 +100,12 @@ export const POST = defineRoute({
     )
     result.problems.push(...projectSync.problems)
     if (projectSync.skipped) result.problems.push(projectSync.skipped)
-    return NextResponse.json(result)
+    // Posted entries reach the drawer with their period labelled in the viewer's locale.
+    const locale = await getLocale()
+    return NextResponse.json({
+      ...result,
+      entries: result.entries.map((entry) => ({ ...entry, period: periodDisplayLabel(entry.periodRef, locale) })),
+    })
   } catch (e: unknown) {
     return revenueRecognitionErrorResponse(e, 'Unable to run revenue recognition.')
   }

@@ -1,7 +1,7 @@
 import { breakageGrantOptions } from '@openbooks/engine/revenue'
 import "server-only";
 
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import {
   page,
   pageHeader,
@@ -12,6 +12,7 @@ import {
 } from "@braedonsaunders/appkit-viewspec";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
+import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
 import { isUuid, pickString } from "../../../lib/list-params";
 import { can, requirePermission } from "../../../lib/authz";
 import { requireFeatureEnabled } from "../../../lib/feature-gates";
@@ -60,6 +61,7 @@ export async function loadRevenue(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<RevenueData> {
   const t = await getTranslations("revenue");
+  const locale = await getLocale();
 
   const authz = await requirePermission("ar.read");
   const canRun = can(authz, "ar.post");
@@ -69,7 +71,7 @@ export async function loadRevenue(
   const contractId = typeof sp.contract === "string" ? sp.contract : undefined;
   const openContract =
     contractId && isUuid(contractId)
-      ? await loadContract(contractId, orgId, authz.allowedSubsidiaryIds)
+      ? await loadContract(contractId, orgId, authz.allowedSubsidiaryIds, locale)
       : null;
   if (openContract && canRun) openContract.prepaidGrants=await breakageGrantOptions(orgId,authz.user.id,openContract.contract.id)
   const requestedReturn = pickString(sp.drawerReturn);
@@ -95,8 +97,15 @@ export async function loadRevenue(
           select id, name, is_primary from accounting_books
            where org_id = ${orgId} and is_active and posts_gl
            order by is_primary desc, code`),
-        db.execute<{ id: string; name: string; starts_on: string; ends_on: string }>(sql`
-          select id, name, starts_on::text as starts_on, ends_on::text as ends_on
+        db.execute<{
+          id: string;
+          fiscal_year: number;
+          period_number: number;
+          is_adjustment: boolean;
+          starts_on: string;
+          ends_on: string;
+        }>(sql`
+          select id, fiscal_year, period_number, is_adjustment, starts_on::text as starts_on, ends_on::text as ends_on
             from accounting_periods
            where org_id = ${orgId} and not is_adjustment
            order by starts_on desc`),
@@ -118,7 +127,16 @@ export async function loadRevenue(
     })),
     periods: periods.rows.map((row) => ({
       id: String(row.id),
-      name: row.name,
+      name: periodDisplayLabel(
+        {
+          fiscalYear: Number(row.fiscal_year),
+          periodNumber: Number(row.period_number),
+          adjustment: row.is_adjustment,
+          startsOn: row.starts_on,
+          endsOn: row.ends_on,
+        },
+        locale,
+      ),
       startsOn: row.starts_on,
       endsOn: row.ends_on,
     })),

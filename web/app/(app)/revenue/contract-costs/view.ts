@@ -8,7 +8,7 @@ import {
 } from '@openbooks/engine/revenue'
 import "server-only";
 
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import {
   page,
   pageHeader,
@@ -19,6 +19,7 @@ import {
 } from "@braedonsaunders/appkit-viewspec";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/database";
+import { periodDisplayLabel, periodDisplayLabelSql } from "@openbooks/engine/periods/period-policy";
 import { isUuid, mergeHref, pickString } from "../../../../lib/list-params";
 import { can, requirePermission } from "../../../../lib/authz";
 import { requireFeatureEnabled } from "../../../../lib/feature-gates";
@@ -30,6 +31,7 @@ type ContractCostDrawerProps = Parameters<typeof ContractCostDrawer>[0];
 export interface AssetScheduleRow {
   month: string;
   periodId: string | null;
+  /** The covering period labelled in the viewer's locale. */
   periodName: string | null;
   amount: string;
   posted: boolean;
@@ -96,7 +98,7 @@ export interface ContractCostsData {
   onAssets: boolean;
 }
 
-async function loadAssetPayload(assetId: string, orgId: string): Promise<ContractCostAssetPayload | null> {
+async function loadAssetPayload(assetId: string, orgId: string, locale: string): Promise<ContractCostAssetPayload | null> {
   const row = (await db.execute<{
     id: string;
     contract_id: string | null;
@@ -132,7 +134,8 @@ async function loadAssetPayload(assetId: string, orgId: string): Promise<Contrac
   const schedule = await scheduleForAsset(db, orgId, assetId);
   const periodNames = new Map(
     (await db.execute<{ id: string; name: string }>(sql`
-      select id, name from accounting_periods where org_id = ${orgId}`)).rows.map((p) => [p.id, p.name]),
+      select p.id, ${periodDisplayLabelSql(locale, "p")} as name
+        from accounting_periods p where p.org_id = ${orgId}`)).rows.map((p) => [p.id, p.name]),
   );
   const postedByPeriod = new Map(
     (await db.execute<{ period_id: string; entry_id: string }>(sql`
@@ -140,7 +143,7 @@ async function loadAssetPayload(assetId: string, orgId: string): Promise<Contrac
        where org_id = ${orgId} and asset_id = ${assetId}`)).rows.map((r) => [r.period_id, r.entry_id]),
   );
   const entries = (await db.execute<{ id: string; origin: string; posting_date: string; period_name: string }>(sql`
-    select distinct je.id, je.origin, je.posting_date::text, p.name as period_name
+    select distinct je.id, je.origin, je.posting_date::text, ${periodDisplayLabelSql(locale, "p")} as period_name
       from journal_entries je
       join journal_lines jl on jl.org_id = je.org_id and jl.entry_id = je.id
       left join accounting_periods p on p.org_id = je.org_id and p.id = je.period_id
@@ -183,6 +186,7 @@ export async function loadContractCosts(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ContractCostsData> {
   const t = await getTranslations("contractCosts");
+  const locale = await getLocale();
 
   const authz = await requirePermission("contract_costs.read");
   const orgId = authz.user.orgId;
@@ -190,8 +194,16 @@ export async function loadContractCosts(
   const canManage = can(authz, "contract_costs.manage");
   const canApprove = can(authz, "contract_costs.approve");
 
-  const periods = (await db.execute<{ id: string; name: string }>(sql`
-    select id, name from accounting_periods
+  const periods = (await db.execute<{
+    id: string;
+    fiscal_year: number;
+    period_number: number;
+    is_adjustment: boolean;
+    starts_on: string;
+    ends_on: string;
+  }>(sql`
+    select id, fiscal_year, period_number, is_adjustment, starts_on::text as starts_on, ends_on::text as ends_on
+      from accounting_periods
      where org_id = ${orgId} and not is_adjustment
      order by starts_on desc`)).rows;
   const selectedPeriodId =
@@ -277,7 +289,7 @@ export async function loadContractCosts(
      order by effective_from desc limit 1`)).rows[0] ?? null;
 
   const assetId = typeof sp.asset === "string" ? sp.asset : undefined;
-  const payload = assetId && isUuid(assetId) ? await loadAssetPayload(assetId, orgId) : null;
+  const payload = assetId && isUuid(assetId) ? await loadAssetPayload(assetId, orgId, locale) : null;
   // Attention and assets are sibling views behind URL tabs: one body shows
   // at a time. An open drawer forces its assets list; otherwise attention
   // leads while actionable.
@@ -316,7 +328,19 @@ export async function loadContractCosts(
     assetBalance: minorUnitsToCanonical(BigInt(balance?.carrying ?? "0"), exponent),
     periodAmortized: minorUnitsToCanonical(BigInt(amortized?.total ?? "0"), exponent),
     selectedPeriodId,
-    periods: periods.map((p) => ({ id: String(p.id), name: p.name })),
+    periods: periods.map((p) => ({
+      id: String(p.id),
+      name: periodDisplayLabel(
+        {
+          fiscalYear: Number(p.fiscal_year),
+          periodNumber: Number(p.period_number),
+          adjustment: p.is_adjustment,
+          startsOn: p.starts_on,
+          endsOn: p.ends_on,
+        },
+        locale,
+      ),
+    })),
     activeAssets,
     attention,
     contracts,

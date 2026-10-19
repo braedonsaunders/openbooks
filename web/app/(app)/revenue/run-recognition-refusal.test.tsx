@@ -165,7 +165,7 @@ const previewRow = {
   obligationId: "obl-1",
   obligationDescription: "Mobilization",
   contractNumber: "C-1042",
-  periodName: "Sep 2026",
+  periodName: "P09 FY2026 · Sep 2026",
   periodEndsOn: "2026-09-30",
   recognitionOn: "2026-09-30",
   method: "straight_line",
@@ -256,7 +256,7 @@ test("a confirmed run reads back its posted entries", async (t) => {
         {
           contract: "C-1042",
           obligation: "Mobilization",
-          period: "Sep 2026",
+          period: "P09 FY2026 · Sep 2026",
           amount: "10.00",
           entryId: "entryid12345678",
         },
@@ -271,6 +271,7 @@ test("a confirmed run reads back its posted entries", async (t) => {
     const text = document.body.textContent ?? "";
     assert.ok(text.includes("1 entry"), "the posted count reads back");
     assert.ok(text.includes("C-1042"), "the posted contract reads back");
+    assert.ok(text.includes("P09 FY2026 · Sep 2026"), "the posted period reads back as the route labelled it");
     const entryLink = document.querySelector("a[href*='entryid12345678']");
     assert.ok(entryLink, "the posted entry links to its journal record");
     const labels = [...document.querySelectorAll("button")].map((b) => b.textContent ?? "");

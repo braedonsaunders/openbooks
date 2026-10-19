@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const state = { org: [{ base_currency: 'USD' }] }
+const state = {
+  org: [{ base_currency: 'USD' }],
+  periods: [
+    { id: 'period-2026-12', fiscal_year: 2026, period_number: 12, is_adjustment: false, starts_on: '2026-12-01', ends_on: '2026-12-31' },
+    { id: 'period-2025-12', fiscal_year: 2025, period_number: 12, is_adjustment: false, starts_on: '2025-12-01', ends_on: '2025-12-31' },
+  ],
+}
 Object.assign(globalThis, { __costViewsState: state })
 const { stubModules } = await import('../../../../testing/stub-modules')
 stubModules({
@@ -22,6 +28,7 @@ stubModules({
       `if (s.includes('contract_cost_amortization')) return { rows: [] };` +
       `if (s.includes('from currencies')) return { rows: [{ minor_units: 2 }] };` +
       `if (s.includes('from orgs')) return { rows: globalThis.__costViewsState.org };` +
+      `if (s.includes('not is_adjustment')) return { rows: globalThis.__costViewsState.periods };` +
       `if (s.includes('count(*)')) return { rows: [{ n: '0' }] };` +
       `return { rows: [] } } }`,
     '../../../../lib/setup/ref-options':
@@ -98,4 +105,13 @@ test('contract-costs honors an explicit assets view and falls back on unknown vi
   const fallback = await loadContractCosts({ view: 'bogus' })
   assert.equal(fallback.activeView, 'attention')
   assert.equal(fallback.onAttention, true)
+})
+
+test('contract-costs offers amortization periods by fiscal position in every fiscal year', async () => {
+  const data = await loadContractCosts({})
+  assert.deepEqual(data.periods, [
+    { id: 'period-2026-12', name: 'P12 FY2026 · Dec 2026' },
+    { id: 'period-2025-12', name: 'P12 FY2025 · Dec 2025' },
+  ])
+  assert.equal(data.selectedPeriodId, 'period-2026-12')
 })

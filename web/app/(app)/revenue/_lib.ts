@@ -4,8 +4,10 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 import { add } from "@openbooks/engine/money/money";
+import { periodDisplayLabelSql } from "@openbooks/engine/periods/period-policy";
 
 export type ScheduleLineRow = {
+  /** The line's period labelled in the viewer's locale (`P07 FY2026 · Jul 2026`). */
   period_name: string;
   period_ends_on: string;
   planned_amount: string;
@@ -104,7 +106,8 @@ export interface ContractPayload {
 export async function loadContract(
   id: string,
   orgId: string,
-  allowedSubsidiaryIds: Set<string> | null = null,
+  allowedSubsidiaryIds: Set<string> | null,
+  locale: string,
 ): Promise<ContractPayload | null> {
   const cRes = await db.execute<{
     id: string;
@@ -205,7 +208,7 @@ export async function loadContract(
   const obligations: ObligationRow[] = [];
   for (const o of oRes.rows) {
     const lRes = await db.execute<ScheduleLineRow>(sql`
-      select p.name as period_name, p.ends_on as period_ends_on,
+      select ${periodDisplayLabelSql(locale, "p")} as period_name, p.ends_on as period_ends_on,
              l.planned_amount, l.recognized_amount, l.journal_entry_id,l.superseded_by_change_id,l.revision,l.reversal_journal_entry_id
         from recognition_schedules s
         join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_primary

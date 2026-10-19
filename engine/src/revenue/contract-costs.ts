@@ -988,11 +988,10 @@ export async function runContractCostAmortization(input: {
     const subsidiaryId = await postingSubsidiaryId(db, orgId);
     await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.manage");
     const period = (await db.execute<{
-      name: string;
       starts_on: string;
       ends_on: string;
     }>(sql`
-      select name, starts_on::text, ends_on::text from accounting_periods
+      select starts_on::text, ends_on::text from accounting_periods
        where org_id = ${orgId} and id = ${periodId}`)).rows[0];
     if (!period) {
       throw new ContractCostError("The amortization period does not exist in this organization.", {

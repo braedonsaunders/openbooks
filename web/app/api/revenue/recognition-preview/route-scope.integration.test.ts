@@ -64,6 +64,14 @@ registerHooks({
           `),
       };
     }
+    // The route labels periods in the request locale; outside a request the
+    // viewer reads English.
+    if (specifier === "next-intl/server" && context.parentURL?.includes("/revenue/recognition-preview/")) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript," + encodeURIComponent(`export async function getLocale(){ return 'en' }`),
+      };
+    }
     return next(specifier, context);
   },
 });

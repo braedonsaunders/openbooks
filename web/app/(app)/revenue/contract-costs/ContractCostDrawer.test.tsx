@@ -85,7 +85,7 @@ function payload(): Payload {
       {
         month: "2026-01",
         periodId: "period-1",
-        periodName: "2026-01",
+        periodName: "P01 FY2026 · Jan 2026",
         amount: "100.0000",
         posted: true,
         entryId: "je-1",
@@ -93,15 +93,15 @@ function payload(): Payload {
       {
         month: "2026-02",
         periodId: "period-2",
-        periodName: "2026-02",
+        periodName: "P02 FY2026 · Feb 2026",
         amount: "100.0000",
         posted: false,
         entryId: null,
       },
     ],
     entries: [
-      { id: "je-1", origin: "contract_cost_amortization", postingDate: "2026-01-31", periodName: "2026-01" },
-      { id: "je-0", origin: "contract_cost_capitalize", postingDate: "2026-01-01", periodName: "2026-01" },
+      { id: "je-1", origin: "contract_cost_amortization", postingDate: "2026-01-31", periodName: "P01 FY2026 · Jan 2026" },
+      { id: "je-0", origin: "contract_cost_capitalize", postingDate: "2026-01-01", periodName: "P01 FY2026 · Jan 2026" },
     ],
   };
 }

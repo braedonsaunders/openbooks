@@ -1,9 +1,11 @@
 import { z } from 'zod'
 import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
+import { getLocale } from 'next-intl/server'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { PostingError } from '@openbooks/engine/journal/contracts'
+import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import {
   previewUnbilledRevenueAccrual,
   runUnbilledRevenueAccrual,
@@ -46,7 +48,19 @@ export const GET = defineRoute({
       return NextResponse.json({ error: 'Choose the accounting period to accrue (periodId or periodEnd).' }, { status: 400 })
     }
     try {
-      return NextResponse.json(await previewUnbilledRevenueAccrual(authz.user.orgId, parsed.data))
+      const preview = await previewUnbilledRevenueAccrual(authz.user.orgId, parsed.data)
+      // The accrual and reversal periods reach the panel labelled in the viewer's locale.
+      const locale = await getLocale()
+      return NextResponse.json({
+        ...preview,
+        period: { ...preview.period, name: periodDisplayLabel(preview.period.periodRef, locale) },
+        reversal: {
+          ...preview.reversal,
+          periodName: preview.reversal.periodRef
+            ? periodDisplayLabel(preview.reversal.periodRef, locale)
+            : preview.reversal.periodName,
+        },
+      })
     } catch (error) {
       return refusal(error, request)
     }

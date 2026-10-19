@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getLocale } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/platform/db'
@@ -8,6 +9,7 @@ import {
   revenueContractAttribution,
 } from '@openbooks/engine/revenue/recognition'
 import { subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
+import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { defineRoute } from '../../../../lib/api/route'
 import { isUuid } from '../../../../lib/list-params'
@@ -126,7 +128,16 @@ export const POST = defineRoute({
       periodId: period.id ?? undefined,
       allowedSubsidiaryIds,
     })
-    return NextResponse.json(preview)
+    // Periods reach the drawer labelled in the viewer's locale, including the
+    // closed period a `period_closed` skip names.
+    const locale = await getLocale()
+    return NextResponse.json({
+      ...preview,
+      rows: preview.rows.map((row) => {
+        const periodName = periodDisplayLabel(row.periodRef, locale)
+        return { ...row, periodName, skipDetail: row.skipReason === 'period_closed' ? periodName : row.skipDetail }
+      }),
+    })
   } catch (e: unknown) {
     return revenueRecognitionErrorResponse(e, 'Unable to preview revenue recognition.')
   }

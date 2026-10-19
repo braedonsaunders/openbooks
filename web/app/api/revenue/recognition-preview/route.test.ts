@@ -6,13 +6,21 @@ const stateKey = Symbol.for('openbooks.recognition-preview-route-test')
 const state: {
   allowedSubsidiaryIds: Set<string> | null
   previewError: { kind: 'domain' | 'unexpected'; message: string } | null
+  previewRows: unknown[]
 } = {
   allowedSubsidiaryIds: null,
   previewError: null,
+  previewRows: [],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const mockSources = new Map<string, string>([
+  // The viewer reads English; without a request store the catalog is unavailable, as outside Next.
+  [
+    'next-intl-server',
+    `export async function getLocale() { return 'en' }
+     export async function getTranslations() { throw new Error('no intl request store') }`,
+  ],
   [
     'authz',
     `
@@ -71,7 +79,7 @@ const mockSources = new Map<string, string>([
         }
         return {
           asOfDate: '2026-08-31',
-          rows: [],
+          rows: state.previewRows,
           postableCount: 0,
           skippedCount: 0,
           totalAmount: '0',
@@ -96,6 +104,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/feature-gates', mockUrl('features')],
   ['@openbooks/engine/platform/business-date/module', mockUrl('business-date')],
   ['@openbooks/engine/revenue/recognition', mockUrl('revenue-recognition')],
+  ['next-intl/server', mockUrl('next-intl-server')],
   // The shared error mapper reaches the same engine module through a
   // relative specifier; it must see the same double or instanceof splits.
   ['../../engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
@@ -121,6 +130,7 @@ const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 function reset(): void {
   state.allowedSubsidiaryIds = null
   state.previewError = null
+  state.previewRows = []
 }
 
 function post(body: unknown): Promise<Response> {
@@ -162,4 +172,27 @@ test('a clean preview passes through with its fingerprint', async () => {
   const body = (await response.json()) as { fingerprint: string; totalAmount: string }
   assert.equal(body.fingerprint, 'preview-fingerprint')
   assert.equal(body.totalAmount, '0')
+})
+
+test('preview rows reach the drawer with their period labelled in the viewer locale', async () => {
+  reset()
+  const july = { fiscalYear: 2026, periodNumber: 7, adjustment: false, startsOn: '2026-07-01', endsOn: '2026-07-31' }
+  state.previewRows = [
+    { lineId: 'line-open', periodName: 'P07 FY2026', periodRef: july, skipReason: null, skipDetail: null },
+    { lineId: 'line-closed', periodName: 'P07 FY2026', periodRef: july, skipReason: 'period_closed', skipDetail: 'P07 FY2026' },
+    { lineId: 'line-capped', periodName: 'P07 FY2026', periodRef: july, skipReason: 'credit_capped', skipDetail: '1200.0000' },
+  ]
+
+  const response = await post({})
+
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as { rows: { lineId: string; periodName: string; skipDetail: string | null }[] }
+  assert.deepEqual(
+    body.rows.map((row) => [row.lineId, row.periodName, row.skipDetail]),
+    [
+      ['line-open', 'P07 FY2026 · Jul 2026', null],
+      ['line-closed', 'P07 FY2026 · Jul 2026', 'P07 FY2026 · Jul 2026'],
+      ['line-capped', 'P07 FY2026 · Jul 2026', '1200.0000'],
+    ],
+  )
 })

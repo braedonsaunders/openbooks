@@ -11,6 +11,7 @@ interface RouteState {
   runCalls: { scope: Scope; postedProjectIds: string[] }[]
   runError: { kind: 'domain' | 'stale' | 'unexpected'; message: string } | null
   syncSkipped: string | null
+  runEntries: unknown[]
 }
 
 const stateKey = Symbol.for('openbooks.recognition-route-test')
@@ -21,6 +22,7 @@ const state: RouteState = {
   runCalls: [],
   runError: null,
   syncSkipped: null,
+  runEntries: [],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
@@ -30,6 +32,12 @@ const projects = [
 ]
 
 const mockSources = new Map<string, string>([
+  // The viewer reads English; without a request store the catalog is unavailable, as outside Next.
+  [
+    'next-intl-server',
+    `export async function getLocale() { return 'en' }
+     export async function getTranslations() { throw new Error('no intl request store') }`,
+  ],
   [
     'authz',
     `
@@ -94,7 +102,7 @@ const mockSources = new Map<string, string>([
           ? projects
           : projects.filter((project) => allowedSubsidiaryIds.includes(project.subsidiaryId))
         state.runCalls.push({ scope: allowedSubsidiaryIds == null ? undefined : [...allowedSubsidiaryIds], postedProjectIds: visible.map((project) => project.id) })
-        return { posted: visible.length, skipped: 0, totalAmount: '0', entries: [], problems: [] }
+        return { posted: visible.length, skipped: 0, totalAmount: '0', entries: state.runEntries, problems: [] }
       }
       // The route maps the stale-confirmation class to 409; the double
       // stands in for the whole module, so it must offer it too.
@@ -113,6 +121,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/platform/business-date/module', mockUrl('business-date')],
   ['@openbooks/engine/projects/revenue', mockUrl('project-revenue')],
   ['@openbooks/engine/revenue/recognition', mockUrl('revenue-recognition')],
+  ['next-intl/server', mockUrl('next-intl-server')],
   // The shared error mapper reaches the same engine module through a
   // relative specifier; it must see the same double or instanceof splits.
   ['../../engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
@@ -142,6 +151,7 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   state.runCalls.length = 0
   state.runError = null
   state.syncSkipped = null
+  state.runEntries = []
 }
 
 function post(): Promise<Response> {
@@ -252,4 +262,22 @@ test('unrestricted access preserves organization-wide synchronization and postin
     scope: undefined,
     postedProjectIds: ['project-visible', 'project-hidden'],
   }])
+})
+
+test('posted entries reach the drawer with their period labelled in the viewer locale', async () => {
+  reset(null)
+  state.runEntries = [{
+    contract: 'RC-1',
+    obligation: 'Support',
+    period: 'P12 FY2025',
+    periodRef: { fiscalYear: 2025, periodNumber: 12, adjustment: false, startsOn: '2025-12-01', endsOn: '2025-12-31' },
+    amount: '100.0000',
+    entryId: 'entry-1',
+  }]
+
+  const response = await post()
+
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as { entries: { period: string; entryId: string }[] }
+  assert.deepEqual(body.entries.map((entry) => [entry.entryId, entry.period]), [['entry-1', 'P12 FY2025 · Dec 2025']])
 })

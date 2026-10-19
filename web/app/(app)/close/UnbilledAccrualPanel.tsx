@@ -24,7 +24,8 @@ import { AlertTriangle, Check, Play, RefreshCw } from "lucide-react";
 import { useMoney } from "@/components/money-provider";
 import { refusalMessageFromBody } from "../../../lib/api-error";
 
-/** The preview the accrual engine returns for one period. */
+/** The preview the accrual engine returns for one period, with its period
+ *  names already labelled in the viewer's locale by the route. */
 type AccrualPreview = {
   period: { id: string; name: string; startsOn: string; endsOn: string };
   reversal: { periodId: string | null; periodName: string | null; date: string | null };

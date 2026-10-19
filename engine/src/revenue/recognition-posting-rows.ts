@@ -1,5 +1,6 @@
 /** Shared posting-row projection breaking the preview/run cycle. Split from revenue/recognition.ts (pure moves only). */
 import { resolveCoveringPeriod } from '../periods/period-resolution.ts';
+import { canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { measureCreditExposure, type CreditExposure } from "./deferred-credit-pool.ts";
@@ -95,7 +96,14 @@ export type RecognitionPostingRow = {
   recognition_on: string | null; recognition_currency: string | null; functional_currency:string|null; recognition_fx_rate: string;
   bundle_delivered_on: string | null; recognition_held: boolean; hold_reason: string | null; delivery_pending: boolean;
   line_id: string; planned: string; period_id: string; sequence: number;
-  book_id: string; period_name: string; period_ends_on: string;
+  book_id: string;
+  /** Stored period name: part of the recognition journal's entry number. */
+  period_name: string;
+  /** Locale-free period label (`P07 FY2026`) for memos and problem text. */
+  period_label: string;
+  /** The period's fiscal position and dates, for display labels. */
+  period_ref: PeriodDisplayInput;
+  period_ends_on: string;
   method: RecognitionMethod;
   obligation_id: string; obligation_desc: string; contract_number: string;
   obl_deferred: string | null; obl_recognized: string | null;
@@ -110,6 +118,13 @@ export type RecognitionPostingRow = {
 /** Discovery is advisory. The posting transaction reloads this same projection
  * after owning the obligation, while locking the line and its native policy.
  */
+/** An accounting period's fiscal position and civil dates as one JSON value. */
+function periodRefSql(alias: string) {
+  const p = sql.identifier(alias);
+  return sql`json_build_object('fiscalYear', ${p}.fiscal_year, 'periodNumber', ${p}.period_number,
+    'adjustment', ${p}.is_adjustment, 'startsOn', ${p}.starts_on::text, 'endsOn', ${p}.ends_on::text)`;
+}
+
 export async function recognitionPostingRows(
   runner: SqlExecutor,
   orgId: string,
@@ -136,6 +151,7 @@ export async function recognitionPostingRows(
            l.sequence       as sequence,
            s.book_id        as book_id,
            p.name           as period_name,
+           ${periodRefSql("p")} as period_ref,
            p.ends_on        as period_ends_on,
            coalesce(s.change_basis->>'method',r.method) as method,
            o.id             as obligation_id,
@@ -191,10 +207,11 @@ export async function recognitionPostingRows(
     if (!row.delivery_pending && row.bundle_delivered_on && row.bundle_delivered_on>plannedDate) {
       const deliveryPeriod=await resolveCoveringPeriod(runner,orgId,row.bundle_delivered_on);
       if (!deliveryPeriod) throw new RevenueRecognitionError('Generate an accounting period covering software bundle delivery before recognizing the deferred consideration');
-      const period=(await runner.execute<{name:string;ends_on:string}>(sql`select name,ends_on::text from accounting_periods where org_id=${orgId} and id=${deliveryPeriod.id}`)).rows[0];
+      const period=(await runner.execute<{name:string;ends_on:string;period_ref:PeriodDisplayInput}>(sql`select p.name,p.ends_on::text,${periodRefSql("p")} as period_ref from accounting_periods p where p.org_id=${orgId} and p.id=${deliveryPeriod.id}`)).rows[0];
       if (!period) throw new RevenueRecognitionError('Delivery accounting period is unavailable');
-      row.period_id=deliveryPeriod.id; row.period_name=period.name; row.period_ends_on=period.ends_on; row.recognition_on=row.bundle_delivered_on;
+      row.period_id=deliveryPeriod.id; row.period_name=period.name; row.period_ref=period.period_ref; row.period_ends_on=period.ends_on; row.recognition_on=row.bundle_delivered_on;
     }
+    row.period_label=canonicalPeriodLabel(row.period_ref);
   }
   return rows;
 }

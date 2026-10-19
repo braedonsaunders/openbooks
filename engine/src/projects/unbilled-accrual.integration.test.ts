@@ -127,6 +127,15 @@ test("unbilled T&M revenue accrues at period end, reverses next period, and reru
       assert.equal(preview.period.id, s.julyId);
       assert.equal(preview.reversal.periodId, s.augustId);
       assert.equal(preview.reversal.date, "2026-08-01");
+      // Periods are named by fiscal position, not by their stored names.
+      assert.equal(preview.period.name, "P07 FY2026");
+      assert.deepEqual(preview.period.periodRef, {
+        fiscalYear: 2026, periodNumber: 7, adjustment: false, startsOn: "2026-07-01", endsOn: "2026-07-31",
+      });
+      assert.equal(preview.reversal.periodName, "P08 FY2026");
+      assert.deepEqual(preview.reversal.periodRef, {
+        fiscalYear: 2026, periodNumber: 8, adjustment: false, startsOn: "2026-08-01", endsOn: "2026-08-31",
+      });
       assert.deepEqual(preview.lines.map((line) => [line.projectId, line.unbilled, line.delta]), [[s.tmProject, "200.0000", "200.0000"]]);
       assert.equal(preview.upToDate, false);
 
@@ -138,6 +147,19 @@ test("unbilled T&M revenue accrues at period end, reverses next period, and reru
       assert.equal(reversal!.posting_date, "2026-08-01");
       assert.equal(reversal!.period_id, s.augustId);
       assert.equal(reversal!.reverses_entry_id, accrual!.id);
+      // Memos name the period by its canonical label; entry numbers keep the stored name.
+      const headers = (await db.execute<{ id: string; entry_number: string; memo: string }>(sql`
+        select id, entry_number, memo from journal_entries where org_id = ${org.orgId} and id in (${accrual!.id}, ${reversal!.id})`)).rows;
+      const accrualHeader = headers.find((row) => row.id === accrual!.id)!;
+      const reversalHeader = headers.find((row) => row.id === reversal!.id)!;
+      assert.equal(accrualHeader.memo, "Unbilled revenue accrual — P07 FY2026");
+      assert.equal(reversalHeader.memo, "Unbilled revenue accrual reversal — P07 FY2026");
+      assert.match(accrualHeader.entry_number, /^UNBILLED-2026-07-[0-9a-f]{8}$/);
+      assert.equal(reversalHeader.entry_number, `${accrualHeader.entry_number}-R`);
+      const runAudit = (await db.execute<{ period_name: string }>(sql`
+        select changes->>'periodName' as period_name from audit_log
+         where org_id = ${org.orgId} and table_name = 'project_revenue_accruals' and row_id = ${run.runId}`)).rows;
+      assert.deepEqual(runAudit, [{ period_name: "P07 FY2026" }]);
       assert.deepEqual(await entryLines(org.orgId, accrual!.id), [
         { account_id: s.unbilledAccountId, amount: "200.0000", project_id: s.tmProject },
         { account_id: org.accounts.revenue, amount: "-200.0000", project_id: s.tmProject },
@@ -204,7 +226,9 @@ test("the accrual refuses closed reversal periods, unmapped accounts and a disab
         values (${org.orgId}, ${s.augustId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', 'closed', now(), ${s.actorId})`);
       await assert.rejects(
         runUnbilledRevenueAccrual(org.orgId, s.actorId, { periodEnd: "2026-07-31" }),
-        (error: unknown) => refusedWith("period_closed")(error) && /reverses on 2026-08-01/.test((error as Error).message),
+        (error: unknown) =>
+          refusedWith("period_closed")(error)
+          && /reverses on 2026-08-01, but the general ledger is closed for P08 FY2026\. Reopen P08 FY2026/.test((error as Error).message),
       );
       await nothingPosted();
       await db.execute(sql`delete from period_locks where org_id = ${org.orgId} and period_id = ${s.augustId}`);

@@ -8,6 +8,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { cancelRevenueRecognitionForInvoice } from "../ledger/revenue-recognition-cancellation.ts";
 import {
   buildRecognitionSchedule,
+  previewRevenueRecognition,
   runRevenueRecognition,
 } from "./recognition.ts";
 import {
@@ -30,6 +31,9 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const IMPORTED_REASON = "close.importedPeriodLockReason";
 
+/** The scratch organization's July period, stored as '2026-07'. */
+const JULY_REF = { fiscalYear: 2026, periodNumber: 7, adjustment: false, startsOn: "2026-07-01", endsOn: "2026-07-31" };
+
 /** User-owned close, through the same lock writer the close flow uses. */
 async function closeGlForUser(org: ScratchOrg, actorId: string): Promise<void> {
   await setPeriodLockState({
@@ -39,7 +43,7 @@ async function closeGlForUser(org: ScratchOrg, actorId: string): Promise<void> {
     module: "gl",
     state: "closed",
     actorId,
-    reason: "fleet8 f2: user-owned GL close",
+    reason: "User-owned GL close",
   });
 }
 
@@ -172,8 +176,24 @@ test("open period: the runner still posts (setup can post, refusal is load-beari
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     await seedDueLine(org, actorId, "open");
+    const preview = await previewRevenueRecognition(org.orgId, { asOfDate: "2026-07-31" });
+    assert.equal(preview.rows.length, 1);
+    assert.equal(preview.rows[0]!.periodName, "P07 FY2026");
+    assert.deepEqual(preview.rows[0]!.periodRef, JULY_REF);
     const run = await runRevenueRecognition(org.orgId, "2026-07-31", actorId);
     assert.equal(run.posted, 1, `expected one posting, got ${JSON.stringify(run.problems)}`);
+    // Run results and memos name the period canonically; the entry number keeps the stored name.
+    assert.equal(run.entries[0]!.period, "P07 FY2026");
+    assert.deepEqual(run.entries[0]!.periodRef, JULY_REF);
+    const posted = (await db.execute<{ entry_number: string; memo: string; line_memos: string[] }>(sql`
+      select e.entry_number, e.memo,
+             (select array_agg(l.memo order by l.line_number) from journal_lines l
+               where l.org_id = e.org_id and l.entry_id = e.id) as line_memos
+        from journal_entries e
+       where e.org_id = ${org.orgId} and e.id = ${run.entries[0]!.entryId}`)).rows[0]!;
+    assert.equal(posted.memo, "Revenue recognition — F2 revenue obl open (P07 FY2026)");
+    assert.deepEqual(posted.line_memos, ["Revenue recognition P07 FY2026", "Revenue recognition P07 FY2026"]);
+    assert.match(posted.entry_number, /^REV-F2R-C-open-2026-07-/);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -186,11 +206,16 @@ test("runRevenueRecognition skips a user-closed GL period", { skip: !DB }, async
     await seedDueLine(org, actorId, "user");
     await closeGlForUser(org, actorId);
     const before = await journalCount(org.orgId);
+    const preview = await previewRevenueRecognition(org.orgId, { asOfDate: "2026-07-31" });
+    assert.deepEqual(
+      preview.rows.map((row) => [row.skipReason, row.skipDetail]),
+      [["period_closed", "P07 FY2026"]],
+    );
     const run = await runRevenueRecognition(org.orgId, "2026-07-31", actorId);
     assert.equal(run.posted, 0, "a user-closed period must post nothing");
     assert.ok(run.skipped >= 1, "the closed line must be skipped, not posted");
     assert.ok(
-      run.problems.some((p) => /closed/i.test(p)),
+      run.problems.includes("F2R-C-user P07 FY2026: GL period closed"),
       `problems must name the closed period, got ${JSON.stringify(run.problems)}`,
     );
     assert.equal(await journalCount(org.orgId), before, "skipped recognition left GL residue");
