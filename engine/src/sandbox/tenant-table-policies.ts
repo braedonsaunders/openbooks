@@ -85,7 +85,6 @@ export const TENANT_TABLE_POLICIES = {
   "schedule_distribution_recipients": "skip:no-copy",
   "schedule_resource_recipients": "clone:catalog-uuid-rebase",
   "schedule_source_records": "clone:catalog-uuid-rebase",
-  // Native offering inserts recreate these identities using the rebased native ids.
   // Shift roster definitions copy with the bookings they generated and the
   // requests those bookings answered.
   "schedule_patterns": "clone:catalog-uuid-rebase",
@@ -104,6 +103,7 @@ export const TENANT_TABLE_POLICIES = {
   "schedule_attendance_watermarks": "skip:no-copy",
   "schedule_attendance_observations": "skip:no-copy",
   "schedule_attendance_event_claims": "skip:no-copy",
+  "schedule_attendance_observation_events": "skip:no-copy",
   // Service work copies with the bookings, documents and stock it references.
   // Customer acceptance and sign-off links, the signatures captured through
   // them and customer notices belong to the source environment.
@@ -125,7 +125,6 @@ export const TENANT_TABLE_POLICIES = {
   "service_visit_signatures": "skip:no-copy",
   "service_customer_notices": "skip:no-copy",
   // Native offering inserts recreate these identities using the rebased native ids.
-  "schedule_attendance_observation_events": "skip:no-copy",
   "hrm_benefit_catalog": "skip:no-copy",
   // Transfer execution and source artifacts belong to their original environment.
   "data_transfer_jobs": "skip:no-copy",
