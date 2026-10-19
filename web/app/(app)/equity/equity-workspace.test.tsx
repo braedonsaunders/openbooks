@@ -156,6 +156,27 @@ test('the cap table filters its view and instrument with toolbar drop-downs besi
   }
 })
 
+test('the cap table by holder truncates a long holder name with the full name on hover, and its figure headers wrap between words', async () => {
+  const longName = 'Meridian Growth Partners Opportunity Fund II'
+  const view = {
+    context: { ...context(), params: { sub: SUB, view: 'captable', by: 'holder' } }, asOfControl,
+    dimension: 'holder' as const, instrument: 'all' as const, query: '', table: capTable, parties: { [HOLDER]: longName, [EMPLOYEE]: 'Employee One' },
+    hasAccountPolicy: true, accountsSetupHref: '/admin/setup/equity-account-policies', reportHref: null, asOfReportHref: null,
+  }
+  const screen = await mount(<EquityCapTablePanel view={view as never} />, `/equity?view=captable&sub=${SUB}&by=holder`)
+  try {
+    const holder = [...screen.host.querySelectorAll('tbody a')].find((link) => text(link) === longName)!
+    assert.equal(holder.getAttribute('title'), longName, 'the full name is on hover')
+    assert.ok(holder.className.includes('truncate') && holder.className.includes('max-w-40'), holder.className)
+    assert.ok(holder.closest('td')!.className.includes('whitespace-nowrap'), 'a name never wraps onto several lines')
+    const figureHeaders = [...screen.host.querySelectorAll('thead th')].slice(1)
+    assert.ok(figureHeaders.length > 0 && figureHeaders.every((th) => !th.className.includes('whitespace-nowrap')), 'figure headers may wrap, so the columns fit')
+    assert.ok([...screen.host.querySelectorAll('tbody td')].slice(1).every((td) => td.className.includes('px-3')), 'figures keep the compact gutter')
+  } finally {
+    await screen.close()
+  }
+})
+
 test('the cap table export holds exactly the rows, columns and totals on screen for every filter', async () => {
   const parties = { [HOLDER]: 'Founder One', [EMPLOYEE]: 'Employee One' }
   const labels = (messages as unknown as { equity: { capTable: { columns: Record<string, string> }; waterfall: { columns: { total: string } } } }).equity

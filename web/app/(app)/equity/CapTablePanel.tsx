@@ -11,9 +11,17 @@ import { capTableLayout, CAP_TABLE_INSTRUMENTS, type CapTableColumn, type CapTab
 import { ExportMenu } from '../reports/ExportMenu'
 import { EquityAsOfControl } from './AsOfControl'
 import type { CapTableViewData } from './view'
-import { CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, PolicyBanner, TOTAL_ROW, listSort, usePercent, useShares, withParams } from './shared'
+import { CELL, HEAD, LINK, OpenReport, PendingActions, PolicyBanner, TOTAL_ROW, listSort, usePercent, useShares, withParams } from './shared'
 
 const BASE = '/equity'
+/**
+ * Every class is a column, so the cap table packs its figures: numeric
+ * headers wrap between words and cells keep a compact gutter, and a holder
+ * name longer than its column truncates with the full name on hover.
+ */
+const FIGURE_HEAD = 'px-3 py-2 font-medium text-right leading-tight'
+const FIGURE_CELL = 'px-3 py-2.5 text-right tabular-nums whitespace-nowrap'
+const HOLDER_CELL = 'px-3 py-2.5 whitespace-nowrap'
 
 /**
  * The cap table on the as-of date, in the shared filtered table: the
@@ -59,12 +67,15 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
         },
       }
     : {
-        key: 'holder', header: <>{t('capTable.columns.holder')}</>, headerClassName: HEAD, className: CELL,
+        key: 'holder', header: <>{t('capTable.columns.holder')}</>, headerClassName: HEAD, className: HOLDER_CELL,
         sortKey: 'holder', sortValue: (line: CapTableLine) => (line.pool ? t('overview.ownership.pool') : view.parties[line.holderPartyId ?? ''] ?? null),
         cell: (line: CapTableLine) => line.pool ? (
           <span className="text-slate-600 dark:text-slate-300">{t('overview.ownership.pool')}</span>
         ) : (
-          <Link className={LINK} href={withParams(BASE, context.params, { view: 'securities', holder: line.holderPartyId ?? undefined, by: undefined, instrument: undefined })}>
+          <Link
+            className={`${LINK} block max-w-40 truncate`} title={view.parties[line.holderPartyId ?? ''] ?? line.holderPartyId ?? undefined}
+            href={withParams(BASE, context.params, { view: 'securities', holder: line.holderPartyId ?? undefined, by: undefined, instrument: undefined })}
+          >
             {view.parties[line.holderPartyId ?? ''] ?? line.holderPartyId}
           </Link>
         ),
@@ -107,16 +118,16 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
         columns={[
           lead,
           ...layout.columns.map((column) => ({
-            key: column.key, header: header(column), headerClassName: NUM_HEAD, className: NUM_CELL,
+            key: column.key, header: header(column), headerClassName: FIGURE_HEAD, className: FIGURE_CELL,
             sortKey: column.key, sortType: 'decimal' as const, sortValue: (line: CapTableLine) => line.values[column.key] ?? null,
             cell: (line: CapTableLine) => cell(column, line),
           })),
         ]}
         footer={layout.lines.length > 0 && Object.keys(layout.totals).length > 0 ? (
           <TableRow className={TOTAL_ROW}>
-            <TableCell className={CELL}>{t('waterfall.columns.total')}</TableCell>
+            <TableCell className={view.dimension === 'class' ? CELL : HOLDER_CELL}>{t('waterfall.columns.total')}</TableCell>
             {layout.columns.map((column) => (
-              <TableCell key={column.key} className={NUM_CELL}>{total(column)}</TableCell>
+              <TableCell key={column.key} className={FIGURE_CELL}>{total(column)}</TableCell>
             ))}
           </TableRow>
         ) : undefined}
