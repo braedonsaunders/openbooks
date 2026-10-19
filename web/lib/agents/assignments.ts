@@ -1,8 +1,9 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { can, subsidiaryScopeAllows, type Authz } from "../authz";
-import { canReadContinuousCloseAgent, loadWorkItemAccess } from "../continuous-close";
+import { can, type Authz } from "../authz";
+import { canReadContinuousCloseAgent, loadWorkItemAccess, withLockedWorkItemAccess } from "../continuous-close";
+import { workItemSubjectInScope } from "./work-item-subsidiary-scope";
 import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /**
@@ -44,15 +45,13 @@ export interface WorkItemNote {
 }
 
 async function readableItem(authz: Authz, itemId: string): Promise<boolean> {
-  const access = await loadWorkItemAccess(authz.user.orgId, itemId);
-  // Pack visibility first, then the actor's subsidiary scope over the
-  // subject: a restricted caller reads (and writes, through the gates
-  // below) only in-scope account-subject findings. Null lineage fails
-  // closed, and every denial answers like a missing item.
+  const access = await loadWorkItemAccess(authz.user.orgId, itemId, authz.allowedSubsidiaryIds);
+  // Pack visibility and type-aware subject scope share the same boundary as
+  // the inbox and detail readers. Denials answer like a missing item.
   return (
     !!access &&
     canReadContinuousCloseAgent(authz, access.agentKey) &&
-    subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)
+    workItemSubjectInScope(authz.allowedSubsidiaryIds, access.subjectType ?? "", access.subjectSubsidiaryId)
   );
 }
 
@@ -104,25 +103,34 @@ export async function setWorkItemAssignment(
   }
   const resolved = await resolveAssignee(authz.user.orgId, assigneeUserId, assigneeRole);
   if (!resolved) return { ok: false, error: "invalid_assignee" };
-  const touched = await db.transaction(async (tx) => {
-    const changed = await tx.execute<{ id: string }>(sql`
-      update ai_work_items set
-        assignee_user_id = ${resolved.userId},
-        assignee_role = ${resolved.roleId},
-        due_at = ${due}::timestamptz,
-        updated_at = now(), updated_by = ${authz.user.id}
-       where id = ${itemId} and org_id = ${authz.user.orgId}
-       returning id
-    `);
-    if (changed.rows.length === 0) return false;
-    await tx.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${authz.user.orgId}, 'ai_work_items', ${itemId}, 'update',
-              ${JSON.stringify({ action: "assign", assigneeUserId: resolved.userId, assigneeRole: resolved.roleId, dueAt: due })}::jsonb,
-              ${authz.user.id})
-    `);
-    return true;
-  });
+  const touched = await withLockedWorkItemAccess(
+    authz.user.orgId,
+    itemId,
+    authz.allowedSubsidiaryIds,
+    async (tx, access) => {
+      if (
+        !canReadContinuousCloseAgent(authz, access.agentKey) ||
+        !workItemSubjectInScope(authz.allowedSubsidiaryIds, access.subjectType ?? "", access.subjectSubsidiaryId)
+      ) return false;
+      const changed = await tx.execute<{ id: string }>(sql`
+        update ai_work_items set
+          assignee_user_id = ${resolved.userId},
+          assignee_role = ${resolved.roleId},
+          due_at = ${due}::timestamptz,
+          updated_at = now(), updated_by = ${authz.user.id}
+         where id = ${itemId} and org_id = ${authz.user.orgId}
+         returning id
+      `);
+      if (changed.rows.length === 0) return false;
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${authz.user.orgId}, 'ai_work_items', ${itemId}, 'update',
+                ${JSON.stringify({ action: "assign", assigneeUserId: resolved.userId, assigneeRole: resolved.roleId, dueAt: due })}::jsonb,
+                ${authz.user.id})
+      `);
+      return true;
+    },
+  );
   if (!touched) return { ok: false, error: "not_found" };
   return { ok: true };
 }
@@ -136,12 +144,25 @@ export async function addWorkItemNote(
   if (!(await readableItem(authz, itemId))) return { ok: false, error: "not_found" };
   const text = typeof body === "string" ? body.trim() : "";
   if (!text || text.length > MAX_NOTE_CHARS) return { ok: false, error: "invalid_body" };
-  const inserted = await db.execute<{ id: string }>(sql`
-    insert into ai_work_item_notes (org_id, work_item_id, user_id, body)
-    values (${authz.user.orgId}, ${itemId}, ${authz.user.id}, ${text})
-    returning id
-  `);
-  return { ok: true, id: String(inserted.rows[0]?.id) };
+  const insertedId = await withLockedWorkItemAccess(
+    authz.user.orgId,
+    itemId,
+    authz.allowedSubsidiaryIds,
+    async (tx, access) => {
+      if (
+        !canReadContinuousCloseAgent(authz, access.agentKey) ||
+        !workItemSubjectInScope(authz.allowedSubsidiaryIds, access.subjectType ?? "", access.subjectSubsidiaryId)
+      ) return null;
+      const inserted = await tx.execute<{ id: string }>(sql`
+        insert into ai_work_item_notes (org_id, work_item_id, user_id, body)
+        values (${authz.user.orgId}, ${itemId}, ${authz.user.id}, ${text})
+        returning id
+      `);
+      return inserted.rows[0]?.id ?? null;
+    },
+  );
+  if (!insertedId) return { ok: false, error: "not_found" };
+  return { ok: true, id: String(insertedId) };
 }
 
 export async function loadWorkItemAssignment(

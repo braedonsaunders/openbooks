@@ -4,8 +4,8 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { SessionUser } from '../../../lib/auth'
 
-// H-AGENTSCOPE: an assistant.use holder restricted to one subsidiary sees
-// only that entity's plus shared-account findings — never B's subjects,
+// A restricted assistant.use holder sees only in-scope and shared-account
+// findings — never another entity's subjects,
 // names, summaries, materiality, or evidence — and must not move B's
 // findings through the item, lifecycle, feedback, or report endpoints.
 // Record-level denials answer exactly like not-found; the narrative PDF
@@ -77,7 +77,7 @@ async function fixture() {
     state.user = null
     await dropScratchOrg(org.orgId)
   }
-  return { org, itemA, itemB, itemN, itemX, asOwner, asScoped, itemParams, close }
+  return { org, subB, scoped, acctA, acctB, itemA, itemB, itemN, itemX, asOwner, asScoped, itemParams, close }
 }
 
 test('a restricted caller lists only their entity’s findings', async () => {
@@ -153,6 +153,85 @@ test('a restricted caller cannot rate another entity’s finding', async () => {
       assert.equal(denied.status, 404)
       const count = Number((await db.execute<{ n: string }>(sql`select count(*) as n from ai_work_item_feedback where work_item_id=${f.itemB}`)).rows[0]!.n)
       assert.equal(count, 0, 'no feedback row persists from the refused write')
+    })
+  } finally {
+    await f.close()
+  }
+})
+
+test('restricted work-item actions follow document, reconciliation, budget, and shared-account scope', async () => {
+  const f = await fixture()
+  try {
+    const documentA = randomUUID()
+    const documentB = randomUUID()
+    const reconciliationA = randomUUID()
+    const budgetA = randomUUID()
+    const budgetMixed = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into documents (id, org_id, kind, status, document_number, subsidiary_id, document_date, currency, subtotal, tax_total, total)
+        values (${documentA}, ${f.org.orgId}, 'vendor_bill', 'draft', 'scope-a', ${f.org.subsidiaryId}, ${f.org.date}, 'CAD', 0, 0, 0),
+               (${documentB}, ${f.org.orgId}, 'vendor_bill', 'draft', 'scope-b', ${f.subB}, ${f.org.date}, 'CAD', 0, 0, 0)
+      `)
+      await db.execute(sql`
+        insert into reconciliations (id, org_id, account_id, through_date, statement_balance, currency)
+        values (${reconciliationA}, ${f.org.orgId}, ${f.acctA}, ${f.org.date}, 0, 'CAD')
+      `)
+      await db.execute(sql`
+        insert into budget_scenarios (id, org_id, book_id, fiscal_year, name)
+        values (${budgetA}, ${f.org.orgId}, ${f.org.bookId}, 2026, 'In scope'),
+               (${budgetMixed}, ${f.org.orgId}, ${f.org.bookId}, 2026, 'Mixed scope')
+      `)
+      await db.execute(sql`
+        insert into budget_lines (org_id, scenario_id, account_id, period_id, subsidiary_id, amount)
+        values (${f.org.orgId}, ${budgetA}, ${f.acctA}, ${f.org.periodId}, ${f.org.subsidiaryId}, 1),
+               (${f.org.orgId}, ${budgetMixed}, ${f.acctA}, ${f.org.periodId}, ${f.org.subsidiaryId}, 1),
+               (${f.org.orgId}, ${budgetMixed}, ${f.acctB}, ${f.org.periodId}, ${f.subB}, 1)
+      `)
+    })
+    const itemDocumentA = await seedFinding(f.org.orgId, 'documents', documentA)
+    const itemDocumentB = await seedFinding(f.org.orgId, 'documents', documentB)
+    const itemReconciliation = await seedFinding(f.org.orgId, 'reconciliation', reconciliationA)
+    const itemBudgetA = await seedFinding(f.org.orgId, 'budget', budgetA)
+    const itemBudgetMixed = await seedFinding(f.org.orgId, 'budget', budgetMixed)
+
+    await withOrgContext(f.org.orgId, async () => {
+      f.asScoped()
+      for (const id of [itemDocumentA, itemReconciliation, itemBudgetA, f.itemN]) {
+        const result = await patchItem(new Request('https://x/', {
+          method: 'PATCH', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'note', body: 'Reviewed within my entity.' }),
+        }), f.itemParams(id))
+        assert.equal(result.status, 200, `in-scope subject ${id} remains actionable`)
+      }
+      for (const id of [itemDocumentB, itemBudgetMixed]) {
+        const result = await patchItem(new Request('https://x/', {
+          method: 'PATCH', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'note', body: 'Should not be visible.' }),
+        }), f.itemParams(id))
+        assert.equal(result.status, 404, `out-of-scope subject ${id} stays hidden`)
+      }
+      const feedback = await putFeedback(new Request('https://x/', {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ rating: 'helpful' }),
+      }), f.itemParams(itemDocumentA))
+      assert.equal(feedback.status, 200, 'document findings accept feedback in scope')
+
+      const assignment = await getItem(new Request('https://x/'), f.itemParams(itemDocumentA))
+      const detail = await assignment.json() as { assignment: { assigneeUserId: string | null } | null; notes: unknown[] }
+      assert.equal(assignment.status, 200)
+      assert.equal(detail.notes.length, 1, 'the detail endpoint returns notes for a scoped document finding')
+      assert.equal(detail.assignment?.assigneeUserId ?? null, null)
+
+      await withBypassContext(() => db.execute(sql`
+        update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [f.subB] })}::jsonb
+         where org_id=${f.org.orgId} and key='scope_clerk'
+      `))
+      const childAssignment = await patchItem(new Request('https://x/', {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'assign', assigneeUserId: f.scoped }),
+      }), f.itemParams(f.itemB))
+      assert.equal(childAssignment.status, 200, 'assigning a finding in a child subsidiary does not require root access')
     })
   } finally {
     await f.close()
