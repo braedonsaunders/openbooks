@@ -37,7 +37,6 @@ const routeState: RouteState = {
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.settings-route-test')]
-  import { NextResponse } from 'next/server'
   export async function guardPermission(permission) {
     state.requestedPermissions.push(permission)
     if (!state.authz) return state.deny(null)
@@ -47,7 +46,7 @@ const mockAuthz = `
     return state.authz
   }
   export function guardUnrestrictedScope(authz) {
-    return authz.allowedSubsidiaryIds === null ? null : NextResponse.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+    return authz.allowedSubsidiaryIds === null ? null : Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
   }
 `;
 
