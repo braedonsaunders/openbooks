@@ -406,3 +406,42 @@ test('inside a record drawer the search stretches across the drawer beside its f
   assert.ok(!search?.className.includes('max-w'), 'the drawer search is never capped')
   assert.ok(toolbar?.querySelector('select[aria-label="Status"]'), 'filters sit beside the search')
 })
+
+test('a list keeping its page and search in the URL reopens them and writes them back as they change', async (t) => {
+  window.history.replaceState(null, '', '/equity?view=stakeholders&sub=s1&page=2&q=Holder');
+  const host = document.createElement('div'); document.body.append(host);
+  const root = createRoot(host);
+  t.after(async () => { await act(async () => root.unmount()); host.remove(); });
+  const rows = Array.from({ length: 25 }, (_, index) => ({ id: String(index), name: `Holder ${String(index).padStart(2, '0')}` }));
+  await act(async () => {
+    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <PagedTable
+        rows={rows}
+        rowKey={(row) => row.id}
+        searchable
+        empty="None"
+        toolbarAfter={<span>Filters</span>}
+        columns={[{ key: 'name', header: 'Name', cell: (row) => row.name, search: (row) => row.name }]}
+        urlState={{ pageKey: 'page', page: 2, searchKey: 'q', query: 'Holder' }}
+      />
+    </NextIntlClientProvider>);
+    await tick();
+  });
+  const body = host.querySelector('tbody')!;
+  assert.ok(body.textContent?.includes('Holder 10'), 'the second page opens from the URL');
+  assert.equal((host.querySelector('input[aria-label="Search"]') as HTMLInputElement).value, 'Holder', 'the search opens from the URL');
+  const next = [...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Next')!;
+  await act(async () => { next.click(); await tick(); });
+  assert.equal(new URL(window.location.href).searchParams.get('page'), '3', 'paging writes the page back');
+  assert.equal(new URL(window.location.href).searchParams.get('view'), 'stakeholders', 'other parameters stay');
+  const search = host.querySelector('input[aria-label="Search"]') as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(search, '');
+    search.dispatchEvent(new window.Event('input', { bubbles: true })); await tick();
+  });
+  const url = new URL(window.location.href)
+  assert.equal(url.searchParams.has('q'), false, 'a cleared search leaves the URL')
+  assert.equal(url.searchParams.has('page'), false, 'a new search restarts at the first page')
+  // The search keeps its own height beside wrapping controls, so its icon stays centred.
+  assert.ok(search.parentElement?.className.includes('self-start'));
+});

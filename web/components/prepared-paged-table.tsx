@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { PagedTable } from './paged-table'
+import { PagedTable, type PagedUrlState } from './paged-table'
 import type { PreparedListSourceKey } from '../lib/list/prepared-sources'
 import type { ListTableColumn } from './list-table'
 
@@ -26,6 +26,7 @@ export function PreparedPagedTable({
   searchable = true,
   contained = false,
   resetPageKey,
+  urlState,
 }: {
   source: PreparedListSourceKey
   rows: PreparedTableRow[]
@@ -38,6 +39,7 @@ export function PreparedPagedTable({
   searchable?: boolean
   contained?: boolean
   resetPageKey?: string
+  urlState?: PagedUrlState
 }) {
   return (
     <PagedTable<PreparedTableRow>
@@ -59,6 +61,7 @@ export function PreparedPagedTable({
       leading={leading}
       footer={footer}
       paginationNote={paginationNote}
+      urlState={urlState}
     />
   )
 }

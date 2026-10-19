@@ -13,6 +13,19 @@ import {
 
 export type PagedColumn<T> = ListTableColumn<T>
 
+/**
+ * Page and search kept in the URL: the server reads them for the first
+ * paint and the table writes them back with replaceState as they change, so
+ * a reload or a shared link reopens the same page and search. `page` is
+ * one-based, as it reads in the address bar.
+ */
+export interface PagedUrlState {
+  pageKey: string
+  page: number
+  searchKey?: string
+  query?: string
+}
+
 export interface PagedSelection<T> {
   getId: (row: T) => string
   /** Currently selected ids (array or set). */
@@ -58,6 +71,7 @@ export function PagedTable<T>({
   contained = false,
   resetPageKey,
   searchLayout = 'list',
+  urlState,
 }: {
   rows: T[]
   columns: PagedColumn<T>[]
@@ -99,13 +113,14 @@ export function PagedTable<T>({
   /** Inside a record drawer the search stretches across the drawer, the
    *  drawer sublist composition; list pages keep the capped page search. */
   searchLayout?: 'list' | 'drawer'
+  urlState?: PagedUrlState
 }) {
   const external = source ? preparedListSource(source).mode !== 'loaded' : false
   searchable = searchable && !external
   const t = useTranslations('common')
   const tp = useTranslations('ui.pagination')
-  const [query, setQuery] = useState('')
-  const [page, setPage] = useState(0)
+  const [query, setQuery] = useState(urlState?.searchKey ? urlState.query ?? '' : '')
+  const [page, setPage] = useState(urlState ? Math.max(0, Math.trunc(urlState.page) - 1) : 0)
   // Sorting changes restart paging: reset during render when the key moves.
   const [pageKey, setPageKey] = useState(resetPageKey)
   if (pageKey !== resetPageKey) {
@@ -125,6 +140,20 @@ export function PagedTable<T>({
   const clamped = external ? 0 : Math.min(page, pageCount - 1)
   const start = clamped * pageSize
   const view = external ? filtered : filtered.slice(start, start + pageSize)
+
+  const urlPageKey = urlState?.pageKey
+  const urlSearchKey = urlState?.searchKey
+  useEffect(() => {
+    if (!urlPageKey || external) return
+    const url = new URL(window.location.href)
+    const write = (key: string, value: string | null) => (value ? url.searchParams.set(key, value) : url.searchParams.delete(key))
+    write(urlPageKey, clamped > 0 ? String(clamped + 1) : null)
+    if (urlSearchKey) write(urlSearchKey, query.trim() ? query : null)
+    const next = `${url.pathname}${url.search}${url.hash}`
+    if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState(window.history.state, '', next)
+    }
+  }, [urlPageKey, urlSearchKey, clamped, query, external])
 
   const selected = useMemo(() => {
     if (!selection) return null
@@ -174,7 +203,9 @@ export function PagedTable<T>({
       </div>
     ) : toolbarAfter ? (
       <div className={`flex flex-wrap gap-2${toolbarAlign === 'end' ? ' items-end' : ''}`}>
-        <div className={`relative ${LIST_SEARCH_WIDTH}`}>
+        {/* The search keeps its own height when the controls beside it wrap,
+            so the icon stays centred in the input. */}
+        <div className={`relative ${LIST_SEARCH_WIDTH}${toolbarAlign === 'end' ? '' : ' self-start'}`}>
           <Search
             className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
             size={15}

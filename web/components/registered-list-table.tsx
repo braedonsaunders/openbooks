@@ -6,6 +6,7 @@ import {
 import { compareDecimal } from '../lib/exact-decimal'
 import { SortTh } from './sortable-th'
 import { PreparedPagedTable } from './prepared-paged-table'
+import type { PagedUrlState } from './paged-table'
 import { ServerPagedTable, type ServerPagedColumn } from './server-paged-table'
 
 export interface RegisteredListColumn<T> extends ServerPagedColumn<T> {
@@ -41,6 +42,7 @@ export function RegisteredListTable<T>({
   showPerPage,
   contained = false,
   resetPageKey,
+  urlState,
 }: {
   source: PreparedListSourceKey
   rows: T[]
@@ -66,6 +68,8 @@ export function RegisteredListTable<T>({
   contained?: boolean
   /** Domain filter changes restart paging while retaining the search query. */
   resetPageKey?: string
+  /** Loaded lists only: keep the page and search in the URL (see PagedUrlState). */
+  urlState?: PagedUrlState
 }) {
   const definition = preparedListSource(source)
   const ids = rows.map(rowKey)
@@ -156,6 +160,7 @@ export function RegisteredListTable<T>({
       footer={footer}
       searchable={searchable}
       toolbarAfter={toolbarAfter}
+      urlState={urlState}
     />
   )
 }
