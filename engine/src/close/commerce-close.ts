@@ -390,6 +390,7 @@ type OpenPayoutRow = {
  */
 async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
   const subsidiaryFilter = subsidiaryIds.length === 0
     ? sql`true`
     : sql`l.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`;
@@ -423,7 +424,7 @@ async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<
          where m.org_id = ${orgId} and m.role in ('gateway_clearing', 'refund_clearing')
            and m.effective_from <= ${scope.endsOn}::date
            and (m.effective_to is null or m.effective_to >= ${scope.startsOn}::date)
-           and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+           and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
         union
         select distinct b.clearing_account_id as account_id
           from psp_settlement_batches b
@@ -893,6 +894,7 @@ type ExceptionQueueRow = {
  */
 async function exceptionCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
   const rows = (
     await db.execute<ExceptionQueueRow>(sql`
       (select 'order' as kind, o.channel_id, c.name as channel_name,
@@ -903,7 +905,7 @@ async function exceptionCheck(orgId: string, scope: CommerceCloseScope): Promise
          join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
         where o.org_id = ${orgId} and o.posting_status = 'exception'
           and (o.ordered_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
-          and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])))
+          and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])))
       union all
       (select e.kind as kind, e.channel_id, c.name as channel_name,
               o.external_number as reference, e.exception_code as code,
@@ -914,7 +916,7 @@ async function exceptionCheck(orgId: string, scope: CommerceCloseScope): Promise
          join sales_channels c on c.org_id = e.org_id and c.id = e.channel_id
         where e.org_id = ${orgId} and e.posting_status = 'exception'
           and (e.occurred_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
-          and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])))
+          and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])))
       order by occurred_on, reference`)
   ).rows;
   return {
