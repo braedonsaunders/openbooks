@@ -1100,6 +1100,7 @@ export async function assertPayrollRemittanceBillCurrent(
     } satisfies RemittanceResolvableRow]),
   );
   const liveAmounts = new Map(live.rows.map((row) => [row.line_id, row.amount]));
+  const liveKinds = new Map(live.rows.map((row) => [row.line_id, row.kind]));
   const resolution = makeRemittanceDestinationResolver(await rawPayrollSettings(orgId, executor));
   let gone = 0;
   let changed = 0;
@@ -1129,7 +1130,9 @@ export async function assertPayrollRemittanceBillCurrent(
   }
   // Receipt: the bill's own total must equal its verified coverage, so a
   // hand-edited bill total cannot post against a stale-but-live source.
-  if (cmp(sum(coverage.map((row) => row.amount)), locked.total) !== 0) {
+  if (cmp(sum(coverage.map((row) =>
+    liveKinds.get(row.stub_line_id) === "credit" ? neg(row.amount) : row.amount,
+  )), locked.total) !== 0) {
     throw new PayrollError(
       `payroll remittance bill ${billName} no longer matches its committed source: `
       + `its total differs from the lines it consumed; void this draft and raise a fresh bill`,
