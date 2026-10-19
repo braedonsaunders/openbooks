@@ -44,6 +44,7 @@ import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-featu
 import { documentRevisionSql } from '@openbooks/engine/records/revision'
 import { inTypeAudience, hasSubsidiaryField, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql, type RecordTypeRow } from '@/lib/records'
 import { lintRecordFields } from '../record-schema'
+import { isUuid } from '@/lib/list-params'
 
 /**
  * Apps server store — every function is org-scoped: the caller passes the
@@ -805,6 +806,7 @@ function recordsAdapter(
          order by created_at desc limit 200`)
     },
     async get(typeKey, id) {
+      if (!isUuid(id)) return null
       const type = await loadRecordTypeByKey(orgId, typeKey)
       if (
         !type ||
