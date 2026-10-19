@@ -164,7 +164,7 @@ test("leave-request run scope resolves its employer subsidiary", { skip: !DB }, 
     ]));
     assert.equal(scope.get(`leave_request\u0001${leaveRequestId}`), h.subA);
     const snapshot = await withBypassContext(() => loadSubjectSnapshot(h.orgId, "leave_request", leaveRequestId));
-    assert.equal(snapshot?.scope.subsidiaryId, h.subA);
+    assert.equal(snapshot?.scope?.subsidiaryId, h.subA);
   } finally {
     await withBypassContext(() => dropScratchOrg(h.orgId));
   }

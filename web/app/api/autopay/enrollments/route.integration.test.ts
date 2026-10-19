@@ -17,7 +17,7 @@ test('enrollment reads expose the linked plan name', { skip: !process.env.OPENBO
     const enrollmentId = randomUUID()
     await withBypassContext(async () => {
       await db.execute(sql`update app_roles set permissions='["payment_methods.read"]'::jsonb where org_id=${org.orgId} and key='autopay-reader'`)
-      await db.execute(sql`update orgs set settings=settings || jsonb_build_object('features', coalesce(settings->'features','{}'::jsonb) || '{"autopay":true}'::jsonb) where id=${org.orgId}`)
+      await db.execute(sql`update orgs set settings=settings || jsonb_build_object('features', coalesce(settings->'features','{}'::jsonb) || '{"onlinePayments":true,"autopay":true}'::jsonb) where id=${org.orgId}`)
       await db.execute(sql`insert into subscription_plans (id, org_id, name, amount, currency_code, interval, interval_count, income_account_id, is_active, created_by)
         values (${planId}, ${org.orgId}, 'Support Plan', '25.00', 'CAD', 'monthly', 1, ${org.accounts.revenue}, true, ${actorId})`)
       await db.execute(sql`insert into subscriptions (id, org_id, customer_id, plan_id, start_on, next_bill_on, created_by)
