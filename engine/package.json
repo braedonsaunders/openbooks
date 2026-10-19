@@ -332,6 +332,7 @@
     "./schedule-boards/boards": "./src/schedule-boards/boards.ts",
     "./schedule-boards/board-types": "./src/schedule-boards/board-types.ts",
     "./schedule-boards/distribution": "./src/schedule-boards/distribution.ts",
+    "./schedule-boards/distribution-hooks": "./src/schedule-boards/distribution-hooks.ts",
     "./schedule-boards/entries": "./src/schedule-boards/entries.ts",
     "./schedule-boards/errors": "./src/schedule-boards/errors.ts",
     "./schedule-boards/mine": "./src/schedule-boards/mine.ts",

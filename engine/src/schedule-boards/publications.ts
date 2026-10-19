@@ -18,6 +18,7 @@ import { boardAuthority, getBoard, requireBoardCapability, type ScheduleActor, t
 import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 import { hash, lockPublishableDrafts, publishBoard, publishDrafts, type ScheduleNotice } from "./entries.ts";
 import { requireDate } from "./spans.ts";
+import { deliverScheduleNotice } from "./distribution-hooks.ts";
 
 export const SCHEDULE_PUBLICATION_SUBJECT_KIND = "schedule_publication";
 
@@ -153,7 +154,8 @@ export async function releasePublicationApproval(input: { orgId: string; actorId
   }
   const board = await getBoard(actor, publication.boardId);
   if (input.outcome === "approved") {
-    await applyPublication(actor, board, publication.id, "flow", input.comment?.trim() || "Approved through the schedule publication Flow");
+    const result = await applyPublication(actor, board, publication.id, "flow", input.comment?.trim() || "Approved through the schedule publication Flow");
+    await deliverScheduleNotice({ orgId: actor.orgId, actorId: actor.actorId, boardName: board.name, notices: result.notices });
     return;
   }
   const declined = (await db.execute(sql`update schedule_publications set status = 'declined', decided_by = ${actor.actorId}, decided_at = now(),

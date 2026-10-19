@@ -32,6 +32,6 @@ export const POST = defineRoute({
     const result = await createOwnShiftRequest({ orgId: authz.user.orgId, actorId: authz.user.id, ...body })
     // A request no approval Flow gates applies at once; its notices follow the committed change.
     const delivery = await deliverScheduleNotices({ orgId: authz.user.orgId, actorId: authz.user.id, boardName: result.boardName, notices: [...result.notices] })
-    return NextResponse.json({ request: result.request, delivery })
+    return NextResponse.json({ request: result.request, delivery, distributionRefusals: result.distributionRefusals })
   },
 })

@@ -31,6 +31,7 @@ import {
 import { localTimeFields } from "../platform/time-zone.ts";
 import { timedSpan } from "./spans.ts";
 import { boardHasCapability } from "./board-types.ts";
+import { deliverScheduleNotice, scheduleBoardLifecycle } from "./distribution-hooks.ts";
 
 export const SHIFT_REQUEST_SUBJECT_KIND = "schedule_entry_request";
 
@@ -184,7 +185,7 @@ export async function createOwnShiftRequest(actor: ScheduleActor & ShiftRequestI
         throw new ScheduleError("This request key was already used for a different request.", { status: 409, code: "schedule_key_reused", remedy: "Reload your schedule; the existing request is preserved." });
       }
       const replayed = await readRequest(actor.orgId, id);
-      return { request: replayed, notices: [], boardName: replayed.boardName };
+      return { request: replayed, notices: [], boardName: replayed.boardName, distributionRefusals: [] };
     }
     const entry = await lockEntry(actor.orgId, entryId);
     requestable(entry, party, actor.expectedRevision, "The shift");
@@ -229,7 +230,7 @@ export async function createOwnShiftRequest(actor: ScheduleActor & ShiftRequestI
     if (inserted.length !== 1) throw new ScheduleError("The request was not saved.", { code: "schedule_not_saved", remedy: "Reload your schedule and try again." });
     if (actor.kind !== "swap") return submitForDecision(actor, id);
     const request = await readRequest(actor.orgId, id);
-    return { request, notices: [], boardName: request.boardName };
+    return { request, notices: [], boardName: request.boardName, distributionRefusals: [] };
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
@@ -251,7 +252,7 @@ async function submitForDecision(actor: ScheduleActor, id: string): Promise<Shif
       where org_id = ${actor.orgId} and id = ${id} and status = 'pending' returning id`)).rows;
     if (updated.length !== 1) throw new ScheduleError("The request changed while it was routed for approval.", { status: 409, code: "schedule_stale", remedy: "Reload your schedule." });
     const request = await readRequest(actor.orgId, id);
-    return { request, notices: [], boardName: request.boardName };
+    return { request, notices: [], boardName: request.boardName, distributionRefusals: [] };
   }
   const request = await lockRequest(actor.orgId, id);
   return decide(actor, await getBoard(actor, request.boardId), request, "approve", NO_APPROVAL_APPLIED, "released");
@@ -275,7 +276,7 @@ export async function respondToSwap(actor: ScheduleActor & { requestId: string; 
     if (updated.length !== 1) throw new ScheduleError("This swap changed while you answered.", { status: 409, code: "schedule_stale", remedy: "Reload your schedule." });
     if (actor.accept) return submitForDecision(actor, request.id);
     const declined = await readRequest(actor.orgId, request.id);
-    return { request: declined, notices: [], boardName: declined.boardName };
+    return { request: declined, notices: [], boardName: declined.boardName, distributionRefusals: [] };
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
@@ -308,6 +309,7 @@ export interface ShiftRequestDecision {
   readonly request: ShiftRequest;
   readonly notices: readonly ScheduleNotice[];
   readonly boardName: string;
+  readonly distributionRefusals: readonly { message: string; remedy: string }[];
 }
 
 /** A Flow's approval gates resolved: apply the decision as the gate's decider. */
@@ -319,16 +321,29 @@ export async function releaseShiftRequestApproval(input: { orgId: string; actorI
   }
   const board = await getBoard(actor, request.boardId);
   const reason = input.comment?.trim() || (input.outcome === "approved" ? "Approved through the shift request Flow" : "Declined through the shift request Flow");
-  await decide(actor, board, request, input.outcome === "approved" ? "approve" : "decline", reason, "flow");
+  const result = await decide(actor, board, request, input.outcome === "approved" ? "approve" : "decline", reason, "flow");
+  if (input.outcome === "approved") {
+    await deliverScheduleNotice({ orgId: actor.orgId, actorId: actor.actorId, boardName: result.boardName, notices: result.notices });
+  }
 }
 
 async function decide(actor: ScheduleActor, board: ScheduleBoard, request: ShiftRequest, decision: "approve" | "decline", reason: string, mode: "flow" | "released"): Promise<ShiftRequestDecision> {
   if (request.status !== "pending") throw new ScheduleError("This request is not waiting for a decision.", { status: 409, code: "schedule_stale", remedy: "Reload the requests." });
   if (decision !== "approve" && decision !== "decline") throw new ScheduleError("Choose to approve or decline the request.", { code: "schedule_invalid" });
   const notices: ScheduleNotice[] = [];
+  const changedSubjects = new Set<string>();
+  const changedDates = new Set<string>();
   if (decision === "approve") {
     const entry = await lockEntry(actor.orgId, request.entryId);
+    changedSubjects.add(entry.subjectId);
+    changedDates.add(entry.startsOn);
+    changedDates.add(entry.endsOn);
     const counterpart = request.counterpartEntryId ? await lockEntry(actor.orgId, request.counterpartEntryId) : null;
+    if (counterpart) {
+      changedSubjects.add(counterpart.subjectId);
+      changedDates.add(counterpart.startsOn);
+      changedDates.add(counterpart.endsOn);
+    }
     for (const [row, revision] of [[entry, request.entryRevision], ...(counterpart ? [[counterpart, request.counterpartEntryRevision]] as const : [])] as const) {
       if (row.status !== "published" || row.revision !== revision) {
         throw new ScheduleError("The shift changed after the request was made.", { status: 409, code: "schedule_request_stale", remedy: "Decline this request; the employee can make a new one." });
@@ -353,6 +368,8 @@ async function decide(actor: ScheduleActor, board: ScheduleBoard, request: Shift
       const booking = await exactStoredBooking(actor.orgId, entry);
       const span = { ...booking.span, spanMode: "timed" as const, startsAt: request.proposedStartsAt!, endsAt: request.proposedEndsAt!,
         breakMinutes: request.proposedBreakMinutes!, startsOn: localDate(request.proposedStartsAt!, entry.timeZone), endsOn: localDate(request.proposedEndsAt!, entry.timeZone) };
+      changedDates.add(span.startsOn);
+      changedDates.add(span.endsOn);
       await setStatus(actor, entry, "cancelled", reason);
       const successorId = crypto.randomUUID();
       await insertEntry({ actor, board, id: successorId, booking: { ...booking, span }, status: "published", supersedesId: entry.id, reason,
@@ -382,7 +399,21 @@ async function decide(actor: ScheduleActor, board: ScheduleBoard, request: Shift
       }
     }
   }
-  return { request: await readRequest(actor.orgId, request.id), notices, boardName: board.name };
+  const distributionRefusals: { message: string; remedy: string }[] = [];
+  if (decision === "approve" && changedDates.size > 0) {
+    const dates = [...changedDates].sort();
+    const refusal = await scheduleBoardLifecycle({
+      actor,
+      boardId: board.id,
+      from: dates[0]!,
+      through: dates.at(-1)!,
+      subjectIds: [...changedSubjects].sort(),
+      event: "on_update",
+      occurrence: `${request.id}:${request.revision + 1}:${dates[0]}:${dates.at(-1)}`,
+    });
+    if (refusal) distributionRefusals.push(refusal);
+  }
+  return { request: await readRequest(actor.orgId, request.id), notices, boardName: board.name, distributionRefusals };
 }
 
 function localDate(instant: string, timeZone: string): string {
