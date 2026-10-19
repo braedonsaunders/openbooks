@@ -172,10 +172,10 @@ test('a separate lease form exposes and submits both classification thresholds',
     ...payload,
     lease: { ...payload.lease, status: 'active' },
   } as Parameters<typeof LeaseDrawer>[0]['payload']
-  let submitted: Record<string, unknown> | null = null
+  const submitted: { body?: Record<string, unknown> } = {}
   await mount(t, () => Response.json({ changeId: 'change-1' }), activePayload)
   globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
-    submitted = JSON.parse(String(init?.body)) as Record<string, unknown>
+    submitted.body = JSON.parse(String(init?.body)) as Record<string, unknown>
     return Response.json({ changeId: 'change-1' })
   }) as typeof fetch
   await act(async () => {
@@ -199,7 +199,7 @@ test('a separate lease form exposes and submits both classification thresholds',
     clickByText('Create approval proposal')
     for (let i = 0; i < 6; i++) await tick()
   })
-  const agreement = submitted?.separateLease as { agreement?: { classificationInputs?: Record<string, unknown> } } | undefined
+  const agreement = submitted.body?.separateLease as { agreement?: { classificationInputs?: Record<string, unknown> } } | undefined
   assert.equal(agreement?.agreement?.classificationInputs?.termThresholdPercent, '80')
   assert.equal(agreement?.agreement?.classificationInputs?.pvThresholdPercent, '95')
 })
