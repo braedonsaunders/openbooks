@@ -3,9 +3,10 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
+import { withSimClock } from "../platform/clock.ts";
 import { toUnits } from "../money/money.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
-import { getAvailableToPromise, releasableBackorders } from "./availability.ts";
+import { getAvailableToPromise, listAvailableToPromise, releasableBackorders } from "./availability.ts";
 import { issueInventory, receiveInventory } from "./movements.ts";
 import { getOnHandWith } from "./position.ts";
 import { replenishmentProposals } from "./replenishment.ts";
@@ -15,6 +16,33 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const run = <T>(work: () => Promise<T>) => withBypassContext(work);
 
 type OrderLine = { quantity: string; location: string | null };
+
+test("kit availability uses the supplied business date for its effective bill of materials", { skip: !DB }, async () => {
+  const org = await run(() => createScratchOrg());
+  try {
+    await run(async () => {
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(settings, '{features,warehousing}', 'true'::jsonb, true)
+         where id = ${org.orgId}`);
+      await db.execute(sql`update items set kind = 'kit' where org_id = ${org.orgId} and id = ${org.items.assembly}`);
+      await db.execute(sql`
+        update bom_components set effective_from = '2026-07-10', effective_to = '2026-07-20'
+         where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`);
+    });
+
+    const at = (asOfDate?: string) => withSimClock("2026-10-19", () => run(() => listAvailableToPromise(
+      db,
+      org.orgId,
+      { subsidiaryId: org.subsidiaryId, itemIds: [org.items.assembly], asOfDate },
+    )));
+    const available = await at("2026-07-15");
+    assert.equal(available.length, 1);
+    assert.equal(available[0]?.itemId, org.items.assembly);
+    await assert.rejects(at(), /no bill of materials effective today/);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("available to promise agrees with the layer math term by term, and replenishment proposes from projected supply", { skip: !DB }, async () => {
   const org = await run(() => createScratchOrg());

@@ -42,6 +42,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "ar.create",
   feature: "quoteToCash",
+  scope: "unrestricted",
   body: settingsBody,
   handler: async ({ authz, body }) => {
     try {

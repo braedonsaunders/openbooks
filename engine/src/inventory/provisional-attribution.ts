@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { loadSubsidiaryContext, restrictionAdmits } from "../organization/subsidiaries.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { InventoryError } from "./contracts.ts";
 import { inventoryOffsetAccountProblem } from "./journal.ts";
 
@@ -23,7 +25,11 @@ export type UnattributedDeficit = {
  * charged; these predate that record, so a receipt refuses to settle them
  * until an authorized user names the account.
  */
-export async function listUnattributedDeficits(orgId: string, itemId: string): Promise<UnattributedDeficit[]> {
+export async function listUnattributedDeficits(
+  orgId: string,
+  itemId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<UnattributedDeficit[]> {
   return withOrgTransaction(orgId, async () => (await db.execute<UnattributedDeficit>(sql`
     select deficit.id, deficit.item_id as "itemId", deficit.stock_location_id as "stockLocationId",
            location.code as "stockLocationCode", deficit.subsidiary_id as "subsidiaryId",
@@ -35,6 +41,7 @@ export async function listUnattributedDeficits(orgId: string, itemId: string): P
       join stock_locations location on location.org_id = deficit.org_id and location.id = deficit.stock_location_id
      where deficit.org_id = ${orgId} and deficit.item_id = ${itemId}
        and deficit.offset_account_id is null and deficit.remaining_quantity > 0
+       ${subsidiaryVisibleFilter(sql`deficit.subsidiary_id`, allowedSubsidiaryIds ?? null)}
      order by deficit.created_at, deficit.id`)).rows);
 }
 
@@ -68,12 +75,24 @@ export async function attributeDeficitAccount(input: {
     if (deficit.offset_account_id !== null) {
       throw new InventoryError("this shortfall already records the account its issue charged; that record is kept as issued");
     }
-    const account = (await db.execute<{ id: string; is_active: boolean; is_summary: boolean }>(sql`
-      select id, is_active, is_summary from accounts
+    const account = (await db.execute<{
+      id: string; is_active: boolean; is_summary: boolean;
+      subsidiary_id: string | null; subsidiary_include_children: boolean;
+    }>(sql`
+      select id, is_active, is_summary, subsidiary_id, subsidiary_include_children from accounts
        where org_id = ${input.orgId} and id = ${input.accountId}
        for share`)).rows[0];
     if (!account || !account.is_active || account.is_summary) {
       throw new InventoryError("choose an active posting account from this organization's chart of accounts");
+    }
+    const subsidiaries = await loadSubsidiaryContext(db, input.orgId);
+    if (!restrictionAdmits(
+      subsidiaries,
+      account.subsidiary_id,
+      account.subsidiary_include_children,
+      deficit.subsidiary_id,
+    )) {
+      throw new InventoryError("choose an active posting account available to the subsidiary that carried this shortfall's cost");
     }
     const asset = (await db.execute<{ asset_account_id: string }>(sql`
       select asset_account_id from item_inventory_profiles

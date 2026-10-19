@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
+import { businessTodayInTx, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, mulDecimalFactors, neg, normalizeDecimal } from "../money/money.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -389,6 +390,8 @@ export interface AvailableToPromise {
 export interface AvailabilityQuery {
   subsidiaryId: string;
   warehouseId?: string | null;
+  /** Optional business date shared by a multi-query availability response. */
+  asOfDate?: string;
   /**
    * Explicit stock locations to measure. A channel push names the mapped
    * stock location directly; warehouse scoping stays the operator-facing
@@ -427,10 +430,12 @@ export async function listAvailableToPromise(
   // real component availability.
   const kitIds = [...items.values()].filter((item) => item.kind === "kit").map((item) => item.itemId);
   const today = kitIds.length > 0
-    ? (await runner.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]?.today
+    ? query.asOfDate ?? await businessTodayInTx(runner as SqlExecutor, orgId)
     : null;
   if (kitIds.length > 0) {
-    if (!today) throw new InventoryError("cannot determine today's date for kit availability");
+    if (!today || !isIsoCalendarDate(today)) {
+      throw new InventoryError("cannot determine a valid business date for kit availability");
+    }
     const componentIds = new Set<string>();
     for (const kitId of kitIds) {
       for (const component of await kitBomForDemand(runner, orgId, kitId, today)) {

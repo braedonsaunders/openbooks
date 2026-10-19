@@ -28,6 +28,7 @@ const settingsBody = z.object({
 export const PATCH = defineRoute({
   permission: "ar.create",
   feature: "quoteToCash",
+  scope: "unrestricted",
   params,
   body: settingsBody,
   handler: async ({ authz, body }) => {
@@ -51,6 +52,7 @@ export const PATCH = defineRoute({
 export const DELETE = defineRoute({
   permission: "ar.create",
   feature: "quoteToCash",
+  scope: "unrestricted",
   params,
   handler: async ({ authz }) => {
     try {
