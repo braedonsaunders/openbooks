@@ -32,13 +32,16 @@ export type CaBonusIncomeReferenceSource = CaBonusIncomeReferenceScope & {
   };
 };
 
-/** Committed periodic income for CRA's separately paid Option 1 bonus method. */
+/** Committed periodic income for CRA's separately paid Option 1 method.
+ * Payment-date remuneration governs bonus tax; a retro earning window must
+ * not exclude regular pay already received before the retro payment.
+ */
 export async function resolveCaBonusIncomeReference(
   tx: Pick<typeof db, 'execute'>,
   scope: CaBonusIncomeReferenceScope,
 ): Promise<CaBonusIncomeReferenceSource> {
   const { orgId, documentId, employeePartyId, employmentId, subsidiaryId,
-    filingAccountId, currency, payScheduleId, taxYear, payDate, periodEnd } = scope;
+    filingAccountId, currency, payScheduleId, taxYear, payDate } = scope;
   const reference = (await tx.execute<{
     stub_id: string; document_id: string; income: string; pay_date: string;
     averaging: string | null; certificate_id: string | null;
@@ -64,7 +67,7 @@ export async function resolveCaBonusIncomeReference(
        and d.subsidiary_id=${subsidiaryId} and d.currency=${currency}
        and r.pay_schedule_id=${payScheduleId} and r.run_status='committed'
        and d.status<>'voided' and r.document_id<>${documentId}
-       and s.pay_date<=${payDate}::date and r.period_end<=${periodEnd}::date
+       and s.pay_date<=${payDate}::date and r.period_end<=${payDate}::date
        and (s.factors->>'I')::numeric>0
      order by s.pay_date desc,r.period_end desc,r.updated_at desc,r.document_id desc,s.id desc
      limit 1

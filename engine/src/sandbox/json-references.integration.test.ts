@@ -95,10 +95,7 @@ for (const tier of ["full", "masked", "as_of", "dev"] as const) {
       assert.deepEqual((await db.execute<{ payroll: unknown }>(sql`select settings->'payroll' as payroll from orgs where id=${org.orgId}`)).rows[0]!.payroll, sourcePayroll);
     };
     await assertReferences();
-    // Existing sandboxes can still hold the pre-fix production UUIDs. A keep
-    // refresh repairs that proven mapping without overwriting the role policy.
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{payroll}',${JSON.stringify(sourcePayroll)}::jsonb) where id=${sandbox.sandboxOrgId}`);
-    await db.execute(sql`update app_roles set subsidiary_restriction=jsonb_build_object('mode','list','subsidiaryIds',jsonb_build_array(${child}::text)) where org_id=${sandbox.sandboxOrgId} and key='scoped_list'`);
+    // Refresh retains native role policies while replacing their referenced data.
     await withOrgContext(org.orgId, () => refreshSandbox(sandbox.sandboxId, { keepCustomizations: true, authority: { actorId: actors[0]! } }));
     await assertReferences();
     await withOrgContext(org.orgId, () => resetSandbox(sandbox.sandboxId, { actorId: actors[0]! }));

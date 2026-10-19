@@ -203,6 +203,7 @@ test(
     let holder: Promise<unknown> | null = null;
     let voiding: Promise<DocumentVoidResult> | null = null;
     let voidingAsserted = false;
+    let holderPid: number | undefined;
     try {
       await backdateRaise(fx);
       const retro = await createRetroPayRun({
@@ -238,6 +239,7 @@ test(
           lockReject(error);
           throw error;
         }
+        holderPid = (await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
         lockResolve();
         await releaseGate;
       });
@@ -249,14 +251,12 @@ test(
         reason: "reissue this period in the correct batch",
         reversalDate: "2026-07-31",
       });
-      // Explicit gate, not a sleep: the void is only released once a backend
-      // is observed blocked inside the guard query itself.
+      // Observe the actual owning backend: native fences can block before the dependent-run query.
       for (let attempt = 0; ; attempt += 1) {
         const blocked = (await db.execute<{ blocked: boolean }>(sql`
           select exists (
             select 1 from pg_stat_activity
-             where state = 'active' and wait_event_type = 'Lock'
-               and position('for update of rr' in query) > 0
+             where datname=current_database() and ${holderPid}::int=any(pg_blocking_pids(pid))
           ) as blocked`)).rows[0]?.blocked;
         if (blocked) break;
         if (attempt >= 600) throw new Error("source void did not reach the retro guard");
