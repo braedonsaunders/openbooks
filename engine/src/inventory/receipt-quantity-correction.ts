@@ -7,7 +7,7 @@ import { adjustInventory } from "./movements.ts";
 import { assertInventoryDate } from "./position.ts";
 import { InventoryError } from "./contracts.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit, type TransactionAuditSnapshot } from "../records/transaction-audit.ts";
-import { type LiveReceiptMovement, liveReceiptMovements, layerCover, lockReceiptInventoryPositions } from "./receipt-void-state.ts";
+import { liveReceiptMovements, layerCover, lockReceiptInventoryPositions } from "./receipt-void-state.ts";
 
 /** Correcting a consumed purchase receipt line to its delivered quantity through a shrink adjustment. */
 
