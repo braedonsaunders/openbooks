@@ -43,7 +43,7 @@ test("rebate cost attestation hides out-of-scope document currency and status", 
            subtotal, tax_total, total, created_by)
         values
           (${documentId}, ${org.orgId}, 'customer_invoice', 'cancelled', ${`REBATE-SCOPE-${documentId}`},
-           ${hiddenSubsidiaryId}, ${org.customerId}, ${org.date}, 'USD', 1, 100, 0, 100, ${actorId})`);
+           ${hiddenSubsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', 1, 100, 0, 100, ${actorId})`);
       await db.execute(sql`
         insert into document_lines (id, org_id, document_id, line_number, account_id, quantity, unit_price, amount)
         values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, 1, 100, 100)`);
@@ -52,7 +52,7 @@ test("rebate cost attestation hides out-of-scope document currency and status", 
     await assert.rejects(
       attestRebateCost(org.orgId, actorId, lineId, {
         costAmount: "10",
-        currency: "CAD",
+        currency: "USD",
         evidence: "Supplier invoice supports the recorded item cost",
       }),
       (error: unknown) => error instanceof ScopeNotFoundError,
