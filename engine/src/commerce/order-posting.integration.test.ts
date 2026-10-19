@@ -445,7 +445,7 @@ test("a gift-card storefront sale issues the full paid amount in ledger units", 
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const { channelId, accounts } = await setup(org, actor, "per_order");
-    const program = await withBypass(() => createProgram({
+    const _program = await withBypass(() => createProgram({
       orgId: org.orgId, name: "Test gift cards", kind: "gift_card", currency: "CAD", liabilityAccountId: accounts.gift, actorId: actor,
     }));
     const order: ChannelOrder = {
