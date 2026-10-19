@@ -504,6 +504,46 @@ async function createVendorReturnDrafts(input: {
   }
   const created: string[] = []
   for (const [vendorId, lines] of byVendor) {
+    const sourceLines = (await db.execute<{
+      line_id: string
+      line_number: number
+      item_id: string | null
+      description: string | null
+      unit: string | null
+      asset_account_id: string | null
+    }>(sql`
+      select line.id as line_id, line.line_number, line.item_id, line.description, line.unit,
+             profile.asset_account_id
+        from document_lines line
+        left join item_inventory_profiles profile on profile.org_id = line.org_id and profile.item_id = line.item_id
+       where line.org_id = ${input.orgId} and line.document_id = ${input.rma.id}
+         and line.id in (${sql.join(lines.map((line) => sql`${line.lineId}`), sql`, `)})
+       order by line.line_number`)).rows
+    const sourceByLine = new Map(sourceLines.map((line) => [line.line_id, line]))
+    const vendorCreditLines: DocumentLineInput[] = lines.map((decision) => {
+      const source = sourceByLine.get(decision.lineId)
+      if (!source?.item_id || !source.asset_account_id) {
+        throw new ReturnRefusal(
+          `RMA line ${decision.lineId} has no inventory asset account for a vendor return`,
+          'source_unavailable', 422,
+          'Set an inventory costing profile with an asset account, then inspect the return again',
+        )
+      }
+      return {
+        accountId: source.asset_account_id,
+        itemId: source.item_id,
+        description: source.description ?? `Return from ${input.rma.documentNumber}`,
+        quantity: decision.accepted,
+        unit: source.unit,
+        unitPrice: '0',
+        amount: '0',
+        taxCodeId: null,
+        taxGroupId: null,
+        taxOverridden: false,
+        taxAmount: '0',
+        stockLocationId: decision.dispositionLocationId,
+      }
+    })
     const key = randomUUID()
     const result = await createDocument({
       orgId: input.orgId,
@@ -518,6 +558,7 @@ async function createVendorReturnDrafts(input: {
         documentDate: input.rmaDocumentDate,
         referenceNumber: input.rma.documentNumber,
         memo: `Vendor return requested from ${input.rma.documentNumber}`,
+        lines: vendorCreditLines,
       },
     })
     if (result.status === 'created') {
@@ -763,14 +804,18 @@ export async function inspectReturnAuthorization(input: {
           referenceNumber: current.documentNumber,
           memo: `Customer return under ${current.documentNumber}`,
           lines: creditLines,
-          ...((sourceControlAccountId || storeCreditProgramId || portalRequest)
+          ...(sourceControlAccountId
             ? { custom: {
-                ...(sourceControlAccountId ? { controlAccountId: sourceControlAccountId } : {}),
-                ...(storeCreditProgramId ? { storeCreditProgramId } : {}),
-                ...(portalRequest ? { portalReturnResolution: portalRequest.resolution } : {}),
+                controlAccountId: sourceControlAccountId,
               } }
             : {}),
         },
+        ...(portalRequest
+          ? { nativeCustom: {
+              ...(storeCreditProgramId ? { storeCreditProgramId } : {}),
+              portalReturnResolution: portalRequest.resolution,
+            } }
+          : {}),
       })
       creditId = created.id
       if (created.status === 'created') {

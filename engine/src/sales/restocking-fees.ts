@@ -390,7 +390,7 @@ export function restockingFeeCreditLines(resolution: ResolveRestockingFeeResult)
         amount,
         taxCodeId: null,
         taxGroupId: null,
-        taxOverridden: true,
+        taxOverridden: false,
         taxAmount: "0",
       };
     });

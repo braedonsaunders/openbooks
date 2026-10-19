@@ -154,6 +154,15 @@ test('RMA inspection issues one original-cost credit, scraps quarantine stock, s
     assert.ok(linkedDraft)
     assert.equal(linkedDraft.status, 'draft')
     assert.equal(linkedDraft.links, 1)
+    const stagedVendorLines = (await db.execute<{ item_id: string; quantity: string; amount: string }>(sql`
+      select item_id, quantity::text, amount::text
+        from document_lines where org_id = ${org.orgId} and document_id = ${linkedDraft.id}
+       order by line_number`)).rows
+    assert.deepEqual(stagedVendorLines, [{
+      item_id: org.items.fifo,
+      quantity: '1.00000000',
+      amount: '0.0000',
+    }], 'the staged vendor credit names the accepted item and quantity for later vendor pricing')
     const scrap = (await db.execute<{ quantity: string; total_value: string }>(sql`
       select m.quantity::text, m.total_value::text from rma_lines r
         join inventory_movements m on m.id = r.scrap_movement_id and m.org_id = r.org_id

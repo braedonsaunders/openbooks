@@ -2870,10 +2870,12 @@ export interface DocumentCreateInput {
   requestBody: unknown
   /** Server-owned return request metadata that is not an editable custom field. */
   nativeCustom?: {
-    portalRequest: {
+    portalRequest?: {
       resolution: 'refund' | 'exchange' | 'store_credit'
       storeCreditBonusPercent: string
     }
+    storeCreditProgramId?: string
+    portalReturnResolution?: 'refund' | 'exchange' | 'store_credit'
   }
 }
 
@@ -2913,7 +2915,17 @@ export interface DocumentCreateResult {
  */
 export async function createDocument(input: DocumentCreateInput): Promise<DocumentCreateResult> {
   const { orgId, userId, kind, key, body, subsidiaryId, requestBody } = input
-  if (input.nativeCustom && kind !== 'rma') throw new DocumentEditError(422, 'Native return metadata can be written only when creating a return authorization.')
+  if (input.nativeCustom) {
+    const keys = Object.keys(input.nativeCustom)
+    const allowed = kind === 'rma'
+      ? ['portalRequest']
+      : kind === 'customer_credit'
+        ? ['storeCreditProgramId', 'portalReturnResolution']
+        : []
+    if (keys.length === 0 || keys.some((key) => !allowed.includes(key))) {
+      throw new DocumentEditError(422, 'Native return metadata is not valid for this document.')
+    }
+  }
   if (body.custom && ['withholdingDeposit','withholdingRemittance'].some(key => Object.hasOwn(body.custom!, key))) throw new DocumentEditError(422, 'Authority remittance source evidence is created only through the native withholding workflow.');
   const cfg = docKindConfig(kind)
   if (!cfg) throw new DocumentEditError(422, `kind "${kind}" is not editable`)
