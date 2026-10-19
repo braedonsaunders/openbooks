@@ -10,7 +10,7 @@
 
 import { sql } from "drizzle-orm";
 import { CREW_TIME_BATCH_SUBJECT_KIND } from "../../flows/crew-batches-adapter.ts";
-import { decideGate, delegateGate } from "../../flows/gates.ts";
+import { decideGate, delegateGate, gateDecisionCapability } from "../../flows/gates.ts";
 import { FIELD_TIME_FEATURE } from "../../hrm/field-time/settings.ts";
 import { actorPartyId, actorPendingGates, orgFeatureOn, toWorklistScope } from "../guard.ts";
 import { db, type SqlExecutor } from "../../platform/db.ts";
@@ -36,17 +36,18 @@ export const crewTimeBatchAdapter: InboxAdapter = {
     const out: InboxItem[] = [];
     for (const gate of await actorPendingGates(ctx)) {
       if (gate.subjectKind !== CREW_TIME_BATCH_SUBJECT_KIND) continue;
+      const sodBlocked = (await gateDecisionCapability(gate.id, ctx.actorId)).sodBlocked;
       const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
       out.push({
         id: inboxItemId("crew_time_batch", `gate:${gate.id}`),
         kind: "crew_time_batch",
         title: gate.title,
-        subtitle: `crew batch approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
+        subtitle: `${sodBlocked ? "Awaiting another approver — " : ""}crew batch approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
         dueAt,
         createdAt: new Date(gate.createdAt).toISOString(),
         priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/time/crew",
-        actions: [
+        actions: sodBlocked ? [] : [
           { key: "approve", label: "Approve", style: "primary" as const, needsReason: false },
           { key: "reject", label: "Reject", style: "danger" as const, needsReason: true },
           { key: "delegate", label: "Delegate", style: "secondary" as const, needsReason: true },

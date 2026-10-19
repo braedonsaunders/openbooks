@@ -16,7 +16,7 @@
 
 import { sql } from "drizzle-orm";
 import { TIMESHEET_WEEK_SUBJECT_KIND } from "../../flows/timesheet-weeks-adapter.ts";
-import { decideGate, delegateGate } from "../../flows/gates.ts";
+import { decideGate, delegateGate, gateDecisionCapability } from "../../flows/gates.ts";
 import { db } from "../../platform/db.ts";
 import { parseDelegationReason } from "../delegation.ts";
 import { actorPartyId, actorPendingGates, toWorklistScope } from "../guard.ts";
@@ -88,17 +88,18 @@ export const timesheetWeekAdapter: InboxAdapter = {
     const out: InboxItem[] = [];
     for (const gate of await actorPendingGates(ctx)) {
       if (gate.subjectKind !== TIMESHEET_WEEK_SUBJECT_KIND) continue;
+      const sodBlocked = (await gateDecisionCapability(gate.id, ctx.actorId)).sodBlocked;
       const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
       out.push({
         id: inboxItemId("timesheet_week", `gate:${gate.id}`),
         kind: "timesheet_week",
         title: gate.title,
-        subtitle: `timesheet approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
+        subtitle: `${sodBlocked ? "Awaiting another approver — " : ""}timesheet approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
         dueAt,
         createdAt: new Date(gate.createdAt).toISOString(),
         priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/timesheets",
-        actions: [
+        actions: sodBlocked ? [] : [
           { key: "approve", label: "Approve", style: "primary", needsReason: false },
           { key: "reject", label: "Reject", style: "danger", needsReason: true },
           { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },
