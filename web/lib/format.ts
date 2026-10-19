@@ -1,6 +1,7 @@
 import type { FiscalPeriodRef } from '@openbooks/reports'
 import { fiscalPeriodLabel } from './fiscal-period-label'
 import { createMoneyFormatter } from './money-format'
+import { periodToDateLabel, weekToDateLabel } from './period-label-catalog'
 
 export { fiscalPeriodLabel }
 
@@ -224,7 +225,7 @@ export function civilDateParams<T extends Record<string, unknown>>(values: T, lo
  * titles and export labels present the window through this one rule.
  */
 export function reportPeriodLabel(
-  period: { presetId?: string; from: string; to: string; label: string; fiscalPeriod?: FiscalPeriodRef },
+  period: { presetId?: string; from: string; to: string; label: string; fiscalPeriod?: FiscalPeriodRef; windowName?: string; toDate?: boolean },
   locale: string,
 ): string {
   if (period.presetId === 'custom') {
@@ -234,8 +235,11 @@ export function reportPeriodLabel(
   if (period.fiscalPeriod) {
     const window = fiscalPeriodLabel(period.fiscalPeriod, locale)
     // A window that stops before its period ends is that period to date.
-    return period.to < period.fiscalPeriod.to ? `${window} to date` : window
+    return period.to < period.fiscalPeriod.to ? periodToDateLabel(window, locale) : window
   }
+  if (period.presetId === 'week_to_date') return weekToDateLabel(locale)
+  // A window qualified to the business day reads its qualifier from the catalog.
+  if (period.toDate && period.windowName) return periodToDateLabel(period.windowName, locale)
   return period.label
 }
 

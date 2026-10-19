@@ -63,6 +63,8 @@ export function fiscalContextFor(today: string, startMonth: number): FiscalConte
       from: priorYear.from,
       to: addMonthsIso(today, -12),
       label: `${priorYear.label} to date`,
+      windowName: priorYear.label,
+      toDate: true,
     },
   }
 }
@@ -260,7 +262,7 @@ function resolveDeclaredPreset(id: string, input: ResolvePresetInput): DateRange
   const periods = [...(input.periods ?? [])].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to))
   if (!periods.length) return null
   const { today } = input
-  const toDate = (r: DateRange): DateRange => ({ ...r, to: today, label: `${r.label} to date` })
+  const toDate = (r: DateRange): DateRange => ({ ...r, to: today, label: `${r.label} to date`, windowName: r.label, toDate: true })
   const holding = declaredPeriodContaining(periods, today)
   const periodWindow = (p: FiscalPeriod): DateRange => ({ from: p.from, to: p.to, label: p.name, fiscalPeriod: fiscalPeriodRef(p) })
 
@@ -445,7 +447,7 @@ export function resolvePreset(id: string, input: ResolvePresetInput): DateRange 
   const curH = Math.floor(fiscalMonthOffset(today, startMonth) / 6) + 1
   const curP = fiscalMonthOffset(today, startMonth) + 1
   const y = Number(today.slice(0, 4))
-  const toDate = (r: DateRange): DateRange => ({ from: r.from, to: today, label: `${r.label} to date` })
+  const toDate = (r: DateRange): DateRange => ({ from: r.from, to: today, label: `${r.label} to date`, windowName: r.label, toDate: true })
 
   switch (id) {
     // Fiscal Year
@@ -524,7 +526,7 @@ export function resolvePreset(id: string, input: ResolvePresetInput): DateRange 
     case 'this_calendar_year':
       return { from: `${y}-01-01`, to: `${y}-12-31`, label: String(y) }
     case 'this_calendar_year_to_date':
-      return { from: `${y}-01-01`, to: today, label: `${y} to date` }
+      return { from: `${y}-01-01`, to: today, label: `${y} to date`, windowName: String(y), toDate: true }
     case 'last_calendar_year':
       return { from: `${y - 1}-01-01`, to: `${y - 1}-12-31`, label: String(y - 1) }
 

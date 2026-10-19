@@ -11,33 +11,33 @@ describe('fiscalContextFor', () => {
     const ctx = fiscalContextFor('2026-08-16', 4)
     assert.equal(ctx.fiscalYear, 2027)
     assert.deepEqual(ctx.year, { from: '2026-04-01', to: '2027-03-31', label: 'FY 2027' })
-    assert.deepEqual(ctx.yearToDate, { from: '2026-04-01', to: '2026-08-16', label: 'FY 2027 to date' })
+    assert.deepEqual(ctx.yearToDate, { from: '2026-04-01', to: '2026-08-16', label: 'FY 2027 to date', windowName: 'FY 2027', toDate: true })
     assert.equal(ctx.quarter, 2)
     assert.deepEqual(ctx.quarterRange, { from: '2026-07-01', to: '2026-09-30', label: 'Q2 FY 2027' })
     assert.deepEqual(ctx.priorYear, { from: '2025-04-01', to: '2026-03-31', label: 'FY 2026' })
-    assert.deepEqual(ctx.priorYearToDate, { from: '2025-04-01', to: '2025-08-16', label: 'FY 2026 to date' })
+    assert.deepEqual(ctx.priorYearToDate, { from: '2025-04-01', to: '2025-08-16', label: 'FY 2026 to date', windowName: 'FY 2026', toDate: true })
   })
 
   it('degenerates to the calendar year for a January start', () => {
     const ctx = fiscalContextFor('2026-08-16', 1)
     assert.equal(ctx.fiscalYear, 2026)
     assert.deepEqual(ctx.year, { from: '2026-01-01', to: '2026-12-31', label: 'FY 2026' })
-    assert.deepEqual(ctx.yearToDate, { from: '2026-01-01', to: '2026-08-16', label: 'FY 2026 to date' })
+    assert.deepEqual(ctx.yearToDate, { from: '2026-01-01', to: '2026-08-16', label: 'FY 2026 to date', windowName: 'FY 2026', toDate: true })
     assert.equal(ctx.quarter, 3)
   })
 
   it('handles the first day of the fiscal year', () => {
     const ctx = fiscalContextFor('2026-04-01', 4)
     assert.equal(ctx.fiscalYear, 2027)
-    assert.deepEqual(ctx.yearToDate, { from: '2026-04-01', to: '2026-04-01', label: 'FY 2027 to date' })
+    assert.deepEqual(ctx.yearToDate, { from: '2026-04-01', to: '2026-04-01', label: 'FY 2027 to date', windowName: 'FY 2027', toDate: true })
     assert.equal(ctx.quarter, 1)
-    assert.deepEqual(ctx.priorYearToDate, { from: '2025-04-01', to: '2025-04-01', label: 'FY 2026 to date' })
+    assert.deepEqual(ctx.priorYearToDate, { from: '2025-04-01', to: '2025-04-01', label: 'FY 2026 to date', windowName: 'FY 2026', toDate: true })
   })
 
   it('handles the last day of the fiscal year', () => {
     const ctx = fiscalContextFor('2027-03-31', 4)
     assert.equal(ctx.fiscalYear, 2027)
-    assert.deepEqual(ctx.yearToDate, { from: '2026-04-01', to: '2027-03-31', label: 'FY 2027 to date' })
+    assert.deepEqual(ctx.yearToDate, { from: '2026-04-01', to: '2027-03-31', label: 'FY 2027 to date', windowName: 'FY 2027', toDate: true })
     assert.equal(ctx.quarter, 4)
   })
 

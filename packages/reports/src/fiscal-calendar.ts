@@ -22,6 +22,13 @@ export type DateRange = {
   to: string
   label: string
   fiscalPeriod?: FiscalPeriodRef
+  /**
+   * A window that runs only to the business day ("2026 to date"): the bare
+   * window name, so presenters render the qualifier from the locale
+   * catalogs instead of the locale-free `label`.
+   */
+  windowName?: string
+  toDate?: boolean
 }
 
 /** The declared accounting period a window covers: its fiscal position and full bounds. */

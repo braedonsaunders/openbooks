@@ -60,6 +60,7 @@ import parties from './parties.json'
 import payments from './payments.json'
 import payroll from './payroll.json'
 import pdfTemplates from './pdfTemplates.json'
+import periodLabels from './periodLabels.json'
 import planning from './planning.json'
 import platform from './platform.json'
 import portal from './portal.json'
@@ -147,6 +148,7 @@ export default {
   payments,
   payroll,
   pdfTemplates,
+  periodLabels,
   planning,
   platform,
   portal,

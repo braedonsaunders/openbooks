@@ -167,3 +167,25 @@ test("an accounting-period window reads as its period label in every fiscal year
     'P12 FY2026 · Dec 2026 to date',
   )
 })
+
+test('a window that runs to the business day reads its qualifier from the locale catalogs', async () => {
+  const { resolvePreset } = await import('@openbooks/reports')
+  const catalogs = { de: (await import('../messages/de/periodLabels.json')).default, ja: (await import('../messages/ja/periodLabels.json')).default }
+  const fiscalPeriod = { fiscalYear: 2026, periodNumber: 5, from: '2026-05-01', to: '2026-05-31' }
+  const periodToDate = { presetId: 'this_period_to_date', from: '2026-05-01', to: '2026-05-19', label: 'P05 FY2026 to date', fiscalPeriod }
+  assert.equal(reportPeriodLabel(periodToDate, 'en'), 'P05 FY2026 · May 2026 to date')
+  assert.equal(reportPeriodLabel(periodToDate, 'de'), catalogs.de.toDate.replace('{label}', reportPeriodLabel({ ...periodToDate, to: '2026-05-31' }, 'de')))
+  // Calendar and fiscal-year windows carry their bare name, so the qualifier never stays English.
+  const yearToDate = { presetId: 'this_calendar_year_to_date', ...resolvePreset('this_calendar_year_to_date', { startMonth: 1, today: '2026-10-19' })! }
+  assert.equal(reportPeriodLabel(yearToDate, 'en'), '2026 to date')
+  assert.equal(reportPeriodLabel(yearToDate, 'de'), '2026 bis heute')
+  assert.equal(reportPeriodLabel(yearToDate, 'ja'), catalogs.ja.toDate.replace('{label}', '2026'))
+  const fiscalToDate = { presetId: 'this_fiscal_year_to_date', ...resolvePreset('this_fiscal_year_to_date', { startMonth: 4, today: '2026-10-19' })! }
+  assert.ok(fiscalToDate.toDate && fiscalToDate.windowName, 'a fiscal year to date names its window')
+  assert.equal(reportPeriodLabel(fiscalToDate, 'fr'), `${fiscalToDate.windowName} à ce jour`)
+  const week = { presetId: 'week_to_date', ...resolvePreset('week_to_date', { startMonth: 1, today: '2026-10-19' })! }
+  assert.equal(reportPeriodLabel(week, 'es'), 'Semana hasta la fecha')
+  for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
+    assert.doesNotMatch(reportPeriodLabel(yearToDate, locale), /to date/, `${locale} reads the qualifier in its own language`)
+  }
+})

@@ -33,20 +33,20 @@ describe('resolvePreset with declared fiscal periods', () => {
       fiscalPeriod: { fiscalYear: 2026, periodNumber: 1, from: '2026-02-02', to: '2026-03-01' },
     })
     // The to-date window keeps the period's full bounds so presenters can label the period it cuts short.
-    assert.deepEqual(resolvePreset('this_period_to_date', input), { from: '2026-03-30', to: TODAY, label: 'P03 FY2026 to date', fiscalPeriod: p03 })
+    assert.deepEqual(resolvePreset('this_period_to_date', input), { from: '2026-03-30', to: TODAY, label: 'P03 FY2026 to date', fiscalPeriod: p03, windowName: 'P03 FY2026', toDate: true })
   })
 
   it('resolves quarter presets by grouping declared periods', () => {
     const input = { startMonth: 2, today: TODAY, periods: P445 }
     assert.deepEqual(resolvePreset('this_fiscal_quarter', input), { from: '2026-02-02', to: '2026-05-03', label: 'Q1 FY 2026' })
-    assert.deepEqual(resolvePreset('this_fiscal_quarter_to_date', input), { from: '2026-02-02', to: TODAY, label: 'Q1 FY 2026 to date' })
+    assert.deepEqual(resolvePreset('this_fiscal_quarter_to_date', input), { from: '2026-02-02', to: TODAY, label: 'Q1 FY 2026 to date', windowName: 'Q1 FY 2026', toDate: true })
     assert.deepEqual(resolvePreset('last_fiscal_quarter', input), { from: '2025-11-03', to: '2026-02-01', label: 'Q4 FY 2025' })
   })
 
   it('resolves fiscal-year presets to the declared year bounds', () => {
     const input = { startMonth: 2, today: TODAY, periods: P445 }
     assert.deepEqual(resolvePreset('this_fiscal_year', input), { from: '2026-02-02', to: '2026-08-02', label: 'FY 2026' })
-    assert.deepEqual(resolvePreset('this_fiscal_year_to_date', input), { from: '2026-02-02', to: TODAY, label: 'FY 2026 to date' })
+    assert.deepEqual(resolvePreset('this_fiscal_year_to_date', input), { from: '2026-02-02', to: TODAY, label: 'FY 2026 to date', windowName: 'FY 2026', toDate: true })
     assert.deepEqual(resolvePreset('last_fiscal_year', input), { from: '2025-11-03', to: '2026-02-01', label: 'FY 2025' })
   })
 
