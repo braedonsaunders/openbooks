@@ -144,10 +144,19 @@ export function CountsList({
   const router = useRouter()
   const [createOpen, setCreateOpen] = useState(createRequested)
   const [selectedId, setSelectedId] = useState<string | null>(selectedCountId ?? null)
-  const [detail, setDetail] = useState<StockCountDetail | null>(null)
-  const [detailError, setDetailError] = useState<string | null>(null)
-  const [detailPending, setDetailPending] = useState(false)
+  const [detailResult, setDetailResult] = useState<{
+    recordId: string
+    requestKey: string
+    detail?: StockCountDetail
+    error?: string
+  } | null>(null)
   const [detailAttempt, setDetailAttempt] = useState(0)
+  const detailRequestKey = selectedId ? `${selectedId}:${detailAttempt}` : null
+  const selectedDetailResult = detailResult?.recordId === selectedId ? detailResult : null
+  const currentDetailResult = selectedDetailResult?.requestKey === detailRequestKey ? selectedDetailResult : null
+  const detail = selectedDetailResult?.detail ?? null
+  const detailError = detail ? null : currentDetailResult?.error ?? null
+  const detailPending = !!selectedId && !detail && !detailError
   // Typed observations that are not yet recorded hold the count drawer open
   // behind a discard confirmation, so Escape or a row switch cannot drop them.
   const detailGuard = useDirtyClose({
@@ -173,12 +182,10 @@ export function CountsList({
   }, [])
 
   useEffect(() => {
-    if (!selectedId) return
+    if (!selectedId || !detailRequestKey) return
     const controller = new AbortController()
     const id = selectedId
-    setDetail(null)
-    setDetailError(null)
-    setDetailPending(true)
+    const requestKey = detailRequestKey
     ;(async () => {
       const res = await fetch(`/api/inventory/counts?id=${encodeURIComponent(id)}`, { signal: controller.signal, cache: 'no-store' })
       if (!res.ok) {
@@ -186,16 +193,17 @@ export function CountsList({
       }
       const data = await res.json()
       if (controller.signal.aborted) return
-      setDetail(data as StockCountDetail)
-      setDetailError(null)
+      setDetailResult({ recordId: id, requestKey, detail: data as StockCountDetail })
     })().catch((error: unknown) => {
       if (controller.signal.aborted) return
-      setDetailError(error instanceof Error ? error.message : t('counts.failed'))
-    }).finally(() => {
-      if (!controller.signal.aborted) setDetailPending(false)
+      setDetailResult({
+        recordId: id,
+        requestKey,
+        error: error instanceof Error ? error.message : t('counts.failed'),
+      })
     })
     return () => controller.abort()
-  }, [selectedId, detailAttempt, t])
+  }, [selectedId, detailRequestKey, t])
 
   const columns: RegisteredListColumn<StockCountSummary>[] = [
     { key: 'date', header: t('counts.columns.date'), cell: (r) => <CountLink id={r.id} params={countParams}>{r.countedOn}</CountLink>, search: (r) => r.countedOn },
@@ -263,7 +271,7 @@ export function CountsList({
           openKey={selectedId}
           pending={detailPending}
           error={detailError}
-          onRetry={() => { setDetailError(null); setDetailAttempt((attempt) => attempt + 1) }}
+          onRetry={() => setDetailAttempt((attempt) => attempt + 1)}
           closeHref={closeHref}
           size="xl"
           title={t('counts.detail.title')}
