@@ -6,13 +6,22 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec, type WidgetR
 import { getAuthz, can } from '../../../../lib/authz'
 import { accessDeniedHref } from '../../../../lib/gate-targets'
 import { isFeatureEnabled } from '../../../../lib/features'
+import {
+  canShowNetInvestmentOciReversal,
+  changeAuthority,
+  enabledAccountingChangeDomains,
+  type AccountingChangeDomain,
+  type AccountingChangeFeature,
+  type AccountingChangeFeatureState,
+} from '../../../../lib/accounting-change-authority'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 
 type AccountingChangesAuthz = NonNullable<Awaited<ReturnType<typeof getAuthz>>>
 
 export interface AccountingChangesWorkspaceData {
   auth: AccountingChangesAuthz
-  domains: string[]
+  domains: AccountingChangeDomain[]
+  allowNetInvestmentOciReversal: boolean
   sp: Record<string, string | string[] | undefined>
 }
 
@@ -28,7 +37,7 @@ export async function loadAccountingChanges(
 ): Promise<AccountingChangesData> {
   const auth = await getAuthz()
   if (!auth) redirect('/login')
-  const domains = [...(can(auth, 'gl.read')
+  const candidates: AccountingChangeDomain[] = [...(can(auth, 'gl.read')
     ? ['lease', 'asset', 'revenue', 'consolidation', 'provision', 'sales']
     : [
         ...(can(auth, 'assets.read') ? ['lease', 'asset'] : []),
@@ -36,16 +45,26 @@ export async function loadAccountingChanges(
         ...(can(auth, 'close.read') ? ['consolidation'] : []),
       ]),
     ...(can(auth, 'payroll.read') ? ['payroll'] : []),
-    ...(can(auth, 'manufacturing.read') && await isFeatureEnabled(auth.user.orgId, 'manufacturing') ? ['manufacturing'] : []),
+    ...(can(auth, 'manufacturing.read') ? ['manufacturing'] : []),
   ]
-  if (domains.length === 0) redirect(accessDeniedHref({ permission: 'gl.read' }))
+  const features: AccountingChangeFeatureState = {}
+  const requiredFeatures = [...new Set(candidates
+    .map((domain) => changeAuthority[domain].feature)
+    .filter((feature): feature is AccountingChangeFeature => feature !== null))]
+  await Promise.all(requiredFeatures.map(async (feature) => {
+    features[feature] = await isFeatureEnabled(auth.user.orgId, feature)
+  }))
+  const domains = enabledAccountingChangeDomains(candidates, features)
+  const allowNetInvestmentOciReversal = canShowNetInvestmentOciReversal(candidates, features)
+  if (domains.length === 0 && !allowNetInvestmentOciReversal)
+    redirect(accessDeniedHref({ permission: 'gl.read' }))
   const t = await getTranslations('accounting')
   const tabs = await groupTabs('accounting', '/accounting/changes', { orgId: auth.user.orgId })
   return {
     title: t('lifecycle.pageTitle'),
     description: t('lifecycle.pageDescription'),
     tabs,
-    workspace: { auth, domains, sp },
+    workspace: { auth, domains, allowNetInvestmentOciReversal, sp },
   }
 }
 

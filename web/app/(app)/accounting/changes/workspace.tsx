@@ -7,6 +7,7 @@ import { UrlDrawer, Badge } from "@openbooks/ui";
 import { EntityListView } from "@/components/entity-list-view";
 import { JournalEntryLink } from "@/components/journal-entry-link";
 import { can } from "@/lib/authz";
+import { isAccountingChangeFeatureAllowed } from "@/lib/accounting-change-authority";
 import { isUuid, mergeHref } from "@/lib/list-params";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 import { financialChangeSubjectExpr,manufacturingChangeResourcesVisible } from "@/lib/customization/entity-list-query/accounting-lifecycles";
@@ -20,11 +21,17 @@ import type { AccountingChangesWorkspaceData } from "./view";
 
 export async function AccountingChangesWorkspace({ data }: { data: AccountingChangesWorkspaceData }) {
   const t = await getTranslations("accounting");
-  const { auth, domains, sp } = data;
-  const scopePredicate = sql`fc.domain in (${sql.join(
-    domains.map((domain) => sql`${domain}`),
-    sql`, `,
-  )}) ${auth.allowedSubsidiaryIds ? sql`and not exists(select 1 from jsonb_array_elements_text(coalesce(fc.payload->'requiredSubsidiaryIds','[]'::jsonb)) required(id) where required.id not in(select jsonb_array_elements_text(${JSON.stringify([...auth.allowedSubsidiaryIds])}::jsonb)))` : sql``} ${manufacturingChangeResourcesVisible(auth.allowedSubsidiaryIds)}`;
+  const { auth, domains, allowNetInvestmentOciReversal, sp } = data;
+  const domainPredicate = domains.length
+    ? sql`fc.domain in (${sql.join(
+        domains.map((domain) => sql`${domain}`),
+        sql`, `,
+      )})`
+    : sql`false`;
+  const reversalPredicate = allowNetInvestmentOciReversal
+    ? sql` or (fc.domain = 'consolidation' and fc.operation = 'net_investment_oci_reversal')`
+    : sql``;
+  const scopePredicate = sql`(${domainPredicate}${reversalPredicate}) ${auth.allowedSubsidiaryIds ? sql`and not exists(select 1 from jsonb_array_elements_text(coalesce(fc.payload->'requiredSubsidiaryIds','[]'::jsonb)) required(id) where required.id not in(select jsonb_array_elements_text(${JSON.stringify([...auth.allowedSubsidiaryIds])}::jsonb)))` : sql``} ${manufacturingChangeResourcesVisible(auth.allowedSubsidiaryIds)}`;
   const orgId = auth.user.orgId;
   const id =
     typeof sp.change === "string" && isUuid(sp.change) ? sp.change : null;
@@ -132,6 +139,14 @@ export async function AccountingChangesWorkspace({ data }: { data: AccountingCha
       ? t(`lifecycle.operations.${row.operation}`)
       : row.operation.replaceAll("_", " ")
     : "";
+  const featureAllowed = row
+    ? isAccountingChangeFeatureAllowed(
+        row.domain,
+        row.operation,
+        domains,
+        allowNetInvestmentOciReversal,
+      )
+    : false;
   const statusLabel = row
     ? t.has(`lifecycle.${row.status}`)
       ? t(`lifecycle.${row.status}`)
@@ -291,9 +306,9 @@ export async function AccountingChangesWorkspace({ data }: { data: AccountingCha
                   id={row.id}
                   status={row.status}
                   canSubmit={
-                    can(auth, row.domain === "provision" ? "gl.manage" : permission) && row.submitted_by === auth.user.id
+                    featureAllowed && can(auth, row.domain === "provision" ? "gl.manage" : permission) && row.submitted_by === auth.user.id
                   }
-                  canApply={can(auth, permission) && (row.domain!=="manufacturing" || (row.operation==="work_order_loss_disposition" && can(auth,"items.post") || auth.allowedSubsidiaryIds===null && (row.operation==="bom_revision_activation" && can(auth,"admin.setup.manage") || row.operation==="routing_revision_activation" || row.operation==="standard_cost_rollup" && can(auth,"items.post") && can(auth,"items.manage"))))}
+                  canApply={featureAllowed && can(auth, permission) && (row.domain!=="manufacturing" || (row.operation==="work_order_loss_disposition" && can(auth,"items.post") || auth.allowedSubsidiaryIds===null && (row.operation==="bom_revision_activation" && can(auth,"admin.setup.manage") || row.operation==="routing_revision_activation" || row.operation==="standard_cost_rollup" && can(auth,"items.post") && can(auth,"items.manage"))))}
                 />
               </div>
             </UrlDrawer>
