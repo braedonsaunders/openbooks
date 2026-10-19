@@ -204,7 +204,8 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
         (org_id, subsidiary_id, code, name, time_zone, cycle_days, cycle_anchor, slots,
          target_kind, project_id, reason, created_by, updated_by)
       values (${org.orgId}, ${org.subsidiaryId}, 'MERGE-PATTERN', 'Merge pattern', 'America/Toronto', 7,
-              '2026-01-05', '[]'::jsonb, 'project', ${duplicate}, 'Pattern follows its project through a merge', ${actor}, ${actor})`);
+              '2026-01-05', '[{"position":0,"starts":"09:00","ends":"17:00","breakMinutes":30,"qualificationTypeIds":[]}]'::jsonb,
+              'project', ${duplicate}, 'Pattern follows its project through a merge', ${actor}, ${actor})`);
     // A project custom reference pointing at the duplicate follows the merge.
     await db.execute(sql`
       insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
