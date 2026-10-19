@@ -14,6 +14,7 @@ import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { sum, isZero } from "../money/money.ts";
 import { assertPeriodModulesOpen, CloseError, periodClosedDetailsOf } from "../periods/period-policy.ts";
 import { markEntryReversed, postEntry } from "./post-entry.ts";
+import { reversalPostEntryLine } from "./reversal-posting-lines.ts";
 import { PostingError } from "./posting-contracts.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 type ProjectGlTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -368,30 +369,7 @@ export async function reverseProjectGlEntryWithinTransaction(
       reason,
       reversalDate,
     },
-    lines: mirror.map((line) => ({
-      accountId: line.accountId,
-      subsidiaryId: line.subsidiaryId,
-      amount: line.amount,
-      currency: line.currency,
-      txnAmount: line.txnAmount,
-      fxRate: line.fxRate,
-      memo: line.memo,
-      partyId: line.partyId,
-      departmentId: line.departmentId,
-      projectId: line.projectId,
-      locationId: line.locationId,
-      classId: line.classId,
-      equipmentUnitId: line.equipmentUnitId,
-      extraDims: (line.extraDims ?? {}) as Record<string, unknown>,
-      paymentCardId: line.paymentCardId,
-      taxCodeId: line.taxCodeId,
-      quantity: line.quantity,
-      unit: line.unit,
-      custom: (line.custom ?? {}) as Record<string, unknown>,
-      contributorKind: line.contributorKind,
-      contributorRef: line.contributorRef,
-      lineNumber: line.lineNumber,
-    })),
+    lines: mirror.map(reversalPostEntryLine),
   });
   await markEntryReversed(tx, { orgId, entryId, actorId });
   return { status: "reversed", reversalId: postedReversal.entryId };

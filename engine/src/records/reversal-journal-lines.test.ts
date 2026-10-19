@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { reversalPostEntryLine } from "../journal/reversal-posting-lines.ts";
 import { reversalJournalLines } from "./reversal-journal-lines.ts";
 
 const ENTRY_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -83,6 +84,9 @@ test("reversalJournalLines keeps elimination and currency-adjustment flags on th
   assert.equal(reversal!.amount, "-40.0000");
   assert.equal(reversal!.eliminate, true);
   assert.equal(reversal!.isCurrencyAdjustment, true);
+  const postingLine = reversalPostEntryLine(reversal!);
+  assert.equal(postingLine.eliminate, true);
+  assert.equal(postingLine.isCurrencyAdjustment, true);
 });
 
 test("reversalJournalLines preserves contributor stamps", () => {

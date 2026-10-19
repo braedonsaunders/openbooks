@@ -13,6 +13,7 @@ import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
+import { reversalPostEntryLine } from "../journal/reversal-posting-lines.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import {
@@ -1866,30 +1867,7 @@ export async function completeRequestedDocumentVoid(
             reversesEntryId: sourceEntryId,
             actorId: String(doc.void_requested_by),
             closeModules: [voidCloseModule(String(doc.kind))],
-            lines: mirror.map((line) => ({
-              accountId: line.accountId,
-              subsidiaryId: line.subsidiaryId,
-              amount: line.amount,
-              currency: line.currency,
-              txnAmount: line.txnAmount,
-              fxRate: line.fxRate,
-              memo: line.memo,
-              partyId: line.partyId,
-              departmentId: line.departmentId,
-              projectId: line.projectId,
-              locationId: line.locationId,
-              classId: line.classId,
-              equipmentUnitId: line.equipmentUnitId,
-              extraDims: (line.extraDims ?? {}) as Record<string, unknown>,
-              paymentCardId: line.paymentCardId,
-              taxCodeId: line.taxCodeId,
-              quantity: line.quantity,
-              unit: line.unit,
-              custom: (line.custom ?? {}) as Record<string, unknown>,
-              contributorKind: line.contributorKind,
-              contributorRef: line.contributorRef,
-              lineNumber: line.lineNumber,
-            })),
+            lines: mirror.map(reversalPostEntryLine),
           });
           await markEntryReversed(tx, {
             orgId,
