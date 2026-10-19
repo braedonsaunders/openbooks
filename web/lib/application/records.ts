@@ -20,7 +20,7 @@ import {
 import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 import { inTypeAudience, loadRecordTypeByKey } from "../records";
-import { customFieldViewerFor } from "../custom-fields";
+import { customFieldViewerFor, loadCustomFieldAccessDefs, redactHiddenCustomValues } from "../custom-fields";
 
 export interface RecordListInput {
   typeKey: string;
@@ -240,8 +240,18 @@ export async function listRecords(
       rows: { count: string | number }[];
     }>,
   ]);
+  const definitions = await loadCustomFieldAccessDefs(
+    scope.resolved.table,
+    scope.resolved.documentKinds?.[0],
+  );
+  const viewer = customFieldViewerFor(context.authz);
   return {
-    records: normalizeDocumentRecordRevisions(scope.resolved.table, rows.rows),
+    records: normalizeDocumentRecordRevisions(scope.resolved.table, rows.rows).map((row) => ({
+      ...row,
+      ...(row.custom && typeof row.custom === "object"
+        ? { custom: redactHiddenCustomValues(definitions, viewer, row.custom as Record<string, unknown>) }
+        : {}),
+    })),
     total: Number(count.rows[0]?.count ?? 0),
     page,
     perPage,
@@ -260,7 +270,15 @@ export async function getRecord(
     select *${documentRevisionProjection(scope.resolved.table)} from ${table} where ${where} limit 1
   `));
   if (!result.rows[0]) throw notFound();
-  return normalizeDocumentRecordRevisions(scope.resolved.table, result.rows)[0]!;
+  const row = normalizeDocumentRecordRevisions(scope.resolved.table, result.rows)[0]!;
+  const definitions = await loadCustomFieldAccessDefs(
+    scope.resolved.table,
+    scope.resolved.documentKinds?.[0],
+  );
+  if (row.custom && typeof row.custom === "object") {
+    row.custom = redactHiddenCustomValues(definitions, customFieldViewerFor(context.authz), row.custom as Record<string, unknown>);
+  }
+  return row;
 }
 
 export async function createApplicationRecord(
