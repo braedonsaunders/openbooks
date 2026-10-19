@@ -57,6 +57,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:gates",
     `
+      export async function gateDecisionCapability() { throw new Error("not under test") }
       export async function decideGate() { throw new Error("not under test") }
       export async function delegateGate() { throw new Error("not under test") }
       export async function worklistGates() { return [] }
