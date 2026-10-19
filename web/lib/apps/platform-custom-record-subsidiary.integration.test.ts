@@ -211,7 +211,7 @@ test(
           limit: 10,
         })
         assert.equal(queried.records.length, 1)
-        assert.equal(queried.records[0]?.id, visibleId)
+        assert.equal(queried.records[0]?.['record.id'], visibleId)
 
         const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
         const revision = (await db.execute<{ revision: string }>(sql`
