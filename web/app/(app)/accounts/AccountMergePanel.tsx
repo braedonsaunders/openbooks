@@ -23,6 +23,7 @@ export interface AccountMergePreviewData {
     amount: string
     txnAmount: string
     fxRate: string | null
+    balanceFrom: string | null
   }[]
   entries: { bookId: string; subsidiaryId: string; bookName: string; subsidiaryName: string; lines: number }[]
   references: { key: string; label: string; redirect: number; history: number; blocked: number }[]
@@ -196,7 +197,12 @@ export function AccountMergePanel({
                   {preview.balances.map((row, index) => (
                     <TableRow key={index}>
                       <TableCell>{row.bookName}</TableCell>
-                      <TableCell>{row.subsidiaryName}</TableCell>
+                      <TableCell>
+                        <div>{row.subsidiaryName}</div>
+                        {!preview.balanceFrom && row.balanceFrom
+                          ? <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('merge.balanceFrom', { date: row.balanceFrom })}</p>
+                          : null}
+                      </TableCell>
                       <TableCell>{row.currency}</TableCell>
                       <TableCell className="text-right font-mono">{row.txnAmount}</TableCell>
                       <TableCell className="text-right font-mono">{row.amount} {row.functionalCurrency}</TableCell>

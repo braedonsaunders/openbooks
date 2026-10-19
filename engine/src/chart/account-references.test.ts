@@ -82,5 +82,8 @@ test("JSON references are uniquely keyed and organization-scoped", () => {
   const controls = ACCOUNT_JSON_REFERENCES.find((ref) => ref.key === "orgs.settings.controlAccounts");
   assert.equal(controls?.orgColumn, "id");
   assert.equal(controls?.path, "controlAccounts");
+  const camPools = ACCOUNT_JSON_REFERENCES.find((ref) => ref.key === "cam_pools.expense_account_ids");
+  assert.ok(camPools?.scope, "only editable CAM pools can move account references");
+  assert.ok(camPools?.blockWhere, "sealed CAM pools block account merges");
   assert.ok(ACCOUNT_JSON_REFERENCES.filter((ref) => ref.table !== "orgs").every((ref) => ref.orgColumn === "org_id"));
 });

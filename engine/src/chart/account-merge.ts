@@ -110,6 +110,7 @@ export interface MergeBalanceTransfer {
   amount: string;
   txnAmount: string;
   fxRate: string | null;
+  balanceFrom: string | null;
   dimensions: {
     departmentId: string | null;
     projectId: string | null;
@@ -137,7 +138,7 @@ export interface AccountMergePreview {
   source: MergeAccountSummary;
   target: MergeAccountSummary;
   effectiveDate: string;
-  /** First date of the fiscal year a profit-and-loss balance is measured from; null for balance-sheet accounts. */
+  /** Common P&L fiscal-year start, or null when entity calendars differ or the account is balance-sheet. */
   balanceFrom: string | null;
   refusals: AccountMergeRefusal[];
   balances: MergeBalanceTransfer[];
@@ -247,7 +248,7 @@ interface MergePlan {
   preview: AccountMergePreview;
   source: AccountRow;
   target: AccountRow;
-  periodId: string | null;
+  periodIdsBySubsidiary: Map<string, string>;
   groups: (BalanceGroup & { fxRate: string })[];
   referenceColumns: { table: string; column: string; rule: AccountReferenceRule }[];
 }
@@ -338,9 +339,36 @@ async function planAccountMerge(
   if (request.effectiveDate > today) {
     refuse("future_date", `The effective date ${request.effectiveDate} is in the future.`, "Merge on or before today's date.");
   }
-  const period = await resolveCoveringPeriod(tx, orgId, request.effectiveDate);
-  if (!period) {
-    refuse("no_period", `No accounting period covers ${request.effectiveDate}.`, "Create the fiscal period for that date under Accounting periods, then merge.");
+  const sourceSubsidiaries = (await tx.execute<{ subsidiary_id: string }>(sql`
+    select distinct l.subsidiary_id
+      from journal_lines l
+      join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted', 'reversed')
+     where l.org_id = ${orgId} and l.account_id = ${source.id}
+     order by l.subsidiary_id`)).rows.map((row) => row.subsidiary_id);
+  if (source.subsidiary_id && !sourceSubsidiaries.includes(source.subsidiary_id)) sourceSubsidiaries.push(source.subsidiary_id);
+  sourceSubsidiaries.sort();
+  const periodsBySubsidiary = new Map<string, NonNullable<Awaited<ReturnType<typeof resolveCoveringPeriod>>>>();
+  const balanceFromBySubsidiary = new Map<string, string>();
+  for (const subsidiaryId of sourceSubsidiaries) {
+    const entityPeriod = await resolveCoveringPeriod(tx, orgId, request.effectiveDate, subsidiaryId);
+    if (!entityPeriod) {
+      refuse("no_period", `No accounting period in the subsidiary's effective fiscal calendar covers ${request.effectiveDate}.`, "Generate the entity's fiscal periods for that date, then preview the merge again.");
+      continue;
+    }
+    periodsBySubsidiary.set(subsidiaryId, entityPeriod);
+    if (PROFIT_AND_LOSS_TYPES.has(source.type)) {
+      const starts = (await tx.execute<{ starts: string | null }>(sql`
+        select min(starts_on)::text as starts from accounting_periods
+         where org_id = ${orgId} and fiscal_calendar_id = ${entityPeriod.fiscal_calendar_id}
+           and fiscal_year = ${entityPeriod.fiscal_year} and not is_adjustment`)).rows[0]?.starts;
+      balanceFromBySubsidiary.set(subsidiaryId, starts ?? entityPeriod.starts_on);
+    }
+  }
+  if (sourceSubsidiaries.length === 0) {
+    const defaultPeriod = await resolveCoveringPeriod(tx, orgId, request.effectiveDate, source.subsidiary_id);
+    if (!defaultPeriod) {
+      refuse("no_period", `No accounting period covers ${request.effectiveDate}.`, "Create the fiscal period for that date under Accounting periods, then merge.");
+    }
   }
   const latest = (await tx.execute<{ latest: string | null }>(sql`
     select max(e.posting_date)::text as latest
@@ -352,13 +380,16 @@ async function planAccountMerge(
   }
 
   // Profit-and-loss accounts move their fiscal-year-to-date balance.
-  let balanceFrom: string | null = null;
-  if (PROFIT_AND_LOSS_TYPES.has(source.type) && period) {
-    balanceFrom = (await tx.execute<{ starts: string }>(sql`
-      select min(starts_on)::text as starts from accounting_periods
-       where org_id = ${orgId} and fiscal_calendar_id = ${period.fiscal_calendar_id}
-         and fiscal_year = ${period.fiscal_year} and not is_adjustment`)).rows[0]?.starts ?? period.starts_on;
-  }
+  const commonBalanceStarts = [...new Set(balanceFromBySubsidiary.values())];
+  const balanceFrom = commonBalanceStarts.length === 1 ? commonBalanceStarts[0]! : null;
+  const balanceScope = PROFIT_AND_LOSS_TYPES.has(source.type) && sourceSubsidiaries.length > 0
+    ? sql`and (${sql.join(sourceSubsidiaries.map((subsidiaryId) => {
+        const starts = balanceFromBySubsidiary.get(subsidiaryId);
+        return starts
+          ? sql`(l.subsidiary_id = ${subsidiaryId} and e.posting_date >= ${starts}::date)`
+          : sql`l.subsidiary_id = ${subsidiaryId}`;
+      }), sql` or `)})`
+    : sql``;
 
   // Balances to move.
   const balanceRows = (await tx.execute<{
@@ -378,7 +409,7 @@ async function planAccountMerge(
       join subsidiaries s on s.org_id = l.org_id and s.id = l.subsidiary_id
      where l.org_id = ${orgId} and l.account_id = ${source.id}
        and e.posting_date <= ${request.effectiveDate}
-       ${balanceFrom ? sql`and e.posting_date >= ${balanceFrom}` : sql``}
+       ${balanceScope}
      group by e.book_id, b.name, b.is_active, b.posts_gl, l.subsidiary_id, s.name, l.currency,
               l.department_id, l.project_id, l.location_id, l.class_id, l.party_id,
               l.equipment_unit_id, l.payment_card_id, l.extra_dims
@@ -416,6 +447,7 @@ async function planAccountMerge(
       amount: row.amount,
       txnAmount: row.txn_amount,
       fxRate: rate.ok ? rate.fxRate : null,
+      balanceFrom: balanceFromBySubsidiary.get(row.subsidiary_id) ?? null,
       dimensions: {
         departmentId: group.departmentId,
         projectId: group.projectId,
@@ -577,13 +609,18 @@ async function planAccountMerge(
   const needle = `%"${source.id}"%`;
   for (const ref of ACCOUNT_JSON_REFERENCES) {
     const value = ref.path ? sql`(r.${sql.identifier(ref.column)} -> ${ref.path})` : sql`r.${sql.identifier(ref.column)}`;
+    const referenceScope = ref.scope
+      ? ref.blockWhere
+        ? sql`and (${ref.scope} or ${ref.blockWhere.predicate})`
+        : sql`and ${ref.scope}`
+      : sql``;
     const counts = (await tx.execute<{ total: number; blocked: number }>(sql`
       select count(*)::int as total,
              count(*) filter (where ${ref.blockWhere?.predicate ?? sql`false`})::int as blocked
         from ${sql.identifier(ref.table)} r
        where r.${sql.identifier(ref.orgColumn)} = ${orgId}
          and ${value}::text like ${needle}
-         ${ref.scope ? sql`and ${ref.scope}` : sql``}`)).rows[0];
+         ${referenceScope}`)).rows[0];
     const total = Number(counts?.total ?? 0);
     if (total === 0) continue;
     const blocked = Number(counts?.blocked ?? 0);
@@ -599,14 +636,17 @@ async function planAccountMerge(
   const entriesPlan = buildReclassEntries(groups, source.id, target.id);
   const bookNames = new Map(balances.map((row) => [row.bookId, row.bookName]));
   const subsidiaryNames = new Map(balances.map((row) => [row.subsidiaryId, row.subsidiaryName]));
-  if (period) {
-    for (const entry of entriesPlan) {
-      try {
-        await assertPeriodModulesOpen(tx, { orgId, periodId: period.id, bookId: entry.bookId, subsidiaryIds: [entry.subsidiaryId], modules: [] });
-      } catch (error) {
-        if (!(error instanceof CloseError)) throw error;
-        refuse("period_closed", `${bookNames.get(entry.bookId) ?? "The book"} is closed on ${request.effectiveDate} for ${subsidiaryNames.get(entry.subsidiaryId) ?? "the subsidiary"}: ${error.message}`, "Choose an effective date in an open period, or request a controlled reopen of the period.");
-      }
+  for (const entry of entriesPlan) {
+    const entityPeriod = periodsBySubsidiary.get(entry.subsidiaryId);
+    if (!entityPeriod) {
+      refuse("no_period", `No accounting period in the subsidiary's effective fiscal calendar covers ${request.effectiveDate}.`, "Generate the entity's fiscal periods for that date, then preview the merge again.");
+      continue;
+    }
+    try {
+      await assertPeriodModulesOpen(tx, { orgId, periodId: entityPeriod.id, bookId: entry.bookId, subsidiaryIds: [entry.subsidiaryId], modules: [] });
+    } catch (error) {
+      if (!(error instanceof CloseError)) throw error;
+      refuse("period_closed", `${bookNames.get(entry.bookId) ?? "The book"} is closed on ${request.effectiveDate} for ${subsidiaryNames.get(entry.subsidiaryId) ?? "the subsidiary"}: ${error.message}`, "Choose an effective date in an open period, or request a controlled reopen of the period.");
     }
   }
 
@@ -624,6 +664,8 @@ async function planAccountMerge(
     balanceFrom,
     entries: entriesPlan,
     references: references.map(({ key, redirect, history, blocked }) => ({ key, redirect, history, blocked })),
+    periods: [...periodsBySubsidiary].map(([subsidiaryId, period]) => ({ subsidiaryId, periodId: period.id })),
+    balanceFromBySubsidiary: [...balanceFromBySubsidiary].map(([subsidiaryId, startsOn]) => ({ subsidiaryId, startsOn })),
     children: children.map((child) => child.id),
     draftJournalLines,
     controlRoles: controlRoles.map(({ scope, role }) => ({ scope, role })),
@@ -632,7 +674,7 @@ async function planAccountMerge(
   return {
     source,
     target,
-    periodId: period?.id ?? null,
+    periodIdsBySubsidiary: new Map([...periodsBySubsidiary].map(([subsidiaryId, period]) => [subsidiaryId, period.id])),
     groups,
     referenceColumns,
     preview: {
@@ -756,7 +798,18 @@ async function applyMerge(
   const targetNeedle = `"${target.id}"`;
   for (const ref of ACCOUNT_JSON_REFERENCES) {
     const value = ref.path ? sql`(r.${sql.identifier(ref.column)} -> ${ref.path})` : sql`r.${sql.identifier(ref.column)}`;
-    const replaced = sql`replace(${value}::text, ${sourceNeedle}, ${targetNeedle})::jsonb`;
+    const replaced = ref.key === "cam_pools.expense_account_ids"
+      ? sql`(
+          select coalesce(jsonb_agg(deduped.value order by deduped.first_position), '[]'::jsonb)
+            from (
+              select case when item.value = to_jsonb(${source.id}::text)
+                          then to_jsonb(${target.id}::text) else item.value end as value,
+                     min(item.ordinality) as first_position
+                from jsonb_array_elements(${value}) with ordinality as item(value, ordinality)
+               group by 1
+            ) deduped
+        )`
+      : sql`replace(${value}::text, ${sourceNeedle}, ${targetNeedle})::jsonb`;
     const assignment = ref.path
       ? sql`${sql.identifier(ref.column)} = jsonb_set(r.${sql.identifier(ref.column)}, array[${ref.path}]::text[], ${replaced}, false)`
       : sql`${sql.identifier(ref.column)} = ${replaced}`;
@@ -792,7 +845,6 @@ async function applyMerge(
   const entryIds: string[] = [];
   const entries = buildReclassEntries(plan.groups, source.id, target.id);
   if (entries.length > 0) {
-    if (!plan.periodId) throw new AccountMergeError(`No accounting period covers ${plan.preview.effectiveDate}.`, "no_period", "Create the fiscal period for that date, then merge.");
     if (!source.is_active) {
       // The reclass credits the source; an inactive duplicate is posted to
       // inside this transaction only, then marked merged and inactive.
@@ -806,13 +858,18 @@ async function applyMerge(
       // The org transaction's pinned executor is the allocator's transaction.
       const allocator = tx as Parameters<typeof nextFreeEntryNumber>[0];
       const entryNumber = await nextFreeEntryNumber(allocator, orgId, `AM-${(source.number ?? "ACCT").replace(/[^A-Za-z0-9_-]/g, "")}-${sequence}`);
+      const period = await resolveCoveringPeriod(tx, orgId, plan.preview.effectiveDate, entry.subsidiaryId);
+      if (!period) throw new AccountMergeError(`No accounting period in the subsidiary's effective fiscal calendar covers ${plan.preview.effectiveDate}.`, "no_period", "Generate the entity's fiscal periods for that date, then retry the merge.");
+      if (plan.periodIdsBySubsidiary.get(entry.subsidiaryId) !== period.id) {
+        throw new AccountMergeError("The subsidiary's accounting period changed after the merge preview.", "account_merge_preview_changed", "Refresh the preview and confirm the current entity fiscal periods.", 409);
+      }
       const posted = await postEntry(tx, {
         orgId,
         bookId: entry.bookId,
         subsidiaryId: entry.subsidiaryId,
         entryNumber,
         postingDate: plan.preview.effectiveDate,
-        periodId: plan.periodId,
+        periodId: period.id,
         memo: `Merge of ${accountLabel(source)} into ${accountLabel(target)}`,
         origin: "account_merge",
         amountBasis: "book",

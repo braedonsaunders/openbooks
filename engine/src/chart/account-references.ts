@@ -370,7 +370,18 @@ export const ACCOUNT_JSON_REFERENCES: readonly AccountJsonReference[] = [
   { key: "saved_views.query", label: "Saved list views", table: "saved_views", column: "query", orgColumn: "org_id" },
   { key: "bank_match_rules.outcome", label: "Bank matching rules", table: "bank_match_rules", column: "outcome", orgColumn: "org_id" },
   { key: "ap_capture_rules.output", label: "Bill capture rules", table: "ap_capture_rules", column: "output", orgColumn: "org_id" },
-  { key: "cam_pools.expense_account_ids", label: "CAM expense pools", table: "cam_pools", column: "expense_account_ids", orgColumn: "org_id" },
+  {
+    key: "cam_pools.expense_account_ids",
+    label: "CAM expense pools",
+    table: "cam_pools",
+    column: "expense_account_ids",
+    orgColumn: "org_id",
+    scope: sql`r.status in ('draft', 'open')`,
+    blockWhere: {
+      predicate: sql`r.status in ('finalized', 'invoiced')`,
+      remedy: "Keep the finalized or invoiced pool as historical evidence and use a new editable CAM pool with the surviving account for future allocations.",
+    },
+  },
   {
     key: "allocation_rule_versions.account_scope",
     label: "Allocation rule account scopes",
