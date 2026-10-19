@@ -88,7 +88,7 @@ test("a hand-coded bill for received stock auto-matches on post and refuses dupl
             { billLineId: partialBillLineB, purchaseOrderLineId: partialSource },
           ],
         })),
-        /only 0 received and unbilled/,
+        /only 0\.0000 received and unbilled/,
       );
       const partialBilled = (await db.execute(sql\`
         select quantity_billed::text as billed from document_lines where id = \${partialSource}
