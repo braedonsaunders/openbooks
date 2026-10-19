@@ -111,3 +111,19 @@ test('adjustment keeps its intent through response loss and tab changes, then cl
   assert.equal((document.getElementById('sv-adjust-amount') as HTMLInputElement).value, '')
   assert.ok(save().disabled, 'a confirmed draft cannot immediately apply again')
 })
+
+test('negative adjustment previews the liability debit and offset credit', async t => {
+  await mount(<StoredValueDrawer drawer={{ remountKey: accountId, account: { id: accountId, kind: 'gift_card', kindLabel: 'Gift card', codeLast4: '1042', customerName: null, currency: 'USD', subsidiaryName: 'HQ', functionalCurrency: 'USD', issuedDisplay: '25.00 USD', balanceDisplay: '25.00 USD', balanceFunctionalDisplay: '25.00 USD', breakageDisplay: '0.00 USD', status: 'active', statusLabel: 'Active', expiresOn: null, lastActivityOn: '2026-10-05' }, program: { id: 'program', name: 'Gift cards', kindLabel: 'Gift card', liabilityAccountName: 'Gift card liability', breakageIncomeAccountName: null, breakagePolicyLabel: 'No breakage', breakageRateDisplay: '0%', expiryMonths: null, inactivityMonths: 0 }, entries: [], offsetAccounts: [{ id: 'cash', name: 'Cash' }], canManage: false, canAdjust: true, closeHref: '/stored-value' }} />, t)
+  await click(messages.storedValue.drawer.adjust)
+  await input('sv-adjust-amount', '-10.00')
+  await input('sv-adjust-reason', 'Correct opening balance')
+  const picker = document.querySelector('button[aria-haspopup="listbox"]') as HTMLButtonElement
+  assert.ok(picker)
+  await act(async () => picker.click())
+  const option = [...document.querySelectorAll('[role="option"]')].find(node => node.textContent?.includes('Cash')) as HTMLElement
+  assert.ok(option)
+  await act(async () => option.click())
+  const preview = document.querySelector('section[aria-label] p.rounded-lg')?.textContent ?? ''
+  assert.ok(preview.includes(`${messages.storedValue.labels.liabilityAccount}: Gift card liability · ${messages.storedValue.labels.offsetAccount}: Cash`))
+  assert.ok(!preview.includes(`${messages.storedValue.labels.debitAccount}: Cash`))
+})
