@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { parseMoney } from "../money/brands.ts";
 import { roundMoney } from "../money/money.ts";
 import type { EntitlementMovement } from "./entitlements-movement-kernel.ts";
 import type { EntitlementPlan } from "./entitlements-types.ts";
@@ -38,7 +39,7 @@ for (const unit of ["money", "hours"] as const) {
       componentId: plan.payoutComponentId,
       kind: "earning",
       description: "Capped bank payout",
-      amount: roundMoney(unit === "money" ? "50" : "30", 2),
+      amount: parseMoney(roundMoney(unit === "money" ? "50" : "30", 2)),
       hours: unit === "hours" ? "1.00" : undefined,
       sequence: 46,
       entitlementSettlementPlanId: plan.id,
