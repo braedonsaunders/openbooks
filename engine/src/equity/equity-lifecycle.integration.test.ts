@@ -126,6 +126,8 @@ test("note interest accrues by idempotent runs on its day count and a conversion
     const structureRound = structure.rounds.find((row) => row.id === round.id);
     assert.ok(structureRound);
     assert.deepEqual([structureRound.raised, structureRound.sharesIssued], ["0.0000", "0"], "conversion certificates are not new cash proceeds or priced-round shares");
+    assert.ok(structureRound.liveSecurities.some((security) => security.id === converted.resultingSecurityId),
+      "the same conversion certificate remains a dependency of a price amendment or round void");
     const overviewAtConversion = await loadEquityOverview({ ...manage(w), subsidiaryId: w.org.subsidiaryId, asOf: "2026-08-31", yearStart: "2026-01-01" });
     assert.equal(overviewAtConversion.latestRound?.raised, "0.0000", "post-money excludes note conversion proceeds");
     const lines = await entryLines(w.org.orgId, converted.journalEntryId!);

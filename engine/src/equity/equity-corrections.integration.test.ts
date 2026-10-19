@@ -241,6 +241,10 @@ test("a round's pre-money must agree with its price and the shares before it, an
     await assert.rejects(voidRound({ ...manage(w), roundId: round.id, effectiveOn: "2026-08-21", reason: "Recorded in error" }), refusal("equity_round_has_securities"));
     const structure = await loadStructure({ ...entity(w), asOf: "2026-08-31" });
     assert.deepEqual(structure.rounds.map((row) => [row.name, row.preMoneyValuation, row.preMoneyBasisReason !== null, row.fullyDilutedBefore]), [["Series A-2", "9000000.0000", true, "2000000"]]);
+    const beforeIssue = (await loadStructure({ ...entity(w), asOf: "2026-08-10" })).rounds.find((row) => row.id === round.id);
+    assert.ok(beforeIssue);
+    assert.deepEqual([beforeIssue.raised, beforeIssue.sharesIssued], ["0.0000", "0"], "future certificates do not change historical fundraising totals");
+    assert.ok(beforeIssue.liveSecurities.some((security) => security.id === issued.id), "current correction dependencies retain the future certificate");
 
     // With an Equity action Flow the void waits for its approver, then applies.
     applied(await recordSecurityEvent({ ...manage(w), securityId: issued.id, kind: "void", effectiveOn: "2026-08-21", reason: "Issued against the wrong round" }));
