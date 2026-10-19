@@ -1052,9 +1052,11 @@ test("project merge covers every catalog project_id column or excludes it by rev
     const uncovered = columns.filter(
       (row) => !refs.has(`${row.table_name}.${row.column_name}`) && !exclusions.has(row.table_name),
     );
+    const uncoveredReferences = uncovered.map((row) => `${row.table_name}.${row.column_name}`);
     assert.deepEqual(
-      uncovered.map((row) => `${row.table_name}.${row.column_name}`),
+      uncoveredReferences,
       [],
+      `Project references require merge handling or a reviewed exclusion: ${JSON.stringify(uncoveredReferences)}`,
     );
     // No stale entries either: every listed table still carries the column.
     const catalogTables = new Set(columns.map((row) => row.table_name));
@@ -1081,14 +1083,16 @@ test("project merge covers every catalog project_id column or excludes it by rev
     ).rows;
     const projectIdSet = new Set(columns.map((row) => `${row.table_name}.${row.column_name}`));
     const directForeignKeys = new Set(fkColumns.map((row) => `${row.table_name}.${row.column_name}`));
-    assert.deepEqual(
-      fkColumns
+    const unhandledForeignKeys = fkColumns
         .filter((row) => {
           const reference = `${row.table_name}.${row.column_name}`;
           return !projectIdSet.has(reference) && !specialForeignKeys.has(reference);
         })
-        .map((row) => `${row.table_name}.${row.column_name}`),
+        .map((row) => `${row.table_name}.${row.column_name}`);
+    assert.deepEqual(
+      unhandledForeignKeys,
       [],
+      `Project foreign keys require merge handling: ${JSON.stringify(unhandledForeignKeys)}`,
     );
     for (const reference of specialForeignKeys.keys()) {
       assert.ok(directForeignKeys.has(reference), `${reference} is listed but has no direct project foreign key`);
