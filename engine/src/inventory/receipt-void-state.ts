@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
+import { lockInventoryPosition } from "./position.ts";
 
 /** Receipt void state: the dependent-document and blocker vocabulary, live movement and layer coverage, and consumption rows read by the void and correction operations. */
 
@@ -58,6 +59,25 @@ export type LiveReceiptMovement = {
   stock_location_id: string;
   subsidiary_id: string;
 };
+
+/** Fence every stock position before receipt or order rows are locked. */
+export async function lockReceiptInventoryPositions(
+  runner: SqlExecutor,
+  orgId: string,
+  receiptId: string,
+): Promise<void> {
+  const positions = (await runner.execute<{ item_id: string; stock_location_id: string }>(sql`
+    select distinct item_id, stock_location_id
+      from inventory_movements
+     where org_id = ${orgId} and document_line_id in (
+       select id from document_lines where org_id = ${orgId} and document_id = ${receiptId}
+     ) and kind = 'receipt' and status = 'posted'
+     order by item_id, stock_location_id
+  `)).rows;
+  for (const position of positions) {
+    await lockInventoryPosition(runner, position.item_id, position.stock_location_id);
+  }
+}
 
 /** Live receipt movements behind a goods receipt: posted, never reversed. */
 export async function liveReceiptMovements(

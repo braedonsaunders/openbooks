@@ -153,6 +153,26 @@ export async function livePurchaseOrderLineReceipts(
     quantity = fromQuantityUnits(toQuantityUnits(quantity) + toQuantityUnits(live.quantity));
     value = add(value, live.value);
   }
+  const corrections = (await runner.execute<{ quantity: string; value: string }>(sql`
+    select coalesce(sum(c.quantity + coalesce((
+             select sum(r.quantity) from inventory_movements r
+              where r.org_id = c.org_id and r.reverses_movement_id = c.id and r.status = 'posted'
+           ), 0)), 0)::text as quantity,
+           coalesce(sum(c.total_value + coalesce((
+             select sum(r.total_value) from inventory_movements r
+              where r.org_id = c.org_id and r.reverses_movement_id = c.id and r.status = 'posted'
+           ), 0)), 0)::text as value
+      from inventory_movements c
+      join document_lines rl on rl.id = c.document_line_id and rl.org_id = c.org_id
+      join documents rd on rd.id = rl.document_id and rd.org_id = rl.org_id
+     where c.org_id = ${orgId} and c.kind = 'issue' and c.status = 'posted'
+       and rd.kind = 'purchase_receipt'
+       and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
+       and (c.idempotency_key like 'receipt-remainder-%'
+            or c.idempotency_key like 'receipt-quantity-%')
+  `)).rows[0];
+  quantity = fromQuantityUnits(toQuantityUnits(quantity) + toQuantityUnits(corrections?.quantity ?? "0"));
+  value = add(value, corrections?.value ?? "0");
   const dropShipConfirmations = (await runner.execute<{ quantity: string; value: string; unit: string | null }>(sql`
     select rl.quantity::text as quantity, rl.amount::text as value, rl.unit as unit
       from document_lines rl
