@@ -35,9 +35,14 @@ test('kit availability validates item IDs and lists warehouses admitted by the c
       await db.execute(sql`insert into stock_locations(id,org_id,location_id,code,kind,is_active)
         values(${homeWarehouseId},${org.orgId},${homeLocationId},'KIT-HOME','warehouse',true),
               (${branchWarehouseId},${org.orgId},${branchLocationId},'KIT-BRANCH','warehouse',true)`)
-      await db.execute(sql`insert into warehouses(stock_location_id,org_id,name,status)
-        values(${homeWarehouseId},${org.orgId},'Main warehouse','active'),
-              (${branchWarehouseId},${org.orgId},'Branch warehouse','active')`)
+      const warehouses = await db.execute(sql`update warehouses
+        set name = case stock_location_id
+          when ${homeWarehouseId} then 'Main warehouse'
+          when ${branchWarehouseId} then 'Branch warehouse'
+          else name end
+        where org_id = ${org.orgId} and stock_location_id in (${homeWarehouseId}, ${branchWarehouseId})
+        returning stock_location_id`)
+      assert.equal(warehouses.rows.length, 2)
     })
 
     const call = (id: string) => withOrgContext(org.orgId, async () => {
