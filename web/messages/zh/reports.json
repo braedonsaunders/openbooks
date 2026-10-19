@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "权益证券登记簿",
-        "description": "截至基准日发行的每份股票凭证、授予、SAFE 和可转换票据，含持有人、类别、条款，以及当日的状态和流通数量。"
+        "description": "截至基准日发行的每项证券，及其条款、当日状态和数量。"
       },
       "equity_cap_table_positions": {
         "label": "股权结构表持仓变动",

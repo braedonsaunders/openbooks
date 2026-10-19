@@ -107,7 +107,7 @@ export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
     ...shared,
     key: 'equity_securities_register',
     label: 'Equity securities register',
-    description: "Every share certificate, award, SAFE and note issued by the as-of date, with holder, class, terms, and its status and quantity outstanding on that date.",
+    description: "Every security issued by the as-of date, with its terms, status and quantity on that date.",
     from: `equity_securities s
       left join parties holder on holder.org_id = s.org_id and holder.id = s.holder_party_id
       left join equity_share_classes c on c.org_id = s.org_id and c.id = s.share_class_id

@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "株式等証券台帳",
-        "description": "基準日までに発行されたすべての株券、付与、SAFE、転換社債を、保有者、種類、条件、および基準日時点のステータスと残高数量とともに表示します。"
+        "description": "基準日までに発行された各証券と、その条件、基準日時点のステータスと数量。"
       },
       "equity_cap_table_positions": {
         "label": "資本政策表ポジションの異動",

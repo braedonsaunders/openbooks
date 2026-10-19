@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "Wertpapierregister Eigenkapital",
-        "description": "Jedes bis zum Stichtag ausgegebene Aktienzertifikat, jede Zuteilung, jeder SAFE und jedes Wandeldarlehen mit Inhaber, Gattung, Konditionen sowie Status und ausstehender Menge zu diesem Datum."
+        "description": "Jedes bis zum Stichtag ausgegebene Wertpapier mit Konditionen, Status und Menge zu diesem Datum."
       },
       "equity_cap_table_positions": {
         "label": "Bewegungen der Cap-Table-Positionen",

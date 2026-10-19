@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "Registro de valores de patrimonio",
-        "description": "Cada certificado de acciones, adjudicación, SAFE y nota emitidos hasta la fecha de corte, con titular, clase, condiciones, y su estado y cantidad en circulación en esa fecha."
+        "description": "Cada título emitido hasta la fecha de corte, con sus condiciones, estado y cantidad en esa fecha."
       },
       "equity_cap_table_positions": {
         "label": "Movimientos de posiciones de la tabla de capitalización",

@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "Registro de valores mobiliários de patrimônio",
-        "description": "Cada certificado de ações, concessão, SAFE e nota emitidos até a data de referência, com titular, classe, termos, e seu status e quantidade em circulação nessa data."
+        "description": "Cada título emitido até a data de referência, com seus termos, status e quantidade nessa data."
       },
       "equity_cap_table_positions": {
         "label": "Movimentações de posições da tabela de capitalização",

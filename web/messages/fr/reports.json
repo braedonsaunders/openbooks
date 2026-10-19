@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "Registre des titres de capital",
-        "description": "Chaque certificat d'actions, attribution, SAFE et obligation émis à la date de référence, avec détenteur, catégorie, conditions, ainsi que son statut et sa quantité en circulation à cette date."
+        "description": "Chaque titre émis à la date de référence, avec ses conditions, son statut et sa quantité à cette date."
       },
       "equity_cap_table_positions": {
         "label": "Mouvements des positions de la table de capitalisation",
