@@ -306,7 +306,7 @@ export async function replicateEntryToBooks(
       closeModules,
       amountBasis: mirrored ? "book" : "functional",
       accountBasis: mirrored ? "book" : "source",
-      allowInactiveAccounts: mirrored !== null,
+      allowInactiveAccounts: true,
       auditAction: "replicate",
       requestId: args.requestId ?? null,
       auditChanges: { bookReplicaOf: source.id, omittedSubsidiaryIds: [...omitted] },

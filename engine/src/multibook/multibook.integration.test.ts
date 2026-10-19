@@ -16,6 +16,8 @@ import { runExpenseAmortization } from "../amortization/run.ts";
 import { reconcileDeferralAccounts } from "../amortization/reconciliation.ts";
 import { AmortizationError } from "../amortization/errors.ts";
 import { createManualSchedule } from "../amortization/schedules.ts";
+import { installEngineSeams } from "../composition/install.ts";
+import { previewAccountMerge, requestAccountMerge } from "../chart/account-merge.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 
@@ -256,6 +258,78 @@ test("activation refuses full history over earlier entries and brings them in as
     () => assert.fail("replication settings change only alongside a recorded run"),
     (error: unknown) => assert.match(String((error as { cause?: unknown }).cause ?? error), /recorded replication change/),
   );
+}));
+
+test("opening balances preserve dimensions and carry only current-year merged P&L into the surviving account", enabled, () => fixture(async (f) => {
+  installEngineSeams();
+  const source = await f.account("expense");
+  const target = await f.account("expense");
+  const currencyDifference = await f.account("income");
+  const department = randomUUID();
+  const oldPeriod = randomUUID();
+  const currentYearPeriod = randomUUID();
+  await withOrgContext(f.org.orgId, async () => {
+    const calendar = (await db.execute<{ id: string }>(sql`
+      select fiscal_calendar_id as id from accounting_periods where org_id = ${f.org.orgId} and id = ${f.org.periodId}`)).rows[0]!.id;
+    await db.execute(sql`insert into departments (id, org_id, name) values (${department}, ${f.org.orgId}, 'Operations')`);
+    await db.execute(sql`update accounts set required_dimensions = '["department"]'::jsonb
+      where org_id = ${f.org.orgId} and id in (${source}, ${target})`);
+    await db.execute(sql`insert into accounting_periods
+      (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on)
+      values (${oldPeriod}, ${f.org.orgId}, ${calendar}, 2025, 12, '2025-12', '2025-12-01', '2025-12-31'),
+             (${currentYearPeriod}, ${f.org.orgId}, ${calendar}, 2026, 1, '2026-01', '2026-01-01', '2026-01-31')`);
+    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
+      coalesce(settings->'features', '{}'::jsonb) || '{"accountMerges":true}'::jsonb) where id = ${f.org.orgId}`);
+    await postEntry(db, {
+      orgId: f.org.orgId, bookId: f.org.bookId, subsidiaryId: f.org.subsidiaryId,
+      entryNumber: `PRE-FY-${randomUUID().slice(0, 8)}`, postingDate: "2025-12-15", periodId: oldPeriod,
+      origin: "manual", currency: f.baseCurrency, actorId: f.actor,
+      lines: [{ accountId: source, amount: "500", departmentId: department }, { accountId: f.org.accounts.bank, amount: "-500" }],
+    });
+    await postEntry(db, {
+      orgId: f.org.orgId, bookId: f.org.bookId, subsidiaryId: f.org.subsidiaryId,
+      entryNumber: `CURRENT-FY-${randomUUID().slice(0, 8)}`, postingDate: "2026-01-15", periodId: currentYearPeriod,
+      origin: "manual", currency: f.baseCurrency, actorId: f.actor,
+      lines: [{ accountId: source, amount: "200", departmentId: department }, { accountId: f.org.accounts.bank, amount: "-200" }],
+    });
+  });
+
+  const input = { sourceAccountId: source, targetAccountId: target, effectiveDate: "2026-07-15" };
+  const preview = await previewAccountMerge(f.org.orgId, input, null);
+  assert.deepEqual(preview.refusals, []);
+  const merge = await requestAccountMerge(f.org.orgId, {
+    ...input, expectedDigest: preview.digest, idempotencyKey: randomUUID(), actorId: f.actor,
+    allowedSubsidiaryIds: null, reason: "Carry the current-year balance into the surviving account",
+  });
+  assert.equal(merge.status, "completed");
+  await activate(f, {
+    replicationFrom: "2026-07-20", openingStrategy: "opening_balances",
+    currencyDifferenceAccountId: currencyDifference,
+  });
+
+  const opening = (await withOrgContext(f.org.orgId, () => db.execute<{
+    account_id: string; amount: string; department_id: string | null;
+  }>(sql`
+    select l.account_id, l.amount::text as amount, l.department_id
+      from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
+     where e.org_id = ${f.org.orgId} and e.book_id = ${f.book} and e.origin = 'book_opening'
+     order by l.line_number`))).rows;
+  assert.ok(opening.some((line) => line.account_id === target && line.amount === "200.0000" && line.department_id === department));
+  assert.ok(!opening.some((line) => line.account_id === source), "merged historical P&L remains on the survivor, never the inactive source");
+}));
+
+test("full-history backfill can replicate entries on accounts deactivated after posting", enabled, () => fixture(async (f) => {
+  const sourceEntryId = await f.post([
+    { accountId: f.org.accounts.bank, amount: "125" },
+    { accountId: f.org.accounts.revenue, amount: "-125" },
+  ]);
+  await withOrgContext(f.org.orgId, () => db.execute(sql`
+    update accounts set is_active = false where org_id = ${f.org.orgId} and id = ${f.org.accounts.revenue}`));
+
+  await activate(f, { replicationFrom: "2026-07-01", openingStrategy: "full_history" });
+  const replica = await replicaOf(f, sourceEntryId);
+  assert.equal(replica.header?.status, "posted");
+  assert.ok(replica.lines.some((line) => line.account_id === f.org.accounts.revenue && line.amount === "-125.0000"));
 }));
 
 test("a closed period in a full book refuses the primary posting as a whole", enabled, () => fixture(async (f) => {

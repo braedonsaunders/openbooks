@@ -26,6 +26,7 @@ import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { assertUnrestrictedScope } from "../organization/subsidiary-scope.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
+import { PNL_TYPES } from "../records/account-types.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { fromUnits, mulRate, toUnits } from "../money/money.ts";
 import { accountClassOf, loadMappableAccounts } from "../journal/book-account-maps.ts";
@@ -246,21 +247,59 @@ async function postOpeningBalances(
   runner: SqlExecutor,
   args: { orgId: string; actorId: string; book: BookProfile; from: string; runId: string },
 ): Promise<string[]> {
-  const balances = (await runner.execute<{
-    subsidiary_id: string; account_id: string; currency: string; amount: string; txn_amount: string;
-  }>(sql`
-    select l.subsidiary_id, l.account_id, l.currency,
-           sum(l.amount)::text as amount, sum(l.txn_amount)::text as txn_amount
+  const eligibleHistory = sql`(${replicableEntrySql("e")} or (
+    e.book_id in (select id from accounting_books where org_id = ${args.orgId} and is_primary)
+    and e.status in ('posted', 'reversed') and e.origin in ('expense_amortization', 'account_merge')
+  ))`;
+  const historySubsidiaries = (await runner.execute<{ subsidiary_id: string }>(sql`
+    select distinct l.subsidiary_id
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${args.orgId} and e.posting_date < ${args.from}::date
-       and (${replicableEntrySql("e")} or (
-         e.book_id in (select id from accounting_books where org_id = ${args.orgId} and is_primary)
-         and e.status in ('posted', 'reversed') and e.origin in ('expense_amortization', 'account_merge')
-       ))
-     group by l.subsidiary_id, l.account_id, l.currency
+       and ${eligibleHistory}
+     order by l.subsidiary_id`)).rows.map((row) => row.subsidiary_id);
+  if (historySubsidiaries.length === 0) return [];
+
+  const periods = new Map<string, NonNullable<Awaited<ReturnType<typeof resolveCoveringPeriod>>>>();
+  const fiscalYearStarts = new Map<string, string>();
+  for (const subsidiaryId of historySubsidiaries) {
+    const period = await resolveCoveringPeriod(runner, args.orgId, args.from, subsidiaryId);
+    if (!period) throw new MultiBookError(`no entity accounting period covers the book opening date ${args.from}`);
+    periods.set(subsidiaryId, period);
+    const fiscalYearStart = (await runner.execute<{ starts_on: string | null }>(sql`
+      select min(starts_on)::text as starts_on from accounting_periods
+       where org_id = ${args.orgId} and fiscal_calendar_id = ${period.fiscal_calendar_id}
+         and fiscal_year = ${period.fiscal_year} and not is_adjustment`)).rows[0]?.starts_on;
+    if (!fiscalYearStart) {
+      throw new MultiBookError(`the subsidiary's fiscal calendar has no regular periods for fiscal year ${period.fiscal_year}; generate its periods and retry`);
+    }
+    fiscalYearStarts.set(subsidiaryId, fiscalYearStart);
+  }
+  const pnlYearScope = sql.join([...fiscalYearStarts].map(([subsidiaryId, start]) =>
+    sql`(l.subsidiary_id = ${subsidiaryId} and e.posting_date >= ${start}::date)`,
+  ), sql` or `);
+  const balances = (await runner.execute<{
+    subsidiary_id: string; account_id: string; currency: string; amount: string; txn_amount: string;
+    party_id: string | null; department_id: string | null; project_id: string | null; location_id: string | null;
+    class_id: string | null; equipment_unit_id: string | null; payment_card_id: string | null; tax_code_id: string | null;
+    extra_dims: Record<string, unknown> | null; eliminate: boolean; quantity: string | null; unit: string | null;
+  }>(sql`
+    select l.subsidiary_id, coalesce(a.merged_into_id, l.account_id) as account_id, l.currency,
+           sum(l.amount)::text as amount, sum(l.txn_amount)::text as txn_amount,
+           l.party_id, l.department_id, l.project_id, l.location_id, l.class_id,
+           l.equipment_unit_id, l.payment_card_id, l.tax_code_id, l.extra_dims, l.eliminate,
+           sum(l.quantity)::text as quantity, l.unit
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+     where l.org_id = ${args.orgId} and e.posting_date < ${args.from}::date
+       and ${eligibleHistory}
+       and (a.type not in (${sql.join(PNL_TYPES.map((type) => sql`${type}`), sql`, `)}) or (${pnlYearScope}))
+     group by l.subsidiary_id, coalesce(a.merged_into_id, l.account_id), l.currency,
+              l.party_id, l.department_id, l.project_id, l.location_id, l.class_id,
+              l.equipment_unit_id, l.payment_card_id, l.tax_code_id, l.extra_dims, l.eliminate, l.unit
     having sum(l.amount) <> 0 or sum(l.txn_amount) <> 0
-     order by l.subsidiary_id, l.account_id, l.currency`)).rows;
+     order by l.subsidiary_id, account_id, l.currency`)).rows;
   if (balances.length === 0) return [];
   const subsidiaryIds = [...new Set(balances.map((row) => row.subsidiary_id))];
   const bookBases = await resolveBookBases(runner, { orgId: args.orgId, book: args.book, subsidiaryIds, postingDate: args.from });
@@ -279,8 +318,7 @@ async function postOpeningBalances(
   });
   const entryIds: string[] = [];
   for (const subsidiaryId of subsidiaryIds) {
-    const period = await resolveCoveringPeriod(runner, args.orgId, args.from, subsidiaryId);
-    if (!period) throw new Error(`No entity accounting period covers the book opening date ${args.from}`);
+    const period = periods.get(subsidiaryId)!;
     const basis = bookBases.get(subsidiaryId)!;
     const lines: PostEntryLineInput[] = [];
     let total = 0n;
@@ -297,7 +335,23 @@ async function postOpeningBalances(
         line = { accountId: row.account_id, amount: mulRate(row.txn_amount, rate), currency: row.currency, txnAmount: row.txn_amount, fxRate: rate };
       }
       if (!line || toUnits(line.amount) === 0n) continue;
-      lines.push({ ...line, subsidiaryId, memo: `Opening balance ${args.from}` });
+      lines.push({
+        ...line,
+        subsidiaryId,
+        partyId: row.party_id,
+        departmentId: row.department_id,
+        projectId: row.project_id,
+        locationId: row.location_id,
+        classId: row.class_id,
+        equipmentUnitId: row.equipment_unit_id,
+        paymentCardId: row.payment_card_id,
+        taxCodeId: row.tax_code_id,
+        extraDims: row.extra_dims ?? {},
+        eliminate: row.eliminate,
+        quantity: row.quantity,
+        unit: row.unit,
+        memo: `Opening balance ${args.from}`,
+      });
       total += toUnits(line.amount);
     }
     if (total !== 0n) {
@@ -329,6 +383,7 @@ async function postOpeningBalances(
       actorId: args.actorId,
       currency: basis.bookCurrency,
       amountBasis: "book",
+      allowInactiveAccounts: true,
       idempotencyKey: `book-opening:${args.runId}:${subsidiaryId}`,
       auditAction: "insert",
       requestId: "book_replication",
