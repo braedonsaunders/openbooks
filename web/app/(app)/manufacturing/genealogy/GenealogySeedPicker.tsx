@@ -62,8 +62,8 @@ export function GenealogySeedPicker({
     router.push(genealogyHref(searchParams.toString(), update) as never, { scroll: false });
   };
   const kindOptions = [
-    { value: "lot", label: m("lot") },
-    { value: "serial", label: m("serial") },
+    { value: "lot", label: m("values.lot") },
+    { value: "serial", label: m("values.serial") },
   ];
   const directionOptions = [
     { value: "forward", label: t("forward") },
@@ -73,10 +73,10 @@ export function GenealogySeedPicker({
   return (
     <div className="flex flex-wrap items-end gap-3" role="group" aria-label={t("title")}>
       <div className="min-w-36 space-y-1">
-        <FieldLabel htmlFor="genealogy-kind">{m("lot")}/{m("serial")}</FieldLabel>
+        <FieldLabel htmlFor="genealogy-kind">{m("values.lot")}/{m("values.serial")}</FieldLabel>
         <Select
           id="genealogy-kind"
-          aria-label={`${m("lot")}/${m("serial")}`}
+          aria-label={`${m("values.lot")}/${m("values.serial")}`}
           value={kind}
           onChange={(event) => {
             setQuery("");

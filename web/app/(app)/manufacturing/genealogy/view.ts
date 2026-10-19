@@ -37,7 +37,7 @@ export interface GenealogyData {
 const f = ref<GenealogyData>();
 const row = ref<GenealogyRow>();
 
-export function genealogySpec(data: GenealogyData): PageSpec {
+export function genealogySpec(_data: GenealogyData): PageSpec {
   return page({
     layout: "bare",
     body: [
