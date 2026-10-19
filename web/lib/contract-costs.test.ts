@@ -56,7 +56,7 @@ registerHooks({
   },
 })
 
-const contractCostsUrl = new URL('./contract-costs.ts?amount-test', import.meta.url).href
+const contractCostsUrl = new URL('./contract-costs.ts', import.meta.url).href
 const { contractCostErrorResponse, parseCostAmountMinor } = (await import(contractCostsUrl)) as typeof import('./contract-costs.ts')
 const { ContractCostError } = await import('@openbooks/engine/revenue')
 
