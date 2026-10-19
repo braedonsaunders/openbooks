@@ -66,6 +66,7 @@ export function SecurityPanel() {
   const [status, setStatus] = useState<MfaStatus | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [setup, setSetup] = useState<{ secret: string; provisioningUri: string } | null>(null);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -88,20 +89,33 @@ export function SecurityPanel() {
   useEffect(() => {
     void reload().then(
       () => setLoaded(true),
-      () => {
-        setMessage(requestFailed);
+      (error: unknown) => {
+        setLoadError(error instanceof Error && error.message ? error.message : requestFailed);
         setLoaded(true);
       },
     );
   }, [reload, requestFailed]);
+
+  function retryLoad() {
+    setLoaded(false);
+    setLoadError(null);
+    setMessage(null);
+    void reload().then(
+      () => setLoaded(true),
+      (error: unknown) => {
+        setLoadError(error instanceof Error && error.message ? error.message : requestFailed);
+        setLoaded(true);
+      },
+    );
+  }
 
   async function act(action: () => Promise<void>) {
     setBusy(true);
     setMessage(null);
     try {
       await action();
-    } catch {
-      setMessage(requestFailed);
+    } catch (error) {
+      setMessage(error instanceof Error && error.message ? error.message : requestFailed);
     } finally {
       setBusy(false);
     }
@@ -113,16 +127,27 @@ export function SecurityPanel() {
         <CardContent className="space-y-5 p-6">
           <div>
             <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t("authenticatorTitle")}</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            <p
+              className={`mt-1 text-sm ${loadError && status === null ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-slate-400"}`}
+              role={loadError && status === null ? "alert" : undefined}
+            >
               {!loaded
                 ? tCommon("feedback.loading")
+                : loadError && status === null
+                  ? loadError
                 : status?.enabled
                   ? t("enabled", { count: status.recoveryCodesRemaining })
                   : t("disabledDescription")}
             </p>
           </div>
 
-          {loaded && !status?.enabled && !setup ? (
+          {loaded && loadError && status === null ? (
+            <Button variant="outline" disabled={busy} onClick={retryLoad}>
+              {tCommon("actions.retry")}
+            </Button>
+          ) : null}
+
+          {loaded && status !== null && !status.enabled && !setup ? (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="setup-password">{t("confirmPassword")}</Label>
