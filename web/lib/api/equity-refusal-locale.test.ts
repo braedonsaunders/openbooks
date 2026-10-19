@@ -1,16 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createTranslator } from 'next-intl'
 import { stubModules } from '../../testing/stub-modules.ts'
 import de from '../../messages/de/index.ts'
 import en from '../../messages/en/index.ts'
 
 // The reader's locale and catalogs the request carries: German, with English beneath it as the app serves it.
 const stateKey = Symbol.for('openbooks.equity-refusal-locale-test')
-;(globalThis as Record<symbol, unknown>)[stateKey] = { de, en }
+;(globalThis as Record<symbol, unknown>)[stateKey] = { de, en, createTranslator }
 stubModules({
   navigation: false,
-  intl: `import { createTranslator } from 'next-intl';
-const state = globalThis[Symbol.for('openbooks.equity-refusal-locale-test')];
+  intl: `const state = globalThis[Symbol.for('openbooks.equity-refusal-locale-test')];
+const { createTranslator } = state;
 const merge = (base, overlay) => { const out = { ...base }; for (const [k, v] of Object.entries(overlay)) out[k] = v && typeof v === 'object' && out[k] && typeof out[k] === 'object' ? merge(out[k], v) : v; return out; };
 export async function getLocale() { return 'de' }
 export async function getTranslations(namespace) { return createTranslator({ locale: 'de', messages: merge(state.en, state.de), namespace }) }`,

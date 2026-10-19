@@ -75,6 +75,18 @@ test('a structured details remedy is appended to the named refusal', async () =>
   )
 })
 
+test('clause refusals retain a dash before a capitalized remedy', async () => {
+  const response = Response.json({ error: 'The payout batch is closed', remedy: 'Reopen the batch before matching it.' }, { status: 409 })
+  assert.equal(await readApiErrorMessage(response, 'failed'), 'The payout batch is closed — Reopen the batch before matching it.')
+})
+
+test('complete refusal sentences and Japanese remedies keep their own punctuation', async () => {
+  const english = Response.json({ error: 'The period is closed.', remedy: 'Request a controlled reopen.' }, { status: 409 })
+  assert.equal(await readApiErrorMessage(english, 'failed'), 'The period is closed. Request a controlled reopen.')
+  const japanese = Response.json({ error: '会計期間は締め済みです。', remedy: '再開を申請してください。' }, { status: 409 })
+  assert.equal(await readApiErrorMessage(japanese, 'failed'), '会計期間は締め済みです。再開を申請してください。')
+})
+
 test('blank and non-string error fields fall through to the fallback, never an empty toast', async () => {
   for (const body of ['{"error":"   "}', '{"error":42}', '{"error":null}']) {
     const res = new Response(body, {

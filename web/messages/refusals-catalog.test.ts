@@ -150,7 +150,32 @@ test('translated templates keep argument identities and only select on declared 
 })
 
 /** Words that only appear in an English sentence. */
-const ENGLISH = /\b(the|and|is|are|was|has|have|not|through|before|after|enter|choose|record|review|period|shares?|units?|run|which|ends|today|valuation|price)\b/i
+const ENGLISH = /(?<![\p{L}\p{M}\p{N}_])(the|and|is|are|was|has|have|not|through|before|after|enter|choose|record|review|period|shares?|units?|run|which|ends|today|valuation|price)(?![\p{L}\p{M}\p{N}_])/iu
+
+test('English prose detection respects accented letters and still catches English words', () => {
+  assert.equal(ENGLISH.test('Une unité est acquise ; les unités sont acquises.'), false)
+  assert.equal(ENGLISH.test('Eine Einheit ist unverfallbar.'), false)
+  assert.equal(ENGLISH.test('Le the\u0301 est chaud.'), false)
+  assert.equal(ENGLISH.test('Only one unit is vested.'), true)
+  assert.equal(ENGLISH.test('Enter the quantity.'), true)
+})
+
+test('financial terminology distinguishes shares and SAFE instruments from ordinary nouns', () => {
+  for (const locale of ['de', 'fr', 'es', 'pt-BR', 'ja', 'zh']) {
+    assert.match(render(locale, 'safeUnknown', 'one').message, /SAFE/, locale)
+  }
+  const conversion = render('fr', 'conversionBelowOneCommon', 'one')
+  assert.match(conversion.message, /action ordinaire/)
+  assert.match(conversion.remedy, /actions/)
+  assert.doesNotMatch(conversion.message + conversion.remedy, /partage/)
+  assert.match(render('fr', 'issuanceQuantityNotPositive', 'one').message, /au moins une action/)
+})
+
+test('French exercise quantities put the number before the correctly inflected unit', () => {
+  assert.match(render('fr', 'exerciseExceedsVested', 'one').remedy, /1 unité(?:[ ;.])/)
+  const many = render('fr', 'exerciseExceedsVested', 'other').remedy.normalize('NFKC')
+  assert.match(many, /12 500 unités(?:[ ;.])/)
+})
 
 test('refusals read in the reader language: no English sentence reaches a German, French or Japanese reader', () => {
   const representative = [

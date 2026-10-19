@@ -170,7 +170,7 @@ stubModules({
       export function resolveLayout() { return { page: {}, showSummary: false } }
     `,
     "../../../../../../lib/export": `export function safeName(name) { return name }`,
-    "next-intl/server": `export async function getTranslations() { return (key) => key }`,
+    "next-intl/server": `export async function getLocale() { return "en" }; export async function getTranslations() { return (key) => key }`,
   },
 })
 

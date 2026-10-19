@@ -1,8 +1,8 @@
 {
   "equity": {
     "featureOff": {
-      "message": "该组织未启用股权和上限表。",
-      "remedy": "在公司设置 → 功能中打开股权和上限表。"
+      "message": "此组织未启用股权和资本结构表模块。",
+      "remedy": "请在公司设置 → 功能中启用此模块。"
     },
     "forbidden": {
       "message": "此操作需要 {permission} 权限。",
@@ -45,8 +45,8 @@
       "remedy": "选择法人实体的股份类别。"
     },
     "classReferenceUnknown": {
-      "message": "证券引用了不存在的共享类。",
-      "remedy": "重新加载上限表。"
+      "message": "证券引用了不存在的股份类。",
+      "remedy": "重新加载资本结构表。"
     },
     "planUnknown": {
       "message": "该法人实体不存在该计划。",
@@ -57,12 +57,12 @@
       "remedy": "选择法人实体的融资轮次。"
     },
     "securityUnknown": {
-      "message": "安全性不存在。",
-      "remedy": "选择证券。"
+      "message": "证券不存在。",
+      "remedy": "请选择证券。"
     },
     "safeUnknown": {
-      "message": "SAFE 不存在。",
-      "remedy": "选择保险箱。"
+      "message": "SAFE不存在。",
+      "remedy": "请选择SAFE。"
     },
     "holderInvalid": {
       "message": "选择有效的持有者。",
@@ -81,8 +81,8 @@
       "remedy": "再次尝试更改。"
     },
     "reasonRequired": {
-      "message": "{subject, select, classAmendment {记录 {min} 至 {max} 字符的原因，以进行类修改。} split {记录 {min} 到 {max} 字符的拆分原因。} reserveChange {记录保留更改的 {min} 到 {max} 字符的原因。} mfnElection {记录 MFN 选择的 {min} 到 {max} 字符的原因。} mfnReversal {记录 MFN 选举逆转的 {min} 到 {max} 字符的原因。} roundAmendment {记录融资轮次修改的{min}至{max}字符的原因。} roundVoid {记录{min}至{max}字符的融资轮次无效的原因。} accountPolicy {记录帐户策略版本的 {min} 到 {max} 字符的原因。} forfeit {记录 {min} 到 {max} 字符的没收原因。} expire {记录 {min} 到 {max} 字符的到期原因。} cancel {记录{min} 至{max} 字符的取消原因。} repurchase {记录 {min} 至 {max} 个字符的回购原因。} void {记录{min}到{max}字符无效的原因。} reverse {记录 {min} 到 {max} 字符的反转原因。} withdrawal {记录{min} 至{max} 字符的撤回原因。} other {记录 {min} 到 {max} 字符的更改原因。}}",
-      "remedy": "描述原因（例如批准它的董事会决议），然后再次提交。"
+      "message": "请为“{subject, select, classAmendment {股份类别修改} split {股票拆分} reserveChange {储备变更} mfnElection {MFN选择} mfnReversal {MFN选择撤销} roundAmendment {融资轮修改} roundVoid {融资轮作废} accountPolicy {会计政策版本} forfeit {权利丧失} expire {到期} cancel {取消} repurchase {回购} void {作废} reverse {冲销} withdrawal {撤回操作申请} other {变更}}”填写{min}至{max}个字符的理由。",
+      "remedy": "请说明原因，例如批准该操作的董事会决议，然后重新提交。"
     },
     "preMoneyBasisTooShort": {
       "message": "以 {min} 至 {max} 字符说明融资前估值的基础。",
@@ -169,11 +169,11 @@
       "remedy": "重新加载记录；它可能已经被逆转了。"
     },
     "notSaved": {
-      "message": "{record, select, round {融资轮未保存。} roundAmendment {融资轮次修改未保存。} roundVoid {融资轮作废未保存。} shareClass {未保存共享类别。} classAmendment {未保存类修改。} split {未保存拆分。} plan {计划未保存。} reserveChange {未保存储备更改。} security {未保存安全性。} event {事件未保存。} election {未保存选择。} reversal {未保存反转。} accountPolicy {未保存策略版本。} compensationRun {补偿运行未保存。} interestRun {未保存利息运行。} request {未保存股权诉讼。} other {未保存更改。}}",
+      "message": "{record, select, round {融资轮未保存。} roundAmendment {融资轮次修改未保存。} roundVoid {融资轮作废未保存。} shareClass {未保存股份类别。} classAmendment {未保存类修改。} split {未保存拆分。} plan {计划未保存。} reserveChange {未保存储备更改。} security {未保存证券。} event {事件未保存。} election {未保存选择。} reversal {未保存反转。} accountPolicy {未保存策略版本。} compensationRun {补偿运行未保存。} interestRun {未保存利息运行。} request {未保存股权诉讼。} other {未保存更改。}}",
       "remedy": "再试一次。"
     },
     "notStoredCompletely": {
-      "message": "{record, select, compensationLines {补偿运行线未完整存储；什么都没有保存。} releaseLines {限制性股票释放未保存完整；什么都没有保存。} interestLines {利息运行行未完全存储；什么都没有保存。} positions {上限表头寸未完整存储；什么都没有保存。} vesting {归属部分未完全存储；什么都没有保存。} other {记录未完整存储；什么都没有保存。}}",
+      "message": "{record, select, compensationLines {补偿运行线未完整存储；什么都没有保存。} releaseLines {限制性股票释放未保存完整；什么都没有保存。} interestLines {利息运行行未完全存储；什么都没有保存。} positions {资本结构表头寸未完整存储；什么都没有保存。} vesting {归属部分未完全存储；什么都没有保存。} other {记录未完整存储；什么都没有保存。}}",
       "remedy": "再试一次。"
     },
     "positionsStale": {
@@ -189,16 +189,16 @@
       "remedy": "请检查日记账中该可转换债券的利息分录；应计利息只能由利息计提或结算操作入账。"
     },
     "eventKindMissing": {
-      "message": "选择安全性发生的情况。",
+      "message": "选择证券发生的情况。",
       "remedy": "选择事件类型。"
     },
     "eventNotApplicable": {
-      "message": "{event, select, exercise {{kind, select, share {行使不能记录在股票上。} option {无法在期权上记录行权。} rsu {锻炼无法记录在 RSU 上。} warrant {行使不能记录在认股权证上。} safe {锻炼无法记录在 SAFE 上。} note {行使不能记录在可转换可转换票据上。} other {无法记录该证券的行权。}}} settle {{kind, select, share {结算不能记录在股票上。} option {无法在期权上记录结算。} rsu {无法在 RSU 上记录结算。} warrant {结算不能记录在认股权证上。} safe {结算无法记录在 SAFE 中。} note {结算不能记录在可转换可转换票据上。} other {无法记录该证券的结算。}}} forfeit {{kind, select, share {没收不能记录在股票上。} option {无法在期权上记录没收。} rsu {没收不能记录在 RSU 上。} warrant {没收不能记录在搜查令中。} safe {没收不能记录在 SAFE 中。} note {没收不能记录在可转换可转换票据上。} other {该证券无法记录没收。}}} expire {{kind, select, share {股票证书上无法记录到期日。} option {无法记录期权的到期日。} rsu {无法在 RSU 上记录到期时间。} warrant {不能在认股权证上记录到期日。} safe {无法在 SAFE 上记录到期时间。} note {无法在可转换可转换票据上记录到期日。} other {无法记录该证券的到期日。}}} cancel {{kind, select, share {取消不能记录在股票上。} option {无法在选项上记录取消。} rsu {无法在 RSU 上记录取消。} warrant {取消不能记录在认股权证上。} safe {无法在 SAFE 上记录取消。} note {取消不能记录在可转换可转换票据上。} other {该证券无法记录取消。}}} repurchase {{kind, select, share {回购不能记录在股票上。} option {无法在期权上记录回购。} rsu {无法在 RSU 上记录回购。} warrant {回购不能记录在认股权证上。} safe {无法在 SAFE 上记录回购。} note {回购不能记录在可转换可转换票据上。} other {该证券无法记录回购。}}} transfer {{kind, select, share {转让不能记录在股票上。} option {无法在选项上记录传输。} rsu {无法在 RSU 上记录传输。} warrant {转让不能记录在认股权证上。} safe {无法在 SAFE 上记录转账。} note {无法在可转换可转换票据上记录转让。} other {无法在此证券上记录转账。}}} convert {{kind, select, share {转换无法记录在股票上。} option {无法在选项上记录转换。} rsu {无法在 RSU 上记录转换。} warrant {转换不能记录在认股权证上。} safe {转换无法记录在 SAFE 上。} note {无法在可转换可转换票据上记录转换。} other {无法在此证券上记录转换。}}} void {{kind, select, share {股票无效不能记录。} option {无法在选项上记录无效。} rsu {无法在 RSU 上记录无效。} warrant {无效不能记录在认股权证上。} safe {无法在 SAFE 上记录无效。} note {无法在可转换可转换票据上记录无效。} other {无法在此证券上记录无效。}}} repay {{kind, select, share {还款不能记录在股票上。} option {无法在期权上记录还款。} rsu {无法在 RSU 上记录还款。} warrant {认股权证上无法记录还款。} safe {无法在 SAFE 中记录还款。} note {无法在可转换可转换票据上记录还款。} other {无法在此证券上记录还款。}}} reverse {{kind, select, share {无法在股票上记录撤销。} option {无法在期权上记录反转。} rsu {无法在 RSU 上记录反转。} warrant {仓单上无法记录逆转。} safe {无法在 SAFE 上记录冲销。} note {无法在可转换可转换票据上记录冲销。} other {该证券无法记录逆转。}}} election_83b {{kind, select, share {83(b) 选择无法记录在股票上。} option {无法在选项上记录 83(b) 选择。} rsu {83(b) 选择无法记录在 RSU 上。} warrant {83(b) 选择不能记录在搜查令中。} safe {83(b) 选择无法记录在 SAFE 上。} note {83(b) 选择不能记录在可转换可转换票据上。} other {无法在此证券上记录 83(b) 选择。}}} other {{kind, select, share {此事件无法记录在股票上。} option {无法在选项上记录此事件。} rsu {该事件无法记录在 RSU 上。} warrant {此事件无法记录在认股权证上。} safe {此事件无法记录在 SAFE 上。} note {此事件无法记录在可转换可转换票据上。} other {无法在此证券上记录此事件。}}}}",
+      "message": "不能对“{kind, select, share {股票凭证} option {期权} rsu {RSU} warrant {认股权证} safe {SAFE} note {可转换债券} other {证券}}”类型的证券记录“{event, select, exercise {行权} settle {结算} forfeit {权利丧失} expire {到期} cancel {取消} repurchase {回购} transfer {转让} convert {转换} void {作废} repay {偿还} reverse {冲销} election_83b {83(b)选择} other {事件}}”事件。",
       "remedy": "选择适用于该证券的事件。"
     },
     "eventSecurityVoid": {
-      "message": "安全性 {security} 无效。",
-      "remedy": "无效的安全性不再发生进一步的事件；将事件记录在站立的证券上。"
+      "message": "证券 {security} 无效。",
+      "remedy": "无效的证券不再发生进一步的事件；将事件记录在站立的证券上。"
     },
     "eventBeforeIssue": {
       "message": "该事件不能早于发行日期 {issueDate}。",
@@ -209,11 +209,11 @@
       "remedy": "在“{field}”下输入至少一个数量。"
     },
     "convertibleNotOutstanding": {
-      "message": "{status, select, outstanding {自 {date} 起，{security} 的安全性非常出色。} exercised {安全性 {security} 自 {date} 起行使。} settled {安全性 {security} 自 {date} 起结算。} forfeited {自 {date} 起，{security} 安全性被丧失。} expired {安全性 {security} 自 {date} 起已过期。} cancelled {自 {date} 起，安全性 {security} 被取消。} repurchased {安全性 {security} 自 {date} 起被重新购买。} transferred {安全性 {security} 自 {date} 起转移。} converted {安全性 {security} 自 {date} 起进行转换。} void {安全性 {security} 自 {date} 起无效。} repaid {安全性 {security} 自 {date} 起偿还。} not_issued {自 {date} 起，安全性 {security} 尚未发布。} other {自 {date} 起，{security} 的安全性不再突出。}}",
-      "remedy": "仅记录未偿还的 SAFE 或可转换票据的结算；如果记录有误，请先冲销先前的结算。"
+      "message": "截至{date}，证券{security}的状态为“{status, select, outstanding {未结清} exercised {已行权} settled {已结算} forfeited {已丧失权利} expired {已到期} cancelled {已取消} repurchased {已回购} transferred {已转让} converted {已转换} void {已作废} repaid {已偿还} not_issued {尚未发行} other {不再处于未结清状态}}”。",
+      "remedy": "只能为尚未结清的SAFE或可转换债券记录结算；如果先前的结算记录有误，请先将其冲销。"
     },
     "exerciseAfterExpiry": {
-      "message": "安全性 {security} 在 {date} 上已过期。",
+      "message": "证券 {security} 在 {date} 上已过期。",
       "remedy": "改为记录到期时间。"
     },
     "nothingVestedUntilNext": {
@@ -226,35 +226,35 @@
     },
     "nothingVestedEver": {
       "message": "{event, select, exercise {{date} 上没有已归属和未行使的 {security} 单位，并且根据其时间表没有进一步归属的单位。} other {{date} 上没有已归属和未结算的 {security} 单位，并且根据其计划也没有其他单位归属。}}",
-      "remedy": "回顾该奖项的历史记录：每个既定单位均已被行使、结算、没收或过期。"
+      "remedy": "回顾该授予的历史记录：每个既定单位均已被行使、结算、没收或过期。"
     },
     "exerciseExceedsOutstanding": {
-      "message": "{ceilingCount, plural, one {只有 {ceiling} 单元在 {date} 上表现出色。} other {只有 {ceiling} 单元在 {date} 上表现出色。}}",
-      "remedy": "{ceilingCount, plural, one {锻炼不超过 {ceiling} 单位。} other {锻炼不超过 {ceiling} 单位。}}"
+      "message": "截至{date}，尚未结清的数量为{ceilingCount, plural, other {{ceiling}单位}}。",
+      "remedy": "行权数量不得超过{ceilingCount, plural, other {{ceiling}单位}}。"
     },
     "exerciseExceedsVested": {
-      "message": "{ceilingCount, plural, one {{event, select, exercise {只有 {ceiling} 单位在 {date} 上归属且未行使。} other {只有 {ceiling} 单位在 {date} 上归属且未结算。}}} other {{event, select, exercise {只有 {ceiling} 单位在 {date} 上已归属且未行使。} other {只有 {ceiling} 单位在 {date} 上归属且未结算。}}}}",
-      "remedy": "{ceilingCount, plural, one {{event, select, exercise {记录不超过{ceiling}单位；未归属单位不能行使。} other {记录不超过{ceiling}单位；未归属单位不能结算。}}} other {{event, select, exercise {记录不超过{ceiling}单位；未归属单位不能行使。} other {记录不超过{ceiling}单位；未归属单位不能结算。}}}}"
+      "message": "截至{date}，已归属且{event, select, exercise {尚未行权} other {尚未结算}}的数量为{ceilingCount, plural, other {{ceiling}单位}}。",
+      "remedy": "记录数量不得超过{ceilingCount, plural, other {{ceiling}单位}}；尚未归属的单位不能{event, select, exercise {行权} other {结算}}。"
     },
     "earlyExerciseTermsMissing": {
       "message": "Grant {security} 不记录公司回购未归属股票的价格。",
-      "remedy": "{ceilingCount, plural, one {行使不超过 {ceiling} 既得单位。} other {行使不超过 {ceiling} 既得单位。}}"
+      "remedy": "行权数量不得超过已归属的{ceilingCount, plural, other {{ceiling}单位}}。"
     },
     "exerciseBelowPar": {
       "message": "股票将以低于面值的价格发行。",
       "remedy": "检查执行价格和类别的票面价值。"
     },
     "eventExceedsHolding": {
-      "message": "{ceilingCount, plural, one {{event, select, forfeit {只有 {ceiling} 单元未归属于 {date}。} expire {只有 {ceiling} 单位在 {date} 上归属且未行使。} other {只有 {ceiling} 单元在 {date} 上表现出色。}}} other {{event, select, forfeit {只有 {ceiling} 单位未归属于 {date}。} expire {只有 {ceiling} 单位在 {date} 上已归属且未行使。} other {只有 {ceiling} 单元在 {date} 上表现出色。}}}}",
-      "remedy": "{ceilingCount, plural, one {记录不超过{ceiling}单位。} other {记录不超过 {ceiling} 单位。}}"
+      "message": "截至{date}，{event, select, forfeit {尚未归属} expire {已归属且尚未行权} other {尚未结清}}的数量为{ceilingCount, plural, other {{ceiling}单位}}。",
+      "remedy": "记录数量不得超过{ceilingCount, plural, other {{ceiling}单位}}。"
     },
     "repurchaseExceedsOutstanding": {
-      "message": "{ceilingCount, plural, one {只有 {ceiling} 份额在 {date} 上未偿还。} other {只有 {ceiling} 股票在 {date} 上流通。}}",
-      "remedy": "{ceilingCount, plural, one {回购不超过{ceiling}份额。} other {回购不超过{ceiling}股票。}}"
+      "message": "截至{date}，尚未结清的股份数量为{ceilingCount, plural, other {{ceiling}股}}。",
+      "remedy": "回购数量不得超过{ceilingCount, plural, other {{ceiling}股}}。"
     },
     "restrictedRepurchaseMixed": {
-      "message": "{ceilingCount, plural, one {{ceiling} 的股份未归属于 {date}；公司根据赠款条款回购未归属的股份。} other {{ceiling} 的股份未归属于 {date}；公司根据赠款条款回购未归属的股份。}}",
-      "remedy": "{ceilingCount, plural, one {先回购{ceiling}未归属股份，然后单独记录回购已归属股份。} other {先回购{ceiling}未归属股份，然后单独记录回购已归属股份。}}"
+      "message": "截至{date}，尚未归属的股份为{ceilingCount, plural, other {{ceiling}股}}；公司按授予条款回购。",
+      "remedy": "请先回购尚未归属的{ceilingCount, plural, other {{ceiling}股}}，再单独记录已归属股份的回购。"
     },
     "restrictedRepurchaseTermsMissing": {
       "message": "授予{grant}不记录未归属股份的回购价格。",
@@ -285,8 +285,8 @@
       "remedy": "在“{field}”下选择不同的支架。"
     },
     "transferExceedsVested": {
-      "message": "{ceilingCount, plural, one {只有 {ceiling} 归属单元可以在 {date} 上转移。} other {只有 {ceiling} 归属单位可以在 {date} 上转移。}}",
-      "remedy": "{ceilingCount, plural, one {传输不超过{ceiling} 单位。} other {传输不超过 {ceiling} 单位。}}"
+      "message": "截至{date}，已归属且可转让的数量为{ceilingCount, plural, other {{ceiling}单位}}。",
+      "remedy": "转让数量不得超过{ceilingCount, plural, other {{ceiling}单位}}。"
     },
     "conversionNotPreferred": {
       "message": "仅优先股可转换为普通股。",
@@ -309,12 +309,12 @@
       "remedy": "转换日期为 {date} 当天或之后。"
     },
     "conversionExceedsHolding": {
-      "message": "{ceilingCount, plural, one {只有{ceiling}共享可以在{date}上转换。} other {只有 {ceiling} 股票可以在 {date} 上转换。}}",
-      "remedy": "{ceilingCount, plural, one {转换不超过 {ceiling} 份额。} other {转换不超过 {ceiling} 股。}}"
+      "message": "截至{date}，可转换的数量为{ceilingCount, plural, other {{ceiling}股}}。",
+      "remedy": "转换数量不得超过{ceilingCount, plural, other {{ceiling}股}}。"
     },
     "conversionBelowOneCommon": {
-      "message": "股份转换为少于一股普通股。",
-      "remedy": "转换更多股票。"
+      "message": "转换后不足1股普通股。",
+      "remedy": "请增加要转换的股份数量。"
     },
     "conversionRoundMissing": {
       "message": "选择工具转换的融资轮次。",
@@ -349,15 +349,15 @@
       "remedy": "按购买金额记录还款；将任何结算差异记录为单独的日记帐分录。"
     },
     "voidMfnSource": {
-      "message": "{safe}通过其最惠国选择{electedOn}采用了{security}的条款；作废 {security} 会导致选举命名术语输入错误。",
-      "remedy": "先反转 {safe} 上的最惠国选择（证券 → {safe} → 最惠国条款 → 反转选择），然后作废 {security}。"
+      "message": "{safe}通过{electedOn}的MFN选择采用了{security}的条款；作废{security}会使该选择继续引用误录的条款。",
+      "remedy": "请先撤销{safe}的MFN选择（证券 → {safe} → MFN条款 → 撤销选择），再作废{security}。"
     },
     "voidMfnSourceConverted": {
-      "message": "{safe}通过其最惠国选择{electedOn}采用了{security}的条款；作废 {security} 会导致选举命名术语输入错误。",
-      "remedy": "作废凭证{certificate}，由{safe}转换产生，日期为{convertedOn}（融资轮截止日期）；逆转{safe}的最惠国选择（证券→{safe}→最惠国条款→逆向选择）；然后作废{security}并再次转换{safe}。"
+      "message": "{safe}通过{electedOn}的MFN选择采用了{security}的条款；作废{security}会使该选择继续引用误录的条款。",
+      "remedy": "请将{safe}转换生成的股票凭证{certificate}按融资轮交割日{convertedOn}作废；撤销{safe}的MFN选择（证券 → {safe} → MFN条款 → 撤销选择），然后作废{security}并重新转换{safe}。"
     },
     "voidHasActivity": {
-      "message": "安全性 {security} 已记录活动且无法作废。",
+      "message": "证券 {security} 已记录活动且无法作废。",
       "remedy": "使其事件首先生成的证书无效，反转其其他事件，或者改为记录取消。"
     },
     "reversalTargetUnknown": {
@@ -365,12 +365,12 @@
       "remedy": "从证券历史记录中选择一个事件。"
     },
     "eventFinal": {
-      "message": "{event, select, void {无效无法逆转。} other {反转无法反转。}}",
-      "remedy": "空头和逆转是最终的；如果仍然需要，请再次记录安全或事件。"
+      "message": "更正“{event, select, void {作废} other {冲销}}”是最终操作，不能冲销。",
+      "remedy": "作废和冲销均不可撤回；如仍有需要，请重新记录证券或事件。"
     },
     "eventNotReversible": {
-      "message": "{event, select, exercise {行使无法撤销。} settle {结算无法撤销。} forfeit {没收无法撤销。} expire {过期无法撤销。} cancel {取消无法撤消。} repurchase {回购无法撤消。} transfer {传输无法撤消。} convert {转换无法逆转。} void {无效无法逆转。} repay {还款无法撤消。} reverse {反转无法反转。} election_83b {83(b) 选择无法逆转。} other {此事件无法逆转。}}",
-      "remedy": "使事件生成的证书作废；撤消该事件。"
+      "message": "事件“{event, select, exercise {行权} settle {结算} forfeit {权利丧失} expire {到期} cancel {取消} repurchase {回购} transfer {转让} convert {转换} void {作废} repay {偿还} reverse {冲销} election_83b {83(b)选择} other {事件}}”不能冲销。",
+      "remedy": "请改为作废该事件生成的股票凭证，以撤销该事件的影响。"
     },
     "eventAlreadyReversed": {
       "message": "事件已反转。",
@@ -382,10 +382,10 @@
     },
     "reversalHasDependents": {
       "message": "{event, select, forfeit {{countCount, plural, one {{security} 上的后续活动依赖于 {date} 的没收：{count} 后续活动（{latestOn} 上的最新活动）。} other {{security} 上的后续活动依赖于 {date} 的没收：{count} 后续活动，即 {latestOn} 上的最新活动。}}} expire {{countCount, plural, one {{security} 上的后续活动依赖于 {date} 的到期：{count} 后续活动（{latestOn} 上的最新活动）。} other {{security} 上的后续活动依赖于 {date} 的到期：{count} 后续活动（{latestOn} 上的最新活动）。}}} cancel {{countCount, plural, one {{security} 上的后续活动依赖于 {date}：{count} 后续活动（{latestOn} 上的最新活动）的取消。} other {{security} 上的后续活动依赖于 {date}：{count} 后续活动（{latestOn} 上的最新活动）的取消。}}} repurchase {{countCount, plural, one {{security} 的后续活动依赖于 {date} 的回购：{count} 后续活动，即 {latestOn} 的最新活动。} other {{security} 的后续活动依赖于 {date} 的回购：{count} 后续活动，即 {latestOn} 的最新活动。}}} repay {{countCount, plural, one {{security} 上的后续活动依赖于 {date} 的偿还：{count} 后续活动，{latestOn} 上的最新活动。} other {{security} 上的后续活动依赖于 {date} 的偿还：{count} 后续活动，{latestOn} 上的最新活动。}}} election_83b {{countCount, plural, one {{security} 上的后续活动依赖于 {date} 的 83(b) 选举：{count} 后续活动，即 {latestOn} 上的最新活动。} other {{security} 上的后续活动依赖于 {date} 的 83(b) 选举：{count} 后续活动，即 {latestOn} 上的最新活动。}}} other {{countCount, plural, one {{security} 上的后续活动依赖于 {date} 的事件：{count} 后续活动，即 {latestOn} 上的最新活动。} other {{security} 上的后续活动依赖于 {date} 的事件：{count} 后续活动，即 {latestOn} 上的最新活动。}}}}",
-      "remedy": "{latest, select, exercise {{event, select, forfeit {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后撤销该没收。} expire {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后撤销此到期。} cancel {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后撤销此取消。} repurchase {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后冲销本次回购。} repay {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后冲销这笔还款。} election_83b {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后推翻这次 83(b) 选举。} other {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后逆转这个事件。}}} settle {{event, select, forfeit {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后撤销该没收。} expire {先撤消后面的活动，先撤消最近的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后撤销此到期。} cancel {先撤消后面的活动，先撤消最近的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {先撤消后面的活动，先撤消最近的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后冲销本次回购。} repay {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {先撤消后面的活动，先撤消最近的活动，从 {latestOn} 的结算开始：撤消每一项，或作废其生成的证书；然后逆转这个事件。}}} forfeit {{event, select, forfeit {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销该没收。} expire {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此到期。} cancel {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销本次回购。} repay {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后逆转这个事件。}}} expire {{event, select, forfeit {首先撤消较晚的活动，最新的活动先撤消，从​​ {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后撤销该没收。} expire {首先撤消较晚的活动，最新的活动先撤消，从​​ {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后撤销此到期。} cancel {先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后冲销本次回购。} repay {首先撤消较晚的活动，最新的活动先撤消，从​​ {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {首先撤消较晚的活动，最新的活动先撤消，从​​ {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后逆转这个事件。}}} cancel {{event, select, forfeit {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后撤销该没收。} expire {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后撤销此到期。} cancel {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后撤销此取消。} repurchase {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后冲销本次回购。} repay {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后冲销这笔还款。} election_83b {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后推翻这次 83(b) 选举。} other {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后逆转这个事件。}}} repurchase {{event, select, forfeit {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销该没收。} expire {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此到期。} cancel {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销本次回购。} repay {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后逆转这个事件。}}} transfer {{event, select, forfeit {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的传输开始：撤消每个活动，或使其生成的证书作废；然后撤销该没收。} expire {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的传输开始：撤消每个活动，或使其生成的证书作废；然后撤销此到期。} cancel {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的传输开始：撤消每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {首先撤消后面的活动，最新的活动先撤消，从​​传输 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后冲销本次回购。} repay {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的传输开始：撤消每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的传输开始：撤消每个活动，或使其生成的证书作废；然后推翻这次 83(b) 选举。} other {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的传输开始：撤消每个活动，或使其生成的证书作废；然后逆转这个事件。}}} convert {{event, select, forfeit {首先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后撤销该没收。} expire {首先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后撤销此到期。} cancel {首先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后撤销此取消。} repurchase {首先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后冲销本次回购。} repay {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后冲销这笔还款。} election_83b {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后推翻这次 83(b) 选举。} other {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后逆转这个事件。}}} repay {{event, select, forfeit {先撤消后面的活动，先撤消最新的活动，从偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销该没收。} expire {先撤消后面的活动，先撤消最新的活动，从偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此到期。} cancel {先撤消后面的活动，最新的活动先撤消，从​​偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {先撤消后面的活动，先撤消最新的活动，从偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销本次回购。} repay {先撤消后面的活动，最新的活动先撤消，从​​偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {先撤消后面的活动，最新的活动先撤消，从​​偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {先撤消后面的活动，最新的活动先撤消，从​​偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后逆转这个事件。}}} election_83b {{event, select, forfeit {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选举开始：反转每个活动，或作废其生成的证书；然后撤销该没收。} expire {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选择开始：反转每个活动，或使其生成的证书作废；然后撤销此到期。} cancel {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选举开始：反转每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选择开始：反转每个活动，或使其生成的证书作废；然后冲销本次回购。} repay {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选择开始：反转每个活动，或使其生成的证书作废；然后冲销这笔还款。} election_83b {首先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的 83(b) 选举开始：反转每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选举开始：反转每个活动，或作废其生成的证书；然后逆转这个事件。}}} other {{event, select, forfeit {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后撤销该没收。} expire {首先撤消后来的活动，最新的活动先撤消，从​​ {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后撤销此到期。} cancel {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后撤销此取消。} repurchase {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后冲销本次回购。} repay {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后冲销这笔还款。} election_83b {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后推翻这次 83(b) 选举。} other {首先撤消后面的活动，最新的活动先撤消，从​​ {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后逆转这个事件。}}}}"
+      "remedy": "{latest, select, exercise {{event, select, forfeit {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后撤销该没收。} expire {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后撤销此到期。} cancel {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后撤销此取消。} repurchase {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后冲销本次回购。} repay {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后冲销这笔还款。} election_83b {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后推翻这次 83(b) 选举。} other {首先撤消较晚的活动，首先撤消最新的活动，从执行 {latestOn} 开始：撤消每个活动，或使其生成的证书无效；然后逆转这个事件。}}} settle {{event, select, forfeit {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后撤销该没收。} expire {先撤消后面的活动，先撤消最近的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后撤销此到期。} cancel {先撤消后面的活动，先撤消最近的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {先撤消后面的活动，先撤消最近的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后冲销本次回购。} repay {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的结算开始：撤销每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {先撤消后面的活动，先撤消最近的活动，从 {latestOn} 的结算开始：撤消每一项，或作废其生成的证书；然后逆转这个事件。}}} forfeit {{event, select, forfeit {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销该没收。} expire {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此到期。} cancel {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销本次回购。} repay {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {首先撤消后面的活动，首先撤消最新的活动，从没收 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后逆转这个事件。}}} expire {{event, select, forfeit {首先撤消较晚的活动，最新的活动先撤消，从 {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后撤销该没收。} expire {首先撤消较晚的活动，最新的活动先撤消，从 {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后撤销此到期。} cancel {先撤消后面的活动，最新的活动先撤消，从 {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后冲销本次回购。} repay {首先撤消较晚的活动，最新的活动先撤消，从 {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {首先撤消较晚的活动，最新的活动先撤消，从 {latestOn} 到期开始：撤消每个活动，或作废其生成的证书；然后逆转这个事件。}}} cancel {{event, select, forfeit {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后撤销该没收。} expire {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后撤销此到期。} cancel {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后撤销此取消。} repurchase {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后冲销本次回购。} repay {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后冲销这笔还款。} election_83b {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后推翻这次 83(b) 选举。} other {先撤消后面的活动，先撤消最新的活动，从取消 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后逆转这个事件。}}} repurchase {{event, select, forfeit {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销该没收。} expire {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此到期。} cancel {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销本次回购。} repay {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {先撤消后面的活动，先撤消最新的活动，从回购 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后逆转这个事件。}}} transfer {{event, select, forfeit {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的传输开始：撤消每个活动，或使其生成的证书作废；然后撤销该没收。} expire {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的传输开始：撤消每个活动，或使其生成的证书作废；然后撤销此到期。} cancel {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的传输开始：撤消每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {首先撤消后面的活动，最新的活动先撤消，从传输 {latestOn} 开始：撤消每个活动，或使其生成的证书作废；然后冲销本次回购。} repay {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的传输开始：撤消每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的传输开始：撤消每个活动，或使其生成的证书作废；然后推翻这次 83(b) 选举。} other {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的传输开始：撤消每个活动，或使其生成的证书作废；然后逆转这个事件。}}} convert {{event, select, forfeit {首先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后撤销该没收。} expire {首先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后撤销此到期。} cancel {首先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后撤销此取消。} repurchase {首先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后冲销本次回购。} repay {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后冲销这笔还款。} election_83b {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后推翻这次 83(b) 选举。} other {先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的转换开始：反转每个活动，或使其生成的证书作废；然后逆转这个事件。}}} repay {{event, select, forfeit {先撤消后面的活动，先撤消最新的活动，从偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销该没收。} expire {先撤消后面的活动，先撤消最新的活动，从偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此到期。} cancel {先撤消后面的活动，最新的活动先撤消，从偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {先撤消后面的活动，先撤消最新的活动，从偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销本次回购。} repay {先撤消后面的活动，最新的活动先撤消，从偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后冲销这笔还款。} election_83b {先撤消后面的活动，最新的活动先撤消，从偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {先撤消后面的活动，最新的活动先撤消，从偿还 {latestOn} 开始：撤消每个活动，或作废其生成的证书；然后逆转这个事件。}}} election_83b {{event, select, forfeit {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选举开始：反转每个活动，或作废其生成的证书；然后撤销该没收。} expire {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选择开始：反转每个活动，或使其生成的证书作废；然后撤销此到期。} cancel {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选举开始：反转每个活动，或作废其生成的证书；然后撤销此取消。} repurchase {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选择开始：反转每个活动，或使其生成的证书作废；然后冲销本次回购。} repay {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选择开始：反转每个活动，或使其生成的证书作废；然后冲销这笔还款。} election_83b {首先撤消后面的活动，先撤消最新的活动，从 {latestOn} 的 83(b) 选举开始：反转每个活动，或作废其生成的证书；然后推翻这次 83(b) 选举。} other {首先撤消后面的活动，首先撤消最新的活动，从 {latestOn} 的 83(b) 选举开始：反转每个活动，或作废其生成的证书；然后逆转这个事件。}}} other {{event, select, forfeit {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后撤销该没收。} expire {首先撤消后来的活动，最新的活动先撤消，从 {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后撤销此到期。} cancel {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后撤销此取消。} repurchase {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后冲销本次回购。} repay {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后冲销这笔还款。} election_83b {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后推翻这次 83(b) 选举。} other {首先撤消后面的活动，最新的活动先撤消，从 {latestOn} 的事件开始：撤消每个活动，或使其生成的证书作废；然后逆转这个事件。}}}}"
     },
     "election83bNotApplicable": {
-      "message": "安全性 {security} 没有归属时间表，因此不适用 83(b) 选择。",
+      "message": "证券 {security} 没有归属时间表，因此不适用 83(b) 选择。",
       "remedy": "仅记录限制性股票的 83(b) 选择。"
     },
     "election83bWindowClosed": {
@@ -397,19 +397,19 @@
       "remedy": "如果输入的日期有误，请首先反转记录的选择。"
     },
     "mfnNotApplicable": {
-      "message": "安全性 {security} 没有最惠国待遇。",
-      "remedy": "仅在带有最惠国条款的 SAFE 上记录最惠国选择。"
+      "message": "证券{security}没有最惠国待遇条款。",
+      "remedy": "只能为发行时包含MFN条款的SAFE记录MFN选择。"
     },
     "mfnElectionClosed": {
-      "message": "{status, select, outstanding {自 {date} 起，{security} 的安全性非常出色；其条款不能再改变。} exercised {安全性 {security} 自 {date} 起行使；其条款不能再改变。} settled {安全性 {security} 自 {date} 起结算；其条款不能再改变。} forfeited {安全性从 {date} 起，{security} 被没收；其条款不能再改变。} expired {安全性 {security} 自 {date} 起已过期；其条款不能再改变。} cancelled {安全性 {security} 自 {date} 起取消；其条款不能再改变。} repurchased {安全性 {security} 自 {date} 起被回购；其条款不能再改变。} transferred {安全性 {security} 自 {date} 起转移；其条款不能再改变。} converted {安全性 {security} 自 {date} 起转换；其条款不能再改变。} void {安全性 {security} 自 {date} 起无效；其条款不能再改变。} repaid {安全{security}自{date}起偿还；其条款不能再改变。} not_issued {自 {date} 起，安全性 {security} 尚未发布；其条款不能再改变。} other {自 {date} 起，{security} 的安全性不再突出；其条款不能再改变。}}",
-      "remedy": "仅在 SAFE 未完成时记录选举；通过作废它首先生成的证书来纠正转换。"
+      "message": "截至{date}，证券{security}的状态为“{status, select, outstanding {未结清} exercised {已行权} settled {已结算} forfeited {已丧失权利} expired {已到期} cancelled {已取消} repurchased {已回购} transferred {已转让} converted {已转换} void {已作废} repaid {已偿还} not_issued {尚未发行} other {不再处于未结清状态}}”。其条款已不能更改。",
+      "remedy": "只能在SAFE尚未结清时记录MFN选择；如需更正转换，请先作废转换生成的股票凭证。"
     },
     "mfnReversalClosedConverted": {
-      "message": "{status, select, outstanding {自 {date} 起，{security} 的安全性非常出色；其条款不能再改变。} exercised {安全性 {security} 自 {date} 起行使；其条款不能再改变。} settled {安全性 {security} 自 {date} 起结算；其条款不能再改变。} forfeited {安全性从 {date} 起，{security} 被没收；其条款不能再改变。} expired {安全性 {security} 自 {date} 起已过期；其条款不能再改变。} cancelled {安全性 {security} 自 {date} 起取消；其条款不能再改变。} repurchased {安全性 {security} 自 {date} 起被回购；其条款不能再改变。} transferred {安全性 {security} 自 {date} 起转移；其条款不能再改变。} converted {安全性 {security} 自 {date} 起转换；其条款不能再改变。} void {安全性 {security} 自 {date} 起无效；其条款不能再改变。} repaid {安全{security}自{date}起偿还；其条款不能再改变。} not_issued {自 {date} 起，安全性 {security} 尚未发布；其条款不能再改变。} other {自 {date} 起，{security} 的安全性不再突出；其条款不能再改变。}}",
-      "remedy": "转换产生的无效证书{certificate}，日期为{date}（融资轮结束日期），以撤消转换；然后反选并再次转换{security}。"
+      "message": "截至{date}，证券{security}的状态为“{status, select, outstanding {未结清} exercised {已行权} settled {已结算} forfeited {已丧失权利} expired {已到期} cancelled {已取消} repurchased {已回购} transferred {已转让} converted {已转换} void {已作废} repaid {已偿还} not_issued {尚未发行} other {不再处于未结清状态}}”。其条款已不能更改。",
+      "remedy": "请将转换生成的股票凭证{certificate}按融资轮交割日{date}作废，以撤销转换；然后撤销MFN选择并重新转换{security}。"
     },
     "mfnReversalClosed": {
-      "message": "{status, select, outstanding {自 {date} 起，{security} 的安全性非常出色；其条款不能再改变。} exercised {安全性 {security} 自 {date} 起行使；其条款不能再改变。} settled {安全性 {security} 自 {date} 起结算；其条款不能再改变。} forfeited {安全性从 {date} 起，{security} 被没收；其条款不能再改变。} expired {安全性 {security} 自 {date} 起已过期；其条款不能再改变。} cancelled {安全性 {security} 自 {date} 起取消；其条款不能再改变。} repurchased {安全性 {security} 自 {date} 起被回购；其条款不能再改变。} transferred {安全性 {security} 自 {date} 起转移；其条款不能再改变。} converted {安全性 {security} 自 {date} 起转换；其条款不能再改变。} void {安全性 {security} 自 {date} 起无效；其条款不能再改变。} repaid {安全{security}自{date}起偿还；其条款不能再改变。} not_issued {自 {date} 起，安全性 {security} 尚未发布；其条款不能再改变。} other {自 {date} 起，{security} 的安全性不再突出；其条款不能再改变。}}",
+      "message": "截至{date}，证券{security}的状态为“{status, select, outstanding {未结清} exercised {已行权} settled {已结算} forfeited {已丧失权利} expired {已到期} cancelled {已取消} repurchased {已回购} transferred {已转让} converted {已转换} void {已作废} repaid {已偿还} not_issued {尚未发行} other {不再处于未结清状态}}”。其条款已不能更改。",
       "remedy": "{status, select, repaid {先反转还款，然后反转选举。} other {先反转取消，然后反转选举。}}"
     },
     "mfnBackdated": {
@@ -430,19 +430,19 @@
     },
     "mfnSourceCurrency": {
       "message": "{source} 在 {sourceCurrency} 中声明，而不是在 {currency} 中声明。",
-      "remedy": "选择 {currency} 中规定的仪器。"
+      "remedy": "选择 {currency} 中规定的金融工具。"
     },
     "mfnSourceVoid": {
-      "message": "{source} 无效。",
-      "remedy": "选择站立的仪器；无效工具的条款输入错误。"
+      "message": "{source}已作废。",
+      "remedy": "请选择仍然有效的金融工具；已作废工具的条款是误录的。"
     },
     "mfnTermsAlreadyAdopted": {
       "message": "{safe} 已包含 {date} 中的 {source} 的条款。",
       "remedy": "没有可供选择的内容；这些条款已被采纳。"
     },
     "mfnSourceNoTerms": {
-      "message": "{source}既没有估值上限，也没有折扣。",
-      "remedy": "选择具有 SAFE 所缺乏或更好的上限或折扣的工具。"
+      "message": "{source}没有估值上限或折扣。",
+      "remedy": "请选择具有SAFE所没有或比SAFE更有利的估值上限或折扣的金融工具。"
     },
     "mfnTermsNotBetter": {
       "message": "{source} 的条款均优于 {date} 上有效的 {safe} 条款。",
@@ -473,8 +473,8 @@
       "remedy": "使用新的请求密钥再次记录该操作（如果它仍然适用）。"
     },
     "actionPending": {
-      "message": "{action, select, void {{subject} 的无效正在等待批准。} reverse {{subject} 的逆转已在等待批准。} repurchase {{subject} 的回购已在等待批准。} repay {{subject} 的还款已在等待批准。} cancel_convertible {{subject} 的取消已在等待批准。} class_amendment {{subject} 的类别修订已在等待批准。} split {{subject} 的拆分已在等待批准。} reserve_change {{subject} 的储备变更已在等待批准。} mfn_election {{subject} 的最惠国待遇选举已在等待批准。} mfn_reversal {{subject} 的最惠国选举逆转已在等待批准。} compensation_run {{subject} 的股票补偿运行已在等待批准。} interest_run {{subject} 的可转换票据利息运行已在等待批准。} account_policy {{subject} 的帐户策略版本已在等待批准。} round_amendment {{subject} 的融资轮修正已在等待批准。} round_void {{subject} 的一轮融资已在等待批准。} other {{subject} 的股权诉讼已在等待批准。}}",
-      "remedy": "等待批准者的决定，或从收件箱撤回待处理的请求 → 由我提交，然后再记录另一个请求。"
+      "message": "针对{subject}的“{action, select, void {作废} reverse {冲销} repurchase {回购} repay {偿还} cancel_convertible {取消} class_amendment {股份类别修改} split {股票拆分} reserve_change {储备变更} mfn_election {MFN选择} mfn_reversal {MFN选择撤销} compensation_run {股票薪酬计提} interest_run {可转换债券利息计提} account_policy {会计政策版本} round_amendment {融资轮修改} round_void {融资轮作废} other {权益操作}}”申请已在等待审批。",
+      "remedy": "请等待审批决定，或在收件箱 → 我提交的申请中撤回待审批申请，然后再记录另一项操作。"
     },
     "actionRoutingFailed": {
       "message": "股权诉讼无法送交批准：{reason}。",
@@ -537,8 +537,8 @@
       "remedy": "在“{account}”下选择一个账户，然后再次保存策略版本。"
     },
     "accountPolicyAccountType": {
-      "message": "{kind, select, equity {“{account}”必须是组织的活跃股权过账账户。} expense {“{account}”必须是组织的有效费用过帐帐户。} liabilityOrEquity {“{account}”必须是组织的活跃负债或权益过账账户。} liability {“{account}”必须是组织的活跃的其他当前或长期负债过账帐户。} other {“{account}”必须是组织接受类型的活动过帐帐户。}}",
-      "remedy": "{kind, select, equity {在“{account}”下选择一个活跃的权益过帐帐户，然后再次保存保单版本。} expense {在“{account}”下选择一个有效的费用过帐科目，然后再次保存策略版本。} liabilityOrEquity {在“{account}”下选择一个活跃负债或权益过帐帐户，然后再次保存保单版本。} liability {在“{account}”下选择一个活动的其他当前或长期负债过账帐户，然后再次保存保单版本。} other {在“{account}”下选择一个可接受类型的活动过账帐户，然后再次保存保单版本。}}"
+      "message": "“{account}”必须是该组织的{kind, select, equity {有效且允许记账的权益科目} expense {有效且允许记账的费用科目} liabilityOrEquity {有效且允许记账的负债或权益科目} liability {有效且允许记账的其他流动负债或长期负债科目} other {类型受支持、有效且允许记账的科目}}。",
+      "remedy": "请在“{account}”中选择{kind, select, equity {有效且允许记账的权益科目} expense {有效且允许记账的费用科目} liabilityOrEquity {有效且允许记账的负债或权益科目} liability {有效且允许记账的其他流动负债或长期负债科目} other {类型受支持、有效且允许记账的科目}}，然后重新保存政策版本。"
     },
     "accountPolicyBeforeLatestPosting": {
       "message": "股票条目通过 {date} 发布；新的政策版本必须在该日期之后生效，以便发布的历史记录保留其帐户。",
@@ -597,11 +597,11 @@
       "remedy": "运行到今天结束的期间的末尾 ({today})；运行视图提供了下一个运行到期的活动，并且自上次运行以来识别出的任何内容都会包含在其中。"
     },
     "runPeriodClosed": {
-      "message": "截至{date}的处理属于会计期间{period}，该期间已关闭，无法过账。",
+      "message": "截至{date}的{run, select, compensation {股票薪酬计提} interest {可转换债券利息计提} other {过账}}属于会计期间{period}，该期间已关闭，无法过账。",
       "remedy": "请选择有待过账金额的开放期间末日，或通过期间结账流程申请受控重新开放{closing}。"
     },
     "compensationRunBackdated": {
-      "message": "通过 {last} 运行的库存补偿已过账。",
+      "message": "通过 {last} 运行的股票薪酬已过账。",
       "remedy": "运行 {last} 之后的日期；早期时期已经被测量过。"
     },
     "interestRunBackdated": {
@@ -609,16 +609,16 @@
       "remedy": "运行 {last} 之后的日期；较早的期间已经累计。"
     },
     "compensationNothingDue": {
-      "message": "没有通过 {date} 支付股票补偿。",
-      "remedy": "在此期间没有任何变化；一旦奖励归属或授予，将在稍后的时期结束。"
+      "message": "截至{date}，没有待计提的股票薪酬。",
+      "remedy": "本期间没有变动。请在发生新的授予或归属后，选择较后的期间末日。"
     },
     "compensationNothingDueSince": {
-      "message": "在通过 {last} 的运行之后，无需通过 {date} 支付库存补偿。",
-      "remedy": "在此期间没有任何变化；一旦奖励归属或授予，将在稍后的时期结束。"
+      "message": "除截至{last}已处理的金额外，截至{date}没有新增待计提的股票薪酬。",
+      "remedy": "本期间没有变动。请在发生新的授予或归属后，选择较后的期间末日。"
     },
     "interestNothingDue": {
-      "message": "{date} 没有可转换票据利息。",
-      "remedy": "本期无可转换票据计息；当可转换票据尚未偿付时，会持续到后期期末。"
+      "message": "截至{date}，没有待计提的可转换债券利息。",
+      "remedy": "本期间未新增利息。可转换债券尚未结清时，请选择较后的期间末日。"
     },
     "interestNothingDueSince": {
       "message": "除了通过 {last} 运行之外，没有通过 {date} 支付可转换票据利息。",
@@ -629,8 +629,8 @@
       "remedy": "审查日记帐中可转换票据的利息条目和结算；仅当可转换票据作废时，应计利息才会下降。"
     },
     "noteDayCountMissing": {
-      "message": "可转换票据没有天数约定。",
-      "remedy": "记录可转换票据的天数（实际/365、实际/360、30/360 或实际/实际）。"
+      "message": "可转换债券未设置计息天数惯例。",
+      "remedy": "请记录Actual/365、Actual/360、30/360或Actual/Actual。"
     },
     "noteInterestBasisMissing": {
       "message": "可换股票据没有利息基础。",
@@ -641,12 +641,12 @@
       "remedy": "再试一次。"
     },
     "issuanceKindRequired": {
-      "message": "选择要发行的证券类型。",
-      "remedy": "在“{field}”下选择股票、期权、RSU、认股权证、SAFE 或可转换票据。"
+      "message": "请选择要发行的证券类型。",
+      "remedy": "请在“{field}”中选择股票、期权、RSU、认股权证、SAFE或可转换债券。"
     },
     "issuanceMemoTooLong": {
-      "message": "{maxCount, plural, one {“{field}”比 {max} 字符长。} other {“{field}”比 {max} 字符长。}}",
-      "remedy": "{maxCount, plural, one {将“{field}”缩短为最多 {max} 字符。} other {将“{field}”缩短为最多 {max} 个字符。}}"
+      "message": "“{field}”超过{max}{maxCount, plural, other {个字符}}。",
+      "remedy": "请将“{field}”限制为最多{max}{maxCount, plural, other {个字符}}。"
     },
     "issuanceClassRequired": {
       "message": "选择证券所在法人实体的股份类别。",
@@ -661,7 +661,7 @@
       "remedy": "清除“{field}”。"
     },
     "issuancePlanClassMismatch": {
-      "message": "计划 {plan} 在同类中授予奖项。",
+      "message": "计划 {plan} 在同类中授予授予。",
       "remedy": "在“{field}”下选择计划的股份类别。"
     },
     "issuancePlanNotYetEffective": {
@@ -677,8 +677,8 @@
       "remedy": "在“{field}”下选择融资轮的股份类别。"
     },
     "issuanceQuantityNotPositive": {
-      "message": "发行至少一股。",
-      "remedy": "在“{field}”下至少输入一份份额。"
+      "message": "发行数量至少为1股。",
+      "remedy": "请在“{field}”中输入至少1股。"
     },
     "issuanceConvertibleQuantity": {
       "message": "外汇和可转换票据以货币而非股票计量。",
@@ -717,7 +717,7 @@
       "remedy": "在“{field}”下输入购买金额或可转换票据本金。"
     },
     "issuanceAwardConsideration": {
-      "message": "奖项的授予无需考虑；行权价格是行权时支付的。",
+      "message": "授予的授予无需考虑；行权价格是行权时支付的。",
       "remedy": "清除“{field}”。"
     },
     "issuanceVestingKindInvalid": {
@@ -761,11 +761,11 @@
       "remedy": "清除“{field}”，或打开“{earlyExercise}”。"
     },
     "issuanceSafeTypeRequired": {
-      "message": "选择资金前或资金后保险箱。",
-      "remedy": "在“{field}”下选择预付款或后付款。"
+      "message": "请选择投前型或投后型SAFE。",
+      "remedy": "请在“{field}”中选择投前型或投后型。"
     },
     "issuanceMfnKindInvalid": {
-      "message": "只有国家外汇管理局拥有最惠国待遇。",
+      "message": "只有SAFE可以包含最惠国待遇条款。",
       "remedy": "关闭“{field}”。"
     },
     "issuanceCapDiscountKindInvalid": {
@@ -801,12 +801,12 @@
       "remedy": "清除“{field}”。"
     },
     "issuanceValuationRequired": {
-      "message": "奖项需要其授予日期估值。",
+      "message": "授予需要其授予日期估值。",
       "remedy": "输入“{field}”和估值假设。"
     },
     "issuanceAttributionRequired": {
-      "message": "选择奖励费用的归属方式。",
-      "remedy": "在“{field}”下选择直线或分级。"
+      "message": "请选择授予成本的分摊方式。",
+      "remedy": "请在“{field}”中选择直线分摊或按归属批次分摊。"
     },
     "issuanceGrantSharePriceNotPositive": {
       "message": "“{field}”必须大于零。",
@@ -817,8 +817,8 @@
       "remedy": "清除估价。"
     },
     "issuanceNumberTooLong": {
-      "message": "{maxCount, plural, one {“{field}”比 {max} 字符长。} other {“{field}”比 {max} 字符长。}}",
-      "remedy": "{maxCount, plural, one {将“{field}”缩短为最多 {max} 字符。} other {将“{field}”缩短为最多 {max} 个字符。}}"
+      "message": "“{field}”超过{max}{maxCount, plural, other {个字符}}。",
+      "remedy": "请将“{field}”限制为最多{max}{maxCount, plural, other {个字符}}。"
     },
     "securityNumberTaken": {
       "message": "安全号 {number} 已被该法人实体使用。",
@@ -829,8 +829,8 @@
       "remedy": "股票发行不得低于面值；输入“{field}”下收到的全部对价。"
     },
     "issuanceParConsiderationRequired": {
-      "message": "股票有面值，因此其发行需要考虑。",
-      "remedy": "在“{field}”下输入因股票收到的现金，并在“{account}”下输入收到现金的账户。"
+      "message": "有面值的股份发行时必须有相应对价。",
+      "remedy": "请在“{field}”中输入股份的收款金额，并在“{account}”中选择收款账户。"
     },
     "vestingShapesMixed": {
       "message": "计划是指定日期的分期或基于时间的计划，但不能同时是两者。",
@@ -849,12 +849,12 @@
       "remedy": "删除空批次。"
     },
     "vestingTranchesTotalMismatch": {
-      "message": "{totalCount, plural, one {{quantityCount, plural, one {部分归属{total}份额，但证券持有{quantity}份额。} other {该部分归属于 {total} 股份，但该证券持有 {quantity} 股份。}}} other {{quantityCount, plural, one {该部分归属于 {total} 股份，但该证券持有 {quantity} 股份。} other {该部分归属于 {total} 股票，但该证券包含 {quantity} 股票。}}}}",
+      "message": "各批次归属总数为{totalCount, plural, other {{total}股}}，但证券数量为{quantityCount, plural, other {{quantity}股}}。",
       "remedy": "使批次数量总和等于证券数量。"
     },
     "vestingCliffWithoutTerm": {
-      "message": "悬崖或频率需要几个月的归属期限。",
-      "remedy": "输入“{months}”，或清除“{cliff}”和“{frequency}”。"
+      "message": "设置等待期或归属频率前，必须先设置以月计的归属期限。",
+      "remedy": "请填写“{months}”，或清空“{cliff}”和“{frequency}”。"
     },
     "vestingMonthsOutOfRange": {
       "message": "“{field}”必须是从 {min} 到 {max} 的整数月。",
@@ -905,12 +905,12 @@
       "remedy": "在“{field}”下输入预期股息收益率的百分比，否则为零。"
     },
     "awardFairValueNegative": {
-      "message": "安全性 {security} 的公允价值为负。",
-      "remedy": "查看奖项的估值。"
+      "message": "证券 {security} 的公允价值为负。",
+      "remedy": "查看授予的估值。"
     },
     "securityNotShareBased": {
-      "message": "安全性 {security} 不是基于共享的。",
-      "remedy": "对 SAFE 和可转换票据使用可转换视图。"
+      "message": "证券{security}不是以股份为基础的证券。",
+      "remedy": "SAFE和可转换债券请使用可转换工具视图。"
     },
     "holdingEventQuantityMissing": {
       "message": "{security} 上的事件没有数量。",
@@ -925,16 +925,16 @@
       "remedy": "记录班级的“{issuePrice}”和“{conversionPrice}”。"
     },
     "securityNotConvertible": {
-      "message": "安全 {security} 不是可转换仪器。",
-      "remedy": "选择 SAFE 或可转换可转换票据。"
+      "message": "证券{security}不是可转换金融工具。",
+      "remedy": "请选择SAFE或可转换债券。"
     },
     "postMoneyOverclaim": {
-      "message": "资金后外汇管理局声称拥有 {limit} 或更多公司股份，因此转换没有任何有意义的解决方案。",
-      "remedy": "检查汇款后外汇管理局的“{principal}”和“{cap}”；常见原因是输入错误单位的上限。"
+      "message": "有估值上限的投后型SAFE合计占公司权益的比例达到或超过{limit}，因此转换计算没有有效解。",
+      "remedy": "请检查投后型SAFE的“{principal}”和“{cap}”；估值上限的单位错误是常见原因。"
     },
     "postMoneyUnsettled": {
-      "message": "付款后转换未结算。",
-      "remedy": "查看转换 SAFE 的“{cap}”。"
+      "message": "投后型转换计算未能收敛。",
+      "remedy": "请检查待转换SAFE的“{cap}”。"
     },
     "conversionPriceZero": {
       "message": "融资转换价格四舍五入为零。",
@@ -946,18 +946,18 @@
     },
     "conversionNotOutstanding": {
       "message": "工具 {security} 在融资轮截止日期 {date} 上并未表现出色。",
-      "remedy": "检查仪器的发行日期和历史记录。"
+      "remedy": "检查金融工具的发行日期和历史记录。"
     },
     "authorizedExceeded": {
-      "message": "{committedCount, plural, one {类 {shareClass} 将在 {date} 上提交 {committed} 共享，但授权 {authorized}。} other {类 {shareClass} 将在 {date} 上提交 {committed} 共享，但授权 {authorized}。}}",
-      "remedy": "{purpose, select, authorized_amendment {{committedCount, plural, one {授权至少 {shareClass} 类别的 {committed} 份额：其已发行股票、已发行奖励和未分配计划池需要在 {date} 上使用。} other {授权至少 {shareClass} 类别的 {committed} 股票：其已发行股票、已发行奖励和未分配计划池需要在 {date} 上使用它们。}}} reserve_increase {{roomCount, plural, one {{committedCount, plural, one {向储备中添加不超过 {room} 份额，或首先记录授权份额修订，将 {shareClass} 类别提升至至少 {committed} 份额。} other {向储备中添加不超过 {room} 股份，或首先记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股份。}}} other {{committedCount, plural, one {在储备中添加不超过 {room} 股份，或首先记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股份。} other {向储备中添加不超过 {room} 股份，或首先记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股份。}}}}} plan {{roomCount, plural, one {{committedCount, plural, one {保留不超过 {room} 份额，或首先记录授权份额修订，将 {shareClass} 类别提升至至少 {committed} 份额。} other {保留不超过 {room} 股份，或首先记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股份。}}} other {{committedCount, plural, one {保留不超过 {room} 股份，或首先记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股份。} other {保留不超过 {room} 股份，或首先记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股份。}}}}} reversal {{committedCount, plural, one {在撤销该事件之前，记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股份。} other {在逆转事件之前记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股份。}}} other {{committedCount, plural, one {{excessCount, plural, one {记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股，或发行更少的 {excess} 股。} other {记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股，或发行更少的 {excess} 股。}}} other {{excessCount, plural, one {记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股，或发行更少的 {excess} 股。} other {记录授权股份修订，将 {shareClass} 类别提升至至少 {committed} 股，或发行更少的 {excess} 股。}}}}}}"
+      "message": "截至{date}，类别{shareClass}将占用{committedCount, plural, other {{committed}股}}，但授权数量只有{authorized}股。",
+      "remedy": "{purpose, select, authorized_amendment {请将类别{shareClass}的授权数量提高至至少{committedCount, plural, other {{committed}股}}，以覆盖截至{date}的已发行股份、尚未结清的授予和计划未分配额度。} reserve_increase {储备增加数量不得超过{roomCount, plural, other {{room}股}}，或先将类别{shareClass}的授权数量提高至至少{committedCount, plural, other {{committed}股}}。} plan {预留数量不得超过{roomCount, plural, other {{room}股}}，或先将类别{shareClass}的授权数量提高至至少{committedCount, plural, other {{committed}股}}。} reversal {冲销事件前，请先将类别{shareClass}的授权数量提高至至少{committedCount, plural, other {{committed}股}}。} other {请将类别{shareClass}的授权数量提高至至少{committedCount, plural, other {{committed}股}}，或将发行数量减少{excessCount, plural, other {{excess}股}}。}}"
     },
     "poolExhausted": {
-      "message": "{availableCount, plural, one {计划 {plan} 将在 {date} 上提供 {available} 共享。} other {计划 {plan} 将在 {date} 上提供 {available} 股票。}}",
-      "remedy": "{action, select, reduce {{maximumCount, plural, one {从{from}中删除不超过{maximum}计划{plan}储备的份额；其余的则授予奖项。} other {从{from}中从计划{plan}的储备中删除不超过{maximum}股份；其余的则授予奖项。}}} empty {计划 {plan} 在 {from} 当天或之后没有可移除的未分配股份；首先放弃或取消奖项。} other {{shortfallCount, plural, one {授予 {shortfall} 较少的单位，或首先增加计划 {plan} 的储备。} other {授予 {shortfall} 较少的单位，或首先增加计划 {plan} 的储备。}}}}"
+      "message": "截至{date}，计划{plan}的可用余额将为{availableCount, plural, other {{available}股}}。",
+      "remedy": "{action, select, reduce {从{from}起，计划{plan}的储备减少数量不得超过{maximumCount, plural, other {{maximum}股}}；其余数量已用于授予。} empty {从{from}起，计划{plan}没有可减少的未分配股份；请先记录授予的权利丧失或取消。} other {请将授予数量减少{shortfallCount, plural, other {{shortfall}单位}}，或先增加计划{plan}的储备。}}"
     },
     "classIdUnknown": {
-      "message": "共享类别不存在。",
+      "message": "股份类别不存在。",
       "remedy": "选择股票类别。"
     },
     "planIdUnknown": {
@@ -969,7 +969,7 @@
       "remedy": "选择法人实体的融资轮次。"
     },
     "authorizedSharesNotPositive": {
-      "message": "授权至少一份共享。",
+      "message": "授权至少一份股份。",
       "remedy": "在“{field}”下至少输入一份份额。"
     },
     "parValueNegative": {
@@ -981,8 +981,8 @@
       "remedy": "在“{field}”下选择常用或首选。"
     },
     "classSeniorityInvalid": {
-      "message": "优先级必须是从 {min} 到 {max} 的整数。",
-      "remedy": "输入“{field}”作为从{min}到{max}的整数；工龄较高的先支付工资。"
+      "message": "优先级必须是{min}至{max}之间的整数。",
+      "remedy": "请在“{field}”中输入该整数；数值越大，受偿顺序越优先。"
     },
     "preferredPricesNotPositive": {
       "message": "优先股需要正的原始发行价和转换价。",
@@ -1041,8 +1041,8 @@
       "remedy": "选择不同的转换类别。"
     },
     "conversionClassSplitRecorded": {
-      "message": "转换类的拆分记录在 {date} 上；在重新解释转换类之前更改它。",
-      "remedy": "修订日期位于 {date} 之后。"
+      "message": "转换目标类别已记录{date}的拆股；在此之前变更转换目标会重新解释该拆股。",
+      "remedy": "请将修订日期设为{date}之后。"
     },
     "classAmendmentKindInvalid": {
       "message": "选择修订更改的内容。",
@@ -1061,8 +1061,8 @@
       "remedy": "拆分日期在 {date} 之后。"
     },
     "splitConversionClassMissing": {
-      "message": "{classesCount, plural, one {Preferred {codes} 没有命名它转换成的公共类，因此拆分对其转换价格的影响未知。} other {Preferred {codes} 没有命名它们转换成的公共类别，因此拆分对其转换价格的影响未知。}}",
-      "remedy": "记录每个首选类别转换成的类别（共享类别→修改→“{field}”），然后记录拆分。"
+      "message": "{classesCount, plural, other {优先股类别{codes}未指定转换后的普通股类别，因此无法确定拆股对转换价格的影响。}}",
+      "remedy": "请先为每个优先股类别记录转换目标（股份类别 → 修订 → “{field}”），再记录拆股。"
     },
     "planReserveNotPositive": {
       "message": "保留至少一股。",
@@ -1085,20 +1085,20 @@
       "remedy": "更改日期为 {date} 当天或之后。"
     },
     "preMoneyUnmeasurable": {
-      "message": "{preMoney} 的融资前估值无法与 {price} 的融资轮价格进行核对：融资轮前没有流通股。",
-      "remedy": "说明“{field}”下的估值基础。"
+      "message": "无法用本轮价格{price}核对投前估值{preMoney}：融资前没有已发行股份。",
+      "remedy": "请在“{field}”中说明估值口径。"
     },
     "preMoneyInconsistent": {
-      "message": "{fullyDilutedCount, plural, one {{preMoney} 的融资前估值与 {price} 融资轮价格乘以融资轮前 {fullyDiluted} 完全稀释份额 ({implied}) 不匹配。} other {{preMoney} 的融资前估值与 {price} 融资轮价格乘以融资轮前 {fullyDiluted} 完全稀释股份 ({implied}) 不匹配。}}",
-      "remedy": "输入 {implied} 的资金前估值或 {impliedPrice} 的每股价格；如果估值是根据其他基础（池增加或转换计入其中）表述的，请在“{field}”下注明该基础。"
+      "message": "投前估值{preMoney}与本轮价格{price}乘以融资前完全摊薄股数{fullyDilutedCount, plural, other {{fullyDiluted}股}}所得的金额（{implied}）不一致。",
+      "remedy": "请将投前估值设为{implied}，或将每股价格设为{impliedPrice}。如估值采用增加计划储备或计入转换等其他口径，请在“{field}”中说明。"
     },
     "preMoneyInconsistentPriceLocked": {
-      "message": "{fullyDilutedCount, plural, one {{preMoney} 的融资前估值与 {price} 融资轮价格乘以融资轮前 {fullyDiluted} 完全稀释份额 ({implied}) 不匹配。} other {{preMoney} 的融资前估值与 {price} 融资轮价格乘以融资轮前 {fullyDiluted} 完全稀释股份 ({implied}) 不匹配。}}",
-      "remedy": "输入 {implied} 的资金前估值（价格保持在 {price}，因为实时证券是在此发行或转换的）；如果估值是根据其他基础（池增加或转换计入其中）表述的，请在“{field}”下注明该基础。"
+      "message": "投前估值{preMoney}与本轮价格{price}乘以融资前完全摊薄股数{fullyDilutedCount, plural, other {{fullyDiluted}股}}所得的金额（{implied}）不一致。",
+      "remedy": "请将投前估值设为{implied}。仍然有效的证券已按此价格发行或转换，因此价格必须保持为{price}。如估值采用其他口径，请在“{field}”中说明。"
     },
     "preMoneyInconsistentValuationOnly": {
-      "message": "{fullyDilutedCount, plural, one {{preMoney} 的融资前估值与 {price} 融资轮价格乘以融资轮前 {fullyDiluted} 完全稀释份额 ({implied}) 不匹配。} other {{preMoney} 的融资前估值与 {price} 融资轮价格乘以融资轮前 {fullyDiluted} 完全稀释股份 ({implied}) 不匹配。}}",
-      "remedy": "输入{implied}的资金前估值；如果估值是根据其他基础（计入池增加或转换）表述的，请在“{field}”下注明该基础。"
+      "message": "投前估值{preMoney}与本轮价格{price}乘以融资前完全摊薄股数{fullyDilutedCount, plural, other {{fullyDiluted}股}}所得的金额（{implied}）不一致。",
+      "remedy": "请将投前估值设为{implied}。如估值采用增加计划储备或计入转换等其他口径，请在“{field}”中说明。"
     },
     "roundPricePerShareNotPositive": {
       "message": "每股价格必须大于零。",
@@ -1121,8 +1121,8 @@
       "remedy": "将“{field}”缩短为最多 {max} 个字符。"
     },
     "roundIsVoid": {
-      "message": "本轮融资无效。",
-      "remedy": "如果仍需要，记录新一轮融资；无效融资轮无需进一步更改。"
+      "message": "本轮融资已作废。",
+      "remedy": "如仍有需要，请记录新一轮融资；已作废的融资轮不能再变更。"
     },
     "roundTermsUnchanged": {
       "message": "融资轮 {round} 已具备这些条款。",
@@ -1141,8 +1141,8 @@
       "remedy": "无效日期为 {date} 当天或之后。"
     },
     "roundVoidHasSecurities": {
-      "message": "融资轮{round}中仍发行或转换了{securities}。",
-      "remedy": "首先将这些证书作废（每次作废都会撤销其条目并将已转换的 SAFE 或可转换票据返回到未偿还状态），然后将融资轮作废。"
+      "message": "融资轮{round}中仍有以下已发行或已转换的证券：{securities}。",
+      "remedy": "请先作废这些股票凭证。每次作废都会冲销其分录，并使已转换的SAFE或可转换债券恢复为尚未结清状态，然后再作废融资轮。"
     },
     "antiDilutionBaseMissing": {
       "message": "加权平均调整需要本轮融资前的流通股。",
@@ -1150,13 +1150,13 @@
     },
     "terms": {
       "roundPrice": "融资轮价格",
-      "runDate": "运行日期",
-      "eventDate": "活动日期",
+      "runDate": "处理日期",
+      "eventDate": "事件日期",
       "trancheDate": "批次日期",
       "trancheQuantity": "批次数量",
       "exchangeRate": "汇率",
-      "payout": "支付",
-      "convertibleTerm": "转换术语",
+      "payout": "支付金额",
+      "convertibleTerm": "转换条款",
       "sharePrice": "股价",
       "price": "价格"
     }

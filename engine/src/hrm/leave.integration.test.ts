@@ -934,15 +934,17 @@ test("same-scope overlapping policies refuse by name; other scopes and adjacent 
     });
     // Storage arbitrates what the service never sees: a raw overlapping
     // insert dies on the exclusion, never as a second readable window.
-    try {
-      await db.execute(sql`
-        insert into hrm_leave_policies (org_id, leave_type_id, effective_from, effective_to)
-        values (${h.org.orgId}, ${type.id}, '2026-03-01', '2026-04-01')
-      `);
-      assert.fail("a raw overlapping insert must die on the exclusion");
-    } catch (error) {
-      // db.execute wraps the PG error: the exclusion code rides on cause.
-      assert.equal(postgresErrorCode(error), "23P01");
+    for (const targets of [{}, { employment_ids: null, classification_ids: null }, { employment_ids: [], classification_ids: [] }]) {
+      let refusal: unknown;
+      try {
+        await db.execute(sql`
+          insert into hrm_leave_policies (org_id, leave_type_id, applies_to, effective_from, effective_to)
+          values (${h.org.orgId}, ${type.id}, ${JSON.stringify(targets)}::jsonb, '2026-03-01', '2026-04-01')
+        `);
+      } catch (error) {
+        refusal = error;
+      }
+      assert.equal(postgresErrorCode(refusal), "23P01", `untargeted storage overlap must refuse: ${JSON.stringify(targets)}`);
     }
     const windows = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_leave_policies
