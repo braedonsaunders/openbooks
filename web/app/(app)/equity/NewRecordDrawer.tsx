@@ -95,6 +95,13 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
     sharePrice: '', volatilityPercent: '', riskFreeRatePercent: '', expectedTermYears: '', dividendYieldPercent: '0', attribution: 'straight_line', memo: '',
   })
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }))
+  // Vesting starts on the issue date unless the operator sets another start.
+  const [vestingStartSet, setVestingStartSet] = useState(false)
+  const setIssueDate = (value: string) => setForm((current) => ({ ...current, issueDate: value, vestingStart: vestingStartSet ? current.vestingStart : value }))
+  const setVestingStart = (value: string) => {
+    setVestingStartSet(true)
+    set('vestingStart')(value)
+  }
   const [flags, setFlags] = useState({ mfn: false, earlyExercise: false })
   const shareBased = kind === 'share' || kind === 'option' || kind === 'rsu' || kind === 'warrant'
   const convertible = kind === 'safe' || kind === 'note'
@@ -159,7 +166,7 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
         <Field label={t('fields.holder')}>
           <SearchSelect value={form.holderPartyId} options={data.holders} onChange={(value) => set('holderPartyId')(value ?? '')} ariaLabel={t('fields.holder')} />
         </Field>
-        <Field label={t('fields.issueDate')}><DateField value={form.issueDate} onChange={(value) => set('issueDate')(value)} /></Field>
+        <Field label={t('fields.issueDate')}><DateField value={form.issueDate} onChange={setIssueDate} /></Field>
         {shareBased && (
           <>
             <Field label={t('fields.shareClass')}>
@@ -249,7 +256,7 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
           <SegmentTabs value={vesting} onChange={setVesting} label={t('new.vesting')} tabs={[{ key: 'none', label: t('new.vestingNone') }, { key: 'time', label: t('new.vestingTime') }]} />
           {vesting === 'time' && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Field label={t('fields.vestingStart')}><DateField value={form.vestingStart} onChange={(value) => set('vestingStart')(value)} /></Field>
+              <Field label={t('fields.vestingStart')}><DateField value={form.vestingStart} onChange={setVestingStart} /></Field>
               <Field label={t('fields.vestingMonths')}><Input inputMode="numeric" value={form.vestingMonths} onChange={(e) => set('vestingMonths')(e.target.value)} /></Field>
               <Field label={t('fields.cliffMonths')}><Input inputMode="numeric" value={form.cliffMonths} onChange={(e) => set('cliffMonths')(e.target.value)} /></Field>
               <Field label={t('fields.vestingFrequency')}>

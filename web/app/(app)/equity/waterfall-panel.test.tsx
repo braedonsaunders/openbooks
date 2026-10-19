@@ -57,7 +57,7 @@ const HOLDER = 'b0000000-0000-4000-8000-000000000001'
 const OTHER = 'b0000000-0000-4000-8000-000000000002'
 const context = {
   subsidiaryId: SUB, currency: 'USD', asOf: '2026-12-15', canManage: true, actorId: 'u0000000-0000-4000-8000-000000000001', pending: [],
-  params: { sub: SUB, view: 'waterfall' } as Record<string, string>, list: { page: 1, query: '' },
+  params: { sub: SUB, view: 'waterfall' } as Record<string, string>, list: { page: 1, query: '', sort: 'default', dir: 'asc' as const },
 }
 const asOfControl = { defaultPeriod: 'today', periodPresets: ['today', 'yesterday', 'tomorrow', 'custom'] }
 
@@ -286,20 +286,24 @@ test('input the waterfall cannot compute replaces the results with what to corre
   }
 })
 
-test('exit presets write a clean decimal to the input and the URL', async () => {
+test('exit presets show a localized amount in the input and write a clean decimal to the URL', async () => {
   const realFetch = globalThis.fetch
   globalThis.fetch = (async () => new Response(JSON.stringify(scenarioOf(current)), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch
   const screen = await mount(<EquityWaterfallPanel view={viewOf(scenarioOf(current))} />, `/equity?view=waterfall&sub=${SUB}`)
   try {
     const exit = screen.host.querySelector<HTMLInputElement>('input[inputmode=decimal]')!
-    assert.equal(exit.value, '67316585.6', 'the opening exit reads without ledger zeros')
+    assert.equal(exit.value, '67,316,585.60', 'the opening exit reads as a localized amount, without ledger zeros')
     const chips = [...screen.host.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')]
     assert.deepEqual(chips.map((chip) => chip.getAttribute('aria-pressed')), ['false', 'true', 'false', 'false'])
     await act(async () => { chips[0]!.click() })
-    assert.equal(exit.value, '33658292.8')
+    assert.equal(exit.value, '33,658,292.80')
     assert.equal(new URL(window.location.href).searchParams.get('exit'), '33658292.8')
     await act(async () => { chips[3]!.click() })
-    assert.equal(exit.value, '336582928')
+    assert.equal(exit.value, '336,582,928.00')
+    assert.equal(new URL(window.location.href).searchParams.get('exit'), '336582928')
+    await act(async () => { exit.focus() })
+    assert.equal(exit.value, '336582928', 'editing shows the clean decimal')
+    await act(async () => { exit.blur() })
     assert.equal(chips[3]!.getAttribute('aria-pressed'), 'true')
     await settle()
   } finally {

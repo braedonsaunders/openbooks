@@ -623,8 +623,13 @@ function ActionForm({ securityId, convertible, restricted, repurchaseBasis, earl
   const t = useTranslations('equity')
   const router = useRouter()
   const { money } = useMoney()
-  const [action, setAction] = useState<ActionKind>(actions[0]!)
-  const { busy, refusal, execute } = useAppAction()
+  const [action, setActionState] = useState<ActionKind>(actions[0]!)
+  const { busy, refusal, execute, clearRefusal } = useAppAction()
+  // A refusal answers the action it was given for; another action starts clean.
+  const setAction = (next: ActionKind) => {
+    setActionState(next)
+    clearRefusal()
+  }
   const [form, setForm] = useState({
     effectiveOn: asOf, quantity: '', amount: '', considerationAccountId: '', transfereePartyId: '', roundId: '', targetShareClassId: '', reason: '', fairMarketValuePerShare: '',
   })

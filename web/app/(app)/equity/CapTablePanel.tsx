@@ -11,7 +11,7 @@ import { capTableLayout, CAP_TABLE_INSTRUMENTS, type CapTableColumn, type CapTab
 import { ExportMenu } from '../reports/ExportMenu'
 import { EquityAsOfControl } from './AsOfControl'
 import type { CapTableViewData } from './view'
-import { CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, PolicyBanner, TOTAL_ROW, usePercent, useShares, withParams } from './shared'
+import { CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, PolicyBanner, TOTAL_ROW, listSort, usePercent, useShares, withParams } from './shared'
 
 const BASE = '/equity'
 
@@ -47,6 +47,7 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
   const lead = view.dimension === 'class'
     ? {
         key: 'class', header: <>{t('capTable.columns.class')}</>, headerClassName: HEAD, className: CELL,
+        sortKey: 'class', sortValue: (line: CapTableLine) => classById.get(line.shareClassId ?? '')?.code ?? null,
         cell: (line: CapTableLine) => {
           const row = classById.get(line.shareClassId ?? '')
           return row ? (
@@ -59,6 +60,7 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
       }
     : {
         key: 'holder', header: <>{t('capTable.columns.holder')}</>, headerClassName: HEAD, className: CELL,
+        sortKey: 'holder', sortValue: (line: CapTableLine) => (line.pool ? t('overview.ownership.pool') : view.parties[line.holderPartyId ?? ''] ?? null),
         cell: (line: CapTableLine) => line.pool ? (
           <span className="text-slate-600 dark:text-slate-300">{t('overview.ownership.pool')}</span>
         ) : (
@@ -79,6 +81,7 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
         resetPageKey={`${view.dimension}:${view.instrument}:${view.query}`}
         searchable={false}
         urlState={{ pageKey: 'page', page: context.list.page }}
+        {...listSort(context)}
         toolbarAfter={
           <div className="flex flex-1 flex-wrap items-center gap-2">
             <SearchInput />
@@ -103,6 +106,7 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
           lead,
           ...layout.columns.map((column) => ({
             key: column.key, header: header(column), headerClassName: NUM_HEAD, className: NUM_CELL,
+            sortKey: column.key, sortType: 'decimal' as const, sortValue: (line: CapTableLine) => line.values[column.key] ?? null,
             cell: (line: CapTableLine) => cell(column, line),
           })),
         ]}

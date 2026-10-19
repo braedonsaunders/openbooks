@@ -115,9 +115,14 @@ const number = (value: unknown): number | null => {
   return Number(value);
 };
 
-/** Where the action lands in the equity workspace. */
-function deepLinkFor(request: Pick<RequestRow, "action" | "subject_id" | "subsidiary_id" | "effective_on">): string {
-  const base = `/equity?sub=${request.subsidiary_id}&asOf=${request.effective_on}`;
+/**
+ * Where the action lands in the equity workspace: the view of the record it
+ * concerns, on the reader's own date. The action's effective date is not
+ * pinned as a custom as-of: the pending action is listed on its view
+ * whatever date the view reads, with its effective date beside it.
+ */
+function deepLinkFor(request: Pick<RequestRow, "action" | "subject_id" | "subsidiary_id">): string {
+  const base = `/equity?sub=${request.subsidiary_id}`;
   switch (request.action) {
     case "void":
     case "reverse":

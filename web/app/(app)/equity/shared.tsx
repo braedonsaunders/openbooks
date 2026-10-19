@@ -18,6 +18,8 @@ import { formatDecimal } from '@/lib/money-format'
 import { promptDialog } from '@/lib/prompt'
 import { useAppAction } from '@/lib/use-app-action'
 import { useMoney } from '@/components/money-provider'
+import { equityHref, type EquityListSort } from '@/lib/equity-url'
+import { perShareFormatOptions } from '@/lib/equity-price'
 
 export const CELL = 'px-4 py-2.5'
 export const HEAD = 'px-4 py-2 font-medium whitespace-nowrap'
@@ -54,26 +56,14 @@ export function useShares(): (value: string | null | undefined) => string {
   }
 }
 
-/**
- * The fraction digits a stored per-share price reads with: at least two, up
- * to four, and more only when four would round a non-zero price (a par value
- * such as 0.00001) to nothing. Prices are stored to ten places.
- */
-export function priceFractionDigits(value: string): number {
-  const fraction = (value.split('.')[1] ?? '').replace(/0+$/, '')
-  if (fraction.length <= 4) return Math.max(2, fraction.length)
-  return /[1-9]/.test(fraction.slice(0, 4)) ? 4 : Math.min(10, fraction.length)
-}
-
 const DECIMAL = /^-?\d+(\.\d+)?$/
 
-/** A per-share price in a currency, at reading precision. */
+/** A per-share value in a currency, under the one per-share precision rule. */
 export function usePrice(): (value: string | null | undefined, currency?: string) => string {
   const { money } = useMoney()
   return (value, currency) => {
     if (!value || !DECIMAL.test(value)) return '—'
-    const digits = priceFractionDigits(value)
-    return money(value, { currency, minimumFractionDigits: 2, maximumFractionDigits: digits })
+    return money(value, { currency, ...perShareFormatOptions(value) })
   }
 }
 
@@ -156,15 +146,14 @@ export function SegmentTabs<T extends string>({ value, onChange, tabs, label }: 
   )
 }
 
+/** A link within the workspace: the current parameters with the overrides, less the list state of another view. */
 export function withParams(base: string, params: Record<string, string | string[] | undefined>, overrides: Record<string, string | undefined>): string {
-  const next = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) if (typeof value === 'string' && value !== '') next.set(key, value)
-  for (const [key, value] of Object.entries(overrides)) {
-    if (value === undefined || value === '') next.delete(key)
-    else next.set(key, value)
-  }
-  const query = next.toString()
-  return query ? `${base}?${query}` : base
+  return equityHref(base, params, overrides)
+}
+
+/** The sortable headers of a view's list: the URL's sort, or the list's natural order. */
+export function listSort(context: { params: Record<string, string | string[] | undefined>; list: EquityListSort }) {
+  return { basePath: '/equity', currentParams: context.params, sort: context.list.sort, dir: context.list.dir }
 }
 
 /** A governed command's answer: applied now, or held by an Equity action Flow for approval. */

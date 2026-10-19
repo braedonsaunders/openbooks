@@ -48,9 +48,9 @@ const text = (element: Element | null) => (element?.textContent ?? '').replace(/
 const cells = (row: Element) => [...row.querySelectorAll('td')].map((cell) => text(cell)).filter(Boolean).join(' ')
 const SUB = 'a0000000-0000-4000-8000-000000000001'
 const ACTOR = 'u0000000-0000-4000-8000-000000000001'
-const context = (overrides: { canManage?: boolean; pending?: PendingRequest[]; list?: { page: number; query: string } } = {}) => ({
+const context = (overrides: { canManage?: boolean; pending?: PendingRequest[]; list?: { page: number; query: string; sort: string; dir: 'asc' | 'desc' } } = {}) => ({
   subsidiaryId: SUB, currency: 'USD', asOf: '2026-12-15', canManage: true, actorId: ACTOR, pending: [] as PendingRequest[],
-  params: { sub: SUB, view: 'compensation' } as Record<string, string>, list: { page: 1, query: '' }, ...overrides,
+  params: { sub: SUB, view: 'compensation' } as Record<string, string>, list: { page: 1, query: '', sort: 'default', dir: 'asc' as const }, ...overrides,
 })
 const asOfControl = { defaultPeriod: 'today', periodPresets: ['today', 'yesterday', 'tomorrow', 'custom'] }
 
@@ -311,7 +311,11 @@ test('the waterfall opens computed on the latest post-money, with preset multipl
   try {
     const chips = [...screen.host.querySelectorAll('button[aria-pressed]')]
     assert.deepEqual(chips.map((chip) => [text(chip), chip.getAttribute('aria-pressed')]), [['0.5×', 'false'], ['1×', 'true'], ['2×', 'false'], ['5×', 'false']])
-    assert.equal(screen.host.querySelector<HTMLInputElement>('input[inputmode=decimal]')?.value, '67200000', 'the exit reads as typed, without ledger zeros')
+    const exit = screen.host.querySelector<HTMLInputElement>('input[inputmode=decimal]')!
+    assert.equal(exit.value, '67,200,000.00', 'the exit reads as a localized amount')
+    await act(async () => { exit.focus() })
+    assert.equal(exit.value, '67200000', 'editing shows the amount as typed, without separators or ledger zeros')
+    await act(async () => { exit.blur() })
     const body = text(screen.host)
     for (const label of ['Proceeds to holders', 'Per common share', 'Payment cascade', 'Conversion decisions', 'As of']) assert.ok(body.includes(label), label)
     assert.ok(body.includes('Converts to common for $14,000,000.00; keeping its $14,000,000.00 preference would pay $14,000,000.00.'))
@@ -404,7 +408,7 @@ const securityRow = (overrides: Record<string, unknown> = {}) => ({
 test('the securities register reads dates and prices in the native formats and keeps its page in the URL', async () => {
   const rows = Array.from({ length: 12 }, (_, index) => securityRow({ id: `s0000000-0000-4000-8000-0000000000${String(index).padStart(2, '0')}`, securityNumber: `OPT-${String(index + 1).padStart(4, '0')}` }))
   const view = {
-    context: { ...context(), params: { sub: SUB, view: 'securities' }, list: { page: 2, query: '' } }, asOfControl,
+    context: { ...context(), params: { sub: SUB, view: 'securities' }, list: { page: 2, query: '', sort: 'default', dir: 'asc' as const } }, asOfControl,
     kind: null, status: null, holderPartyId: null, holders: [], rows, convertibles: [], reportHref: '/reports/custom/run/r1?period=custom&from=2026-12-15&to=2026-12-15',
   }
   const screen = await mount(<EquitySecuritiesPanel view={view} />, `/equity?view=securities&sub=${SUB}&page=2`)
@@ -419,9 +423,64 @@ test('the securities register reads dates and prices in the native formats and k
   }
 })
 
+test('the securities register filters by the search in the URL on load, never matching its own links', async () => {
+  const kinds = ['option', 'safe', 'option', 'safe', 'share'] as const
+  const rows = kinds.map((kind, index) => securityRow({
+    id: `s0000000-0000-4000-8000-0000000001${String(index).padStart(2, '0')}`, kind,
+    securityNumber: `${kind === 'safe' ? 'SAFE' : kind === 'share' ? 'CS' : 'OPT'}-000${index + 1}`,
+    // Each row's drawer link carries the list's own search, as the loader builds it.
+    href: `/equity?sub=${SUB}&view=securities&q=SAFE&security=s${index}`,
+  }))
+  const view = {
+    context: { ...context(), params: { sub: SUB, view: 'securities', q: 'SAFE' }, list: { page: 1, query: 'SAFE', sort: 'default', dir: 'asc' as const } }, asOfControl,
+    kind: null, status: null, holderPartyId: null, holders: [], rows, convertibles: [], reportHref: null,
+  }
+  const screen = await mount(<EquitySecuritiesPanel view={view} />, `/equity?view=securities&sub=${SUB}&q=SAFE`)
+  try {
+    assert.equal((screen.host.querySelector('input[aria-label="Search"]') as HTMLInputElement).value, 'SAFE')
+    const listed = [...screen.host.querySelectorAll('tbody tr')].map(cells)
+    assert.deepEqual(listed.map((row) => row.split(' ')[0]), ['SAFE-0002', 'SAFE-0004'], 'only the SAFEs match, not every row whose link carries the search')
+    assert.equal(new URL(window.location.href).searchParams.get('q'), 'SAFE', 'the search stays in the URL')
+  } finally {
+    await screen.close()
+  }
+})
+
+test('the securities register sorts by the column in the URL, and its headers link the next sort', async () => {
+  const rows = ['Zed Holder', 'Ann Holder', 'Mia Holder'].map((holderName, index) => securityRow({
+    id: `s0000000-0000-4000-8000-0000000002${String(index).padStart(2, '0')}`, securityNumber: `OPT-000${index + 1}`, holderName,
+  }))
+  const view = {
+    context: { ...context(), params: { sub: SUB, view: 'securities', sort: 'holder', dir: 'desc' }, list: { page: 1, query: '', sort: 'holder', dir: 'desc' as const } }, asOfControl,
+    kind: null, status: null, holderPartyId: null, holders: [], rows, convertibles: [], reportHref: null,
+  }
+  const screen = await mount(<EquitySecuritiesPanel view={view} />, `/equity?view=securities&sub=${SUB}&sort=holder&dir=desc`)
+  try {
+    const listed = [...screen.host.querySelectorAll('tbody tr')].map(cells)
+    assert.deepEqual(listed.map((row) => row.split(' ')[0]), ['OPT-0001', 'OPT-0003', 'OPT-0002'], 'Zed, Mia, Ann')
+    const holderHeader = [...screen.host.querySelectorAll('thead a')].find((link) => text(link) === 'Holder')!
+    const next = new URL(holderHeader.getAttribute('href')!, 'http://localhost')
+    assert.equal(next.searchParams.get('sort'), 'holder')
+    assert.equal(next.searchParams.get('dir'), 'asc', 'the active column flips direction')
+    assert.equal(next.searchParams.get('view'), 'securities')
+  } finally {
+    await screen.close()
+  }
+})
+
+test('links into another view leave the list search, page and sort behind, and links within the view keep them', async () => {
+  const { withParams } = await import('./shared')
+  const params = { sub: SUB, view: 'stakeholders', q: 'Employee', page: '2', sort: 'name', dir: 'desc', asOf: '2026-06-30' }
+  const other = new URL(withParams('/equity', params, { view: 'securities', holder: 'p1' }), 'http://localhost').searchParams
+  assert.deepEqual([...other.keys()].sort(), ['asOf', 'holder', 'sub', 'view'])
+  const same = new URL(withParams('/equity', params, { new: 'stakeholder' }), 'http://localhost').searchParams
+  assert.equal(same.get('q'), 'Employee')
+  assert.equal(same.get('sort'), 'name')
+})
+
 test('stakeholder search reads from the URL and writes back as it changes', async () => {
   const view = {
-    context: { ...context(), params: { sub: SUB, view: 'stakeholders' }, list: { page: 1, query: 'Employee' } }, asOfControl, table: capTable,
+    context: { ...context(), params: { sub: SUB, view: 'stakeholders' }, list: { page: 1, query: 'Employee', sort: 'default', dir: 'asc' as const } }, asOfControl, table: capTable,
     parties: { [HOLDER]: { name: 'Founder One', kind: 'person', email: null }, [EMPLOYEE]: { name: 'Employee One', kind: 'person', email: 'employee@example.com' } },
   }
   const screen = await mount(<EquityStakeholdersPanel view={view} />, `/equity?view=stakeholders&sub=${SUB}&q=Employee`)

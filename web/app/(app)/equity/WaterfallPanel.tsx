@@ -3,17 +3,19 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { SlidersHorizontal } from 'lucide-react'
-import { Badge, EmptyState, Input, Popover, Select, TableCell, TableRow, cn } from '@openbooks/ui'
+import { Badge, EmptyState, Popover, Select, TableCell, TableRow, cn } from '@openbooks/ui'
 import type { WaterfallScenario } from '@openbooks/engine/equity'
 import { add, cmp, formatMoney as fixedPlaces, isZero, neg, sum } from '@openbooks/engine/money/money'
 import { RegisteredListTable } from '@/components/registered-list-table'
 import { ListFilterSelect } from '@/components/list-filter-select'
 import { HomePanel, HomeStatTile } from '@/components/module-home/client'
+import { MoneyInput } from '@/components/money-input'
 import { MoneyProvider, useMoney } from '@/components/money-provider'
 import { ApiResponseError, apiJson } from '@/lib/api-error'
 import { toChartNumber } from '@/lib/chart-number'
 import { formatExactPercent } from '@/lib/format'
 import { formatDecimal } from '@/lib/money-format'
+import { perShareFormatOptions } from '@/lib/equity-price'
 import {
   cleanDecimal, conversionDecisions, currencyDecimalPlaces, curveSeries, decisionMessageKey, displayedAmounts, payoutLines, percentOf, waterfallSteps,
   type PayoutLine, type RecipientKey, type WaterfallStep,
@@ -79,7 +81,7 @@ export function EquityWaterfallPanel({ view }: { view: WaterfallViewData | null 
 
 function WaterfallScenarioView({ view }: { view: WaterfallViewData }) {
   const t = useTranslations('equity')
-  const { money } = useMoney()
+  const { money, locale } = useMoney()
   const { context } = view
   const [inputs, setInputs] = useState<Inputs>(() => ({
     ...view.inputs,
@@ -152,7 +154,10 @@ function WaterfallScenarioView({ view }: { view: WaterfallViewData }) {
         <>
           <label className="flex shrink-0 items-center gap-1.5">
             <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">{t('waterfall.exitValue')}</span>
-            <Input inputMode="decimal" value={inputs.exitValue} onChange={(e) => update({ exitValue: e.target.value.trim() })} aria-invalid={invalid === 'exit'} className="h-8 w-36 tabular-nums" placeholder="25000000" />
+            <MoneyInput
+              grouped showError={false} field={t('waterfall.exitValue')} ariaLabel={t('waterfall.exitValue')} value={inputs.exitValue} invalid={invalid === 'exit'}
+              onChange={(value) => update({ exitValue: value.trim() })} className="h-8 w-40 tabular-nums" placeholder={formatDecimal(locale, '25000000', { maximumFractionDigits: 0 })}
+            />
           </label>
           {view.presets.length > 0 && (
             <div className="flex shrink-0 items-center gap-1" role="group" aria-label={t('waterfall.presets', { round: view.anchor?.roundName ?? '' })}>
@@ -177,7 +182,10 @@ function WaterfallScenarioView({ view }: { view: WaterfallViewData }) {
           )}
           <label className="flex shrink-0 items-center gap-1.5">
             <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">{t('waterfall.fees')}</span>
-            <Input inputMode="decimal" value={inputs.transactionFees} onChange={(e) => update({ transactionFees: e.target.value.trim() })} aria-invalid={invalid === 'fees'} className="h-8 w-32 tabular-nums" placeholder="0" />
+            <MoneyInput
+              grouped showError={false} field={t('waterfall.fees')} ariaLabel={t('waterfall.fees')} value={inputs.transactionFees} invalid={invalid === 'fees'}
+              onChange={(value) => update({ transactionFees: value.trim() })} className="h-8 w-32 tabular-nums" placeholder="0"
+            />
           </label>
         </>
       }
@@ -248,7 +256,7 @@ function WaterfallResults({ scenario, pending, payoutsBy, onPayoutsBy }: { scena
   const places = currencyDecimalPlaces(currency)
   const nothingToShare = isZero(result.exitValue)
 
-  const price = (value: string) => money(value, { maximumFractionDigits: 4 })
+  const price = (value: string) => money(value, perShareFormatOptions(value))
   /** A two-place percentage, localized; a dash when there are no proceeds to share. */
   const percentLabel = (value: string | null) => (value === null || nothingToShare ? '—' : formatExactPercent(fixedPlaces(value, 2), locale, 2))
   const shareOfProceeds = (part: string) => {

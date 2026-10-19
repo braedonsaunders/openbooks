@@ -8,7 +8,7 @@ import { ListFilterSelect } from '@/components/list-filter-select'
 import { useMoney } from '@/components/money-provider'
 import { EquityAsOfControl } from './AsOfControl'
 import type { SecuritiesViewData } from './view'
-import { CELL, DATE_CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, STATUS_VARIANT, searchText, useCivilDate, usePercent, usePrice, useShares, withParams } from './shared'
+import { CELL, DATE_CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, STATUS_VARIANT, listSort, useCivilDate, usePercent, usePrice, useShares, withParams } from './shared'
 
 const BASE = '/equity'
 const KINDS = ['share', 'option', 'rsu', 'warrant', 'safe', 'note'] as const
@@ -37,10 +37,17 @@ export function EquitySecuritiesPanel({ view }: { view: SecuritiesViewData | nul
     {
       key: 'number', header: <>{t('securities.columns.number')}</>, headerClassName: HEAD, className: CELL,
       cell: (row) => <Link className={`font-mono ${LINK}`} href={row.href}>{row.securityNumber}</Link>,
-      search: searchText,
+      // The search reads what the row shows, never its link or ids.
+      search: (row) => row.securityNumber,
+      sortKey: 'number', sortValue: (row) => row.securityNumber,
     },
     {
       key: 'kind', header: <>{t('securities.columns.kind')}</>, headerClassName: HEAD, className: CELL,
+      search: (row) => {
+        const convertible = convertibles.get(row.id)
+        return `${t(`kind.${row.kind}`)} ${convertible?.safeType ? t(`safeType.${convertible.safeType}`) : ''}`
+      },
+      sortKey: 'kind', sortValue: (row) => t(`kind.${row.kind}`),
       cell: (row) => {
         const convertible = convertibles.get(row.id)
         return (
@@ -51,11 +58,15 @@ export function EquitySecuritiesPanel({ view }: { view: SecuritiesViewData | nul
         )
       },
     },
-    { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{row.holderName}</> },
-    { key: 'class', header: <>{t('securities.columns.class')}</>, headerClassName: HEAD, className: `${CELL} font-mono`, cell: (row) => <>{row.shareClassCode ?? '—'}</> },
-    { key: 'issued', header: <>{t('securities.columns.issued')}</>, headerClassName: HEAD, className: DATE_CELL, cell: (row) => <>{date(row.issueDate)}</> },
+    { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{row.holderName}</>, search: (row) => row.holderName, sortKey: 'holder', sortValue: (row) => row.holderName },
+    {
+      key: 'class', header: <>{t('securities.columns.class')}</>, headerClassName: HEAD, className: `${CELL} font-mono`, cell: (row) => <>{row.shareClassCode ?? '—'}</>,
+      search: (row) => row.shareClassCode ?? '', sortKey: 'class', sortValue: (row) => row.shareClassCode,
+    },
+    { key: 'issued', header: <>{t('securities.columns.issued')}</>, headerClassName: HEAD, className: DATE_CELL, cell: (row) => <>{date(row.issueDate)}</>, sortKey: 'issued', sortValue: (row) => row.issueDate },
     {
       key: 'status', header: <>{t('securities.columns.status')}</>, headerClassName: HEAD, className: CELL,
+      search: (row) => t(`status.${row.status}`), sortKey: 'status', sortValue: (row) => t(`status.${row.status}`),
       cell: (row) => (
         <span className="flex flex-wrap items-center gap-1">
           <Badge variant={STATUS_VARIANT[row.status] ?? 'secondary'}>{t(`status.${row.status}`)}</Badge>
@@ -77,14 +88,15 @@ export function EquitySecuritiesPanel({ view }: { view: SecuritiesViewData | nul
   const shareColumns: RegisteredListColumn<Row>[] = [
     {
       key: 'outstanding', header: <>{t('securities.columns.outstanding')}</>, headerClassName: NUM_HEAD, className: NUM_CELL,
+      sortKey: 'outstanding', sortType: 'decimal', sortValue: (row) => row.outstandingAmount ?? row.outstanding,
       cell: (row) => <>{row.outstandingAmount !== null ? money(row.outstandingAmount, { currency: row.currency }) : shares(row.outstanding)}</>,
     },
-    { key: 'vested', header: <>{t('securities.columns.vested')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.vested ? shares(row.vested) : '—'}</> },
-    { key: 'price', header: <>{t('securities.columns.price')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.price, row.currency)}</> },
+    { key: 'vested', header: <>{t('securities.columns.vested')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.vested ? shares(row.vested) : '—'}</>, sortKey: 'vested', sortType: 'decimal', sortValue: (row) => row.vested },
+    { key: 'price', header: <>{t('securities.columns.price')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.price, row.currency)}</>, sortKey: 'price', sortType: 'decimal', sortValue: (row) => row.price },
   ]
   const convertibleColumns: RegisteredListColumn<Row>[] = [
-    { key: 'principal', header: <>{t('rounds.columns.principal')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.principal ? money(row.principal, { currency: row.currency }) : '—'}</> },
-    { key: 'outstandingAmount', header: <>{t('securities.columns.outstanding')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.outstandingAmount !== null ? money(row.outstandingAmount, { currency: row.currency }) : '—'}</> },
+    { key: 'principal', header: <>{t('rounds.columns.principal')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.principal ? money(row.principal, { currency: row.currency }) : '—'}</>, sortKey: 'principal', sortType: 'decimal', sortValue: (row) => row.principal },
+    { key: 'outstandingAmount', header: <>{t('securities.columns.outstanding')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.outstandingAmount !== null ? money(row.outstandingAmount, { currency: row.currency }) : '—'}</>, sortKey: 'outstanding', sortType: 'decimal', sortValue: (row) => row.outstandingAmount },
     {
       key: 'interest', header: <>{t('rounds.columns.interest')}</>, headerClassName: NUM_HEAD, className: NUM_CELL,
       cell: (row) => { const value = convertibles.get(row.id)?.accruedInterest; return <>{value ? money(value, { currency: row.currency }) : '—'}</> },
@@ -105,6 +117,7 @@ export function EquitySecuritiesPanel({ view }: { view: SecuritiesViewData | nul
         empty={t('securities.empty')}
         resetPageKey={`${view.kind ?? ''}:${view.status ?? ''}:${view.holderPartyId ?? ''}`}
         urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
+        {...listSort(context)}
         toolbarAfter={
           <div className="flex flex-1 flex-wrap items-center gap-2">
             <ListFilterSelect

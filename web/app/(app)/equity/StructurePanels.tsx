@@ -13,11 +13,13 @@ import { useAppAction } from '@/lib/use-app-action'
 import { EquityAsOfControl } from './AsOfControl'
 import type { EquityContext, StakeholdersViewData, StructureViewData } from './view'
 import {
-  CELL, CommandRefusal, DATE_CELL, Field, HEAD, LINK, NUM_CELL, NUM_HEAD, PendingActions, SegmentTabs, isPendingApproval, postCommand, toastGoverned,
+  CELL, CommandRefusal, DATE_CELL, Field, HEAD, LINK, NUM_CELL, NUM_HEAD, PendingActions, SegmentTabs, isPendingApproval, listSort, postCommand, toastGoverned,
   useCivilDate, useDecimal, usePercent, usePrice, useShares, withParams,
 } from './shared'
 
 const BASE = '/equity'
+
+type ClassActionMode = 'authorized_shares' | 'conversion_price' | 'conversion_class' | 'split'
 
 /**
  * Share classes on the as-of date with their terms and capitalization.
@@ -44,17 +46,19 @@ export function EquityClassesPanel({ view }: { view: StructureViewData | null })
         rowKey={(row) => row.shareClassId}
         empty={t('classes.empty')}
         urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
+        {...listSort(context)}
         toolbarAfter={<EquityAsOfControl control={view.asOfControl} />}
         columns={[
           {
             key: 'class', header: <>{t('capTable.columns.class')}</>, headerClassName: HEAD, className: CELL,
             cell: (row) => <span><span className="font-mono font-medium">{row.code}</span> <span className="text-slate-500">{row.name}</span></span>,
             search: (row) => `${row.code} ${row.name}`,
+            sortKey: 'class', sortValue: (row) => row.code,
           },
-          { key: 'kind', header: <>{t('classes.columns.kind')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <Badge variant="outline">{t(`classKind.${row.kind}`)}</Badge> },
-          { key: 'seniority', header: <>{t('classes.columns.seniority')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.kind === 'preferred' ? row.seniority : '—'}</> },
-          { key: 'authorized', header: <>{t('capTable.columns.authorized')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.authorized)}</> },
-          { key: 'outstanding', header: <>{t('capTable.columns.outstanding')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.outstanding)}</> },
+          { key: 'kind', header: <>{t('classes.columns.kind')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <Badge variant="outline">{t(`classKind.${row.kind}`)}</Badge>, search: (row) => t(`classKind.${row.kind}`), sortKey: 'kind', sortValue: (row) => t(`classKind.${row.kind}`) },
+          { key: 'seniority', header: <>{t('classes.columns.seniority')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.kind === 'preferred' ? row.seniority : '—'}</>, sortKey: 'seniority', sortValue: (row) => (row.kind === 'preferred' ? row.seniority : null) },
+          { key: 'authorized', header: <>{t('capTable.columns.authorized')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.authorized)}</>, sortKey: 'authorized', sortType: 'decimal', sortValue: (row) => row.authorized },
+          { key: 'outstanding', header: <>{t('capTable.columns.outstanding')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.outstanding)}</>, sortKey: 'outstanding', sortType: 'decimal', sortValue: (row) => row.outstanding },
           { key: 'par', header: <>{t('classes.columns.par')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.parValue, context.currency)}</> },
           { key: 'issuePrice', header: <>{t('classes.columns.issuePrice')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.originalIssuePrice, context.currency)}</> },
           { key: 'conversionPrice', header: <>{t('classes.columns.conversionPrice')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.conversionPrice, context.currency)}</> },
@@ -75,7 +79,7 @@ export function EquityClassesPanel({ view }: { view: StructureViewData | null })
             key: 'antiDilution', header: <>{t('fields.antiDilution')}</>, headerClassName: HEAD, className: `${CELL} text-xs`,
             cell: (row) => { const record = terms.get(row.shareClassId); return <>{record && record.kind === 'preferred' ? t(`antiDilution.${record.antiDilution}`) : '—'}</> },
           },
-          { key: 'fullyDilutedPercent', header: <>{t('capTable.columns.fullyDilutedPercent')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{percentText(row.fullyDilutedPercent)}</> },
+          { key: 'fullyDilutedPercent', header: <>{t('capTable.columns.fullyDilutedPercent')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{percentText(row.fullyDilutedPercent)}</>, sortKey: 'fullyDilutedPercent', sortType: 'decimal', sortValue: (row) => row.fullyDilutedPercent },
           {
             key: 'actions', header: <span className="sr-only">{t('capTable.columns.actions')}</span>, headerClassName: HEAD, className: `${CELL} text-right`,
             cell: (row) => context.canManage
@@ -111,8 +115,13 @@ function ClassActionDrawer({ shareClass, context, closeHref, commonClasses }: {
   const router = useRouter()
   const shares = useShares()
   const price = usePrice()
-  const [mode, setMode] = useState<'authorized_shares' | 'conversion_price' | 'conversion_class' | 'split'>('authorized_shares')
-  const { busy, refusal, execute } = useAppAction()
+  const [mode, setModeState] = useState<ClassActionMode>('authorized_shares')
+  const { busy, refusal, execute, clearRefusal } = useAppAction()
+  // A refusal answers the action it was given for; another action starts clean.
+  const setMode = (next: ClassActionMode) => {
+    setModeState(next)
+    clearRefusal()
+  }
   const [form, setForm] = useState({ effectiveOn: context.asOf, value: '', numerator: '', denominator: '', reason: '', conversionShareClassId: '' })
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }))
   const done = (pending: boolean) => {
@@ -215,19 +224,21 @@ export function EquityPlansPanel({ view }: { view: StructureViewData | null }) {
         rowKey={(row) => row.id}
         empty={t('plans.empty')}
         urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
+        {...listSort(context)}
         toolbarAfter={<EquityAsOfControl control={view.asOfControl} />}
         columns={[
           {
             key: 'code', header: <>{t('plans.columns.plan')}</>, headerClassName: HEAD, className: CELL,
             cell: (row) => <span><span className="font-mono font-medium">{row.code}</span> <span className="text-slate-500">{row.name}</span></span>,
             search: (row) => `${row.code} ${row.name}`,
+            sortKey: 'plan', sortValue: (row) => row.code,
           },
-          { key: 'class', header: <>{t('plans.columns.class')}</>, headerClassName: HEAD, className: `${CELL} font-mono`, cell: (row) => <>{classCodes.get(row.shareClassId) ?? '—'}</> },
-          { key: 'effective', header: <>{t('plans.columns.effective')}</>, headerClassName: HEAD, className: DATE_CELL, cell: (row) => <>{date(row.effectiveOn)}</> },
-          { key: 'reserved', header: <>{t('plans.columns.reserved')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.reserved)}</> },
-          { key: 'used', header: <>{t('plans.columns.used')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.used)}</> },
-          { key: 'returned', header: <>{t('plans.columns.returned')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.returned)}</> },
-          { key: 'available', header: <>{t('plans.columns.available')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <strong>{shares(row.available)}</strong> },
+          { key: 'class', header: <>{t('plans.columns.class')}</>, headerClassName: HEAD, className: `${CELL} font-mono`, cell: (row) => <>{classCodes.get(row.shareClassId) ?? '—'}</>, search: (row) => classCodes.get(row.shareClassId) ?? '', sortKey: 'class', sortValue: (row) => classCodes.get(row.shareClassId) ?? null },
+          { key: 'effective', header: <>{t('plans.columns.effective')}</>, headerClassName: HEAD, className: DATE_CELL, cell: (row) => <>{date(row.effectiveOn)}</>, sortKey: 'effective', sortValue: (row) => row.effectiveOn },
+          { key: 'reserved', header: <>{t('plans.columns.reserved')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.reserved)}</>, sortKey: 'reserved', sortType: 'decimal', sortValue: (row) => row.reserved },
+          { key: 'used', header: <>{t('plans.columns.used')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.used)}</>, sortKey: 'used', sortType: 'decimal', sortValue: (row) => row.used },
+          { key: 'returned', header: <>{t('plans.columns.returned')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.returned)}</>, sortKey: 'returned', sortType: 'decimal', sortValue: (row) => row.returned },
+          { key: 'available', header: <>{t('plans.columns.available')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <strong>{shares(row.available)}</strong>, sortKey: 'available', sortType: 'decimal', sortValue: (row) => row.available },
           {
             key: 'recycling', header: <>{t('plans.columns.recycling')}</>, headerClassName: HEAD, className: `${CELL} text-xs`,
             cell: (row) => <>{[row.recycleForfeited && t('plans.recycle.forfeited'), row.recycleExpired && t('plans.recycle.expired'), row.recycleRepurchased && t('plans.recycle.repurchased')].filter(Boolean).join(' · ') || t('plans.recycle.none')}</>,
@@ -295,6 +306,7 @@ export function EquityStakeholdersPanel({ view }: { view: StakeholdersViewData |
       rowKey={(row) => row.holderPartyId}
       empty={t('stakeholders.empty')}
       urlState={{ pageKey: 'page', page: view.context.list.page, searchKey: 'q', query: view.context.list.query }}
+      {...listSort(view.context)}
       toolbarAfter={<EquityAsOfControl control={view.asOfControl} />}
       columns={[
         {
@@ -305,13 +317,14 @@ export function EquityStakeholdersPanel({ view }: { view: StakeholdersViewData |
             </Link>
           ),
           search: (row) => `${view.parties[row.holderPartyId]?.name ?? ''} ${view.parties[row.holderPartyId]?.email ?? ''}`,
+          sortKey: 'name', sortValue: (row) => view.parties[row.holderPartyId]?.name ?? null,
         },
         { key: 'kind', header: <>{t('stakeholders.columns.kind')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{view.parties[row.holderPartyId]?.kind ? t(`partyKind.${view.parties[row.holderPartyId]!.kind}`) : '—'}</> },
         { key: 'email', header: <>{t('stakeholders.columns.email')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{view.parties[row.holderPartyId]?.email ?? '—'}</> },
-        { key: 'shares', header: <>{t('stakeholders.columns.shares')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.asConvertedOutstanding)}</> },
-        { key: 'vested', header: <>{t('stakeholders.columns.vestedAwards')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.vestedAwards)}</> },
-        { key: 'fullyDiluted', header: <>{t('stakeholders.columns.fullyDiluted')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.fullyDiluted)}</> },
-        { key: 'percent', header: <>{t('stakeholders.columns.percent')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{percentText(row.fullyDilutedPercent)}</> },
+        { key: 'shares', header: <>{t('stakeholders.columns.shares')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.asConvertedOutstanding)}</>, sortKey: 'shares', sortType: 'decimal', sortValue: (row) => row.asConvertedOutstanding },
+        { key: 'vested', header: <>{t('stakeholders.columns.vestedAwards')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.vestedAwards)}</>, sortKey: 'vested', sortType: 'decimal', sortValue: (row) => row.vestedAwards },
+        { key: 'fullyDiluted', header: <>{t('stakeholders.columns.fullyDiluted')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.fullyDiluted)}</>, sortKey: 'fullyDiluted', sortType: 'decimal', sortValue: (row) => row.fullyDiluted },
+        { key: 'percent', header: <>{t('stakeholders.columns.percent')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{percentText(row.fullyDilutedPercent)}</>, sortKey: 'percent', sortType: 'decimal', sortValue: (row) => row.fullyDilutedPercent },
       ]}
     />
   )

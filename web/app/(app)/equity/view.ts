@@ -43,15 +43,17 @@ import {
 } from '@openbooks/engine/equity'
 import { cmp } from '@openbooks/engine/money/money'
 import { normalizeDecimal, roundMoney } from '@openbooks/engine/money'
-import { db } from '@openbooks/engine/platform/database'
+import { db, memoizedRead, withReadMemo } from '@openbooks/engine/platform/database'
 import { businessToday } from '@openbooks/engine/platform/business-date'
 import { canonicalPeriodLabel, periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import { APPROVALS_HOME_HREF } from '@openbooks/engine/navigation/approvals-home'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
+import { isUuid, pickString } from '../../../lib/list-params'
+import { equityHref, parseEquityListSort, type EquityListSort } from '../../../lib/equity-url'
+import { perShareFormatOptions } from '../../../lib/equity-price'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
-import { builtInReportDefinitionId } from '../../../lib/custom-reports'
+import { builtInReportDefinitionIds } from '../../../lib/custom-reports'
 import { resolvePeriod } from '../../../lib/periods'
 import { getMoneyFormatter } from '../../../lib/money-server'
 import { formatCivilDate, formatExactPercent } from '../../../lib/format'
@@ -116,8 +118,8 @@ export interface EquityContext {
   actorId: string
   /** Governed actions of the legal entity awaiting a Flow decision. */
   pending: PendingRequest[]
-  /** The list's page and search from the URL, so a reload reopens them. */
-  list: { page: number; query: string }
+  /** The list's page, search and sort from the URL, so a reload or a shared link reopens them. */
+  list: { page: number; query: string } & EquityListSort
   /** The current URL parameters, so in-page links keep the entity, the date and the filters. */
   params: Record<string, string | string[] | undefined>
 }
@@ -376,7 +378,16 @@ async function resolveAsOf(sp: Record<string, string | string[] | undefined>, or
 
 const shareCount = (value: string, locale: string): string => new Intl.NumberFormat(locale).format(BigInt(value))
 
-export async function loadEquity(sp: Record<string, string | string[] | undefined>): Promise<EquityPageData> {
+/**
+ * The page's data. The views read in parallel inside one read memo, so a
+ * legal entity's records, its reader's authority and the report links load
+ * once however many views of them the page composes.
+ */
+export function loadEquity(sp: Record<string, string | string[] | undefined>): Promise<EquityPageData> {
+  return withReadMemo(() => loadEquityPage(sp))
+}
+
+async function loadEquityPage(sp: Record<string, string | string[] | undefined>): Promise<EquityPageData> {
   const t = await getTranslations('equity')
   const authz = await requirePermission('equity.read')
   const orgId = authz.user.orgId
@@ -396,10 +407,9 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
     redirect(target ?? EQUITY_BASE)
   }
 
-  const entities = await listEquityEntities(actor)
+  const [entities, today] = await Promise.all([listEquityEntities(actor), businessToday(orgId)])
   const requestedSub = pickString(sp.sub)
   const entity = entities.find((row) => row.id === requestedSub) ?? entities[0] ?? null
-  const today = await businessToday(orgId)
   const { asOf, control: asOfControl } = await resolveAsOf(sp, orgId, today)
   const securityParam = pickString(sp.security)
   const requestedView = pickString(sp.view)
@@ -458,19 +468,25 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
     }
   }
 
-  const pending = await pendingEquityActions({ ...actor, subsidiaryId: entity.id })
   // In-page links keep the entity, the date control and the view's own
   // filters; an open drawer is never carried into another link.
   const params: Record<string, string | string[] | undefined> = Object.fromEntries(
     Object.entries(sp).filter(([key]) => !TRANSIENT_PARAMS.has(key)),
   )
-  const requestedPage = Number(pickString(sp.page) ?? '1')
-  const context: EquityContext = {
-    subsidiaryId: entity.id, currency: entity.currency, asOf, canManage, actorId: authz.user.id, pending, params,
-    list: { page: Number.isInteger(requestedPage) && requestedPage >= 1 ? requestedPage : 1, query: pickString(sp.q) ?? '' },
-  }
-  const keep = (overrides: Record<string, string | undefined>) => mergeHref(EQUITY_BASE, params, overrides)
+  const keep = (overrides: Record<string, string | undefined>) => equityHref(EQUITY_BASE, params, overrides)
   const scope = { ...actor, subsidiaryId: entity.id, asOf }
+  const requestedPage = Number(pickString(sp.page) ?? '1')
+  const pendingRead = pendingEquityActions({ ...actor, subsidiaryId: entity.id })
+  // The context waits only on the pending actions; every read below starts
+  // at once and shares the legal entity's book through the render's memo.
+  const contextRead = pendingRead.then((pending): EquityContext => ({
+    subsidiaryId: entity.id, currency: entity.currency, asOf, canManage, actorId: authz.user.id, pending, params,
+    list: {
+      page: Number.isInteger(requestedPage) && requestedPage >= 1 ? requestedPage : 1,
+      query: pickString(sp.q) ?? '',
+      ...parseEquityListSort(pickString(sp.sort), pickString(sp.dir)),
+    },
+  }))
 
   const newKind = VIEW_NEW_ACTION[view]
   const canCreateParty = can(authz, 'parties.manage')
@@ -478,36 +494,32 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
     ? { href: keep({ new: newKind, security: undefined }), label: t(`new.actions.${newKind}`) }
     : null
 
-  let overview: OverviewData | null = null
-  let capTable: CapTableViewData | null = null
-  let securities: SecuritiesViewData | null = null
-  let stakeholders: StakeholdersViewData | null = null
-  let structure: StructureViewData | null = null
-  let rounds: RoundsViewData | null = null
-  let waterfall: WaterfallViewData | null = null
-  let runs: RunsViewData | null = null
-
   // Point-in-time reports open on this page's date through their as-of control.
-  const asOfReport = (key: string) => reportHref(orgId, key, { period: 'custom', from: asOf, to: asOf })
+  const asOfReport = (key: EquityReportSlug) => reportHref(orgId, key, { period: 'custom', from: asOf, to: asOf })
 
-  if (view === 'overview') {
-    const yearStart = (await resolvePeriod('this_fiscal_year_to_date', { orgId, today: asOf })).from
-    const data = await loadEquityOverview({ ...scope, yearStart })
-    const capView = await loadCapTableView(scope)
-    overview = await overviewData(data, {
-      locale, keep, pending, hasAccountPolicy: capView.hasAccountPolicy, orgId,
-      classOrder: await classColorOrder(orgId, entity.id),
-      reports: {
-        capTable: await asOfReport('equity-cap-table'),
-        register: await asOfReport('equity-securities-register'),
-        compensation: await reportHref(orgId, 'equity-stock-compensation-schedule'),
-      },
+  const overviewRead = async (): Promise<OverviewData | null> => {
+    if (view !== 'overview') return null
+    const [yearStart, capView, classOrder, capTableReport, registerReport, compensationReport] = await Promise.all([
+      resolvePeriod('this_fiscal_year_to_date', { orgId, today: asOf }).then((period) => period.from),
+      loadCapTableView(scope),
+      classColorOrder(orgId, entity.id),
+      asOfReport('equity-cap-table'),
+      asOfReport('equity-securities-register'),
+      reportHref(orgId, 'equity-stock-compensation-schedule'),
+    ])
+    const [data, pending] = await Promise.all([loadEquityOverview({ ...scope, yearStart }), pendingRead])
+    return overviewData(data, {
+      locale, keep, pending, hasAccountPolicy: capView.hasAccountPolicy, orgId, classOrder,
+      reports: { capTable: capTableReport, register: registerReport, compensation: compensationReport },
     })
   }
 
-  if (view === 'captable') {
-    const capView = await loadCapTableView(scope)
-    capTable = {
+  const capTableRead = async (): Promise<CapTableViewData | null> => {
+    if (view !== 'captable') return null
+    const [capView, register, asOfCapTable, context] = await Promise.all([
+      loadCapTableView(scope), asOfReport('equity-securities-register'), asOfReport('equity-cap-table'), contextRead,
+    ])
+    return {
       context,
       asOfControl,
       ...capTableFilters({ by: pickString(sp.by), instrument: pickString(sp.instrument), q: pickString(sp.q) }),
@@ -515,25 +527,27 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
       parties: capView.parties,
       hasAccountPolicy: capView.hasAccountPolicy,
       accountsSetupHref: '/admin/setup/equity-account-policies',
-      reportHref: await asOfReport('equity-securities-register'),
+      reportHref: register,
       // The report's as-of control, set to this page's date.
-      asOfReportHref: await asOfReport('equity-cap-table'),
+      asOfReportHref: asOfCapTable,
     }
   }
 
-  if (view === 'securities') {
+  const securitiesRead = async (): Promise<SecuritiesViewData | null> => {
+    if (view !== 'securities') return null
     const requestedKind = pickString(sp.kind)
     const kind = KINDS.find((value) => value === requestedKind) ?? null
     const requestedStatus = pickString(sp.status)
     const status = (STATUSES as readonly string[]).includes(requestedStatus ?? '') ? requestedStatus! : null
     const holder = pickString(sp.holder)
     const holderPartyId = holder && isUuid(holder) ? holder : null
-    const all = await listSecurities({ ...scope, kind: null, holderPartyId: null })
-    const capView = await loadCapTableView(scope)
+    const [all, capView, register, context] = await Promise.all([
+      listSecurities({ ...scope, kind: null, holderPartyId: null }), loadCapTableView(scope), asOfReport('equity-securities-register'), contextRead,
+    ])
     const holders = [...new Map(all.rows.map((row) => [row.holderPartyId, row.holderName])).entries()]
       .sort(([, a], [, b]) => a.localeCompare(b, locale))
       .map(([value, label]) => ({ value, label }))
-    securities = {
+    return {
       context,
       asOfControl,
       kind,
@@ -544,24 +558,28 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
         .filter((row) => (!kind || row.kind === kind) && (!holderPartyId || row.holderPartyId === holderPartyId) && (!status || row.status === status))
         .map((row) => ({ ...row, href: keep({ view: 'securities', security: row.id, new: undefined }) })),
       convertibles: capView.table.convertibles,
-      reportHref: await asOfReport('equity-securities-register'),
+      reportHref: register,
     }
   }
 
-  if (view === 'stakeholders') {
-    const listed = await listStakeholders(scope)
-    stakeholders = { context, asOfControl, table: listed.table, parties: listed.parties }
+  const stakeholdersRead = async (): Promise<StakeholdersViewData | null> => {
+    if (view !== 'stakeholders') return null
+    const [listed, context] = await Promise.all([listStakeholders(scope), contextRead])
+    return { context, asOfControl, table: listed.table, parties: listed.parties }
   }
 
-  if (view === 'classes' || view === 'plans') {
-    const capView = await loadCapTableView(scope)
-    structure = { context, asOfControl, structure: await loadStructure(scope), classRows: capView.table.classes }
+  const structureRead = async (): Promise<StructureViewData | null> => {
+    if (view !== 'classes' && view !== 'plans') return null
+    const [capView, structureView, context] = await Promise.all([loadCapTableView(scope), loadStructure(scope), contextRead])
+    return { context, asOfControl, structure: structureView, classRows: capView.table.classes }
   }
 
-  if (view === 'rounds') {
-    rounds = {
+  const roundsRead = async (): Promise<RoundsViewData | null> => {
+    if (view !== 'rounds') return null
+    const [structureView, context] = await Promise.all([loadStructure(scope), contextRead])
+    return {
       context,
-      structure: await loadStructure(scope),
+      structure: structureView,
       roundId: (() => { const id = pickString(sp.round); return id && isUuid(id) ? id : null })(),
       roundCloseHref: keep({ round: undefined }),
       modelOpen: pickString(sp.model) === 'round',
@@ -570,59 +588,72 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
     }
   }
 
-  if (view === 'waterfall') {
-    waterfall = await waterfallData(sp, context, asOfControl, scope)
+  const waterfallRead = async (): Promise<WaterfallViewData | null> => {
+    if (view !== 'waterfall') return null
+    return waterfallData(sp, await contextRead, asOfControl, scope)
   }
 
-  if (view === 'compensation') {
-    runs = await runsData(sp, context, keep, orgId, actor, entity.id, today)
+  const runsRead = async (): Promise<RunsViewData | null> => {
+    if (view !== 'compensation') return null
+    return runsData(sp, await contextRead, keep, orgId, actor, entity.id, today)
   }
 
-  let drawer: SecurityDrawerData | null = null
-  if (securityParam && isUuid(securityParam)) {
+  const drawerRead = async (): Promise<SecurityDrawerData | null> => {
+    if (!securityParam || !isUuid(securityParam)) return null
     try {
-      const detail = await loadSecurityDetail({ ...actor, securityId: securityParam, asOf })
-      if (detail.entity.id === entity.id) {
-        const structureView = canManage ? await loadStructure(scope) : null
-        drawer = {
-          context,
-          detail,
-          releases: detail.restricted ? await listRestrictedReleases({ ...actor, securityId: securityParam }) : [],
-          closeHref: keep({ security: undefined }),
-          holders: canManage ? await holderOptions(orgId, authz.allowedSubsidiaryIds) : [],
-          rounds: structureView?.rounds.map((row) => ({ value: row.id, label: `${row.name} · ${formatCivilDate(row.closedOn, locale)}` })) ?? [],
-          commonClasses: structureView?.classes.filter((row) => row.kind === 'common').map((row) => ({ value: row.id, label: `${row.code} · ${row.name}` })) ?? [],
-          considerationAccounts: canManage ? await considerationAccounts(orgId) : [],
-        }
+      const [detail, structureView, holders, accounts, context] = await Promise.all([
+        loadSecurityDetail({ ...actor, securityId: securityParam, asOf }),
+        canManage ? loadStructure(scope) : null,
+        canManage ? holderOptions(orgId, authz.allowedSubsidiaryIds) : [],
+        canManage ? considerationAccounts(orgId) : [],
+        contextRead,
+      ])
+      if (detail.entity.id !== entity.id) return null
+      return {
+        context,
+        detail,
+        releases: detail.restricted ? await listRestrictedReleases({ ...actor, securityId: securityParam }) : [],
+        closeHref: keep({ security: undefined }),
+        holders,
+        rounds: structureView?.rounds.map((row) => ({ value: row.id, label: `${row.name} · ${formatCivilDate(row.closedOn, locale)}` })) ?? [],
+        commonClasses: structureView?.classes.filter((row) => row.kind === 'common').map((row) => ({ value: row.id, label: `${row.code} · ${row.name}` })) ?? [],
+        considerationAccounts: accounts,
       }
     } catch (error) {
       if (!(error instanceof EquityError) || error.status !== 404) throw error
+      return null
     }
   }
 
-  let newRecord: NewRecordData | null = null
   const requestedNew = pickString(sp.new)
   const newRecordKind = NEW_RECORD_KINDS.find((value) => value === requestedNew) ?? null
-  if (canManage && newRecordKind && (newRecordKind !== 'stakeholder' || canCreateParty)) {
-    const structureView = await loadStructure(scope)
+  const newRecordRead = async (): Promise<NewRecordData | null> => {
+    if (!canManage || !newRecordKind || (newRecordKind === 'stakeholder' && !canCreateParty)) return null
     const requestedHolder = pickString(sp.newHolder)
     const requestedKind = pickString(sp.newKind)
-    newRecord = {
+    const [structureView, holders, accounts, currencies, context] = await Promise.all([
+      loadStructure(scope), holderOptions(orgId, authz.allowedSubsidiaryIds), considerationAccounts(orgId), currencyOptions(), contextRead,
+    ])
+    return {
       context,
       kind: newRecordKind,
       closeHref: keep({ new: undefined, newHolder: undefined, newKind: undefined }),
       holderPartyId: requestedHolder && isUuid(requestedHolder) ? requestedHolder : null,
       securityKind: KINDS.find((value) => value === requestedKind) ?? null,
-      holders: await holderOptions(orgId, authz.allowedSubsidiaryIds),
+      holders,
       classes: structureView.classes.map((row) => ({ value: row.id, label: `${row.code} · ${row.name}`, kind: row.kind })),
       commonClasses: structureView.classes.filter((row) => row.kind === 'common').map((row) => ({ value: row.id, label: `${row.code} · ${row.name}` })),
       plans: structureView.plans.map((row) => ({ value: row.id, label: `${row.code} · ${row.name}`, shareClassId: row.shareClassId })),
       rounds: structureView.rounds.map((row) => ({ value: row.id, label: `${row.name} · ${formatCivilDate(row.closedOn, locale)}`, shareClassId: row.shareClassId, pricePerShare: row.pricePerShare, currency: row.currency })),
-      considerationAccounts: await considerationAccounts(orgId),
-      currencies: await currencyOptions(),
+      considerationAccounts: accounts,
+      currencies,
       canCreateParty,
     }
   }
+
+  const [overview, capTable, securities, stakeholders, structure, rounds, waterfall, runs, drawer, newRecord] = await Promise.all([
+    overviewRead(), capTableRead(), securitiesRead(), stakeholdersRead(), structureRead(), roundsRead(), waterfallRead(), runsRead(), drawerRead(), newRecordRead(),
+  ])
 
   return {
     ...base,
@@ -657,13 +688,16 @@ async function classColorOrder(orgId: string, subsidiaryId: string): Promise<str
 }
 
 /**
- * Chart palette slots for the ownership donut: share classes cycle through
- * their own slots in creation order, each award kind has a fixed slot of
- * its own, and the pool is drawn neutral (-1). Slots are chosen so
- * neighbouring slices never share a hue.
+ * Chart palette slots for the ownership donut, from the shared chart
+ * palette. Share classes take their slots in creation order and each award
+ * kind has a fixed slot of its own; the pool is drawn neutral (-1). The
+ * first three class slots and the option and RSU slots are mutually distinct
+ * hues (teal, indigo, orange, pink, lime: every pair at least 18 OKLab units
+ * apart), so a typical capitalization never puts two similar hues side by
+ * side whatever order its slices take.
  */
-const CLASS_COLOR_SLOTS = [0, 1, 2, 7, 8, 6] as const
-const GROUP_COLOR_SLOTS: Record<string, number> = { option: 3, rsu: 5, warrant: 9, safe: 4, note: 4 }
+const CLASS_COLOR_SLOTS = [0, 1, 9, 7, 6, 5] as const
+const GROUP_COLOR_SLOTS: Record<string, number> = { option: 3, rsu: 8, warrant: 2 }
 
 export function ownershipColorSlot(slice: { key: string; group: string }, classOrder: readonly string[]): number {
   if (slice.group === 'pool') return -1
@@ -671,11 +705,17 @@ export function ownershipColorSlot(slice: { key: string; group: string }, classO
     const index = classOrder.indexOf(slice.key.replace(/^class:/, ''))
     return CLASS_COLOR_SLOTS[(index < 0 ? classOrder.length : index) % CLASS_COLOR_SLOTS.length]!
   }
-  return GROUP_COLOR_SLOTS[slice.group] ?? 4
+  return GROUP_COLOR_SLOTS[slice.group] ?? 2
 }
 
-async function reportHref(orgId: string, key: string, params: Record<string, string> = {}): Promise<string | null> {
-  const id = await builtInReportDefinitionId(orgId, key)
+/** The built-in reports the workspace links to, resolved together once per render. */
+const EQUITY_REPORT_SLUGS = ['equity-cap-table', 'equity-securities-register', 'equity-stock-compensation-schedule'] as const
+
+type EquityReportSlug = (typeof EQUITY_REPORT_SLUGS)[number]
+
+async function reportHref(orgId: string, key: EquityReportSlug, params: Record<string, string> = {}): Promise<string | null> {
+  const ids = await memoizedRead(`equity-report-ids:${orgId}`, () => builtInReportDefinitionIds(orgId, EQUITY_REPORT_SLUGS))
+  const id = ids.get(key)
   if (!id) return null
   const query = new URLSearchParams(params).toString()
   return `/reports/custom/run/${id}${query ? `?${query}` : ''}`
@@ -780,7 +820,7 @@ async function overviewData(
   const activity = data.activity.map((row) => {
     const detail = row.quantity ? t('overview.activity.shares', { quantity: shares(row.quantity) }) : row.amount && row.currency ? money(row.amount, { currency: row.currency }) : null
     const text = row.kind === 'round'
-      ? t('overview.activity.round', { name: row.label ?? '', price: money(row.amount ?? '0', { currency: row.currency ?? data.entity.currency, maximumFractionDigits: 4 }) })
+      ? t('overview.activity.round', { name: row.label ?? '', price: money(row.amount ?? '0', { currency: row.currency ?? data.entity.currency, ...perShareFormatOptions(row.amount ?? '0') }) })
       : row.kind === 'issue'
         ? t('overview.activity.issue', { kind: t(`kind.${row.securityKind ?? 'share'}`), number: row.securityNumber ?? '', holder: row.holderName ?? '' })
         : [t(`eventKind.${row.kind}`), row.securityNumber, row.holderName].filter(Boolean).join(' · ')
@@ -804,7 +844,7 @@ async function overviewData(
       fullyDilutedSub: t('overview.tiles.fullyDilutedSub', { outstanding: shares(data.totals.asConvertedOutstanding) }),
       pool: shares(data.totals.poolAvailable),
       poolSub: pool ? t('overview.tiles.poolSub', { percent: percent(pool.percent) }) : t('overview.tiles.noPool'),
-      price: round ? money(round.pricePerShare, { currency: round.currency, maximumFractionDigits: 4 }) : '—',
+      price: round ? money(round.pricePerShare, { currency: round.currency, ...perShareFormatOptions(round.pricePerShare) }) : '—',
       priceSub: round ? `${round.name} · ${date(round.closedOn)}` : t('overview.tiles.noRound'),
       raised: raisedFigures ? compact(raisedFigures.total) : others[0] ? compact(additiveRounding(others[0].total, []).total, others[0].currency) : moneyCompact('0'),
       raisedSub: [
@@ -887,8 +927,9 @@ async function runsData(
   // Each period reads with the native fiscal label, and links to its own
   // close: the primary book's close run once started, else the period's row
   // in the close list of its fiscal year.
-  const periods = (await db.execute<{ id: string; name: string; ends_on: string; fiscal_year: number; period_number: number; is_adjustment: boolean; close_run_id: string | null }>(sql`
-    select p.id, p.name, p.ends_on::text as ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
+  const locale = await getLocale()
+  const periods = (await db.execute<{ id: string; name: string; starts_on: string; ends_on: string; fiscal_year: number; period_number: number; is_adjustment: boolean; close_run_id: string | null }>(sql`
+    select p.id, p.name, p.starts_on::text as starts_on, p.ends_on::text as ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
            (select r.id from close_runs r
               join accounting_books b on b.org_id = r.org_id and b.id = r.book_id and b.is_primary
              where r.org_id = p.org_id and r.period_id = p.id
@@ -897,7 +938,7 @@ async function runsData(
      where p.org_id = ${orgId} and not p.is_adjustment
      order by p.starts_on desc
      limit 60`)).rows.map((row): RunPeriod => {
-    const label = periodDisplayLabel({ fiscalYear: row.fiscal_year, periodNumber: row.period_number, adjustment: row.is_adjustment, name: row.name })
+    const label = periodDisplayLabel({ fiscalYear: row.fiscal_year, periodNumber: row.period_number, adjustment: row.is_adjustment, startsOn: row.starts_on, endsOn: row.ends_on }, locale)
     return {
       id: row.id,
       label,

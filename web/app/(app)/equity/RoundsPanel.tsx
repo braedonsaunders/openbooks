@@ -8,12 +8,15 @@ import { Badge, Button, Input, Table, TableBody, TableCell, TableHead, TableHead
 import type { RoundModelResult } from '@openbooks/engine/equity'
 import { add } from '@openbooks/engine/money/money'
 import { RegisteredListTable } from '@/components/registered-list-table'
+import { MoneyInput } from '@/components/money-input'
 import { useMoney } from '@/components/money-provider'
+import { perShareFormatOptions } from '@/lib/equity-price'
+import { formatDecimal } from '@/lib/money-format'
 import { useAppAction } from '@/lib/use-app-action'
 import type { EquityContext, RoundsViewData } from './view'
 import { DateField } from '@/components/date-field'
 import {
-  CELL, CommandRefusal, DATE_CELL, Field, HEAD, LINK, NUM_CELL, NUM_HEAD, PendingActions, SegmentTabs, Stat, postCommand, toastGoverned, useCivilDate, usePercent, usePrice, useShares, withParams,
+  CELL, CommandRefusal, DATE_CELL, Field, HEAD, LINK, NUM_CELL, NUM_HEAD, PendingActions, SegmentTabs, Stat, listSort, postCommand, toastGoverned, useCivilDate, usePercent, usePrice, useShares, withParams,
 } from './shared'
 
 type RoundRow = RoundsViewData['structure']['rounds'][number]
@@ -55,6 +58,7 @@ export function EquityRoundsPanel({ view }: { view: RoundsViewData | null }) {
         rowKey={(row) => row.id}
         empty={t('rounds.empty')}
         urlState={{ pageKey: 'page', page: view.context.list.page, searchKey: 'q', query: view.context.list.query }}
+        {...listSort(view.context)}
         toolbarAfter={
           <div className="ml-auto flex items-center gap-2">
             <Button asChild variant="outline" size="sm"><Link href={view.modelHref}>{t('rounds.model')}</Link></Button>
@@ -62,7 +66,7 @@ export function EquityRoundsPanel({ view }: { view: RoundsViewData | null }) {
         }
         columns={[
           {
-            key: 'name', header: <>{t('rounds.columns.name')}</>, headerClassName: HEAD, className: `${CELL} font-medium`, search: (row) => row.name,
+            key: 'name', header: <>{t('rounds.columns.name')}</>, headerClassName: HEAD, className: `${CELL} font-medium`, search: (row) => row.name, sortKey: 'name', sortValue: (row) => row.name,
             cell: (row) => (
               <span className="flex items-center gap-2">
                 <Link className={LINK} href={withParams('/equity', view.context.params, { view: 'rounds', round: row.id, model: undefined }) as never}>{row.name}</Link>
@@ -71,11 +75,11 @@ export function EquityRoundsPanel({ view }: { view: RoundsViewData | null }) {
               </span>
             ),
           },
-          { key: 'class', header: <>{t('rounds.columns.class')}</>, headerClassName: HEAD, className: `${CELL} font-mono`, cell: (row) => <>{classCodes.get(row.shareClassId) ?? '—'}</> },
-          { key: 'closed', header: <>{t('rounds.columns.closedOn')}</>, headerClassName: HEAD, className: DATE_CELL, cell: (row) => <>{date(row.closedOn)}</> },
-          { key: 'price', header: <>{t('rounds.columns.price')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.pricePerShare, row.currency)}</> },
-          { key: 'preMoney', header: <>{t('rounds.columns.preMoney')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.preMoneyValuation, { currency: row.currency })}</> },
-          { key: 'raised', header: <>{t('rounds.columns.raised')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.voidedOn ? '—' : money(row.raised, { currency: row.currency })}</> },
+          { key: 'class', header: <>{t('rounds.columns.class')}</>, headerClassName: HEAD, className: `${CELL} font-mono`, cell: (row) => <>{classCodes.get(row.shareClassId) ?? '—'}</>, search: (row) => classCodes.get(row.shareClassId) ?? '', sortKey: 'class', sortValue: (row) => classCodes.get(row.shareClassId) ?? null },
+          { key: 'closed', header: <>{t('rounds.columns.closedOn')}</>, headerClassName: HEAD, className: DATE_CELL, cell: (row) => <>{date(row.closedOn)}</>, sortKey: 'closed', sortValue: (row) => row.closedOn },
+          { key: 'price', header: <>{t('rounds.columns.price')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.pricePerShare, row.currency)}</>, sortKey: 'price', sortType: 'decimal', sortValue: (row) => row.pricePerShare },
+          { key: 'preMoney', header: <>{t('rounds.columns.preMoney')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.preMoneyValuation, { currency: row.currency })}</>, sortKey: 'preMoney', sortType: 'decimal', sortValue: (row) => row.preMoneyValuation },
+          { key: 'raised', header: <>{t('rounds.columns.raised')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.voidedOn ? '—' : money(row.raised, { currency: row.currency })}</>, sortKey: 'raised', sortType: 'decimal', sortValue: (row) => (row.voidedOn ? null : row.raised) },
           { key: 'postMoney', header: <>{t('rounds.columns.postMoney')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => (row.voidedOn ? <>—</> : <strong>{money(add(row.preMoneyValuation, row.raised), { currency: row.currency })}</strong>) },
           { key: 'shares', header: <>{t('rounds.columns.shares')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.voidedOn ? '—' : shares(row.sharesIssued)}</> },
         ]}
@@ -105,9 +109,14 @@ function RoundDrawer({ round, context, classCode, closeHref }: { round: RoundRow
   const shares = useShares()
   const date = useCivilDate()
   const price = usePrice()
-  const { money } = useMoney()
-  const { busy, refusal, execute } = useAppAction()
-  const [mode, setMode] = useState<'amend' | 'void'>('amend')
+  const { money, locale } = useMoney()
+  const { busy, refusal, execute, clearRefusal } = useAppAction()
+  const [mode, setModeState] = useState<'amend' | 'void'>('amend')
+  // A refusal answers the action it was given for; another action starts clean.
+  const setMode = (next: 'amend' | 'void') => {
+    setModeState(next)
+    clearRefusal()
+  }
   const [form, setForm] = useState({ effectiveOn: context.asOf, name: round.name, pricePerShare: '', preMoneyValuation: '', preMoneyBasisReason: '', reason: '' })
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }))
   const locked = round.liveSecurities.length > 0
@@ -203,10 +212,16 @@ function RoundDrawer({ round, context, classCode, closeHref }: { round: RoundRow
                 <>
                   <Field label={t('fields.name')}><Input value={form.name} onChange={(e) => set('name')(e.target.value)} /></Field>
                   <Field label={t('fields.pricePerShare')} hint={locked ? t('rounds.priceLocked') : undefined}>
-                    <Input inputMode="decimal" value={form.pricePerShare} placeholder={round.pricePerShare} disabled={locked} onChange={(e) => set('pricePerShare')(e.target.value)} />
+                    <MoneyInput
+                      grouped maxScale={10} field={t('fields.pricePerShare')} ariaLabel={t('fields.pricePerShare')} value={form.pricePerShare} disabled={locked}
+                      placeholder={formatDecimal(locale, round.pricePerShare, perShareFormatOptions(round.pricePerShare))} onChange={set('pricePerShare')}
+                    />
                   </Field>
                   <Field label={t('fields.preMoneyValuation')}>
-                    <Input inputMode="decimal" value={form.preMoneyValuation} placeholder={round.preMoneyValuation} onChange={(e) => set('preMoneyValuation')(e.target.value)} />
+                    <MoneyInput
+                      grouped field={t('fields.preMoneyValuation')} ariaLabel={t('fields.preMoneyValuation')} value={form.preMoneyValuation}
+                      placeholder={formatDecimal(locale, round.preMoneyValuation, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} onChange={set('preMoneyValuation')}
+                    />
                   </Field>
                 </>
               )}
@@ -256,8 +271,8 @@ function RoundModelDrawer({ context, closeHref }: { context: EquityContext; clos
     <UrlDrawer open closeHref={closeHref} size="xl" title={t('rounds.model')} description={t('model.description')}>
       <div className="space-y-4 p-4">
         <div className="flex flex-wrap items-end gap-3">
-          <Field label={t('model.preMoney')}><Input inputMode="decimal" value={form.preMoneyValuation} onChange={(e) => setForm({ ...form, preMoneyValuation: e.target.value })} /></Field>
-          <Field label={t('model.investment')}><Input inputMode="decimal" value={form.investment} onChange={(e) => setForm({ ...form, investment: e.target.value })} /></Field>
+          <Field label={t('model.preMoney')}><MoneyInput grouped field={t('model.preMoney')} ariaLabel={t('model.preMoney')} value={form.preMoneyValuation} onChange={(value) => setForm({ ...form, preMoneyValuation: value })} /></Field>
+          <Field label={t('model.investment')}><MoneyInput grouped field={t('model.investment')} ariaLabel={t('model.investment')} value={form.investment} onChange={(value) => setForm({ ...form, investment: value })} /></Field>
           <Field label={t('model.targetPool')}><Input inputMode="decimal" value={form.targetPoolPercent} onChange={(e) => setForm({ ...form, targetPoolPercent: e.target.value })} placeholder="10" /></Field>
           <Button onClick={run} disabled={busy || !form.preMoneyValuation || !form.investment}>{t('model.run')}</Button>
         </div>

@@ -12,7 +12,7 @@ import { JournalEntryLink } from '@/components/journal-entry-link'
 import { MoneyProvider, useMoney } from '@/components/money-provider'
 import { useAppAction } from '@/lib/use-app-action'
 import type { RunsViewData } from './view'
-import { CELL, CommandRefusal, DATE_CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, Refusal, postCommand, useCivilDate, useShares, withParams } from './shared'
+import { CELL, CommandRefusal, DATE_CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, Refusal, listSort, postCommand, useCivilDate, useShares, withParams } from './shared'
 
 const BASE = '/equity'
 const NOTICE = 'rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
@@ -139,6 +139,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
               rows={view.compensation.lines}
               rowKey={(row) => row.securityId}
               urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
+              {...listSort(context)}
               empty={t('compensation.empty')}
               toolbarAfter={toolbar}
               columns={[
@@ -146,12 +147,13 @@ function RunsBody({ view }: { view: RunsViewData }) {
                   key: 'security', header: <>{t('securities.columns.number')}</>, headerClassName: HEAD, className: CELL,
                   cell: (row) => <Link className={`font-mono ${LINK}`} href={withParams(BASE, context.params, { view: 'securities', security: row.securityId, run: undefined, period: undefined, lines: undefined })}>{row.securityNumber}</Link>,
                   search: (row) => `${row.securityNumber} ${view.parties[row.holderPartyId] ?? ''}`,
+                  sortKey: 'security', sortValue: (row) => row.securityNumber,
                 },
                 { key: 'kind', header: <>{t('securities.columns.kind')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{t(`kind.${row.kind}`)}</> },
-                { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{view.parties[row.holderPartyId] ?? '—'}</> },
-                { key: 'cumulative', header: <>{t('compensation.columns.cumulative')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.cumulative)}</> },
-                { key: 'previous', header: <>{t('compensation.columns.previous')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.previous)}</> },
-                { key: 'period', header: <>{t('compensation.columns.period')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <strong>{money(row.period)}</strong> },
+                { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{view.parties[row.holderPartyId] ?? '—'}</>, sortKey: 'holder', sortValue: (row) => view.parties[row.holderPartyId] ?? null },
+                { key: 'cumulative', header: <>{t('compensation.columns.cumulative')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'cumulative', sortType: 'decimal', sortValue: (row) => row.cumulative, cell: (row) => <>{money(row.cumulative)}</> },
+                { key: 'previous', header: <>{t('compensation.columns.previous')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'previous', sortType: 'decimal', sortValue: (row) => row.previous, cell: (row) => <>{money(row.previous)}</> },
+                { key: 'period', header: <>{t('compensation.columns.period')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'period', sortType: 'decimal', sortValue: (row) => row.period, cell: (row) => <strong>{money(row.period)}</strong> },
               ]}
             />
           )}
@@ -161,6 +163,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
               rows={view.compensation.releases}
               rowKey={(row) => row.securityId}
               urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
+              {...listSort(context)}
               empty={t('compensation.releasesEmpty')}
               toolbarAfter={toolbar}
               columns={[
@@ -168,12 +171,13 @@ function RunsBody({ view }: { view: RunsViewData }) {
                   key: 'security', header: <>{t('securities.columns.number')}</>, headerClassName: HEAD, className: CELL,
                   cell: (row) => <Link className={`font-mono ${LINK}`} href={withParams(BASE, context.params, { view: 'securities', security: row.securityId, run: undefined, period: undefined, lines: undefined })}>{row.securityNumber}</Link>,
                   search: (row) => `${row.securityNumber} ${view.parties[row.holderPartyId] ?? ''}`,
+                  sortKey: 'security', sortValue: (row) => row.securityNumber,
                 },
-                { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{view.parties[row.holderPartyId] ?? '—'}</> },
-                { key: 'shares', header: <>{t('compensation.columns.releasedShares')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.previousShares)} → {shares(row.shares)}</> },
-                { key: 'deposit', header: <>{t('compensation.columns.deposit')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.deposit)}</> },
-                { key: 'reclass', header: <>{t('compensation.columns.reclass')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.reclass)}</> },
-                { key: 'par', header: <>{t('compensation.columns.par')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.par)}</> },
+                { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{view.parties[row.holderPartyId] ?? '—'}</>, sortKey: 'holder', sortValue: (row) => view.parties[row.holderPartyId] ?? null },
+                { key: 'shares', header: <>{t('compensation.columns.releasedShares')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'shares', sortType: 'decimal', sortValue: (row) => row.shares, cell: (row) => <>{shares(row.previousShares)} → {shares(row.shares)}</> },
+                { key: 'deposit', header: <>{t('compensation.columns.deposit')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'deposit', sortType: 'decimal', sortValue: (row) => row.deposit, cell: (row) => <>{money(row.deposit)}</> },
+                { key: 'reclass', header: <>{t('compensation.columns.reclass')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'reclass', sortType: 'decimal', sortValue: (row) => row.reclass, cell: (row) => <>{money(row.reclass)}</> },
+                { key: 'par', header: <>{t('compensation.columns.par')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'par', sortType: 'decimal', sortValue: (row) => row.par, cell: (row) => <>{money(row.par)}</> },
               ]}
             />
           )}
@@ -183,6 +187,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
               rows={view.interest.lines}
               rowKey={(row) => row.securityId}
               urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
+              {...listSort(context)}
               empty={t('interest.empty')}
               toolbarAfter={toolbar}
               columns={[
@@ -190,12 +195,13 @@ function RunsBody({ view }: { view: RunsViewData }) {
                   key: 'security', header: <>{t('securities.columns.number')}</>, headerClassName: HEAD, className: CELL,
                   cell: (row) => <Link className={`font-mono ${LINK}`} href={withParams(BASE, context.params, { view: 'securities', security: row.securityId, run: undefined, period: undefined, lines: undefined })}>{row.securityNumber}</Link>,
                   search: (row) => `${row.securityNumber} ${view.parties[row.holderPartyId] ?? ''}`,
+                  sortKey: 'security', sortValue: (row) => row.securityNumber,
                 },
-                { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{view.parties[row.holderPartyId] ?? '—'}</> },
-                { key: 'cumulative', header: <>{t('interest.columns.cumulative')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.cumulative, { currency: row.currency })}</> },
-                { key: 'previous', header: <>{t('interest.columns.previous')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.previous, { currency: row.currency })}</> },
-                { key: 'period', header: <>{t('interest.columns.period')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <strong>{money(row.period, { currency: row.currency })}</strong> },
-                { key: 'functional', header: <>{t('interest.columns.functional')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.functional)}</> },
+                { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{view.parties[row.holderPartyId] ?? '—'}</>, sortKey: 'holder', sortValue: (row) => view.parties[row.holderPartyId] ?? null },
+                { key: 'cumulative', header: <>{t('interest.columns.cumulative')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'cumulative', sortType: 'decimal', sortValue: (row) => row.cumulative, cell: (row) => <>{money(row.cumulative, { currency: row.currency })}</> },
+                { key: 'previous', header: <>{t('interest.columns.previous')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'previous', sortType: 'decimal', sortValue: (row) => row.previous, cell: (row) => <>{money(row.previous, { currency: row.currency })}</> },
+                { key: 'period', header: <>{t('interest.columns.period')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'period', sortType: 'decimal', sortValue: (row) => row.period, cell: (row) => <strong>{money(row.period, { currency: row.currency })}</strong> },
+                { key: 'functional', header: <>{t('interest.columns.functional')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, sortKey: 'functional', sortType: 'decimal', sortValue: (row) => row.functional, cell: (row) => <>{money(row.functional)}</> },
               ]}
             />
           )}

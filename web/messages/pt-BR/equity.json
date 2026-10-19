@@ -1,7 +1,7 @@
 {
   "home": {
     "title": "Patrimônio e tabela de capitalização",
-    "description": "A tabela de capitalização de cada entidade jurídica em qualquer data, com seus títulos, rodadas, modelos de saída e remuneração em ações."
+    "description": "Capitalização em qualquer data, com rodadas, saídas e remuneração em ações."
   },
   "tabs": {
     "captable": "Tabela de capitalização",

@@ -41,7 +41,7 @@ function restrictedCertificate(overrides: Partial<DrawerProps['detail']> = {}): 
   return {
     context: {
       subsidiaryId: SUB, currency: 'USD', asOf: '2026-12-15', canManage: true, actorId: 'u0000000-0000-4000-8000-000000000001', pending: [],
-      params: { sub: SUB, view: 'securities' }, list: { page: 1, query: '' },
+      params: { sub: SUB, view: 'securities' }, list: { page: 1, query: '', sort: 'default', dir: 'asc' as const },
     },
     detail: {
       entity: { id: SUB, name: 'Northstar Cloud', currency: 'USD' },
@@ -142,6 +142,10 @@ test('a refused event pins its refusal and remedy beside the form until the next
     assert.ok(text(alert).includes('Enter at most 1,000 shares.'), 'the remedy stays with the refusal')
     await new Promise((resolve) => setTimeout(resolve, 50))
     assert.ok(dialog().querySelector('[role=alert]'), 'the refusal stays pinned after the notification fades')
+    // Another action starts clean: the refusal answered the void, not it.
+    const other = [...dialog().querySelectorAll('button[role=tab]')].find((tab) => text(tab) !== 'Void') as HTMLButtonElement
+    await act(async () => { other.click() })
+    assert.equal(dialog().querySelector('[role=alert]'), null, `switching to ${text(other)} clears the void's refusal`)
   } finally {
     globalThis.fetch = originalFetch
     await screen.close()
@@ -179,6 +183,36 @@ test('a new stakeholder with an address no message could be sent to is held at t
     assert.deepEqual(requests, [], 'nothing was sent while the address was invalid')
   } finally {
     globalThis.fetch = originalFetch
+    await screen.close()
+  }
+})
+
+test('a new award vests from its issue date until the operator sets another start', async () => {
+  const data = {
+    context: restrictedCertificate().context, kind: 'security' as const, closeHref: `/equity?sub=${SUB}&view=securities`,
+    holderPartyId: null, securityKind: 'option' as const, holders: [], classes: [], commonClasses: [], plans: [], rounds: [], considerationAccounts: [], currencies: [], canCreateParty: true,
+  }
+  const screen = await mount(<NewRecordDrawer data={data} />, `/equity?sub=${SUB}&view=securities&new=security`)
+  try {
+    const settle = async (input: HTMLInputElement, value: string) => act(async () => {
+      input.focus()
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+      input.dispatchEvent(new window.Event('input', { bubbles: true }))
+      input.blur()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    const timeTab = [...dialog().querySelectorAll('button[role=tab]')].find((tab) => text(tab) === 'Time-based schedule') as HTMLButtonElement
+    await act(async () => { timeTab.click() })
+    const dateInputs = () => [...dialog().querySelectorAll<HTMLInputElement>('input[data-date-field], input[aria-haspopup=dialog], input')].filter((input) => /\d/.test(input.value) && /\d{2,4}\D\d{1,2}\D\d{2,4}/.test(input.value))
+    const [issue] = dateInputs()
+    await settle(issue!, '2026-02-25')
+    const [issued, vestingStart] = dateInputs()
+    assert.equal(vestingStart!.value, issued!.value, 'vesting starts on the issue date')
+    await settle(vestingStart!, '2026-03-01')
+    await settle(dateInputs()[0]!, '2026-02-20')
+    const [, kept] = dateInputs()
+    assert.notEqual(kept!.value, dateInputs()[0]!.value, 'a start the operator set is kept when the issue date moves')
+  } finally {
     await screen.close()
   }
 })

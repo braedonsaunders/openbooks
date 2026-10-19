@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { useLocale } from 'next-intl'
 import { Input } from '@openbooks/ui'
 import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import { decimalNullCause, decimalNullRefusal } from '@openbooks/engine/money/decimal-refusal'
+import { formatDecimal } from '../lib/money-format'
 
 /**
  * One operator-typed money (or hours) answer, refused with a named cause
@@ -70,6 +72,10 @@ export function MoneyInput({
   disabled = false,
   className,
   autoFocus = false,
+  grouped = false,
+  invalid = false,
+  showError = true,
+  onFocusChange,
 }: {
   id?: string
   ariaLabel?: string
@@ -87,33 +93,58 @@ export function MoneyInput({
   disabled?: boolean
   className?: string
   autoFocus?: boolean
+  /**
+   * Show a valid amount in the viewer's locale (grouped, at least two
+   * places) while the field is not being edited; editing shows the value as
+   * typed, so the operator never edits separators the parser would refuse.
+   */
+  grouped?: boolean
+  /** The caller's own refusal of the value (beside the shared classifier's). */
+  invalid?: boolean
+  /** False where the caller states the refusal itself (a toolbar field whose body names it). */
+  showError?: boolean
+  onFocusChange?: (focused: boolean) => void
 }) {
+  const locale = useLocale()
   const [touched, setTouched] = useState(false)
+  const [focused, setFocused] = useState(false)
   const error = moneyFieldError(field, noun, value, maxScale, { required })
   // A pristine required field disables its submit without scolding the
   // operator first — the refusal appears once they have typed or left it.
   const shown = error !== null && (touched || value.trim() !== '')
   const errorId = id !== undefined ? `${id}-error` : undefined
+  const canonical = grouped && !focused ? canonicalDecimal(value.trim(), maxScale) : null
+  const display = canonical !== null
+    ? formatDecimal(locale, canonical, { minimumFractionDigits: Math.min(2, maxScale), maximumFractionDigits: maxScale })
+    : value
   return (
     <div>
       <Input
         id={id}
         aria-label={ariaLabel}
         inputMode="decimal"
-        value={value}
+        value={display}
         placeholder={placeholder}
         disabled={disabled}
         autoFocus={autoFocus}
-        aria-invalid={shown}
-        aria-describedby={shown ? errorId : undefined}
+        aria-invalid={shown || invalid}
+        aria-describedby={shown && showError ? errorId : undefined}
         className={className}
         onChange={(event) => {
           setTouched(true)
           onChange(event.target.value)
         }}
-        onBlur={() => setTouched(true)}
+        onFocus={() => {
+          setFocused(true)
+          onFocusChange?.(true)
+        }}
+        onBlur={() => {
+          setTouched(true)
+          setFocused(false)
+          onFocusChange?.(false)
+        }}
       />
-      {shown && (
+      {shown && showError && (
         <p id={errorId} role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
           {error}
         </p>
