@@ -1079,8 +1079,8 @@ async function sumReturnGlRaw(
       // immutable component evidence (posted sales documents only), with
       // credits netting like the taxable_base box below.
       const valueCol = src.basis === "marketplace_tax"
-        ? sql`activity.sign * (case when d.kind = 'customer_credit' then -mc.tax_amount else mc.tax_amount end)`
-        : sql`activity.sign * round(((case when d.kind = 'customer_credit' then -mdl.amount else mdl.amount end) * d.fx_rate)::numeric, 4)`;
+        ? sql`activity.sign * round(((case when d.kind in ('customer_credit', 'cash_refund') then -mc.tax_amount else mc.tax_amount end) * d.fx_rate)::numeric, 4)`
+        : sql`activity.sign * round(((case when d.kind in ('customer_credit', 'cash_refund') then -mdl.amount else mdl.amount end) * d.fx_rate)::numeric, 4)`;
       const r = (await runner.execute<{ total: string }>(sql`
         select coalesce(sum(${valueCol}), 0)::text as total
           from document_line_tax_components mc
@@ -1089,7 +1089,7 @@ async function sumReturnGlRaw(
           ${documentReturnActivity({ from, to })}
          where mc.org_id = ${orgId} and mc.tax_code_id = ${src.taxCodeId}
            and mc.collected_by = 'marketplace'
-           and d.kind in ('customer_invoice', 'customer_credit')
+           and d.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')
            ${docScope}`));
       total = r.rows[0]?.total ?? "0";
     } else {

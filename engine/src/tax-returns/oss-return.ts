@@ -231,7 +231,7 @@ export async function computeOssReturn(
          and corrected.id = correction_edge.to_document_id
        where d.org_id = ${orgId}
          and d.kind in ('customer_invoice', 'customer_credit')
-         and d.status = 'posted'
+         and (d.status = 'posted' or (d.status = 'voided' and d.voided_at::date > ${request.to}::date))
          and d.document_date between ${request.from}::date and ${request.to}::date
          and d.custom -> 'crossBorderSupply' ->> 'outcome' = 'customer_country'
          and component.calculation_type = 'standard'`)
