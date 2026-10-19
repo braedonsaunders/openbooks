@@ -1,4 +1,6 @@
 import { add, cmp, fromUnits, sum, toUnits } from "../money/money.ts";
+import { toQuantityUnits } from "../money/quantity.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import {
@@ -94,10 +96,10 @@ export function validatePurchaseOrderQuantities(input: {
 }
 
 function exactProduct(quantity: string, price: string): string {
-  const product = toUnits(quantity) * toUnits(price);
+  const product = toQuantityUnits(quantity) * toUnits(price);
   const negative = product < 0n;
   const absolute = negative ? -product : product;
-  const rounded = (absolute + 5_000n) / 10_000n;
+  const rounded = (absolute + 50_000_000n) / 100_000_000n;
   return fromUnits(negative ? -rounded : rounded);
 }
 
@@ -249,8 +251,14 @@ export function validateNormalizedCapture(
     if (!line.description && !line.productCode) {
       issues.push({ code: "missing_line_description", severity: "warning", lineIndex });
     }
+    const quantityValid = canonicalDecimal(line.quantity, 8) !== null;
+    if (!quantityValid) {
+      issues.push(invalidMoneyIssue(
+        `line ${lineIndex + 1} quantity`, "a quantity", line.quantity,
+        { field: "quantity", lineIndex }, 8,
+      ));
+    }
     const entries = [
-      ["quantity", line.quantity, "a quantity"],
       ["unitPrice", line.unitPrice, "an amount"],
       ["amount", line.amount, "an amount"],
       ["taxAmount", line.taxAmount, "an amount"],
@@ -264,7 +272,7 @@ export function validateNormalizedCapture(
         issues.push({ code: "amount_out_of_range", severity: "blocking", lineIndex });
       }
     }
-    if (lineMoneyValid) {
+    if (quantityValid && lineMoneyValid) {
       const expected = exactProduct(line.quantity, line.unitPrice);
       if (cmp(expected, line.amount) !== 0) {
         issues.push({ code: "line_math_mismatch", severity: "blocking", lineIndex, expected, actual: line.amount });

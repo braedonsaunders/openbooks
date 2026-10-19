@@ -23,7 +23,7 @@ export async function extractNativeInvoice(bytes: Uint8Array, contentType: strin
   if (cmp(add(invoice.totals.taxExclusive, invoice.totals.tax), invoice.totals.taxInclusive) !== 0
       || cmp(sum(invoice.vatBreakdown.map(g => g.taxAmount)), invoice.totals.tax) !== 0) fail('The supplier invoice VAT and gross totals do not reconcile. Request a corrected e-invoice.');
   if (cmp(invoice.totals.prepaid, '0') !== 0 || cmp(invoice.totals.payable, invoice.totals.taxInclusive) !== 0) fail('This invoice includes prepayments or payment rounding. Review it manually so AP does not recognize an incorrect liability.');
-  const lines = invoice.lines.map(line => ({ description: line.description ?? line.name, productCode: line.sellerItemId, quantity: line.quantity, unit: line.unitCode, unitPrice: divideDecimal(line.netPrice, line.baseQuantity ?? '1', 8), amount: line.netAmount, taxAmount: '0.0000', confidence: '1.0000' }));
+  const lines = invoice.lines.map(line => ({ description: line.description ?? line.name, productCode: line.sellerItemId, quantity: line.quantity, unit: line.unitCode, unitPrice: divideDecimal(line.netPrice, line.baseQuantity ?? '1', 4), amount: line.netAmount, taxAmount: '0.0000', confidence: '1.0000' }));
   for (const group of invoice.vatBreakdown) {
     const indexes = invoice.lines.flatMap((line, i) => line.vatCategory === group.category && cmp(line.vatRate ?? '0', group.rate ?? '0') === 0 ? [i] : []);
     if (!indexes.length) fail('A supplier VAT group has no matching invoice lines. Request a corrected e-invoice.');
