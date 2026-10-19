@@ -946,6 +946,7 @@ const SOURCES = {
   asset_components: { route: '/assets', rowsField: 'members', rowKeyField: 'id', mode: 'loaded' },
   // Register drawer sessions: the session reader scopes and counts the window.
   pos_sessions: { route: '/pos/sessions', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'page', perPageField: 'perPage' } },
+  time_kiosks: { route: '/time/setup', rowsField: 'kiosks', rowKeyField: 'id', mode: 'loaded' },
 } satisfies Record<string, PreparedListSource>
 
 export type PreparedListSourceKey = keyof typeof SOURCES

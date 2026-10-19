@@ -6,7 +6,6 @@ import { db } from '@openbooks/engine/platform/db'
 import {
   page,
   pageHeader,
-  panel,
   ref,
   widget,
   widgetBlock,
@@ -15,6 +14,7 @@ import {
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 
 /**
  * The field-time setup surface: declared rules, kiosks with token
@@ -27,7 +27,7 @@ export interface FieldSetupData {
   title: string
   description: string
   tabs: { href: string; label: string; active: boolean }[]
-  panelTitle: string
+  employees: { value: string; label: string }[]
   initialSettings: {
     roundingIncrement: number | null
     roundingMode: string | null
@@ -75,8 +75,26 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
   // API's project visibility exactly.
   const canManageKiosks = can(authz, 'time.kiosk.manage')
   const canEditPolicy = authz.allowedSubsidiaryIds === null
+  const today = await businessToday(orgId)
   const settings = (await db.execute<{ settings: unknown }>(sql`
     select settings->'fieldTime' as settings from orgs where id = ${orgId}`)).rows[0]?.settings as Record<string, unknown> | null
+  const employees = (await db.execute<{ value: string; label: string }>(sql`
+    select distinct p.id::text as value, p.display_name as label
+      from worker_employments e
+      join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+      join lateral (
+        select status
+          from worker_employment_versions v
+         where v.org_id = e.org_id and v.employment_id = e.id
+           and v.recorded_until is null
+           and v.effective_from <= ${today}::date
+           and (v.effective_to is null or v.effective_to > ${today}::date)
+         order by v.version_no desc
+         limit 1
+      ) current_status on current_status.status = 'active'
+     where e.org_id = ${orgId}
+       and ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, authz.allowedSubsidiaryIds)}
+     order by p.display_name`)).rows
   const kiosks = !canManageKiosks
     ? []
     : (await db.execute<FieldSetupData['kiosks'][number]>(sql`
@@ -98,8 +116,9 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
       { href: '/timesheets', label: t('field.timesheetsTab'), active: false },
       { href: '/time/clock', label: t('field.clockTab'), active: false },
       { href: '/time/crew', label: t('field.crewTab'), active: false },
+      { href: '/time/setup', label: t('field.setupTitle'), active: true },
     ],
-    panelTitle: t('field.setupPanel'),
+    employees,
     initialSettings: {
       roundingIncrement: typeof settings?.roundingIncrement === 'number' ? (settings.roundingIncrement as number) : null,
       roundingMode: typeof settings?.roundingMode === 'string' ? (settings.roundingMode as string) : null,
@@ -128,18 +147,13 @@ export function fieldSetupSpec(data: FieldSetupData): PageSpec {
       }),
     ],
     body: [
-      panel({
-        title: f('panelTitle'),
-        iconKey: 'settings',
-        blocks: [
-          widgetBlock('hrm-field-time-setup', {
-            initialSettings: data.initialSettings,
-            kiosks: data.kiosks,
-            kioskLinkBase: data.kioskLinkBase,
-            canManageKiosks: data.canManageKiosks,
-            canEditPolicy: data.canEditPolicy,
-          }),
-        ],
+      widgetBlock('hrm-field-time-setup', {
+        initialSettings: data.initialSettings,
+        kiosks: data.kiosks,
+        employees: data.employees,
+        kioskLinkBase: data.kioskLinkBase,
+        canManageKiosks: data.canManageKiosks,
+        canEditPolicy: data.canEditPolicy,
       }),
     ],
   })

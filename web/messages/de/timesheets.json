@@ -251,6 +251,8 @@
     "rulesSaved": "Regeln gespeichert.",
     "kiosksTitle": "Kioskgeräte",
     "noKiosks": "Noch keine Kiosks registriert.",
+    "pinRequired": "PIN erforderlich",
+    "lastSeen": "Zuletzt gesehen",
     "retired": "Stillgelegt",
     "tokenIssued": "Gerätelink für {name} — jetzt kopieren, er wird nicht erneut angezeigt:",
     "acknowledgeToken": "Ich habe diesen Gerätelink kopiert",

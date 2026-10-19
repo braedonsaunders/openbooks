@@ -142,6 +142,95 @@ test("filling every visible rule sends the complete rule set", async () => {
       equipmentToleranceHours: "0.5",
       photoRequired: false,
     });
+    await act(async () => root.unmount());
+  } finally {
+    globalThis.fetch = prior;
+  }
+});
+
+test("worker PIN selection posts the selected employee and kiosk rows can be retired", async () => {
+  const seen: { url: unknown; body: unknown }[] = [];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (url: unknown, init?: { body?: unknown }) => {
+    seen.push({ url, body: typeof init?.body === "string" ? JSON.parse(init.body) : init?.body });
+    return { ok: true, json: async () => ({ ok: true }) };
+  }) as typeof fetch;
+  try {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <FieldTimeSetup
+            initialSettings={{
+              roundingIncrement: null,
+              roundingMode: null,
+              unpaidBreakMinutes: null,
+              autoCloseHours: null,
+              signatureRequired: false,
+              equipmentToleranceHours: null,
+              photoRequired: false,
+            }}
+            kiosks={[{
+              id: "kiosk-1",
+              name: "West gate",
+              locationId: null,
+              projectId: null,
+              pinRequired: true,
+              photoRequired: false,
+              isActive: true,
+              lastSeenAt: "2026-10-18T12:00:00.000Z",
+            }]}
+            employees={[{ value: "employee-1", label: "Jordan Lee" }]}
+            kioskLinkBase="/kiosk"
+          />
+        </NextIntlClientProvider>,
+      );
+      await tick();
+    });
+
+    assert.ok(host.textContent?.includes("West gate"));
+    const workerPicker = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes(msg("chooseWorker"))) as HTMLButtonElement | undefined;
+    assert.ok(workerPicker, "the worker field uses a named picker instead of a raw party-id input");
+    await act(async () => {
+      workerPicker.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+    });
+    const workerOption = [...document.querySelectorAll('[role="option"]')].find((option) => option.textContent?.includes("Jordan Lee")) as HTMLElement | undefined;
+    assert.ok(workerOption, `the active scoped employee is offered by display name: ${JSON.stringify({ expanded: workerPicker.getAttribute("aria-expanded"), text: document.body.textContent, options: [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent) })}`);
+    await act(async () => {
+      workerOption.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+    });
+
+    const pinInput = host.querySelector(`input[placeholder="${msg("pinPlaceholder")}"]`) as HTMLInputElement | null;
+    assert.ok(pinInput, "the PIN field is available after selecting an employee");
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+      setter.call(pinInput, "1234");
+      pinInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+      await tick();
+    });
+    const setPin = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === msg("setPin")) as HTMLButtonElement | undefined;
+    assert.ok(setPin && !setPin.disabled, "a selected employee and PIN enable submission");
+    await act(async () => {
+      setPin.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+    });
+    assert.deepEqual(seen[0]?.body, { action: "set-pin", employeePartyId: "employee-1", pin: "1234" });
+
+    const retire = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Retire") as HTMLButtonElement | undefined;
+    assert.ok(retire, "active kiosks expose the revoke action");
+    await act(async () => {
+      retire.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+    });
+    assert.deepEqual(seen[1]?.body, { action: "revoke", kioskId: "kiosk-1" });
+    await act(async () => root.unmount());
   } finally {
     globalThis.fetch = prior;
   }
