@@ -808,6 +808,18 @@ test("CAM estimates prorate across pool boundaries and are attributed once to ov
   try {
     const { org } = fixture;
     const actor = await createScratchUser(org.orgId, "CAM estimate operator", "admin");
+    const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+      select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`)).rows[0]!.fiscal_calendar_id;
+    for (const period of [
+      { number: 1, name: "2026-01", startsOn: "2026-01-01", endsOn: "2026-01-31" },
+      { number: 2, name: "2026-02", startsOn: "2026-02-01", endsOn: "2026-02-28" },
+    ]) {
+      await db.execute(sql`
+        insert into accounting_periods
+          (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${randomUUID()}, ${org.orgId}, 2026, ${period.number}, ${period.name},
+                ${period.startsOn}, ${period.endsOn}, false, ${calendarId})`);
+    }
     const lease = (await db.execute<{ id: string }>(sql`
       select id from property_leases where org_id=${org.orgId} and property_id=${fixture.propertyId}`)).rows[0]!;
     await db.execute(sql`update property_leases set starts_on='2026-01-01',ends_on='2026-02-28',auto_invoice=true
