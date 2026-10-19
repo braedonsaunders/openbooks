@@ -6,6 +6,8 @@ import type { Authz } from '../authz'
 import { isFeatureEnabled } from '../features'
 import type { PaymentProviderAccount, PaymentProviderSetupData } from './payment-providers-types'
 
+type PaymentProviderAccountRow = PaymentProviderAccount & Record<string, unknown>
+
 /**
  * Shared authorized reader for the payment provider page and its API. Callers
  * establish the organization transaction before invoking it; subsidiary
@@ -41,7 +43,7 @@ export async function readPaymentProviderSetupData(authz: Authz): Promise<Paymen
        where org_id = ${orgId} and provider in ('paypal', 'shopify_payments', 'square')
        order by provider
     `),
-    db.execute<PaymentProviderAccount>(sql`
+    db.execute<PaymentProviderAccountRow>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
        ${accountScope}
@@ -56,13 +58,13 @@ export async function readPaymentProviderSetupData(authz: Authz): Promise<Paymen
         from payment_surcharge_rules where org_id = ${orgId}
        order by effective_from desc
     `),
-    db.execute<PaymentProviderAccount>(sql`
+    db.execute<PaymentProviderAccountRow>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and type in ('income', 'income_other') and is_active and not is_summary
        ${accountScope}
        order by number nulls last, name
     `),
-    db.execute<PaymentProviderAccount>(sql`
+    db.execute<PaymentProviderAccountRow>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and is_active and not is_summary
        ${accountScope}
