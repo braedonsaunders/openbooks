@@ -6,10 +6,12 @@ import { sql } from 'drizzle-orm'
 import { grid, page, pageHeader, panel, ref, statTile, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { POINT_IN_TIME_PERIOD_PRESETS } from '@openbooks/reports'
 import {
+  CONSIDERATION_ACCOUNT_TYPES,
   EquityError,
   listCompensationRuns,
   listEquityEntities,
   listInterestRuns,
+  listRestrictedReleases,
   listSecurities,
   listStakeholders,
   loadCapTableView,
@@ -18,6 +20,7 @@ import {
   pendingEquityActions,
   loadSecurityDetail,
   loadStructure,
+  nextEquityRunPeriod,
   previewCompensationRun,
   previewInterestRun,
   runEntityWaterfallScenario,
@@ -29,6 +32,7 @@ import {
   type InterestPreview,
   type InterestRunRow,
   type PendingRequest,
+  type RestrictedReleaseRow,
   type SecurityDetail,
   type SecurityKind,
   type SecurityRow,
@@ -39,6 +43,8 @@ import { cmp } from '@openbooks/engine/money/money'
 import { normalizeDecimal, roundMoney } from '@openbooks/engine/money'
 import { db } from '@openbooks/engine/platform/database'
 import { businessToday } from '@openbooks/engine/platform/business-date'
+import { canonicalPeriodLabel, periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
+import { APPROVALS_HOME_HREF } from '@openbooks/engine/navigation/approvals-home'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
@@ -47,6 +53,7 @@ import { builtInReportDefinitionId } from '../../../lib/custom-reports'
 import { resolvePeriod } from '../../../lib/periods'
 import { getMoneyFormatter } from '../../../lib/money-server'
 import { formatCivilDate, formatExactPercent } from '../../../lib/format'
+import { additiveRounding } from '../../../lib/additive-rounding'
 import { capTableFilters, type CapTableDimension, type CapTableInstrument } from '../../../lib/equity-cap-table'
 import { defaultExitAnchor, exitPresets } from '../../../lib/equity-waterfall'
 import type { DirectoryItem } from '../../../components/module-home/ui'
@@ -67,7 +74,7 @@ import type { AttentionItem } from '../purchasing/sections'
  * equity.read and the reader's reach to the legal entity in the engine;
  * every command does the same for its own duty. Governed actions an Equity
  * action Flow holds for approval are listed with the views they concern
- * until decided in Approvals; `?request=<id>` (the Flow's link) opens the
+ * until decided in the Inbox; `?request=<id>` (the Flow's link) opens the
  * view an action request concerns.
  */
 
@@ -103,8 +110,12 @@ export interface EquityContext {
   currency: string
   asOf: string
   canManage: boolean
+  /** The signed-in user: the requester of a pending action may withdraw it. */
+  actorId: string
   /** Governed actions of the legal entity awaiting a Flow decision. */
   pending: PendingRequest[]
+  /** The list's page and search from the URL, so a reload reopens them. */
+  list: { page: number; query: string }
   /** The current URL parameters, so in-page links keep the entity, the date and the filters. */
   params: Record<string, string | string[] | undefined>
 }
@@ -162,6 +173,9 @@ export interface StructureViewData {
 export interface RoundsViewData {
   context: EquityContext
   structure: StructureView
+  /** The round whose drawer is open (`?round=<id>`): its terms, corrections and governed amend and void. */
+  roundId: string | null
+  roundCloseHref: string
   modelOpen: boolean
   modelHref: string
   modelCloseHref: string
@@ -173,7 +187,7 @@ export interface WaterfallViewData {
   /** The latest priced round in the functional currency, the default exit and the preset anchor. */
   anchor: { roundName: string; closedOn: string; postMoney: string } | null
   presets: { multiple: string; value: string }[]
-  inputs: { exitValue: string; transactionFees: string; unvestedAwards: 'participate' | 'cancel'; changeOfControl: boolean; terminated: boolean }
+  inputs: { exitValue: string; transactionFees: string; unvestedAwards: 'participate' | 'cancel'; changeOfControl: boolean; terminated: boolean; payoutsBy?: 'class' | 'holder' }
   /** The scenario computed for the first paint; null until an exit value is known. */
   scenario: WaterfallScenario | null
   refusal: { message: string; remedy: string } | null
@@ -181,8 +195,11 @@ export interface WaterfallViewData {
 
 export interface RunPeriod {
   id: string
-  name: string
+  /** The native fiscal period label (P03 FY2026), with the stored name when it differs. */
+  label: string
   endsOn: string
+  /** The period's close: its close run when one is started, else the period in the close list. */
+  closeHref: string
 }
 
 export interface RunsViewData {
@@ -208,6 +225,8 @@ export interface RunsViewData {
 export interface SecurityDrawerData {
   context: EquityContext
   detail: SecurityDetail
+  /** The certificate's restricted-stock releases with the entries that posted them (early-exercise certificates only). */
+  releases: RestrictedReleaseRow[]
   closeHref: string
   holders: Option[]
   rounds: Option[]
@@ -243,7 +262,7 @@ export interface OverviewData {
     compensation: string; compensationSub: string
   }
   ownershipHint: string
-  ownership: { key: string; label: string; shares: string; percent: string }[]
+  ownership: { key: string; label: string; shares: string; percent: string; colorSlot: number }[]
   roundPulse: { postMoney: string; preMoney: string; raised: string } | null
   attention: AttentionItem[]
   directory: DirectoryItem[]
@@ -292,8 +311,15 @@ export interface EquityPageData {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-/** Drawer and redirect parameters: they open one thing once and never travel with a link. */
-const TRANSIENT_PARAMS = new Set(['request', 'security', 'new', 'newHolder', 'newKind', 'history', 'model', 'amend', 'reserve'])
+/**
+ * Drawer and redirect parameters, including the shell's stacked overlays (a
+ * journal entry, a related record): they open one thing once and never
+ * travel with a link.
+ */
+const TRANSIENT_PARAMS = new Set([
+  'request', 'security', 'new', 'newHolder', 'newKind', 'history', 'model', 'amend', 'reserve', 'round',
+  'txn', 'journalEntry', 'reportRecord', 'reportRecordKind', 'drawerReturn', 'transactionTab',
+])
 
 async function holderOptions(orgId: string, allowed: ReadonlySet<string> | null): Promise<Option[]> {
   // The org-wide party rule: parties without an entity are eligible to every
@@ -313,7 +339,7 @@ async function currencyOptions(): Promise<Option[]> {
 async function considerationAccounts(orgId: string): Promise<Option[]> {
   return (await db.execute<{ id: string; label: string }>(sql`
     select id, concat_ws(' · ', number, name) as label from accounts
-     where org_id = ${orgId} and is_active and not is_summary and type in ('asset_bank', 'asset_current_other')
+     where org_id = ${orgId} and is_active and not is_summary and type = any(${`{${CONSIDERATION_ACCOUNT_TYPES.join(',')}}`}::text[])
      order by number nulls last, name`)).rows.map((row) => ({ value: row.id, label: row.label }))
 }
 
@@ -432,7 +458,11 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
   const params: Record<string, string | string[] | undefined> = Object.fromEntries(
     Object.entries(sp).filter(([key]) => !TRANSIENT_PARAMS.has(key)),
   )
-  const context: EquityContext = { subsidiaryId: entity.id, currency: entity.currency, asOf, canManage, pending, params }
+  const requestedPage = Number(pickString(sp.page) ?? '1')
+  const context: EquityContext = {
+    subsidiaryId: entity.id, currency: entity.currency, asOf, canManage, actorId: authz.user.id, pending, params,
+    list: { page: Number.isInteger(requestedPage) && requestedPage >= 1 ? requestedPage : 1, query: pickString(sp.q) ?? '' },
+  }
   const keep = (overrides: Record<string, string | undefined>) => mergeHref(EQUITY_BASE, params, overrides)
   const scope = { ...actor, subsidiaryId: entity.id, asOf }
 
@@ -451,15 +481,19 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
   let waterfall: WaterfallViewData | null = null
   let runs: RunsViewData | null = null
 
+  // Point-in-time reports open on this page's date through their as-of control.
+  const asOfReport = (key: string) => reportHref(orgId, key, { period: 'custom', from: asOf, to: asOf })
+
   if (view === 'overview') {
     const yearStart = (await resolvePeriod('this_fiscal_year_to_date', { orgId, today: asOf })).from
     const data = await loadEquityOverview({ ...scope, yearStart })
     const capView = await loadCapTableView(scope)
     overview = await overviewData(data, {
       locale, keep, pending, hasAccountPolicy: capView.hasAccountPolicy, orgId,
+      classOrder: await classColorOrder(orgId, entity.id),
       reports: {
-        capTable: await reportHref(orgId, 'equity-cap-table', { period: 'custom', from: asOf, to: asOf }),
-        register: await reportHref(orgId, 'equity-securities-register'),
+        capTable: await asOfReport('equity-cap-table'),
+        register: await asOfReport('equity-securities-register'),
         compensation: await reportHref(orgId, 'equity-stock-compensation-schedule'),
       },
     })
@@ -475,9 +509,9 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
       parties: capView.parties,
       hasAccountPolicy: capView.hasAccountPolicy,
       accountsSetupHref: '/admin/setup/equity-account-policies',
-      reportHref: await reportHref(orgId, 'equity-securities-register'),
+      reportHref: await asOfReport('equity-securities-register'),
       // The report's as-of control, set to this page's date.
-      asOfReportHref: await reportHref(orgId, 'equity-cap-table', { period: 'custom', from: asOf, to: asOf }),
+      asOfReportHref: await asOfReport('equity-cap-table'),
     }
   }
 
@@ -504,7 +538,7 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
         .filter((row) => (!kind || row.kind === kind) && (!holderPartyId || row.holderPartyId === holderPartyId) && (!status || row.status === status))
         .map((row) => ({ ...row, href: keep({ view: 'securities', security: row.id, new: undefined }) })),
       convertibles: capView.table.convertibles,
-      reportHref: await reportHref(orgId, 'equity-securities-register'),
+      reportHref: await asOfReport('equity-securities-register'),
     }
   }
 
@@ -522,6 +556,8 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
     rounds = {
       context,
       structure: await loadStructure(scope),
+      roundId: (() => { const id = pickString(sp.round); return id && isUuid(id) ? id : null })(),
+      roundCloseHref: keep({ round: undefined }),
       modelOpen: pickString(sp.model) === 'round',
       modelHref: keep({ model: 'round', new: undefined }),
       modelCloseHref: keep({ model: undefined }),
@@ -545,9 +581,10 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
         drawer = {
           context,
           detail,
+          releases: detail.restricted ? await listRestrictedReleases({ ...actor, securityId: securityParam }) : [],
           closeHref: keep({ security: undefined }),
           holders: canManage ? await holderOptions(orgId, authz.allowedSubsidiaryIds) : [],
-          rounds: structureView?.rounds.map((row) => ({ value: row.id, label: `${row.name} · ${row.closedOn}` })) ?? [],
+          rounds: structureView?.rounds.map((row) => ({ value: row.id, label: `${row.name} · ${formatCivilDate(row.closedOn, locale)}` })) ?? [],
           commonClasses: structureView?.classes.filter((row) => row.kind === 'common').map((row) => ({ value: row.id, label: `${row.code} · ${row.name}` })) ?? [],
           considerationAccounts: canManage ? await considerationAccounts(orgId) : [],
         }
@@ -574,7 +611,7 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
       classes: structureView.classes.map((row) => ({ value: row.id, label: `${row.code} · ${row.name}`, kind: row.kind })),
       commonClasses: structureView.classes.filter((row) => row.kind === 'common').map((row) => ({ value: row.id, label: `${row.code} · ${row.name}` })),
       plans: structureView.plans.map((row) => ({ value: row.id, label: `${row.code} · ${row.name}`, shareClassId: row.shareClassId })),
-      rounds: structureView.rounds.map((row) => ({ value: row.id, label: `${row.name} · ${row.closedOn}`, shareClassId: row.shareClassId, pricePerShare: row.pricePerShare, currency: row.currency })),
+      rounds: structureView.rounds.map((row) => ({ value: row.id, label: `${row.name} · ${formatCivilDate(row.closedOn, locale)}`, shareClassId: row.shareClassId, pricePerShare: row.pricePerShare, currency: row.currency })),
       considerationAccounts: await considerationAccounts(orgId),
       currencies: await currencyOptions(),
       canCreateParty,
@@ -601,6 +638,36 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
   }
 }
 
+/**
+ * The legal entity's share classes in the order they came into being, so a
+ * class keeps its chart colour whatever the as-of date shows (a later class
+ * never shifts an earlier class's colour).
+ */
+async function classColorOrder(orgId: string, subsidiaryId: string): Promise<string[]> {
+  return (await db.execute<{ id: string }>(sql`
+    select id from equity_share_classes
+     where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
+     order by effective_on, created_at, id`)).rows.map((row) => row.id)
+}
+
+/**
+ * Chart palette slots for the ownership donut: share classes cycle through
+ * their own slots in creation order, each award kind has a fixed slot of
+ * its own, and the pool is drawn neutral (-1). Slots are chosen so
+ * neighbouring slices never share a hue.
+ */
+const CLASS_COLOR_SLOTS = [0, 1, 2, 7, 8, 6] as const
+const GROUP_COLOR_SLOTS: Record<string, number> = { option: 3, rsu: 5, warrant: 9, safe: 4, note: 4 }
+
+export function ownershipColorSlot(slice: { key: string; group: string }, classOrder: readonly string[]): number {
+  if (slice.group === 'pool') return -1
+  if (slice.group === 'class') {
+    const index = classOrder.indexOf(slice.key.replace(/^class:/, ''))
+    return CLASS_COLOR_SLOTS[(index < 0 ? classOrder.length : index) % CLASS_COLOR_SLOTS.length]!
+  }
+  return GROUP_COLOR_SLOTS[slice.group] ?? 4
+}
+
 async function reportHref(orgId: string, key: string, params: Record<string, string> = {}): Promise<string | null> {
   const id = await builtInReportDefinitionId(orgId, key)
   if (!id) return null
@@ -619,6 +686,8 @@ async function overviewData(
     pending: PendingRequest[]
     hasAccountPolicy: boolean
     orgId: string
+    /** The entity's share classes in creation order, for stable chart colours. */
+    classOrder: readonly string[]
     reports: { capTable: string | null; register: string | null; compensation: string | null }
   },
 ): Promise<OverviewData> {
@@ -645,6 +714,13 @@ async function overviewData(
         return { tone: 'negative', href: keep({ view: 'securities', holder: item.holderPartyId, kind: undefined, status: 'outstanding', new: undefined }), text: t('overview.attention.departed', { holder: item.holderName, date: date(item.date), units: shares(item.units) }) }
       case 'expiring':
         return { tone: 'warning', href: security(item.securityId), text: t('overview.attention.expiring', { holder: item.holderName, number: item.securityNumber, date: date(item.date), quantity: shares(item.quantity) }) }
+      case 'conversion_terms_void':
+        return {
+          tone: 'negative', href: security(item.securityId),
+          text: item.certificateNumber
+            ? t('overview.attention.conversionTermsVoid', { holder: item.holderName, number: item.securityNumber, source: item.sourceSecurityNumber, certificate: item.certificateNumber })
+            : t('overview.attention.electionTermsVoid', { holder: item.holderName, number: item.securityNumber, source: item.sourceSecurityNumber }),
+        }
       case 'compensation_due':
         return {
           tone: 'warning', href: keep({ view: 'compensation', run: undefined, new: undefined }),
@@ -657,7 +733,7 @@ async function overviewData(
         }
     }
   })
-  if (input.pending.length > 0) attention.unshift({ tone: 'warning', href: '/approvals', text: t('overview.attention.pending', { count: input.pending.length }) })
+  if (input.pending.length > 0) attention.unshift({ tone: 'warning', href: APPROVALS_HOME_HREF, text: t('overview.attention.pending', { count: input.pending.length }) })
   if (!input.hasAccountPolicy) attention.unshift({ tone: 'negative', href: '/admin/setup/equity-account-policies', text: t('overview.attention.policyMissing', { date: date(data.asOf) }) })
 
   const compensationDue = data.postings?.compensation.due === true
@@ -694,6 +770,10 @@ async function overviewData(
 
   const round = data.latestRound
   const roundInFunctional = round !== null && round.currency === data.entity.currency
+  // The raised total and its priced and convertible parts round together, so
+  // the compact figures on the tile add up.
+  const raisedFigures = functional ? additiveRounding(functional.total, [functional.priced, functional.convertible]) : null
+  const compact = (value: string, currency?: string) => moneyCompact(value, { currency, maximumFractionDigits: 2 })
   return {
     tiles: {
       fullyDiluted: shares(data.totals.fullyDiluted),
@@ -702,10 +782,10 @@ async function overviewData(
       poolSub: pool ? t('overview.tiles.poolSub', { percent: percent(pool.percent) }) : t('overview.tiles.noPool'),
       price: round ? money(round.pricePerShare, { currency: round.currency, maximumFractionDigits: 4 }) : '—',
       priceSub: round ? `${round.name} · ${date(round.closedOn)}` : t('overview.tiles.noRound'),
-      raised: functional ? moneyCompact(functional.total) : others[0] ? moneyCompact(others[0].total, { currency: others[0].currency }) : moneyCompact('0'),
+      raised: raisedFigures ? compact(raisedFigures.total) : others[0] ? compact(additiveRounding(others[0].total, []).total, others[0].currency) : moneyCompact('0'),
       raisedSub: [
-        functional ? t('overview.tiles.raisedSub', { priced: moneyCompact(functional.priced), convertible: moneyCompact(functional.convertible) }) : null,
-        ...others.slice(functional ? 0 : 1).map((row) => t('overview.tiles.raisedOther', { amount: moneyCompact(row.total, { currency: row.currency }) })),
+        raisedFigures ? t('overview.tiles.raisedSub', { priced: compact(raisedFigures.parts[0]!), convertible: compact(raisedFigures.parts[1]!) }) : null,
+        ...others.slice(functional ? 0 : 1).map((row) => t('overview.tiles.raisedOther', { amount: compact(additiveRounding(row.total, []).total, row.currency) })),
       ].filter(Boolean).join(' · ') || t('overview.tiles.noRaise'),
       compensation: moneyCompact(data.compensationPosted.amount),
       compensationSub: t('overview.tiles.compensationSub', { date: date(data.compensationPosted.from) }),
@@ -716,6 +796,7 @@ async function overviewData(
       label: slice.group === 'class' ? `${slice.code ?? ''} · ${slice.name ?? ''}` : slice.group === 'pool' ? t('overview.ownership.pool') : t(`kindPlural.${slice.group}`),
       shares: slice.shares,
       percent: slice.percent,
+      colorSlot: ownershipColorSlot(slice, input.classOrder),
     })),
     roundPulse: round && roundInFunctional
       ? { postMoney: moneyCompact(round.postMoneyValuation), preMoney: moneyCompact(round.preMoneyValuation), raised: moneyCompact(round.raised) }
@@ -747,6 +828,7 @@ async function waterfallData(
     unvestedAwards: pickString(sp.unvested) === 'cancel' ? 'cancel' : 'participate',
     changeOfControl: pickString(sp.coc) !== '0',
     terminated: pickString(sp.terminated) === '1',
+    payoutsBy: pickString(sp.payouts) === 'holder' ? 'holder' : 'class',
   }
   let scenario: WaterfallScenario | null = null
   let refusal: WaterfallViewData['refusal'] = null
@@ -758,7 +840,7 @@ async function waterfallData(
       })
     } catch (error) {
       if (!(error instanceof EquityError)) throw error
-      refusal = { message: error.message, remedy: error.remedy }
+      refusal = error.localized(await getLocale())
     }
   }
   return { context, asOfControl, anchor, presets: exitPresets(anchor?.postMoney ?? null), inputs, scenario, refusal }
@@ -778,30 +860,52 @@ async function runsData(
   const compensationRuns = await listCompensationRuns({ ...actor, subsidiaryId })
   const interestRuns = await listInterestRuns({ ...actor, subsidiaryId })
   const lastRunThrough = (run === 'compensation' ? compensationRuns : interestRuns)[0]?.throughDate ?? null
-  const periods = (await db.execute<{ id: string; name: string; ends_on: string }>(sql`
-    select id, name, ends_on::text as ends_on from accounting_periods
-     where org_id = ${orgId} and not is_adjustment
-     order by starts_on desc
-     limit 60`)).rows.map((row) => ({ id: row.id, name: row.name, endsOn: row.ends_on }))
+  // Each period reads with the native fiscal label, and links to its own
+  // close: the primary book's close run once started, else the period's row
+  // in the close list of its fiscal year.
+  const periods = (await db.execute<{ id: string; name: string; ends_on: string; fiscal_year: number; period_number: number; is_adjustment: boolean; close_run_id: string | null }>(sql`
+    select p.id, p.name, p.ends_on::text as ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
+           (select r.id from close_runs r
+              join accounting_books b on b.org_id = r.org_id and b.id = r.book_id and b.is_primary
+             where r.org_id = p.org_id and r.period_id = p.id
+             order by r.created_at desc limit 1) as close_run_id
+      from accounting_periods p
+     where p.org_id = ${orgId} and not p.is_adjustment
+     order by p.starts_on desc
+     limit 60`)).rows.map((row): RunPeriod => {
+    const label = periodDisplayLabel({ fiscalYear: row.fiscal_year, periodNumber: row.period_number, adjustment: row.is_adjustment, name: row.name })
+    return {
+      id: row.id,
+      label,
+      endsOn: row.ends_on,
+      closeHref: row.close_run_id
+        ? `/close?${new URLSearchParams({ run: row.close_run_id })}`
+        : `/close?${new URLSearchParams({ fy: String(row.fiscal_year), q: canonicalPeriodLabel({ fiscalYear: row.fiscal_year, periodNumber: row.period_number, adjustment: row.is_adjustment }) })}`,
+    }
+  })
   const requested = pickString(sp.period)
-  // The period a run is due for: the earliest ended period the runs have not
-  // reached, else the latest ended period, else the period containing today.
-  const ended = periods.filter((period) => period.endsOn <= today)
-  const selected = periods.find((period) => period.id === requested)
-    ?? [...ended].reverse().find((period) => lastRunThrough === null || period.endsOn > lastRunThrough)
-    ?? ended[0]
-    ?? periods.find((period) => period.endsOn >= today)
-    ?? null
+  // The period a run is due for: the earliest open period after the last run
+  // through whose end the run would post a change. Nothing is offered when
+  // nothing is due, so a closed period or an empty run is never the default.
+  const due = requested ? null : await nextEquityRunPeriod({ ...actor, subsidiaryId, kind: run, today })
+  const selected = periods.find((period) => period.id === (requested ?? due?.periodId)) ?? null
   let compensation: CompensationPreview | null = null
   let interest: InterestPreview | null = null
   let refusal: RunsViewData['refusal'] = null
+  if (!selected && periods.length > 0) {
+    const t = await getTranslations('equity')
+    refusal = {
+      message: t(run === 'compensation' ? 'runs.nothingDueCompensation' : 'runs.nothingDueInterest'),
+      remedy: lastRunThrough ? t('runs.nothingDueRemedy', { date: formatCivilDate(lastRunThrough, await getLocale()) }) : t('runs.nothingDueRemedyFirst'),
+    }
+  }
   if (selected) {
     try {
       if (run === 'compensation') compensation = await previewCompensationRun({ ...actor, subsidiaryId, throughDate: selected.endsOn })
       else interest = await previewInterestRun({ ...actor, subsidiaryId, throughDate: selected.endsOn })
     } catch (error) {
       if (!(error instanceof EquityError)) throw error
-      refusal = { message: error.message, remedy: error.remedy }
+      refusal = error.localized(await getLocale())
     }
   }
   const holderIds = [
@@ -835,6 +939,9 @@ const f = ref<EquityPageData>()
 /** The overview: vitals, the ownership hero and recent activity, and the rail of the round, attention and quick links. */
 function overviewBlocks(data: EquityPageData) {
   return grid('flex h-full min-h-0 flex-col gap-4', [
+    // The as-of control leads the overview body, as it leads every working
+    // view's toolbar, so the page header keeps room for its description.
+    grid('flex shrink-0 flex-wrap items-center gap-2', [widgetBlock('equity-as-of', { control: data.asOfControl, compact: false })]),
     grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5', [
       statTile({ iconKey: 'layers', accent: 'teal', label: f('labels.fullyDiluted'), value: f('overview.tiles.fullyDiluted'), sub: f('overview.tiles.fullyDilutedSub') }),
       statTile({ iconKey: 'users', accent: 'violet', label: f('labels.pool'), value: f('overview.tiles.pool'), sub: f('overview.tiles.poolSub') }),
@@ -907,7 +1014,6 @@ export function equitySpec(data: EquityPageData): PageSpec {
         actionsClassName: 'flex flex-wrap items-center justify-end gap-2',
         actions: [
           widget('subsidiary-switcher', { picker: data.entityPicker, value: data.subsidiaryId, label: data.entityLabel }, f('hasEntity')),
-          widget('equity-as-of', { control: data.asOfControl, compact: true }, f('onOverview')),
           widget('link-button', { href: data.newAction?.href ?? '', label: data.newAction?.label ?? '', iconKey: 'plus' }, f('hasNewAction')),
         ],
       }),

@@ -7,7 +7,7 @@ import { exportDataToCsv, exportDataToPdfInput, exportDataToXlsx } from './repor
 
 const labels: CapTableExportLabels = {
   title: 'Main Co — cap table', dateRange: 'As of 2026-07-31', class: 'Class', kind: (kind) => kind, holder: 'Holder',
-  column: (key) => `[${key}]`, total: 'Total',
+  column: (key) => `[${key}]`, total: 'Total', pool: 'Available pool',
 }
 
 const view = {
@@ -25,6 +25,7 @@ const view = {
       holderPartyId: 'founder', sharesByClass: { cs: '9007199254740993' }, asConvertedOutstanding: '9007199254740993', options: '0', rsus: '0', warrants: '0',
       vestedAwards: '0', fullyDiluted: '9007199254740993', outstandingPercent: '100.0000', fullyDilutedPercent: '100.0000',
     }],
+    unallocatedPool: { fullyDiluted: '0', fullyDilutedPercent: '0.0000' },
     plans: [], holdings: [], convertibles: [],
     totals: { outstanding: '9007199254740993', asConvertedOutstanding: '9007199254740993', awardsOutstanding: '0', poolAvailable: '0', fullyDiluted: '9007199254740993' },
   },

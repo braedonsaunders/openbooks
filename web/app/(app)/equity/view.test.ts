@@ -3,7 +3,7 @@ import test from 'node:test'
 
 const { stubModules } = await import('../../../testing/stub-modules')
 stubModules({ navigation: true, intl: true, authz: true, features: true, extra: { 'server-only': 'export {}' } })
-const { equitySpec, EQUITY_VIEWS, VIEW_NEW_ACTION } = await import('./view')
+const { equitySpec, EQUITY_VIEWS, VIEW_NEW_ACTION, ownershipColorSlot } = await import('./view')
 const messages = (await import('../../../messages/en/index.ts')).default as unknown as { equity: { new: { actions: Record<string, string> } } }
 
 type Data = Parameters<typeof equitySpec>[0]
@@ -64,4 +64,22 @@ test('the overview composes the module-home cockpit; working views carry no vita
     assert.equal(tiles(working).length, 0, `${view} shows no KPI tiles`)
     assert.ok(!widgets(working).includes('kpi-strip'), `${view} shows no KPI strip`)
   }
+})
+
+test('ownership colours are stable per share class whatever the as-of date shows, and distinct from the award slots', () => {
+  const order = ['cs', 'seed', 'seriesa']
+  // At an early date only CS and SEED exist; later SERIES A joins. Earlier classes keep their colours.
+  const early = ['cs', 'seed'].map((id) => ownershipColorSlot({ key: `class:${id}`, group: 'class' }, order))
+  const late = order.map((id) => ownershipColorSlot({ key: `class:${id}`, group: 'class' }, order))
+  assert.deepEqual(late.slice(0, 2), early)
+  assert.equal(new Set(late).size, late.length, 'classes never share a colour')
+  const awards = ['option', 'rsu', 'warrant'].map((group) => ownershipColorSlot({ key: group, group }, order))
+  assert.equal(new Set([...late, ...awards]).size, late.length + awards.length, 'award kinds never take a class colour')
+  assert.equal(ownershipColorSlot({ key: 'pool', group: 'pool' }, order), -1, 'the pool is drawn neutral')
+})
+
+test('the overview leads its body with the as-of control and keeps the header to the title, description and actions', () => {
+  const spec = equitySpec({ ...base, view: 'overview', onOverview: true, overview, hasRoundPulse: true, newAction: null, hasNewAction: false } as Data)
+  assert.ok(!widgets((spec as { header: unknown }).header).includes('equity-as-of'), 'the header leaves room for its description')
+  assert.ok(widgets((spec as { body: unknown }).body).includes('equity-as-of'))
 })

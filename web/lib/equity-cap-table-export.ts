@@ -10,6 +10,8 @@ export interface CapTableExportLabels {
   class: string
   kind: (kind: 'common' | 'preferred') => string
   holder: string
+  /** The holder basis's unallocated pool line. */
+  pool: string
   /** A measure column's header, by the cap table's column key. */
   column: (key: Exclude<CapTableColumn['key'], `class:${string}`>) => string
   total: string
@@ -42,9 +44,11 @@ export function capTableExportData(view: CapTableView, filters: CapTableFilters,
   const value = (raw: string | undefined) => raw ?? ''
   const rows = layout.lines.map((line) => {
     const shareClass = line.shareClassId ? classes.get(line.shareClassId) : undefined
-    const lead = shareClass
-      ? `${shareClass.code} · ${shareClass.name} (${labels.kind(shareClass.kind)})`
-      : view.parties[line.holderPartyId ?? ''] ?? line.holderPartyId ?? ''
+    const lead = line.pool
+      ? labels.pool
+      : shareClass
+        ? `${shareClass.code} · ${shareClass.name} (${labels.kind(shareClass.kind)})`
+        : view.parties[line.holderPartyId ?? ''] ?? line.holderPartyId ?? ''
     return [lead, ...layout.columns.map((column) => value(line.values[column.key]))]
   })
   const totals = layout.lines.length > 0 && Object.keys(layout.totals).length > 0

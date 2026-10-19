@@ -200,9 +200,9 @@
     "unvestedRepurchaseBasis": "Preço de recompra de ações não adquiridas",
     "conversionClass": "Converte em",
     "partyKind": "Tipo de participante",
+    "issuedTerms": "Condições na emissão",
     "liquidationPreferenceBasis": "Preferência medida sobre",
-    "preMoneyBasisReason": "Base da avaliação pre-money",
-    "issuedTerms": "Condições na emissão"
+    "preMoneyBasisReason": "Base da avaliação pre-money"
   },
   "capTable": {
     "by": {
@@ -334,7 +334,31 @@
       "discount": "Desconto",
       "postMoney": "Avaliação pós-money"
     },
-    "model": "Modelar uma rodada"
+    "model": "Modelar uma rodada",
+    "voidedBadge": "Anulada",
+    "voidedDescription": "Anulada em {date}; mantida no histórico e excluída de todos os valores.",
+    "voidedReason": "Motivo: {reason}",
+    "actionFailed": "Não foi possível alterar a rodada",
+    "voided": "Rodada anulada",
+    "amended": "Rodada alterada",
+    "drawerDescription": "{code} · encerrada em {date}",
+    "impliedPreMoney": "Preço × totalmente diluído antes",
+    "fullyDilutedBefore": "Totalmente diluído antes da rodada",
+    "basisReason": "Base da avaliação pre-money: {reason}",
+    "lockedBy": "{count, plural, one {# título ativo pertence} other {# títulos ativos pertencem}} a esta rodada; por isso o preço e a data permanecem como registrados e ela não pode ser anulada:",
+    "historyTitle": "Alterações",
+    "change": "Alteração",
+    "changedName": "Renomeada {name}",
+    "changedPrice": "Preço {price}",
+    "changedPreMoney": "Avaliação pre-money {amount}",
+    "changedBasis": "Base pre-money registrada",
+    "actions": "Ações da rodada",
+    "amend": "Alterar",
+    "void": "Anular rodada",
+    "amendHelp": "Corrija o nome, o preço ou a avaliação pre-money registrados. Um campo em branco mantém o valor; a alteração é uma ação controlada.",
+    "voidLocked": "Uma rodada só pode ser anulada quando não houver títulos ativos nela: anule ou reverta esses títulos primeiro.",
+    "voidHelp": "Anule uma rodada registrada por engano. Ela permanece listada no histórico e sai de todos os valores; a anulação é uma ação controlada.",
+    "priceLocked": "Há títulos ativos a este preço."
   },
   "model": {
     "description": "Precifica uma rodada pelo método pré-money com base na tabela de capitalização na data de referência: SAFEs e notas em circulação são convertidos, classes protegidas recebem suas ações de antidiluição e o pool é complementado até a meta dentro do pré-money. Nada é registrado.",
@@ -371,7 +395,11 @@
       "price": "Preço de conversão",
       "shares": "Ações"
     },
-    "prompt": "Informe uma avaliação pré-money e o capital novo para precificar a rodada sobre a tabela de capitalização na data de referência."
+    "prompt": "Informe uma avaliação pré-money e o capital novo para precificar a rodada sobre a tabela de capitalização na data de referência.",
+    "sharesOfFullyDiluted": "{shares} · {percent} do totalmente diluído",
+    "newShares": "{shares} novas ações",
+    "poolAfter": "Reserva após a rodada",
+    "percentOfFullyDiluted": "{percent} do totalmente diluído"
   },
   "waterfall": {
     "exitValue": "Valor de saída",
@@ -414,6 +442,7 @@
       "priceSub": "Titulares ordinários e que convertem",
       "preferred": "Para preferenciais",
       "common": "Para ordinárias e outorgas",
+      "noShare": "Sem recursos a distribuir",
       "ofProceeds": "{percent}% dos recursos"
     },
     "cascadeTitle": "Cascata de pagamentos",
@@ -442,7 +471,27 @@
       "safe_converts": "Converte por {amount}; o resgate pagaria {alternative}.",
       "safe_converts_only": "Converte por {amount}, mais que o valor de resgate de {entitlement}.",
       "safe_cash_out": "Recebe o valor de resgate de {entitlement}; converter pagaria {alternative}.",
-      "safe_cash_out_only": "Recebe o valor de resgate de {entitlement}."
+      "safe_cash_out_only": "Recebe o valor de resgate de {entitlement}.",
+      "keeps_preference_partial": "Recebe {paid} da preferência de {entitlement}, que os recursos cobrem só em parte; converter pagaria {alternative}.",
+      "keeps_preference_partial_only": "Recebe {paid} da preferência de {entitlement}, que os recursos cobrem só em parte.",
+      "keeps_preference_none": "Não recebe nada: os recursos não alcançam a preferência de {entitlement}; converter pagaria {alternative}.",
+      "keeps_preference_none_only": "Não recebe nada: os recursos não alcançam a preferência de {entitlement}.",
+      "participates_partial": "Recebe {paid} da preferência de {entitlement}, que os recursos cobrem só em parte, sem nada a dividir.",
+      "participates_none": "Não recebe nada: os recursos não alcançam a preferência de {entitlement}.",
+      "participates_capped_partial": "Recebe {paid} da preferência de {entitlement}, que os recursos cobrem só em parte; converter pagaria {alternative}.",
+      "participates_capped_partial_only": "Recebe {paid} da preferência de {entitlement}, que os recursos cobrem só em parte.",
+      "participates_capped_none": "Não recebe nada: os recursos não alcançam a preferência de {entitlement}; converter pagaria {alternative}.",
+      "participates_capped_none_only": "Não recebe nada: os recursos não alcançam a preferência de {entitlement}.",
+      "safe_cash_out_partial": "Recebe {paid} do valor de resgate de {entitlement}, que os recursos cobrem só em parte; converter pagaria {alternative}.",
+      "safe_cash_out_partial_only": "Recebe {paid} do valor de resgate de {entitlement}, que os recursos cobrem só em parte.",
+      "safe_cash_out_none": "Não recebe nada: os recursos não alcançam o valor de resgate de {entitlement}; converter pagaria {alternative}.",
+      "safe_cash_out_none_only": "Não recebe nada: os recursos não alcançam o valor de resgate de {entitlement}."
+    },
+    "invalid": {
+      "exit": "O valor de saída deve ser um valor decimal com no máximo quatro casas decimais.",
+      "exitRemedy": "Informe o valor de saída sem separadores, por exemplo 25000000.",
+      "fees": "Os custos da transação devem ser um valor decimal com no máximo quatro casas decimais.",
+      "feesRemedy": "Informe os custos pagos com a saída, por exemplo 750000, ou deixe em branco."
     },
     "curveTitle": "Recursos por valor de saída",
     "curveHint": "De zero ao dobro desta saída",
@@ -474,7 +523,9 @@
       "releasedShares": "Ações restritas liberadas",
       "deposit": "Depósito liberado",
       "reclass": "Valor na data de outorga",
-      "par": "Valor nominal"
+      "par": "Valor nominal",
+      "releaseTotal": "Depósitos liberados",
+      "releaseEntry": "Lançamento de liberação"
     },
     "releases": "Liberações de ações restritas",
     "releasesEmpty": "Nenhuma ação restrita é adquirida até esta data."
@@ -522,6 +573,9 @@
     "reversed": "Estornado",
     "accrualEntry": "Apropriação de juros",
     "reverse": "Estornar",
+    "releasesTitle": "Liberações de ações restritas",
+    "releasedThisRun": "Liberadas pela execução",
+    "expectedValue": "Previsto após perdas",
     "depositUnvested": "Depósito sobre ações não adquiridas",
     "outstandingPrincipal": "Em aberto",
     "convertedInto": "Convertido em",
@@ -604,6 +658,7 @@
     "createStakeholder": "Criar e emitir um título",
     "stakeholderHelp": "Uma parte interessada é uma pessoa ou empresa do seu cadastro. Depois de salvar, emita o primeiro título para incluí-la na tabela de capitalização.",
     "stakeholderSaved": "{name} adicionado. Emita o primeiro título.",
+    "emailInvalid": "Informe um endereço de e-mail válido, como nome@example.com, ou deixe em branco.",
     "preMoneyBasisHint": "Necessária apenas quando a avaliação pre-money não é o preço vezes as ações totalmente diluídas antes da rodada, por exemplo quando inclui um aumento da reserva ou conversões."
   },
   "dayCount": {
@@ -690,10 +745,10 @@
   },
   "approval": {
     "pendingTitle": "Aguardando aprovação",
-    "openApprovals": "Abrir aprovações",
+    "openApprovals": "Abrir caixa de entrada",
     "pendingItem": "{action} · {subject} · vigente em {date} · solicitado por {requester}",
     "unknownRequester": "um usuário anterior",
-    "submitted": "Enviado para aprovação. É aplicado quando um aprovador o aprova em Aprovações.",
+    "submitted": "Enviado para aprovação. É aplicado quando um aprovador o aprova na caixa de entrada.",
     "action": {
       "void": "Anulação",
       "reverse": "Estorno",
@@ -706,8 +761,13 @@
       "mfn_election": "Eleição MFN",
       "compensation_run": "Execução de remuneração em ações",
       "interest_run": "Execução de juros de notas",
-      "account_policy": "Versão da política de contas"
-    }
+      "account_policy": "Versão da política de contas",
+      "mfn_reversal": "Reversão da eleição MFN",
+      "round_amendment": "Alteração de rodada",
+      "round_void": "Anulação de rodada"
+    },
+    "withdrawFailed": "Não foi possível retirar a ação",
+    "withdrawn": "Solicitação retirada — nada foi aplicado"
   },
   "classes": {
     "empty": "Ainda não há classes de ações. Use Nova classe de ações para registrar a primeira classe da entidade.",
@@ -762,7 +822,9 @@
       "interestDue": "Os juros das notas não estão apropriados até {date}: {amount} a contabilizar",
       "interestRefused": "Os juros das notas até {date} não podem ser mensurados: {message}",
       "pending": "{count, plural, one {# operação de patrimônio aguarda aprovação} other {# operações de patrimônio aguardam aprovação}}",
-      "policyMissing": "Nenhuma política de contas de patrimônio vigora em {date}; nada pode ser contabilizado até configurá-la"
+      "policyMissing": "Nenhuma política de contas de patrimônio vigora em {date}; nada pode ser contabilizado até configurá-la",
+      "conversionTermsVoid": "{holder} · {number} foi convertido em {certificate} nos termos de {source}, que depois foi anulado. Abra {number} para reverter a eleição MFN e corrigir a conversão.",
+      "electionTermsVoid": "{holder} · {number} adotou os termos de {source}, que depois foi anulado. Abra {number} para reverter a eleição MFN antes da conversão."
     },
     "activity": {
       "title": "Atividade recente",
@@ -809,7 +871,7 @@
     "alreadyPosted": "Contabilizado para este período",
     "backdated": "As execuções estão contabilizadas até {date}; escolha um período posterior",
     "closeTask": "Esta execução é uma tarefa do fechamento do período.",
-    "openClose": "Abrir o fechamento",
+    "openClose": "Abrir o fechamento de {period}",
     "noPeriods": "Não há períodos contábeis",
     "noPeriodsRemedy": "As execuções contabilizam até o fim de um período contábil. Gere os períodos do calendário fiscal para executar a remuneração em ações e os juros das notas.",
     "setUpPeriods": "Configurar períodos",

@@ -200,9 +200,9 @@
     "unvestedRepurchaseBasis": "Precio de recompra de acciones no consolidadas",
     "conversionClass": "Se convierte en",
     "partyKind": "Tipo de tercero",
+    "issuedTerms": "Condiciones de emisión",
     "liquidationPreferenceBasis": "Preferencia medida sobre",
-    "preMoneyBasisReason": "Base de la valoración pre-money",
-    "issuedTerms": "Condiciones de emisión"
+    "preMoneyBasisReason": "Base de la valoración pre-money"
   },
   "capTable": {
     "by": {
@@ -334,7 +334,31 @@
       "discount": "Descuento",
       "postMoney": "Valoración post-money"
     },
-    "model": "Modelar una ronda"
+    "model": "Modelar una ronda",
+    "voidedBadge": "Anulada",
+    "voidedDescription": "Anulada el {date}; se conserva en el historial y queda fuera de todas las cifras.",
+    "voidedReason": "Motivo: {reason}",
+    "actionFailed": "No se pudo modificar la ronda",
+    "voided": "Ronda anulada",
+    "amended": "Ronda modificada",
+    "drawerDescription": "{code} · cerrada el {date}",
+    "impliedPreMoney": "Precio × total diluido previo",
+    "fullyDilutedBefore": "Total diluido antes de la ronda",
+    "basisReason": "Base de la valoración pre-money: {reason}",
+    "lockedBy": "{count, plural, one {# título vigente pertenece} other {# títulos vigentes pertenecen}} a esta ronda, por lo que su precio y fecha se mantienen y no puede anularse:",
+    "historyTitle": "Modificaciones",
+    "change": "Cambio",
+    "changedName": "Renombrada {name}",
+    "changedPrice": "Precio {price}",
+    "changedPreMoney": "Valoración pre-money {amount}",
+    "changedBasis": "Base pre-money registrada",
+    "actions": "Acciones de la ronda",
+    "amend": "Modificar",
+    "void": "Anular ronda",
+    "amendHelp": "Corrija el nombre, el precio o la valoración pre-money registrados. Un campo vacío conserva su valor; la modificación es una acción gobernada.",
+    "voidLocked": "Una ronda solo puede anularse cuando no tiene títulos vigentes: anule o revierta primero esos títulos.",
+    "voidHelp": "Anule una ronda registrada por error. Sigue en el historial y queda fuera de todas las cifras; la anulación es una acción gobernada.",
+    "priceLocked": "Hay títulos vigentes a este precio."
   },
   "model": {
     "description": "Fija el precio de una ronda con el método pre-money sobre la tabla de capitalización a la fecha de corte: los SAFE y notas en circulación se convierten, las clases protegidas reciben sus acciones antidilución y la reserva se completa hasta su objetivo dentro de la valoración pre-money. No se registra nada.",
@@ -371,7 +395,11 @@
       "price": "Precio de conversión",
       "shares": "Acciones"
     },
-    "prompt": "Introduzca una valoración pre-money y el capital nuevo para fijar el precio de la ronda frente a la tabla de capitalización en la fecha de corte."
+    "prompt": "Introduzca una valoración pre-money y el capital nuevo para fijar el precio de la ronda frente a la tabla de capitalización en la fecha de corte.",
+    "sharesOfFullyDiluted": "{shares} · {percent} del total diluido",
+    "newShares": "{shares} acciones nuevas",
+    "poolAfter": "Reserva tras la ronda",
+    "percentOfFullyDiluted": "{percent} del total diluido"
   },
   "waterfall": {
     "exitValue": "Valor de salida",
@@ -414,6 +442,7 @@
       "priceSub": "Titulares comunes y que convierten",
       "preferred": "Para preferentes",
       "common": "Para comunes y concesiones",
+      "noShare": "No hay ingresos que repartir",
       "ofProceeds": "{percent} % de los ingresos"
     },
     "cascadeTitle": "Cascada de pagos",
@@ -442,7 +471,27 @@
       "safe_converts": "Convierte por {amount}; el reembolso pagaría {alternative}.",
       "safe_converts_only": "Convierte por {amount}, más que su importe de reembolso de {entitlement}.",
       "safe_cash_out": "Recibe su importe de reembolso de {entitlement}; convertir pagaría {alternative}.",
-      "safe_cash_out_only": "Recibe su importe de reembolso de {entitlement}."
+      "safe_cash_out_only": "Recibe su importe de reembolso de {entitlement}.",
+      "keeps_preference_partial": "Recibe {paid} de su preferencia de {entitlement}, que los ingresos cubren solo en parte; convertir pagaría {alternative}.",
+      "keeps_preference_partial_only": "Recibe {paid} de su preferencia de {entitlement}, que los ingresos cubren solo en parte.",
+      "keeps_preference_none": "No recibe nada: los ingresos no alcanzan su preferencia de {entitlement}; convertir pagaría {alternative}.",
+      "keeps_preference_none_only": "No recibe nada: los ingresos no alcanzan su preferencia de {entitlement}.",
+      "participates_partial": "Recibe {paid} de su preferencia de {entitlement}, que los ingresos cubren solo en parte, sin nada que repartir.",
+      "participates_none": "No recibe nada: los ingresos no alcanzan su preferencia de {entitlement}.",
+      "participates_capped_partial": "Recibe {paid} de su preferencia de {entitlement}, que los ingresos cubren solo en parte; convertir pagaría {alternative}.",
+      "participates_capped_partial_only": "Recibe {paid} de su preferencia de {entitlement}, que los ingresos cubren solo en parte.",
+      "participates_capped_none": "No recibe nada: los ingresos no alcanzan su preferencia de {entitlement}; convertir pagaría {alternative}.",
+      "participates_capped_none_only": "No recibe nada: los ingresos no alcanzan su preferencia de {entitlement}.",
+      "safe_cash_out_partial": "Recibe {paid} de su importe de reembolso de {entitlement}, que los ingresos cubren solo en parte; convertir pagaría {alternative}.",
+      "safe_cash_out_partial_only": "Recibe {paid} de su importe de reembolso de {entitlement}, que los ingresos cubren solo en parte.",
+      "safe_cash_out_none": "No recibe nada: los ingresos no alcanzan su importe de reembolso de {entitlement}; convertir pagaría {alternative}.",
+      "safe_cash_out_none_only": "No recibe nada: los ingresos no alcanzan su importe de reembolso de {entitlement}."
+    },
+    "invalid": {
+      "exit": "El valor de salida debe ser un importe decimal con un máximo de cuatro decimales.",
+      "exitRemedy": "Introduzca el valor de salida sin separadores, por ejemplo 25000000.",
+      "fees": "Los costes de la operación deben ser un importe decimal con un máximo de cuatro decimales.",
+      "feesRemedy": "Introduzca los costes pagados con la salida, por ejemplo 750000, o déjelos en blanco."
     },
     "curveTitle": "Ingresos según el valor de salida",
     "curveHint": "De cero al doble de esta salida",
@@ -474,7 +523,9 @@
       "releasedShares": "Acciones restringidas liberadas",
       "deposit": "Depósito liberado",
       "reclass": "Valor en la fecha de otorgamiento",
-      "par": "Valor nominal"
+      "par": "Valor nominal",
+      "releaseTotal": "Depósitos liberados",
+      "releaseEntry": "Asiento de liberación"
     },
     "releases": "Liberaciones de acciones restringidas",
     "releasesEmpty": "Ninguna acción restringida se consolida hasta esta fecha."
@@ -522,6 +573,9 @@
     "reversed": "Revertido",
     "accrualEntry": "Devengo de intereses",
     "reverse": "Revertir",
+    "releasesTitle": "Liberaciones de acciones restringidas",
+    "releasedThisRun": "Liberadas por la ejecución",
+    "expectedValue": "Previsto tras renuncias",
     "depositUnvested": "Depósito sobre acciones no consolidadas",
     "outstandingPrincipal": "Pendiente",
     "convertedInto": "Convertido en",
@@ -604,6 +658,7 @@
     "createStakeholder": "Crear y emitir un valor",
     "stakeholderHelp": "Un titular es una persona o empresa de su directorio. Tras guardar, emita su primer valor para incluirlo en la tabla de capitalización.",
     "stakeholderSaved": "{name} añadido. Emita su primer valor.",
+    "emailInvalid": "Introduzca una dirección de correo válida, como nombre@example.com, o déjelo en blanco.",
     "preMoneyBasisHint": "Solo es necesaria cuando la valoración pre-money no es el precio por las acciones totalmente diluidas antes de la ronda, por ejemplo si incluye un aumento de la reserva o conversiones."
   },
   "dayCount": {
@@ -690,10 +745,10 @@
   },
   "approval": {
     "pendingTitle": "Pendiente de aprobación",
-    "openApprovals": "Abrir aprobaciones",
+    "openApprovals": "Abrir bandeja de entrada",
     "pendingItem": "{action} · {subject} · vigente desde {date} · solicitado por {requester}",
     "unknownRequester": "un usuario anterior",
-    "submitted": "Enviado para aprobación. Se aplica cuando un aprobador lo aprueba en Aprobaciones.",
+    "submitted": "Enviado para aprobación. Se aplica cuando un aprobador lo aprueba en la bandeja de entrada.",
     "action": {
       "void": "Anulación",
       "reverse": "Reversión",
@@ -706,8 +761,13 @@
       "mfn_election": "Elección MFN",
       "compensation_run": "Cálculo de compensación en acciones",
       "interest_run": "Cálculo de intereses de notas",
-      "account_policy": "Versión de la política de cuentas"
-    }
+      "account_policy": "Versión de la política de cuentas",
+      "mfn_reversal": "Reversión de elección MFN",
+      "round_amendment": "Modificación de ronda",
+      "round_void": "Anulación de ronda"
+    },
+    "withdrawFailed": "No se pudo retirar la acción",
+    "withdrawn": "Solicitud retirada: no se aplicó nada"
   },
   "classes": {
     "empty": "Aún no hay clases de acciones. Use Nueva clase de acciones para registrar la primera clase de la entidad.",
@@ -762,7 +822,9 @@
       "interestDue": "Los intereses de notas no están devengados hasta el {date}: {amount} por contabilizar",
       "interestRefused": "Los intereses de notas hasta el {date} no se pueden medir: {message}",
       "pending": "{count, plural, one {# acción de patrimonio espera aprobación} other {# acciones de patrimonio esperan aprobación}}",
-      "policyMissing": "No hay una política de cuentas de patrimonio vigente al {date}; nada puede contabilizarse hasta configurarla"
+      "policyMissing": "No hay una política de cuentas de patrimonio vigente al {date}; nada puede contabilizarse hasta configurarla",
+      "conversionTermsVoid": "{holder} · {number} se convirtió en {certificate} con los términos de {source}, que después se anuló. Abra {number} para revertir su elección MFN y corregir la conversión.",
+      "electionTermsVoid": "{holder} · {number} adoptó los términos de {source}, que después se anuló. Abra {number} para revertir su elección MFN antes de la conversión."
     },
     "activity": {
       "title": "Actividad reciente",
@@ -809,7 +871,7 @@
     "alreadyPosted": "Contabilizado para este período",
     "backdated": "Las ejecuciones están contabilizadas hasta el {date}; elija un período posterior",
     "closeTask": "Esta ejecución es una tarea del cierre del período.",
-    "openClose": "Abrir el cierre",
+    "openClose": "Abrir el cierre de {period}",
     "noPeriods": "No hay períodos contables",
     "noPeriodsRemedy": "Las ejecuciones contabilizan hasta el final de un período contable. Genere los períodos del calendario fiscal para ejecutar la compensación en acciones y los intereses de notas.",
     "setUpPeriods": "Configurar períodos",

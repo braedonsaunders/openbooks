@@ -23,13 +23,19 @@ export interface CapTableLine {
   /** The share class or the holder the line is for. */
   shareClassId: string | null
   holderPartyId: string | null
+  /** The holder basis's line for the plans' unallocated pool. */
+  pool?: true
   values: Record<string, string>
 }
 
 export interface CapTableLayout {
   columns: CapTableColumn[]
   lines: CapTableLine[]
-  /** Column totals for the share-count columns. */
+  /**
+   * The totals row: every share-count column summed (authorized included),
+   * and each percentage column as the lines' share of the whole cap table,
+   * so a search or an instrument filter totals what it shows.
+   */
   totals: Record<string, string>
 }
 
@@ -43,11 +49,29 @@ export function parseInstrument(value: string | undefined | null): CapTableInstr
 
 const big = (value: string | undefined): bigint => (value && /^-?\d+$/.test(value) ? BigInt(value) : 0n)
 
-function sumColumns(columns: CapTableColumn[], lines: CapTableLine[]): Record<string, string> {
+/** `part` of `whole` as a percentage to four places, rounded half up, in exact integer arithmetic. */
+export function exactPercent(part: bigint, whole: bigint): string {
+  if (whole <= 0n) return '0.0000'
+  const negative = part < 0n
+  const scaled = ((negative ? -part : part) * 1_000_000n * 2n + whole) / (whole * 2n)
+  const text = scaled.toString().padStart(5, '0')
+  return `${negative && scaled > 0n ? '-' : ''}${text.slice(0, -4)}.${text.slice(-4)}`
+}
+
+/** The share-count measure each percentage column is a share of. */
+const PERCENT_BASIS = { outstandingPercent: 'asConverted', fullyDilutedPercent: 'fullyDiluted' } as const
+
+function sumColumns(table: CapTable, columns: CapTableColumn[], lines: CapTableLine[]): Record<string, string> {
   const totals: Record<string, string> = {}
+  const sum = (key: string) => lines.reduce((acc, line) => acc + big(line.values[key]), 0n)
   for (const column of columns) {
-    if (column.kind !== 'shares' || column.key === 'authorized') continue
-    totals[column.key] = lines.reduce((sum, line) => sum + big(line.values[column.key]), 0n).toString()
+    if (column.kind === 'shares') totals[column.key] = sum(column.key).toString()
+  }
+  for (const column of columns) {
+    if (column.kind !== 'percent') continue
+    const basis = PERCENT_BASIS[column.key]
+    const whole = basis === 'asConverted' ? big(table.totals.asConvertedOutstanding) : big(table.totals.fullyDiluted)
+    totals[column.key] = exactPercent(sum(basis), whole)
   }
   return totals
 }
@@ -99,11 +123,13 @@ export function capTableLayout(table: CapTable, filters: CapTableFilters, partie
   const query = filters.query.toLocaleLowerCase()
   if (!query) return layout
   const classes = new Map(table.classes.map((row) => [row.shareClassId, `${row.code} ${row.name}`]))
+  // A search names classes or holders; the pool line belongs to neither.
   const lines = layout.lines.filter((line) => {
+    if (line.pool) return false
     const text = line.shareClassId ? classes.get(line.shareClassId) ?? '' : parties[line.holderPartyId ?? ''] ?? ''
     return text.toLocaleLowerCase().includes(query)
   })
-  return { columns: layout.columns, lines, totals: sumColumns(layout.columns, lines) }
+  return { columns: layout.columns, lines, totals: sumColumns(table, layout.columns, lines) }
 }
 
 function unfilteredLayout(table: CapTable, dimension: CapTableDimension, instrument: CapTableInstrument): CapTableLayout {
@@ -149,7 +175,7 @@ function unfilteredLayout(table: CapTable, dimension: CapTableDimension, instrum
       ? [...classColumns, { key: 'asConverted', kind: 'shares' }, { key: 'outstandingPercent', kind: 'percent' }]
       : [...classColumns, { key: 'options', kind: 'shares' }, { key: 'rsus', kind: 'shares' }, { key: 'warrants', kind: 'shares' }, { key: 'fullyDiluted', kind: 'shares' },
           { key: 'outstandingPercent', kind: 'percent' }, { key: 'fullyDilutedPercent', kind: 'percent' }]
-    lines = holders.map((row) => ({
+    lines = holders.map((row): CapTableLine => ({
       key: row.holderPartyId, shareClassId: null, holderPartyId: row.holderPartyId,
       values: {
         ...Object.fromEntries(table.classes.map((shareClass) => [`class:${shareClass.shareClassId}`, row.sharesByClass[shareClass.shareClassId] ?? '0'])),
@@ -157,6 +183,18 @@ function unfilteredLayout(table: CapTable, dimension: CapTableDimension, instrum
         outstandingPercent: row.outstandingPercent, fullyDilutedPercent: row.fullyDilutedPercent,
       },
     }))
+    // Fully diluted by holder includes the shares the plans still hold
+    // unallocated, so the holders and the pool add up to the class basis.
+    if (instrument === 'all' && big(table.unallocatedPool.fullyDiluted) > 0n) {
+      lines.push({
+        key: 'pool', shareClassId: null, holderPartyId: null, pool: true,
+        values: {
+          ...Object.fromEntries(table.classes.map((shareClass) => [`class:${shareClass.shareClassId}`, '0'])),
+          asConverted: '0', options: '0', rsus: '0', warrants: '0', fullyDiluted: table.unallocatedPool.fullyDiluted,
+          fullyDilutedPercent: table.unallocatedPool.fullyDilutedPercent,
+        },
+      })
+    }
   }
-  return { columns, lines, totals: sumColumns(columns, lines) }
+  return { columns, lines, totals: sumColumns(table, columns, lines) }
 }

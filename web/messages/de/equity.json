@@ -200,9 +200,9 @@
     "unvestedRepurchaseBasis": "Rückkaufpreis nicht unverfallbarer Anteile",
     "conversionClass": "Wandelt in",
     "partyKind": "Art des Beteiligten",
+    "issuedTerms": "Ursprüngliche Bedingungen",
     "liquidationPreferenceBasis": "Präferenz bemessen nach",
-    "preMoneyBasisReason": "Grundlage der Pre-Money-Bewertung",
-    "issuedTerms": "Ursprüngliche Bedingungen"
+    "preMoneyBasisReason": "Grundlage der Pre-Money-Bewertung"
   },
   "capTable": {
     "by": {
@@ -334,7 +334,31 @@
       "discount": "Abschlag",
       "postMoney": "Post-Money-Bewertung"
     },
-    "model": "Runde modellieren"
+    "model": "Runde modellieren",
+    "voidedBadge": "Storniert",
+    "voidedDescription": "Am {date} storniert; zur Historie aufbewahrt und in keiner Kennzahl enthalten.",
+    "voidedReason": "Grund: {reason}",
+    "actionFailed": "Die Finanzierungsrunde konnte nicht geändert werden",
+    "voided": "Finanzierungsrunde storniert",
+    "amended": "Finanzierungsrunde geändert",
+    "drawerDescription": "{code} · abgeschlossen am {date}",
+    "impliedPreMoney": "Preis × voll verwässert davor",
+    "fullyDilutedBefore": "Voll verwässert vor der Runde",
+    "basisReason": "Grundlage der Pre-Money-Bewertung: {reason}",
+    "lockedBy": "{count, plural, one {# aktives Wertpapier besteht} other {# aktive Wertpapiere bestehen}} in dieser Runde; Preis und Datum bleiben daher wie erfasst, und die Runde kann nicht storniert werden:",
+    "historyTitle": "Änderungen",
+    "change": "Änderung",
+    "changedName": "Umbenannt in {name}",
+    "changedPrice": "Preis {price}",
+    "changedPreMoney": "Pre-Money {amount}",
+    "changedBasis": "Bewertungsgrundlage erfasst",
+    "actions": "Aktionen der Finanzierungsrunde",
+    "amend": "Ändern",
+    "void": "Runde stornieren",
+    "amendHelp": "Korrigieren Sie Name, Preis oder Pre-Money-Bewertung der Runde. Ein leeres Feld behält seinen Wert; die Änderung ist ein genehmigungspflichtiger Vorgang.",
+    "voidLocked": "Eine Runde kann nur storniert werden, wenn kein aktives Wertpapier in ihr besteht: Stornieren Sie zuerst diese Wertpapiere oder machen Sie sie rückgängig.",
+    "voidHelp": "Stornieren Sie eine irrtümlich erfasste Runde. Sie bleibt zur Historie gelistet und fließt in keine Kennzahl ein; die Stornierung ist ein genehmigungspflichtiger Vorgang.",
+    "priceLocked": "Aktive Wertpapiere bestehen zu diesem Preis."
   },
   "model": {
     "description": "Bepreist eine Runde nach der Pre-Money-Methode anhand der Kapitaltabelle zum Stichtag: Ausstehende SAFEs und Wandeldarlehen werden gewandelt, geschützte Klassen erhalten ihre Verwässerungsschutzanteile und der Pool wird innerhalb der Pre-Money-Bewertung auf sein Ziel aufgefüllt. Es wird nichts erfasst.",
@@ -371,7 +395,11 @@
       "price": "Wandlungspreis",
       "shares": "Anteile"
     },
-    "prompt": "Geben Sie eine Pre-Money-Bewertung und das neue Kapital ein, um die Runde gegen die Kapitaltabelle zum Stichtag zu bepreisen."
+    "prompt": "Geben Sie eine Pre-Money-Bewertung und das neue Kapital ein, um die Runde gegen die Kapitaltabelle zum Stichtag zu bepreisen.",
+    "sharesOfFullyDiluted": "{shares} · {percent} voll verwässert",
+    "newShares": "{shares} neue Aktien",
+    "poolAfter": "Pool nach der Runde",
+    "percentOfFullyDiluted": "{percent} voll verwässert"
   },
   "waterfall": {
     "exitValue": "Exit-Wert",
@@ -414,6 +442,7 @@
       "priceSub": "Stamm- und wandelnde Inhaber",
       "preferred": "An Vorzugsanteile",
       "common": "An Stammanteile und Zuteilungen",
+      "noShare": "Kein Erlös zu verteilen",
       "ofProceeds": "{percent} % des Erlöses"
     },
     "cascadeTitle": "Zahlungskaskade",
@@ -442,7 +471,27 @@
       "safe_converts": "Wandelt für {amount}; die Auszahlung brächte {alternative}.",
       "safe_converts_only": "Wandelt für {amount}, mehr als der Auszahlungsbetrag von {entitlement}.",
       "safe_cash_out": "Nimmt den Auszahlungsbetrag von {entitlement}; die Wandlung brächte {alternative}.",
-      "safe_cash_out_only": "Nimmt den Auszahlungsbetrag von {entitlement}."
+      "safe_cash_out_only": "Nimmt den Auszahlungsbetrag von {entitlement}.",
+      "keeps_preference_partial": "Erhält {paid} der Präferenz von {entitlement}, die der Erlös nur teilweise deckt; die Wandlung brächte {alternative}.",
+      "keeps_preference_partial_only": "Erhält {paid} der Präferenz von {entitlement}, die der Erlös nur teilweise deckt.",
+      "keeps_preference_none": "Erhält nichts: Der Erlös reicht nicht bis zur Präferenz von {entitlement}; die Wandlung brächte {alternative}.",
+      "keeps_preference_none_only": "Erhält nichts: Der Erlös reicht nicht bis zur Präferenz von {entitlement}.",
+      "participates_partial": "Erhält {paid} der Präferenz von {entitlement}, die der Erlös nur teilweise deckt; es bleibt nichts zu teilen.",
+      "participates_none": "Erhält nichts: Der Erlös reicht nicht bis zur Präferenz von {entitlement}.",
+      "participates_capped_partial": "Erhält {paid} der Präferenz von {entitlement}, die der Erlös nur teilweise deckt; die Wandlung brächte {alternative}.",
+      "participates_capped_partial_only": "Erhält {paid} der Präferenz von {entitlement}, die der Erlös nur teilweise deckt.",
+      "participates_capped_none": "Erhält nichts: Der Erlös reicht nicht bis zur Präferenz von {entitlement}; die Wandlung brächte {alternative}.",
+      "participates_capped_none_only": "Erhält nichts: Der Erlös reicht nicht bis zur Präferenz von {entitlement}.",
+      "safe_cash_out_partial": "Erhält {paid} des Auszahlungsbetrags von {entitlement}, den der Erlös nur teilweise deckt; die Wandlung brächte {alternative}.",
+      "safe_cash_out_partial_only": "Erhält {paid} des Auszahlungsbetrags von {entitlement}, den der Erlös nur teilweise deckt.",
+      "safe_cash_out_none": "Erhält nichts: Der Erlös reicht nicht bis zum Auszahlungsbetrag von {entitlement}; die Wandlung brächte {alternative}.",
+      "safe_cash_out_none_only": "Erhält nichts: Der Erlös reicht nicht bis zum Auszahlungsbetrag von {entitlement}."
+    },
+    "invalid": {
+      "exit": "Der Exit-Wert muss ein Dezimalbetrag mit höchstens vier Nachkommastellen sein.",
+      "exitRemedy": "Geben Sie den Exit-Wert ohne Trennzeichen ein, zum Beispiel 25000000.",
+      "fees": "Die Transaktionskosten müssen ein Dezimalbetrag mit höchstens vier Nachkommastellen sein.",
+      "feesRemedy": "Geben Sie die aus dem Exit gezahlten Kosten ein, zum Beispiel 750000, oder lassen Sie das Feld leer."
     },
     "curveTitle": "Erlöse über Exit-Werte",
     "curveHint": "Von null bis zum Doppelten dieses Exits",
@@ -474,7 +523,9 @@
       "releasedShares": "Freigegebene gesperrte Anteile",
       "deposit": "Freigegebene Einlage",
       "reclass": "Wert am Gewährungstag",
-      "par": "Nennwert"
+      "par": "Nennwert",
+      "releaseTotal": "Freigegebene Einlagen",
+      "releaseEntry": "Freigabebuchung"
     },
     "releases": "Freigaben gesperrter Anteile",
     "releasesEmpty": "Bis zu diesem Datum werden keine gesperrten Anteile unverfallbar."
@@ -522,6 +573,9 @@
     "reversed": "Rückabgewickelt",
     "accrualEntry": "Zinsabgrenzung",
     "reverse": "Rückabwickeln",
+    "releasesTitle": "Freigaben gesperrter Aktien",
+    "releasedThisRun": "Durch den Lauf freigegeben",
+    "expectedValue": "Erwartet nach Verfall",
     "depositUnvested": "Einlage auf nicht unverfallbare Aktien",
     "outstandingPrincipal": "Ausstehend",
     "convertedInto": "Umgewandelt in",
@@ -604,6 +658,7 @@
     "createStakeholder": "Anlegen und Wertpapier ausgeben",
     "stakeholderHelp": "Ein Anteilseigner ist eine Person oder ein Unternehmen in Ihrem Verzeichnis. Geben Sie nach dem Speichern das erste Wertpapier aus, um ihn in die Kapitaltabelle aufzunehmen.",
     "stakeholderSaved": "{name} hinzugefügt. Geben Sie das erste Wertpapier aus.",
+    "emailInvalid": "Geben Sie eine gültige E-Mail-Adresse ein, z. B. name@example.com, oder lassen Sie das Feld leer.",
     "preMoneyBasisHint": "Nur erforderlich, wenn die Pre-Money-Bewertung nicht Preis mal voll verwässerte Aktien vor der Runde ist, etwa weil sie eine Pool-Erhöhung oder Umwandlungen einrechnet."
   },
   "dayCount": {
@@ -690,10 +745,10 @@
   },
   "approval": {
     "pendingTitle": "Wartet auf Genehmigung",
-    "openApprovals": "Genehmigungen öffnen",
+    "openApprovals": "Posteingang öffnen",
     "pendingItem": "{action} · {subject} · gültig ab {date} · angefordert von {requester}",
     "unknownRequester": "einem ehemaligen Benutzer",
-    "submitted": "Zur Genehmigung eingereicht. Der Vorgang wird angewendet, sobald ein Genehmiger ihn unter Genehmigungen genehmigt.",
+    "submitted": "Zur Genehmigung eingereicht. Der Vorgang wird angewendet, sobald ein Genehmiger ihn im Posteingang genehmigt.",
     "action": {
       "void": "Ungültigmachung",
       "reverse": "Rückabwicklung",
@@ -706,8 +761,13 @@
       "mfn_election": "MFN-Wahl",
       "compensation_run": "Lauf der aktienbasierten Vergütung",
       "interest_run": "Zinslauf für Wandeldarlehen",
-      "account_policy": "Version der Kontenrichtlinie"
-    }
+      "account_policy": "Version der Kontenrichtlinie",
+      "mfn_reversal": "Rücknahme der MFN-Wahl",
+      "round_amendment": "Änderung der Finanzierungsrunde",
+      "round_void": "Stornierung der Finanzierungsrunde"
+    },
+    "withdrawFailed": "Der Vorgang konnte nicht zurückgezogen werden",
+    "withdrawn": "Antrag zurückgezogen – nichts wurde angewendet"
   },
   "classes": {
     "empty": "Noch keine Anteilsklassen. Erfassen Sie mit „Neue Anteilsklasse“ die erste Klasse der Gesellschaft.",
@@ -762,7 +822,9 @@
       "interestDue": "Darlehenszinsen sind bis {date} nicht abgegrenzt: {amount} zu buchen",
       "interestRefused": "Die Darlehenszinsen bis {date} können nicht bemessen werden: {message}",
       "pending": "{count, plural, one {# Eigenkapitalvorgang wartet auf Genehmigung} other {# Eigenkapitalvorgänge warten auf Genehmigung}}",
-      "policyMissing": "Zum {date} gilt keine Kontenregel für Eigenkapital; bis eine eingerichtet ist, kann nichts gebucht werden"
+      "policyMissing": "Zum {date} gilt keine Kontenregel für Eigenkapital; bis eine eingerichtet ist, kann nichts gebucht werden",
+      "conversionTermsVoid": "{holder} · {number} wurde zu den Bedingungen von {source} in {certificate} umgewandelt; {source} wurde inzwischen storniert. Öffnen Sie {number}, um die MFN-Wahl rückgängig zu machen und die Umwandlung zu berichtigen.",
+      "electionTermsVoid": "{holder} · {number} hat die Bedingungen von {source} übernommen; {source} wurde inzwischen storniert. Öffnen Sie {number}, um die MFN-Wahl vor der Umwandlung rückgängig zu machen."
     },
     "activity": {
       "title": "Letzte Aktivität",
@@ -809,7 +871,7 @@
     "alreadyPosted": "Für diese Periode gebucht",
     "backdated": "Läufe sind bis {date} gebucht; wählen Sie eine spätere Periode",
     "closeTask": "Dieser Lauf ist eine Aufgabe des Periodenabschlusses.",
-    "openClose": "Abschluss öffnen",
+    "openClose": "Abschluss {period} öffnen",
     "noPeriods": "Keine Buchungsperioden",
     "noPeriodsRemedy": "Läufe buchen bis zum Ende einer Buchungsperiode. Erzeugen Sie die Perioden des Geschäftsjahreskalenders, um Aktienvergütung und Darlehenszinsen zu buchen.",
     "setUpPeriods": "Perioden einrichten",

@@ -1,13 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import type { ActionError } from '@braedonsaunders/appkit-errors'
 import { Button, Input, SearchSelect, Textarea, UrlDrawer } from '@openbooks/ui'
 import type { NewRecordData } from './view'
-import { Field, SegmentTabs, postJson, withParams } from './shared'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { CommandRefusal, Field, SegmentTabs, postCommand, withParams } from './shared'
+import { fetchAppAction } from '@/lib/api-error'
+import { partyEmailInvalid } from '@/lib/party-email'
+import { useAppAction } from '@/lib/use-app-action'
 import { DateField } from '../../../components/date-field'
 
 type Kind = 'share' | 'option' | 'rsu' | 'warrant' | 'safe' | 'note'
@@ -39,43 +42,48 @@ export function NewRecordDrawer({ data }: { data: NewRecordData | null }) {
   )
 }
 
+/**
+ * A form's create command through the house action path: a refusal pins
+ * beside the form (with the server's remedy) until the next attempt, and a
+ * success continues to the next step or closes the drawer.
+ */
 function useSubmit(onDone: () => void) {
   const t = useTranslations('equity')
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const { busy, refusal, execute } = useAppAction()
   async function submit<T>(url: string, body: unknown, saved: string, next?: (result: T) => string | null) {
-    setBusy(true)
-    try {
-      const result = await postJson<T>(url, body, t('new.failed'))
-      toast.success(saved)
-      const href = next?.(result)
-      if (href) router.push(href as never)
-      else {
-        onDone()
-        router.refresh()
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('new.failed'))
-    } finally {
-      setBusy(false)
-    }
+    await execute(() => postCommand<T>(url, body, t('new.failed')), {
+      fallbackMessage: t('new.failed'),
+      onOk: (result) => {
+        toast.success(saved)
+        const href = next?.(result)
+        if (href) router.push(href as never)
+        else {
+          onDone()
+          router.refresh()
+        }
+      },
+    })
   }
-  return { busy, submit }
+  return { busy, refusal, submit }
 }
 
-function Actions({ busy, ready, onCancel, onSubmit, label }: { busy: boolean; ready: boolean; onCancel: () => void; onSubmit: () => void; label: string }) {
+function Actions({ busy, ready, onCancel, onSubmit, label, refusal }: { busy: boolean; ready: boolean; onCancel: () => void; onSubmit: () => void; label: string; refusal: ActionError | null }) {
   const t = useTranslations('equity')
   return (
-    <div className="flex justify-end gap-2">
-      <Button variant="ghost" onClick={onCancel}>{t('actions.cancel')}</Button>
-      <Button onClick={onSubmit} disabled={busy || !ready}>{label}</Button>
+    <div className="space-y-3">
+      <CommandRefusal refusal={refusal} fallback={t('new.failed')} />
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" onClick={onCancel}>{t('actions.cancel')}</Button>
+        <Button onClick={onSubmit} disabled={busy || !ready}>{label}</Button>
+      </div>
     </div>
   )
 }
 
 function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () => void }) {
   const t = useTranslations('equity')
-  const { busy, submit } = useSubmit(onDone)
+  const { busy, refusal, submit } = useSubmit(onDone)
   const [kind, setKind] = useState<Kind>(data.securityKind ?? 'share')
   const [vesting, setVesting] = useState<'none' | 'time'>('none')
   const [form, setForm] = useState({
@@ -278,18 +286,18 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
         </section>
       )}
       <Field label={t('fields.memo')}><Textarea rows={2} value={form.memo} onChange={(e) => set('memo')(e.target.value)} /></Field>
-      <Actions busy={busy} ready={ready} onCancel={onDone} onSubmit={issue} label={t('new.issue')} />
+      <Actions refusal={refusal} busy={busy} ready={ready} onCancel={onDone} onSubmit={issue} label={t('new.issue')} />
     </div>
   )
 }
 
 function ShareClassForm({ data, onDone }: { data: NewRecordData; onDone: () => void }) {
   const t = useTranslations('equity')
-  const { busy, submit } = useSubmit(onDone)
+  const { busy, refusal, submit } = useSubmit(onDone)
   const [form, setForm] = useState({
     code: '', name: '', kind: 'common', effectiveOn: data.context.asOf, authorizedShares: '', parValue: '0.0001', originalIssuePrice: '',
     conversionPrice: '', liquidationMultiple: '1', participation: 'none', participationCapMultiple: '', seniority: '0', antiDilution: 'none',
-    conversionShareClassId: data.commonClasses[0]?.value ?? '',
+    conversionShareClassId: data.commonClasses[0]?.value ?? '', liquidationPreferenceBasis: 'amount_paid',
   })
   const [adjustsForSplits, setAdjustsForSplits] = useState(true)
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }))
@@ -301,7 +309,7 @@ function ShareClassForm({ data, onDone }: { data: NewRecordData; onDone: () => v
       authorizedShares: form.authorizedShares, parValue: form.parValue,
       ...(preferred ? {
         originalIssuePrice: form.originalIssuePrice, conversionPrice: blank(form.conversionPrice), liquidationMultiple: blank(form.liquidationMultiple),
-        participation: form.participation, participationCapMultiple: form.participation === 'capped' ? blank(form.participationCapMultiple) : null,
+        liquidationPreferenceBasis: form.liquidationPreferenceBasis, participation: form.participation, participationCapMultiple: form.participation === 'capped' ? blank(form.participationCapMultiple) : null,
         seniority: Number.parseInt(form.seniority || '0', 10), antiDilution: form.antiDilution,
         conversionShareClassId: form.conversionShareClassId, conversionAdjustsForSplits: adjustsForSplits,
       } : {}),
@@ -323,6 +331,14 @@ function ShareClassForm({ data, onDone }: { data: NewRecordData; onDone: () => v
             <Field label={t('fields.originalIssuePrice')}><Input inputMode="decimal" value={form.originalIssuePrice} onChange={(e) => set('originalIssuePrice')(e.target.value)} /></Field>
             <Field label={t('fields.conversionPrice')} hint={t('new.conversionPriceHint')}><Input inputMode="decimal" value={form.conversionPrice} onChange={(e) => set('conversionPrice')(e.target.value)} /></Field>
             <Field label={t('fields.liquidationMultiple')}><Input inputMode="decimal" value={form.liquidationMultiple} onChange={(e) => set('liquidationMultiple')(e.target.value)} /></Field>
+            <Field label={t('fields.liquidationPreferenceBasis')} hint={t(`preferenceBasisHint.${form.liquidationPreferenceBasis as 'amount_paid' | 'original_issue_price'}`)}>
+              <SearchSelect
+                value={form.liquidationPreferenceBasis}
+                options={(['amount_paid', 'original_issue_price'] as const).map((value) => ({ value, label: t(`preferenceBasis.${value}`) }))}
+                onChange={(value) => set('liquidationPreferenceBasis')(value ?? 'amount_paid')}
+                ariaLabel={t('fields.liquidationPreferenceBasis')}
+              />
+            </Field>
             <Field label={t('fields.seniority')} hint={t('new.seniorityHint')}><Input inputMode="numeric" value={form.seniority} onChange={(e) => set('seniority')(e.target.value)} /></Field>
             <Field label={t('fields.participation')}>
               <SearchSelect value={form.participation} options={(['none', 'full', 'capped'] as const).map((value) => ({ value, label: t(`participation.${value}`) }))} onChange={(value) => set('participation')(value ?? 'none')} ariaLabel={t('fields.participation')} />
@@ -342,14 +358,14 @@ function ShareClassForm({ data, onDone }: { data: NewRecordData; onDone: () => v
           </>
         )}
       </div>
-      <Actions busy={busy} ready={ready} onCancel={onDone} onSubmit={create} label={t('new.createClass')} />
+      <Actions refusal={refusal} busy={busy} ready={ready} onCancel={onDone} onSubmit={create} label={t('new.createClass')} />
     </div>
   )
 }
 
 function PlanForm({ data, onDone }: { data: NewRecordData; onDone: () => void }) {
   const t = useTranslations('equity')
-  const { busy, submit } = useSubmit(onDone)
+  const { busy, refusal, submit } = useSubmit(onDone)
   const [form, setForm] = useState({ code: '', name: '', shareClassId: '', effectiveOn: data.context.asOf, reservedShares: '', recycleForfeited: true, recycleExpired: true, recycleRepurchased: false })
   const ready = Boolean(form.code && form.name && form.shareClassId && form.effectiveOn && /^\d+$/.test(form.reservedShares))
   return (
@@ -369,15 +385,15 @@ function PlanForm({ data, onDone }: { data: NewRecordData; onDone: () => void })
         <label className="flex items-center gap-2"><input type="checkbox" checked={form.recycleExpired} onChange={(e) => setForm({ ...form, recycleExpired: e.target.checked })} />{t('plans.recycle.expired')}</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={form.recycleRepurchased} onChange={(e) => setForm({ ...form, recycleRepurchased: e.target.checked })} />{t('plans.recycle.repurchased')}</label>
       </fieldset>
-      <Actions busy={busy} ready={ready} onCancel={onDone} onSubmit={() => void submit('/api/equity/plans', { subsidiaryId: data.context.subsidiaryId, ...form }, t('new.planSaved'))} label={t('new.createPlan')} />
+      <Actions refusal={refusal} busy={busy} ready={ready} onCancel={onDone} onSubmit={() => void submit('/api/equity/plans', { subsidiaryId: data.context.subsidiaryId, ...form }, t('new.planSaved'))} label={t('new.createPlan')} />
     </div>
   )
 }
 
 function RoundForm({ data, onDone }: { data: NewRecordData; onDone: () => void }) {
   const t = useTranslations('equity')
-  const { busy, submit } = useSubmit(onDone)
-  const [form, setForm] = useState({ name: '', shareClassId: '', closedOn: data.context.asOf, pricePerShare: '', preMoneyValuation: '', currency: data.context.currency })
+  const { busy, refusal, submit } = useSubmit(onDone)
+  const [form, setForm] = useState({ name: '', shareClassId: '', closedOn: data.context.asOf, pricePerShare: '', preMoneyValuation: '', currency: data.context.currency, preMoneyBasisReason: '' })
   const ready = Boolean(form.name && form.shareClassId && form.closedOn && form.pricePerShare && form.preMoneyValuation)
   return (
     <div className="space-y-4">
@@ -394,7 +410,10 @@ function RoundForm({ data, onDone }: { data: NewRecordData; onDone: () => void }
           <SearchSelect value={form.currency} options={data.currencies} onChange={(value) => setForm({ ...form, currency: value ?? data.context.currency })} ariaLabel={t('fields.currency')} />
         </Field>
       </div>
-      <Actions busy={busy} ready={ready} onCancel={onDone} onSubmit={() => void submit('/api/equity/rounds', { subsidiaryId: data.context.subsidiaryId, ...form }, t('new.roundSaved'))} label={t('new.createRound')} />
+      <Field label={t('fields.preMoneyBasisReason')} hint={t('new.preMoneyBasisHint')}>
+        <Textarea rows={2} value={form.preMoneyBasisReason} onChange={(e) => setForm({ ...form, preMoneyBasisReason: e.target.value })} />
+      </Field>
+      <Actions refusal={refusal} busy={busy} ready={ready} onCancel={onDone} onSubmit={() => void submit('/api/equity/rounds', { subsidiaryId: data.context.subsidiaryId, ...form, preMoneyBasisReason: form.preMoneyBasisReason.trim() || null }, t('new.roundSaved'))} label={t('new.createRound')} />
     </div>
   )
 }
@@ -407,27 +426,29 @@ function RoundForm({ data, onDone }: { data: NewRecordData; onDone: () => void }
 function StakeholderForm({ data, onDone }: { data: NewRecordData; onDone: () => void }) {
   const t = useTranslations('equity')
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const { busy, refusal, execute } = useAppAction()
   const [form, setForm] = useState({ kind: 'person', displayName: '', email: '' })
-  const ready = form.displayName.trim().length > 0
+  // The party route refuses an address no message could be sent to; the form
+  // says so as it is typed rather than after a round trip.
+  const emailInvalid = partyEmailInvalid(form.email)
+  const ready = form.displayName.trim().length > 0 && !emailInvalid
   async function create() {
-    setBusy(true)
+    // The idempotency key becomes the party's id, so a retry of the same
+    // request returns the same stakeholder.
     const id = crypto.randomUUID()
-    try {
-      const res = await fetch('/api/parties', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': id },
-        body: JSON.stringify({ kind: form.kind, displayName: form.displayName.trim(), email: blank(form.email) }),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('new.failed')))
-      toast.success(t('new.stakeholderSaved', { name: form.displayName.trim() }))
-      router.push(withParams('/equity', data.context.params, { new: 'security', newHolder: id }) as never)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('new.failed'))
-    } finally {
-      setBusy(false)
-    }
+    await execute(() => fetchAppAction('/api/parties', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': id },
+      body: JSON.stringify({ kind: form.kind, displayName: form.displayName.trim(), email: blank(form.email) }),
+    }, { fallback: t('new.failed') }), {
+      fallbackMessage: t('new.failed'),
+      onOk: () => {
+        toast.success(t('new.stakeholderSaved', { name: form.displayName.trim() }))
+        router.push(withParams('/equity', data.context.params, { new: 'security', newHolder: id }) as never)
+      },
+    })
   }
+  const emailError: ReactNode = emailInvalid ? <span className="text-red-700 dark:text-red-300">{t('new.emailInvalid')}</span> : null
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-500 dark:text-slate-400">{t('new.stakeholderHelp')}</p>
@@ -436,9 +457,14 @@ function StakeholderForm({ data, onDone }: { data: NewRecordData; onDone: () => 
           <SearchSelect value={form.kind} options={[{ value: 'person', label: t('partyKind.person') }, { value: 'company', label: t('partyKind.company') }]} onChange={(value) => setForm({ ...form, kind: value ?? 'person' })} ariaLabel={t('fields.partyKind')} />
         </Field>
         <Field label={t('fields.name')}><Input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} /></Field>
-        <Field label={t('stakeholders.columns.email')}><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+        <div className="space-y-1">
+          <Field label={t('stakeholders.columns.email')}>
+            <Input type="email" value={form.email} aria-invalid={emailInvalid} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </Field>
+          {emailError && <p className="text-xs" role="alert">{emailError}</p>}
+        </div>
       </div>
-      <Actions busy={busy} ready={ready} onCancel={onDone} onSubmit={() => void create()} label={t('new.createStakeholder')} />
+      <Actions refusal={refusal} busy={busy} ready={ready} onCancel={onDone} onSubmit={() => void create()} label={t('new.createStakeholder')} />
     </div>
   )
 }

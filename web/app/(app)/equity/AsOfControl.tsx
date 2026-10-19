@@ -33,4 +33,4 @@ export function EquityAsOfControl({ control, compact = true, leading, actions }:
   )
 }
 
-const AS_OF_RESETS = ['security', 'new', 'newHolder', 'newKind', 'history', 'model', 'amend', 'reserve'] as const
+const AS_OF_RESETS = ['security', 'new', 'newHolder', 'newKind', 'history', 'model', 'amend', 'reserve', 'round', 'page'] as const

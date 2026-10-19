@@ -200,9 +200,9 @@
     "unvestedRepurchaseBasis": "未確定株式の買戻価格",
     "conversionClass": "転換先",
     "partyKind": "取引先の種類",
+    "issuedTerms": "発行時の条件",
     "liquidationPreferenceBasis": "優先分配額の基準",
-    "preMoneyBasisReason": "プレマネー評価の根拠",
-    "issuedTerms": "発行時の条件"
+    "preMoneyBasisReason": "プレマネー評価の根拠"
   },
   "capTable": {
     "by": {
@@ -334,7 +334,31 @@
       "discount": "ディスカウント",
       "postMoney": "ポストマネー"
     },
-    "model": "ラウンドをモデル化"
+    "model": "ラウンドをモデル化",
+    "voidedBadge": "無効",
+    "voidedDescription": "{date} に無効化。履歴として保持され、すべての数値から除外されます。",
+    "voidedReason": "理由: {reason}",
+    "actionFailed": "ラウンドを変更できませんでした",
+    "voided": "ラウンドを無効化しました",
+    "amended": "ラウンドを修正しました",
+    "drawerDescription": "{code}・{date} 完了",
+    "impliedPreMoney": "価格 × 前の完全希薄化株式数",
+    "fullyDilutedBefore": "ラウンド前の完全希薄化株式数",
+    "basisReason": "プレマネーの算定根拠: {reason}",
+    "lockedBy": "このラウンドには有効な証券が {count} 件あるため、価格と日付は記録どおりに維持され、無効化できません:",
+    "historyTitle": "修正履歴",
+    "change": "変更",
+    "changedName": "名称を {name} に変更",
+    "changedPrice": "価格 {price}",
+    "changedPreMoney": "プレマネー {amount}",
+    "changedBasis": "プレマネーの算定根拠を記録",
+    "actions": "ラウンドの操作",
+    "amend": "修正",
+    "void": "ラウンドを無効化",
+    "amendHelp": "記録されたラウンドの名称・価格・プレマネー評価額を訂正します。空欄の項目は現在の値を維持します。修正は承認対象の操作です。",
+    "voidLocked": "有効な証券がないラウンドのみ無効化できます。先にそれらの証券を無効化または取り消してください。",
+    "voidHelp": "誤って記録したラウンドを無効化します。履歴として一覧に残り、すべての数値から除外されます。無効化は承認対象の操作です。",
+    "priceLocked": "この価格で有効な証券があります。"
   },
   "model": {
     "description": "基準日時点の資本政策表に対し、プレマネー方式でラウンドの価格を算定します。発行済の SAFE とノートは転換され、保護されたクラスには希薄化防止株式が割り当てられ、プールはプレマネーの範囲内で目標まで補充されます。記録は行われません。",
@@ -371,7 +395,11 @@
       "price": "転換価格",
       "shares": "株式数"
     },
-    "prompt": "プレマネー評価額と新規調達額を入力すると、基準日の資本政策表に対してラウンドの価格を算定します。"
+    "prompt": "プレマネー評価額と新規調達額を入力すると、基準日の資本政策表に対してラウンドの価格を算定します。",
+    "sharesOfFullyDiluted": "{shares}・完全希薄化後の {percent}",
+    "newShares": "新株 {shares} 株",
+    "poolAfter": "ラウンド後のプール",
+    "percentOfFullyDiluted": "完全希薄化後の {percent}"
   },
   "waterfall": {
     "exitValue": "エグジット価値",
@@ -414,6 +442,7 @@
       "priceSub": "普通株主と転換する保有者",
       "preferred": "優先株式へ",
       "common": "普通株式と付与へ",
+      "noShare": "分配する金額はありません",
       "ofProceeds": "分配額の {percent}%"
     },
     "cascadeTitle": "支払いの順序",
@@ -442,7 +471,27 @@
       "safe_converts": "{amount} で転換します。現金払戻しの場合は {alternative} です。",
       "safe_converts_only": "{amount} で転換します。{entitlement} の現金払戻し額を上回ります。",
       "safe_cash_out": "{entitlement} の現金払戻しを受けます。転換した場合は {alternative} です。",
-      "safe_cash_out_only": "{entitlement} の現金払戻しを受けます。"
+      "safe_cash_out_only": "{entitlement} の現金払戻しを受けます。",
+      "keeps_preference_partial": "{entitlement} の優先分配のうち {paid} を受けます（分配額では一部しか賄えません）。転換した場合は {alternative} です。",
+      "keeps_preference_partial_only": "{entitlement} の優先分配のうち {paid} を受けます（分配額では一部しか賄えません）。",
+      "keeps_preference_none": "受取額はありません。分配額が {entitlement} の優先分配に届きません。転換した場合は {alternative} です。",
+      "keeps_preference_none_only": "受取額はありません。分配額が {entitlement} の優先分配に届きません。",
+      "participates_partial": "{entitlement} の優先分配のうち {paid} を受けます（分配額では一部しか賄えず、分け合う残りはありません）。",
+      "participates_none": "受取額はありません。分配額が {entitlement} の優先分配に届きません。",
+      "participates_capped_partial": "{entitlement} の優先分配のうち {paid} を受けます（分配額では一部しか賄えません）。転換した場合は {alternative} です。",
+      "participates_capped_partial_only": "{entitlement} の優先分配のうち {paid} を受けます（分配額では一部しか賄えません）。",
+      "participates_capped_none": "受取額はありません。分配額が {entitlement} の優先分配に届きません。転換した場合は {alternative} です。",
+      "participates_capped_none_only": "受取額はありません。分配額が {entitlement} の優先分配に届きません。",
+      "safe_cash_out_partial": "{entitlement} の現金払戻し額のうち {paid} を受けます（分配額では一部しか賄えません）。転換した場合は {alternative} です。",
+      "safe_cash_out_partial_only": "{entitlement} の現金払戻し額のうち {paid} を受けます（分配額では一部しか賄えません）。",
+      "safe_cash_out_none": "受取額はありません。分配額が {entitlement} の現金払戻し額に届きません。転換した場合は {alternative} です。",
+      "safe_cash_out_none_only": "受取額はありません。分配額が {entitlement} の現金払戻し額に届きません。"
+    },
+    "invalid": {
+      "exit": "エグジット価値は小数点以下4桁までの金額で入力してください。",
+      "exitRemedy": "エグジット価値を区切り記号なしで入力してください（例：25000000）。",
+      "fees": "取引費用は小数点以下4桁までの金額で入力してください。",
+      "feesRemedy": "エグジットから支払う費用を入力するか（例：750000）、空欄のままにしてください。"
     },
     "curveTitle": "エグジット価値別の分配額",
     "curveHint": "ゼロからこのエグジットの2倍まで",
@@ -474,7 +523,9 @@
       "releasedShares": "解除された譲渡制限株式",
       "deposit": "解除された預り金",
       "reclass": "付与日価値",
-      "par": "額面"
+      "par": "額面",
+      "releaseTotal": "解除された預り金",
+      "releaseEntry": "解除仕訳"
     },
     "releases": "譲渡制限株式の解除",
     "releasesEmpty": "この日付までに権利確定する譲渡制限株式はありません。"
@@ -522,6 +573,9 @@
     "reversed": "逆仕訳済み",
     "accrualEntry": "利息発生仕訳",
     "reverse": "逆仕訳",
+    "releasesTitle": "譲渡制限株式の解除",
+    "releasedThisRun": "この実行で解除",
+    "expectedValue": "失効見込み控除後",
     "depositUnvested": "未確定株式の預り金",
     "outstandingPrincipal": "未決済残高",
     "convertedInto": "転換先",
@@ -604,6 +658,7 @@
     "createStakeholder": "作成して証券を発行",
     "stakeholderHelp": "ステークホルダーはディレクトリ内の個人または会社です。保存後、最初の証券を発行すると資本政策表に記載されます。",
     "stakeholderSaved": "{name} を追加しました。最初の証券を発行してください。",
+    "emailInvalid": "name@example.com のような有効なメールアドレスを入力するか、空欄のままにしてください。",
     "preMoneyBasisHint": "プレマネー評価額がラウンド前の完全希薄化後株式数×価格でない場合（プール拡大や転換を含める場合など）にのみ必要です。"
   },
   "dayCount": {
@@ -690,10 +745,10 @@
   },
   "approval": {
     "pendingTitle": "承認待ち",
-    "openApprovals": "承認を開く",
+    "openApprovals": "受信トレイを開く",
     "pendingItem": "{action} · {subject} · 発効日 {date} · 申請者 {requester}",
     "unknownRequester": "以前のユーザー",
-    "submitted": "承認に回されました。承認者が承認画面で承認すると適用されます。",
+    "submitted": "承認を申請しました。承認者が受信トレイで承認すると適用されます。",
     "action": {
       "void": "無効化",
       "reverse": "取消",
@@ -706,8 +761,13 @@
       "mfn_election": "MFN 選択",
       "compensation_run": "株式報酬の計上",
       "interest_run": "ノート利息の計上",
-      "account_policy": "勘定ポリシーのバージョン"
-    }
+      "account_policy": "勘定ポリシーのバージョン",
+      "mfn_reversal": "MFN 選択の取消",
+      "round_amendment": "ラウンドの修正",
+      "round_void": "ラウンドの無効化"
+    },
+    "withdrawFailed": "アクションを取り下げられませんでした",
+    "withdrawn": "申請を取り下げました。何も適用されていません"
   },
   "classes": {
     "empty": "株式クラスはまだありません。「新規株式クラス」で法人の最初のクラスを登録してください。",
@@ -762,7 +822,9 @@
       "interestDue": "{date} までのノート利息が未計上です：転記額 {amount}",
       "interestRefused": "{date} までのノート利息を測定できません：{message}",
       "pending": "{count} 件の資本取引が承認待ちです",
-      "policyMissing": "{date} 時点で有効な資本勘定ポリシーがありません。設定するまで転記できません"
+      "policyMissing": "{date} 時点で有効な資本勘定ポリシーがありません。設定するまで転記できません",
+      "conversionTermsVoid": "{holder}・{number} は {source} の条件で {certificate} に転換されましたが、{source} はその後無効化されました。{number} を開いて MFN 選択を取り消し、転換を訂正してください。",
+      "electionTermsVoid": "{holder}・{number} は {source} の条件を採用しましたが、{source} はその後無効化されました。転換前に {number} を開いて MFN 選択を取り消してください。"
     },
     "activity": {
       "title": "最近のアクティビティ",
@@ -809,7 +871,7 @@
     "alreadyPosted": "この期間は転記済み",
     "backdated": "{date} まで転記済みです。より後の期間を選択してください",
     "closeTask": "この実行は期間締めのタスクです。",
-    "openClose": "締めを開く",
+    "openClose": "{period} の決算を開く",
     "noPeriods": "会計期間がありません",
     "noPeriodsRemedy": "実行は会計期間の末日まで転記します。株式報酬とノート利息を実行するには、会計カレンダーの期間を生成してください。",
     "setUpPeriods": "期間を設定",

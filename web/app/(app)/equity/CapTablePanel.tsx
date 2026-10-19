@@ -11,7 +11,7 @@ import { capTableLayout, CAP_TABLE_INSTRUMENTS, type CapTableColumn, type CapTab
 import { ExportMenu } from '../reports/ExportMenu'
 import { EquityAsOfControl } from './AsOfControl'
 import type { CapTableViewData } from './view'
-import { CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, PolicyBanner, TOTAL_ROW, percentText, useShares, withParams } from './shared'
+import { CELL, HEAD, LINK, NUM_CELL, NUM_HEAD, OpenReport, PendingActions, PolicyBanner, TOTAL_ROW, usePercent, useShares, withParams } from './shared'
 
 const BASE = '/equity'
 
@@ -25,6 +25,7 @@ const BASE = '/equity'
 export function EquityCapTablePanel({ view }: { view: CapTableViewData | null }) {
   const t = useTranslations('equity')
   const shares = useShares()
+  const percentText = usePercent()
   if (!view) return null
   const { table, context } = view
   const filters = { dimension: view.dimension, instrument: view.instrument, query: view.query }
@@ -37,6 +38,11 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
     const value = line.values[column.key]
     if (column.kind === 'percent') return <>{percentText(value)}</>
     return <>{value && value !== '0' ? shares(value) : '—'}</>
+  }
+  const total = (column: CapTableColumn) => {
+    const value = layout.totals[column.key]
+    if (value === undefined) return ''
+    return column.kind === 'percent' ? percentText(value) : value !== '0' ? shares(value) : '—'
   }
   const lead = view.dimension === 'class'
     ? {
@@ -53,7 +59,9 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
       }
     : {
         key: 'holder', header: <>{t('capTable.columns.holder')}</>, headerClassName: HEAD, className: CELL,
-        cell: (line: CapTableLine) => (
+        cell: (line: CapTableLine) => line.pool ? (
+          <span className="text-slate-600 dark:text-slate-300">{t('overview.ownership.pool')}</span>
+        ) : (
           <Link className={LINK} href={withParams(BASE, context.params, { view: 'securities', holder: line.holderPartyId ?? undefined, by: undefined, instrument: undefined })}>
             {view.parties[line.holderPartyId ?? ''] ?? line.holderPartyId}
           </Link>
@@ -62,7 +70,7 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
   return (
     <div className="space-y-4">
       {!view.hasAccountPolicy && <PolicyBanner href={view.accountsSetupHref} />}
-      <PendingActions pending={context.pending} filter={(request) => request.action === 'split' || request.action === 'class_amendment'} />
+      <PendingActions context={context} filter={(request) => request.action === 'split' || request.action === 'class_amendment'} />
       <RegisteredListTable
         source={view.dimension === 'class' ? 'equity_cap_table_classes' : 'equity_cap_table_holders'}
         rows={layout.lines}
@@ -70,15 +78,16 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
         empty={view.dimension === 'class' ? t('capTable.emptyClasses') : t('capTable.emptyHolders')}
         resetPageKey={`${view.dimension}:${view.instrument}:${view.query}`}
         searchable={false}
+        urlState={{ pageKey: 'page', page: context.list.page }}
         toolbarAfter={
           <div className="flex flex-1 flex-wrap items-center gap-2">
             <SearchInput />
             <ListFilterSelect
-              basePath={BASE} currentParams={context.params} paramKey="by" pageParamKey={null} label={t('capTable.filters.view')}
+              basePath={BASE} currentParams={context.params} paramKey="by" label={t('capTable.filters.view')}
               options={[{ value: '', label: t('capTable.by.class') }, { value: 'holder', label: t('capTable.by.holder') }]}
             />
             <ListFilterSelect
-              basePath={BASE} currentParams={context.params} paramKey="instrument" pageParamKey={null} label={t('capTable.filters.instrument')}
+              basePath={BASE} currentParams={context.params} paramKey="instrument" label={t('capTable.filters.instrument')}
               allLabel={t('capTable.filters.allInstruments')}
               options={CAP_TABLE_INSTRUMENTS.map((value) => ({ value, label: t(`kindPlural.${value}`) }))}
             />
@@ -101,7 +110,7 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
           <TableRow className={TOTAL_ROW}>
             <TableCell className={CELL}>{t('waterfall.columns.total')}</TableCell>
             {layout.columns.map((column) => (
-              <TableCell key={column.key} className={NUM_CELL}>{layout.totals[column.key] !== undefined ? shares(layout.totals[column.key]) : ''}</TableCell>
+              <TableCell key={column.key} className={NUM_CELL}>{total(column)}</TableCell>
             ))}
           </TableRow>
         ) : undefined}

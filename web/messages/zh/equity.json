@@ -200,9 +200,9 @@
     "unvestedRepurchaseBasis": "未归属股份回购价格",
     "conversionClass": "转换为",
     "partyKind": "往来方类型",
+    "issuedTerms": "发行时条款",
     "liquidationPreferenceBasis": "优先清算额计量基础",
-    "preMoneyBasisReason": "投前估值依据",
-    "issuedTerms": "发行时条款"
+    "preMoneyBasisReason": "投前估值依据"
   },
   "capTable": {
     "by": {
@@ -334,7 +334,31 @@
       "discount": "折扣",
       "postMoney": "投后估值"
     },
-    "model": "模拟融资轮次"
+    "model": "模拟融资轮次",
+    "voidedBadge": "已作废",
+    "voidedDescription": "已于 {date} 作废；保留在历史中，不计入任何数字。",
+    "voidedReason": "原因：{reason}",
+    "actionFailed": "无法更改该融资轮",
+    "voided": "融资轮已作废",
+    "amended": "融资轮已修改",
+    "drawerDescription": "{code} · {date} 完成",
+    "impliedPreMoney": "价格 × 此前完全稀释股数",
+    "fullyDilutedBefore": "本轮前完全稀释股数",
+    "basisReason": "投前估值依据：{reason}",
+    "lockedBy": "本轮仍有 {count} 项有效证券，因此其价格和日期保持原记录，且无法作废：",
+    "historyTitle": "修改记录",
+    "change": "变更",
+    "changedName": "更名为 {name}",
+    "changedPrice": "价格 {price}",
+    "changedPreMoney": "投前估值 {amount}",
+    "changedBasis": "已记录投前估值依据",
+    "actions": "融资轮操作",
+    "amend": "修改",
+    "void": "作废融资轮",
+    "amendHelp": "更正已记录的融资轮名称、价格或投前估值。留空的字段保持原值；修改为受控操作。",
+    "voidLocked": "只有在没有有效证券时才能作废融资轮：请先作废或撤销这些证券。",
+    "voidHelp": "作废误录的融资轮。它保留在历史列表中并不再计入任何数字；作废为受控操作。",
+    "priceLocked": "已有有效证券按此价格发行。"
   },
   "model": {
     "description": "以截至日期的股权结构表为基础，按投前法为融资轮次定价：流通中的 SAFE 和票据转换，受保护类别获得反稀释股份，期权池在投前估值内补足至目标比例。不会记录任何内容。",
@@ -371,7 +395,11 @@
       "price": "转换价格",
       "shares": "股数"
     },
-    "prompt": "输入投前估值和新增资金，即可按截止日的股权结构表为该轮次定价。"
+    "prompt": "输入投前估值和新增资金，即可按截止日的股权结构表为该轮次定价。",
+    "sharesOfFullyDiluted": "{shares} · 完全稀释后的 {percent}",
+    "newShares": "新增 {shares} 股",
+    "poolAfter": "本轮后的期权池",
+    "percentOfFullyDiluted": "完全稀释后的 {percent}"
   },
   "waterfall": {
     "exitValue": "退出价值",
@@ -414,6 +442,7 @@
       "priceSub": "普通股及转换持有人",
       "preferred": "优先股所得",
       "common": "普通股和授予所得",
+      "noShare": "无可分配收益",
       "ofProceeds": "占收益的 {percent}%"
     },
     "cascadeTitle": "支付顺序",
@@ -442,7 +471,27 @@
       "safe_converts": "以 {amount} 转换；现金赎回将获得 {alternative}。",
       "safe_converts_only": "以 {amount} 转换，高于其 {entitlement} 的现金赎回金额。",
       "safe_cash_out": "获得 {entitlement} 的现金赎回金额；转换将获得 {alternative}。",
-      "safe_cash_out_only": "获得 {entitlement} 的现金赎回金额。"
+      "safe_cash_out_only": "获得 {entitlement} 的现金赎回金额。",
+      "keeps_preference_partial": "获得 {entitlement} 优先清算权中的 {paid}，收益仅能部分覆盖；转换将获得 {alternative}。",
+      "keeps_preference_partial_only": "获得 {entitlement} 优先清算权中的 {paid}，收益仅能部分覆盖。",
+      "keeps_preference_none": "未获得任何分配：收益不足以覆盖 {entitlement} 的优先清算权；转换将获得 {alternative}。",
+      "keeps_preference_none_only": "未获得任何分配：收益不足以覆盖 {entitlement} 的优先清算权。",
+      "participates_partial": "获得 {entitlement} 优先清算权中的 {paid}，收益仅能部分覆盖，没有剩余可分享。",
+      "participates_none": "未获得任何分配：收益不足以覆盖 {entitlement} 的优先清算权。",
+      "participates_capped_partial": "获得 {entitlement} 优先清算权中的 {paid}，收益仅能部分覆盖；转换将获得 {alternative}。",
+      "participates_capped_partial_only": "获得 {entitlement} 优先清算权中的 {paid}，收益仅能部分覆盖。",
+      "participates_capped_none": "未获得任何分配：收益不足以覆盖 {entitlement} 的优先清算权；转换将获得 {alternative}。",
+      "participates_capped_none_only": "未获得任何分配：收益不足以覆盖 {entitlement} 的优先清算权。",
+      "safe_cash_out_partial": "获得 {entitlement} 现金赎回金额中的 {paid}，收益仅能部分覆盖；转换将获得 {alternative}。",
+      "safe_cash_out_partial_only": "获得 {entitlement} 现金赎回金额中的 {paid}，收益仅能部分覆盖。",
+      "safe_cash_out_none": "未获得任何分配：收益不足以覆盖 {entitlement} 的现金赎回金额；转换将获得 {alternative}。",
+      "safe_cash_out_none_only": "未获得任何分配：收益不足以覆盖 {entitlement} 的现金赎回金额。"
+    },
+    "invalid": {
+      "exit": "退出价值必须是最多四位小数的金额。",
+      "exitRemedy": "请输入不带分隔符的退出价值，例如 25000000。",
+      "fees": "交易费用必须是最多四位小数的金额。",
+      "feesRemedy": "请输入从退出中支付的费用，例如 750000，或留空。"
     },
     "curveTitle": "不同退出价值下的收益",
     "curveHint": "从零到本次退出的两倍",
@@ -474,7 +523,9 @@
       "releasedShares": "已解禁限制性股票",
       "deposit": "已释放保证金",
       "reclass": "授予日价值",
-      "par": "面值"
+      "par": "面值",
+      "releaseTotal": "已释放的保证金",
+      "releaseEntry": "解禁分录"
     },
     "releases": "限制性股票解禁",
     "releasesEmpty": "截至该日期没有归属的限制性股票。"
@@ -522,6 +573,9 @@
     "reversed": "已冲销",
     "accrualEntry": "利息计提",
     "reverse": "冲销",
+    "releasesTitle": "限制性股票解禁",
+    "releasedThisRun": "本次运行解禁",
+    "expectedValue": "扣除预计没收后",
     "depositUnvested": "未归属股份的保证金",
     "outstandingPrincipal": "未结余额",
     "convertedInto": "已转换为",
@@ -604,6 +658,7 @@
     "createStakeholder": "创建并发行证券",
     "stakeholderHelp": "利益相关方是您通讯录中的个人或公司。保存后，发行其首个证券即可将其列入股权结构表。",
     "stakeholderSaved": "已添加 {name}。请发行其首个证券。",
+    "emailInvalid": "请输入有效的电子邮件地址（例如 name@example.com），或留空。",
     "preMoneyBasisHint": "仅当投前估值不等于价格乘以本轮前完全稀释股份数时（例如计入期权池扩大或转换）才需填写。"
   },
   "dayCount": {
@@ -690,10 +745,10 @@
   },
   "approval": {
     "pendingTitle": "待审批",
-    "openApprovals": "打开审批",
+    "openApprovals": "打开收件箱",
     "pendingItem": "{action} · {subject} · 生效日期 {date} · 申请人 {requester}",
     "unknownRequester": "已离职用户",
-    "submitted": "已提交审批。审批人在审批中批准后即生效。",
+    "submitted": "已提交审批。审批人在收件箱中批准后即生效。",
     "action": {
       "void": "作废",
       "reverse": "冲销",
@@ -706,8 +761,13 @@
       "mfn_election": "MFN 选择",
       "compensation_run": "股权激励过账",
       "interest_run": "票据利息计提",
-      "account_policy": "科目政策版本"
-    }
+      "account_policy": "科目政策版本",
+      "mfn_reversal": "撤销 MFN 选择",
+      "round_amendment": "融资轮修改",
+      "round_void": "融资轮作废"
+    },
+    "withdrawFailed": "无法撤回该操作",
+    "withdrawn": "已撤回申请，未应用任何内容"
   },
   "classes": {
     "empty": "尚无股份类别。请使用“新建股份类别”登记法律实体的首个类别。",
@@ -762,7 +822,9 @@
       "interestDue": "截至 {date} 的票据利息尚未计提：待过账 {amount}",
       "interestRefused": "无法计量截至 {date} 的票据利息：{message}",
       "pending": "{count} 项股权操作待审批",
-      "policyMissing": "{date} 没有生效的股权科目政策；设置之前无法过账"
+      "policyMissing": "{date} 没有生效的股权科目政策；设置之前无法过账",
+      "conversionTermsVoid": "{holder} · {number} 按 {source} 的条款转换为 {certificate}，但 {source} 此后已作废。打开 {number} 撤销其 MFN 选择并更正转换。",
+      "electionTermsVoid": "{holder} · {number} 采用了 {source} 的条款，但 {source} 此后已作废。请在转换前打开 {number} 撤销其 MFN 选择。"
     },
     "activity": {
       "title": "最近活动",
@@ -809,7 +871,7 @@
     "alreadyPosted": "本期间已过账",
     "backdated": "运行已过账至 {date}；请选择更晚的期间",
     "closeTask": "此运行是期间结账任务。",
-    "openClose": "打开结账",
+    "openClose": "打开 {period} 结账",
     "noPeriods": "没有会计期间",
     "noPeriodsRemedy": "运行过账至会计期间末。请生成财务日历的期间，以运行股权激励和票据利息。",
     "setUpPeriods": "设置期间",

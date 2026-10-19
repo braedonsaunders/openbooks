@@ -200,9 +200,9 @@
     "unvestedRepurchaseBasis": "Unvested repurchase price",
     "conversionClass": "Converts into",
     "partyKind": "Party type",
+    "issuedTerms": "Terms as issued",
     "liquidationPreferenceBasis": "Preference measured on",
-    "preMoneyBasisReason": "Pre-money basis",
-    "issuedTerms": "Terms as issued"
+    "preMoneyBasisReason": "Pre-money basis"
   },
   "capTable": {
     "by": {
@@ -334,7 +334,31 @@
       "discount": "Discount",
       "postMoney": "Post-money"
     },
-    "model": "Model a round"
+    "model": "Model a round",
+    "voidedBadge": "Voided",
+    "voidedDescription": "Voided on {date}; kept for history and left out of every figure.",
+    "voidedReason": "Reason: {reason}",
+    "actionFailed": "The round could not be changed",
+    "voided": "Round voided",
+    "amended": "Round amended",
+    "drawerDescription": "{code} · closed {date}",
+    "impliedPreMoney": "Price × fully diluted before",
+    "fullyDilutedBefore": "Fully diluted before the round",
+    "basisReason": "Pre-money basis: {reason}",
+    "lockedBy": "{count, plural, one {# live security stands} other {# live securities stand}} in this round, so its price and date stay as recorded and it cannot be voided:",
+    "historyTitle": "Amendments",
+    "change": "Change",
+    "changedName": "Renamed {name}",
+    "changedPrice": "Price {price}",
+    "changedPreMoney": "Pre-money {amount}",
+    "changedBasis": "Pre-money basis recorded",
+    "actions": "Round actions",
+    "amend": "Amend",
+    "void": "Void round",
+    "amendHelp": "Correct the round’s name, price or pre-money valuation as recorded. A blank field keeps its value; the amendment is a governed action.",
+    "voidLocked": "A round can be voided only when no live security stands in it: void or reverse those securities first.",
+    "voidHelp": "Void a round recorded in error. It stays listed for history and leaves every figure; the void is a governed action.",
+    "priceLocked": "Live securities stand at this price."
   },
   "model": {
     "description": "Prices a round on the pre-money method against the cap table on the as-of date: outstanding SAFEs and notes convert, protected classes take their anti-dilution shares, and the pool is topped up to its target inside the pre-money. Nothing is recorded.",
@@ -371,7 +395,11 @@
       "price": "Conversion price",
       "shares": "Shares"
     },
-    "prompt": "Enter a pre-money valuation and the new money to price the round against the cap table on the as-of date."
+    "prompt": "Enter a pre-money valuation and the new money to price the round against the cap table on the as-of date.",
+    "sharesOfFullyDiluted": "{shares} · {percent} of fully diluted",
+    "newShares": "{shares} new shares",
+    "poolAfter": "Pool after the round",
+    "percentOfFullyDiluted": "{percent} of fully diluted"
   },
   "waterfall": {
     "exitValue": "Exit value",
@@ -414,6 +442,7 @@
       "priceSub": "Common and converting holders",
       "preferred": "To preferred",
       "common": "To common and awards",
+      "noShare": "No proceeds to share",
       "ofProceeds": "{percent}% of proceeds"
     },
     "cascadeTitle": "Payment cascade",
@@ -442,7 +471,27 @@
       "safe_converts": "Converts for {amount}; cashing out would pay {alternative}.",
       "safe_converts_only": "Converts for {amount}, more than its {entitlement} cash-out amount.",
       "safe_cash_out": "Takes its {entitlement} cash-out amount; converting would pay {alternative}.",
-      "safe_cash_out_only": "Takes its {entitlement} cash-out amount."
+      "safe_cash_out_only": "Takes its {entitlement} cash-out amount.",
+      "keeps_preference_partial": "Takes {paid} of its {entitlement} preference, which the proceeds cover only in part; converting would pay {alternative}.",
+      "keeps_preference_partial_only": "Takes {paid} of its {entitlement} preference, which the proceeds cover only in part.",
+      "keeps_preference_none": "Receives nothing: the proceeds do not reach its {entitlement} preference; converting would pay {alternative}.",
+      "keeps_preference_none_only": "Receives nothing: the proceeds do not reach its {entitlement} preference.",
+      "participates_partial": "Takes {paid} of its {entitlement} preference, which the proceeds cover only in part, leaving nothing to share.",
+      "participates_none": "Receives nothing: the proceeds do not reach its {entitlement} preference.",
+      "participates_capped_partial": "Takes {paid} of its {entitlement} preference, which the proceeds cover only in part; converting would pay {alternative}.",
+      "participates_capped_partial_only": "Takes {paid} of its {entitlement} preference, which the proceeds cover only in part.",
+      "participates_capped_none": "Receives nothing: the proceeds do not reach its {entitlement} preference; converting would pay {alternative}.",
+      "participates_capped_none_only": "Receives nothing: the proceeds do not reach its {entitlement} preference.",
+      "safe_cash_out_partial": "Takes {paid} of its {entitlement} cash-out amount, which the proceeds cover only in part; converting would pay {alternative}.",
+      "safe_cash_out_partial_only": "Takes {paid} of its {entitlement} cash-out amount, which the proceeds cover only in part.",
+      "safe_cash_out_none": "Receives nothing: the proceeds do not reach its {entitlement} cash-out amount; converting would pay {alternative}.",
+      "safe_cash_out_none_only": "Receives nothing: the proceeds do not reach its {entitlement} cash-out amount."
+    },
+    "invalid": {
+      "exit": "The exit value must be a decimal amount with at most four places.",
+      "exitRemedy": "Enter the exit value without separators, such as 25000000.",
+      "fees": "The transaction fees must be a decimal amount with at most four places.",
+      "feesRemedy": "Enter the fees paid from the exit, such as 750000, or leave them blank."
     },
     "curveTitle": "Proceeds across exit values",
     "curveHint": "From zero to twice this exit",
@@ -474,7 +523,9 @@
       "releasedShares": "Restricted shares released",
       "deposit": "Deposit released",
       "reclass": "Grant-date value",
-      "par": "Par value"
+      "par": "Par value",
+      "releaseTotal": "Deposits released",
+      "releaseEntry": "Release entry"
     },
     "releases": "Restricted stock releases",
     "releasesEmpty": "No restricted shares vest through this date."
@@ -522,6 +573,9 @@
     "reversed": "Reversed",
     "accrualEntry": "Interest accrual",
     "reverse": "Reverse",
+    "releasesTitle": "Restricted stock releases",
+    "releasedThisRun": "Released by the run",
+    "expectedValue": "Expected after forfeitures",
     "depositUnvested": "Deposit on unvested shares",
     "outstandingPrincipal": "Outstanding",
     "convertedInto": "Converted into",
@@ -604,6 +658,7 @@
     "createStakeholder": "Create and issue a security",
     "stakeholderHelp": "A stakeholder is a person or company in your directory. After saving, issue their first security to put them on the cap table.",
     "stakeholderSaved": "{name} added. Issue their first security.",
+    "emailInvalid": "Enter a valid email address, such as name@example.com, or leave it blank.",
     "preMoneyBasisHint": "Needed only when the pre-money valuation is not the price times the fully diluted shares before the round, such as when it counts a pool increase or conversions."
   },
   "dayCount": {
@@ -690,10 +745,10 @@
   },
   "approval": {
     "pendingTitle": "Awaiting approval",
-    "openApprovals": "Open Approvals",
+    "openApprovals": "Open Inbox",
     "pendingItem": "{action} · {subject} · effective {date} · requested by {requester}",
     "unknownRequester": "a former user",
-    "submitted": "Submitted for approval. It applies when an approver approves it in Approvals.",
+    "submitted": "Submitted for approval. It applies when an approver approves it in the Inbox.",
     "action": {
       "void": "Void",
       "reverse": "Reversal",
@@ -706,8 +761,13 @@
       "mfn_election": "MFN election",
       "compensation_run": "Stock compensation run",
       "interest_run": "Note interest run",
-      "account_policy": "Account policy version"
-    }
+      "account_policy": "Account policy version",
+      "mfn_reversal": "MFN election reversal",
+      "round_amendment": "Round amendment",
+      "round_void": "Round void"
+    },
+    "withdrawFailed": "The action could not be withdrawn",
+    "withdrawn": "Request withdrawn — nothing was applied"
   },
   "classes": {
     "empty": "No share classes yet. Use New share class to record the legal entity's first class.",
@@ -762,7 +822,9 @@
       "interestDue": "Note interest is not accrued through {date}: {amount} to post",
       "interestRefused": "Note interest through {date} cannot be measured: {message}",
       "pending": "{count, plural, one {# equity action awaits approval} other {# equity actions await approval}}",
-      "policyMissing": "No equity account policy is in force on {date}; nothing can post until one is set up"
+      "policyMissing": "No equity account policy is in force on {date}; nothing can post until one is set up",
+      "conversionTermsVoid": "{holder} · {number} converted into {certificate} on the terms of {source}, which has since been voided. Open {number} to reverse its MFN election and correct the conversion.",
+      "electionTermsVoid": "{holder} · {number} adopted the terms of {source}, which has since been voided. Open {number} to reverse its MFN election before it converts."
     },
     "activity": {
       "title": "Recent activity",
@@ -809,7 +871,7 @@
     "alreadyPosted": "Posted for this period",
     "backdated": "Runs are posted through {date}; choose a later period",
     "closeTask": "This run is a period close task.",
-    "openClose": "Open close",
+    "openClose": "Open the {period} close",
     "noPeriods": "No accounting periods",
     "noPeriodsRemedy": "Runs post through the end of an accounting period. Generate the fiscal calendar's periods to run stock compensation and note interest.",
     "setUpPeriods": "Set up periods",

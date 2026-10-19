@@ -9,10 +9,12 @@ import { Badge, Button, Input, SearchSelect, Textarea, UrlDrawer } from '@openbo
 import type { ClassRow } from '@openbooks/engine/equity'
 import { RegisteredListTable } from '@/components/registered-list-table'
 import { DateField } from '@/components/date-field'
+import { useAppAction } from '@/lib/use-app-action'
 import { EquityAsOfControl } from './AsOfControl'
 import type { EquityContext, StakeholdersViewData, StructureViewData } from './view'
 import {
-  CELL, Field, HEAD, LINK, NUM_CELL, NUM_HEAD, PendingActions, SegmentTabs, isPendingApproval, percentText, postJson, priceText, useShares, withParams,
+  CELL, CommandRefusal, DATE_CELL, Field, HEAD, LINK, NUM_CELL, NUM_HEAD, PendingActions, SegmentTabs, isPendingApproval, postCommand, toastGoverned,
+  useCivilDate, useDecimal, usePercent, usePrice, useShares, withParams,
 } from './shared'
 
 const BASE = '/equity'
@@ -24,6 +26,9 @@ const BASE = '/equity'
 export function EquityClassesPanel({ view }: { view: StructureViewData | null }) {
   const t = useTranslations('equity')
   const shares = useShares()
+  const price = usePrice()
+  const multiple = useDecimal()
+  const percentText = usePercent()
   const search = useSearchParams()
   if (!view) return null
   const { context } = view
@@ -32,12 +37,13 @@ export function EquityClassesPanel({ view }: { view: StructureViewData | null })
   const amending = amendId ? view.classRows.find((row) => row.shareClassId === amendId) ?? null : null
   return (
     <div className="space-y-3">
-      <PendingActions pending={context.pending} filter={(request) => request.action === 'class_amendment' || request.action === 'split'} />
+      <PendingActions context={context} filter={(request) => request.action === 'class_amendment' || request.action === 'split'} />
       <RegisteredListTable
         source="equity_share_classes"
         rows={view.classRows}
         rowKey={(row) => row.shareClassId}
         empty={t('classes.empty')}
+        urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
         toolbarAfter={<EquityAsOfControl control={view.asOfControl} />}
         columns={[
           {
@@ -49,9 +55,9 @@ export function EquityClassesPanel({ view }: { view: StructureViewData | null })
           { key: 'seniority', header: <>{t('classes.columns.seniority')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.kind === 'preferred' ? row.seniority : '—'}</> },
           { key: 'authorized', header: <>{t('capTable.columns.authorized')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.authorized)}</> },
           { key: 'outstanding', header: <>{t('capTable.columns.outstanding')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.outstanding)}</> },
-          { key: 'par', header: <>{t('classes.columns.par')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{priceText(row.parValue)}</> },
-          { key: 'issuePrice', header: <>{t('classes.columns.issuePrice')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{priceText(row.originalIssuePrice)}</> },
-          { key: 'conversionPrice', header: <>{t('classes.columns.conversionPrice')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{priceText(row.conversionPrice)}</> },
+          { key: 'par', header: <>{t('classes.columns.par')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.parValue, context.currency)}</> },
+          { key: 'issuePrice', header: <>{t('classes.columns.issuePrice')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.originalIssuePrice, context.currency)}</> },
+          { key: 'conversionPrice', header: <>{t('classes.columns.conversionPrice')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.conversionPrice, context.currency)}</> },
           {
             key: 'preference', header: <>{t('classes.columns.preference')}</>, headerClassName: HEAD, className: `${CELL} text-xs`,
             cell: (row) => {
@@ -59,8 +65,8 @@ export function EquityClassesPanel({ view }: { view: StructureViewData | null })
               if (!record || record.kind !== 'preferred') return <>—</>
               return (
                 <>
-                  {`${priceText(record.liquidationMultiple)}×`} · {t(`participation.${record.participation}`)}
-                  {record.participation === 'capped' && record.participationCapMultiple ? ` (${priceText(record.participationCapMultiple)}×)` : ''}
+                  {`${multiple(record.liquidationMultiple)}×`} · {t(`participation.${record.participation}`)}
+                  {record.participation === 'capped' && record.participationCapMultiple ? ` (${multiple(record.participationCapMultiple)}×)` : ''}
                 </>
               )
             },
@@ -103,38 +109,39 @@ function ClassActionDrawer({ shareClass, context, closeHref, commonClasses }: {
 }) {
   const t = useTranslations('equity')
   const router = useRouter()
+  const shares = useShares()
+  const price = usePrice()
   const [mode, setMode] = useState<'authorized_shares' | 'conversion_price' | 'conversion_class' | 'split'>('authorized_shares')
-  const [busy, setBusy] = useState(false)
+  const { busy, refusal, execute } = useAppAction()
   const [form, setForm] = useState({ effectiveOn: context.asOf, value: '', numerator: '', denominator: '', reason: '', conversionShareClassId: '' })
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }))
+  const done = (pending: boolean) => {
+    toast.success(pending ? t('approval.submitted') : t('classActions.saved'))
+    router.push(closeHref as never)
+    router.refresh()
+  }
   async function submit() {
-    setBusy(true)
-    try {
-      let pending = false
-      if (mode === 'split') {
-        const split = await postJson<{ status: string; adjustedClasses: { code: string; conversionPriceAfter: string | null }[] }>(
-          `/api/equity/classes/${shareClass.shareClassId}/splits`,
-          { effectiveOn: form.effectiveOn, ratioNumerator: form.numerator, ratioDenominator: form.denominator, reason: form.reason },
-          t('classActions.failed'),
-        )
-        pending = isPendingApproval(split)
-        if (split.adjustedClasses?.length > 0) {
-          toast.success(t('classActions.splitAdjusted', { classes: split.adjustedClasses.map((row) => `${row.code} → ${priceText(row.conversionPriceAfter)}`).join(', ') }))
-        }
-      } else {
-        pending = isPendingApproval(await postJson(`/api/equity/classes/${shareClass.shareClassId}/amendments`, {
-          kind: mode, effectiveOn: form.effectiveOn, reason: form.reason,
-          ...(mode === 'authorized_shares' ? { authorizedShares: form.value } : mode === 'conversion_price' ? { conversionPrice: form.value } : { conversionShareClassId: form.conversionShareClassId }),
-        }, t('classActions.failed')))
-      }
-      toast.success(pending ? t('approval.submitted') : t('classActions.saved'))
-      router.push(closeHref as never)
-      router.refresh()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('classActions.failed'))
-    } finally {
-      setBusy(false)
+    const failed = t('classActions.failed')
+    if (mode === 'split') {
+      await execute(() => postCommand<{ status: string; adjustedClasses?: { code: string; conversionPriceAfter: string | null }[] }>(
+        `/api/equity/classes/${shareClass.shareClassId}/splits`,
+        { effectiveOn: form.effectiveOn, ratioNumerator: form.numerator, ratioDenominator: form.denominator, reason: form.reason },
+        failed,
+      ), {
+        fallbackMessage: failed,
+        onOk: (split) => {
+          if (split.adjustedClasses && split.adjustedClasses.length > 0) {
+            toast.success(t('classActions.splitAdjusted', { classes: split.adjustedClasses.map((row) => `${row.code} → ${price(row.conversionPriceAfter, context.currency)}`).join(', ') }))
+          }
+          done(isPendingApproval(split))
+        },
+      })
+      return
     }
+    await execute(() => postCommand(`/api/equity/classes/${shareClass.shareClassId}/amendments`, {
+      kind: mode, effectiveOn: form.effectiveOn, reason: form.reason,
+      ...(mode === 'authorized_shares' ? { authorizedShares: form.value } : mode === 'conversion_price' ? { conversionPrice: form.value } : { conversionShareClassId: form.conversionShareClassId }),
+    }, failed), { fallbackMessage: failed, onOk: (result) => done(isPendingApproval(result)) })
   }
   const modes = [
     { key: 'authorized_shares' as const, label: t('classActions.authorized') },
@@ -159,12 +166,12 @@ function ClassActionDrawer({ shareClass, context, closeHref, commonClasses }: {
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('fields.effectiveOn')}><DateField value={form.effectiveOn} onChange={(value) => set('effectiveOn')(value)} /></Field>
           {mode === 'authorized_shares' && (
-            <Field label={t('fields.authorizedShares')} hint={t('classActions.currentAuthorized', { value: shareClass.authorized })}>
+            <Field label={t('fields.authorizedShares')} hint={t('classActions.currentAuthorized', { value: shares(shareClass.authorized) })}>
               <Input inputMode="numeric" value={form.value} onChange={(e) => set('value')(e.target.value)} />
             </Field>
           )}
           {mode === 'conversion_price' && (
-            <Field label={t('fields.conversionPrice')} hint={t('classActions.currentConversionPrice', { value: priceText(shareClass.conversionPrice) })}>
+            <Field label={t('fields.conversionPrice')} hint={t('classActions.currentConversionPrice', { value: price(shareClass.conversionPrice, context.currency) })}>
               <Input inputMode="decimal" value={form.value} onChange={(e) => set('value')(e.target.value)} />
             </Field>
           )}
@@ -182,6 +189,7 @@ function ClassActionDrawer({ shareClass, context, closeHref, commonClasses }: {
         </div>
         {mode === 'split' && <p className="text-sm text-slate-500 dark:text-slate-400">{t('classActions.splitHelp')}</p>}
         <Field label={t('fields.reason')}><Textarea rows={3} value={form.reason} onChange={(e) => set('reason')(e.target.value)} /></Field>
+        <CommandRefusal refusal={refusal} fallback={t('classActions.failed')} />
       </div>
     </UrlDrawer>
   )
@@ -191,6 +199,7 @@ function ClassActionDrawer({ shareClass, context, closeHref, commonClasses }: {
 export function EquityPlansPanel({ view }: { view: StructureViewData | null }) {
   const t = useTranslations('equity')
   const shares = useShares()
+  const date = useCivilDate()
   const search = useSearchParams()
   if (!view) return null
   const { context } = view
@@ -199,12 +208,13 @@ export function EquityPlansPanel({ view }: { view: StructureViewData | null }) {
   const reservePlan = reserveId ? view.structure.plans.find((row) => row.id === reserveId) ?? null : null
   return (
     <div className="space-y-3">
-      <PendingActions pending={context.pending} filter={(request) => request.action === 'reserve_change'} />
+      <PendingActions context={context} filter={(request) => request.action === 'reserve_change'} />
       <RegisteredListTable
         source="equity_plans"
         rows={view.structure.plans}
         rowKey={(row) => row.id}
         empty={t('plans.empty')}
+        urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
         toolbarAfter={<EquityAsOfControl control={view.asOfControl} />}
         columns={[
           {
@@ -213,7 +223,7 @@ export function EquityPlansPanel({ view }: { view: StructureViewData | null }) {
             search: (row) => `${row.code} ${row.name}`,
           },
           { key: 'class', header: <>{t('plans.columns.class')}</>, headerClassName: HEAD, className: `${CELL} font-mono`, cell: (row) => <>{classCodes.get(row.shareClassId) ?? '—'}</> },
-          { key: 'effective', header: <>{t('plans.columns.effective')}</>, headerClassName: HEAD, className: `${CELL} font-mono`, cell: (row) => <>{row.effectiveOn}</> },
+          { key: 'effective', header: <>{t('plans.columns.effective')}</>, headerClassName: HEAD, className: DATE_CELL, cell: (row) => <>{date(row.effectiveOn)}</> },
           { key: 'reserved', header: <>{t('plans.columns.reserved')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.reserved)}</> },
           { key: 'used', header: <>{t('plans.columns.used')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.used)}</> },
           { key: 'returned', header: <>{t('plans.columns.returned')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{shares(row.returned)}</> },
@@ -240,20 +250,17 @@ export function EquityPlansPanel({ view }: { view: StructureViewData | null }) {
 function ReserveDrawer({ plan, context, closeHref }: { plan: { id: string; code: string }; context: EquityContext; closeHref: string }) {
   const t = useTranslations('equity')
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const { busy, refusal, execute } = useAppAction()
   const [form, setForm] = useState({ effectiveOn: context.asOf, shareDelta: '', reason: '' })
   async function submit() {
-    setBusy(true)
-    try {
-      const result = await postJson(`/api/equity/plans/${plan.id}/reserve-changes`, form, t('plans.reserveFailed'))
-      toast.success(isPendingApproval(result) ? t('approval.submitted') : t('plans.reserveSaved'))
-      router.push(closeHref as never)
-      router.refresh()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('plans.reserveFailed'))
-    } finally {
-      setBusy(false)
-    }
+    await execute(() => postCommand(`/api/equity/plans/${plan.id}/reserve-changes`, form, t('plans.reserveFailed')), {
+      fallbackMessage: t('plans.reserveFailed'),
+      onOk: (result) => {
+        toastGoverned(result, t('plans.reserveSaved'), t('approval.submitted'))
+        router.push(closeHref as never)
+        router.refresh()
+      },
+    })
   }
   return (
     <UrlDrawer open openKey={plan.id} closeHref={closeHref} title={t('plans.reserveTitle', { code: plan.code })} description={t('plans.reserveDescription')}
@@ -269,6 +276,7 @@ function ReserveDrawer({ plan, context, closeHref }: { plan: { id: string; code:
           <Field label={t('fields.shareDelta')} hint={t('plans.deltaHelp')}><Input inputMode="numeric" value={form.shareDelta} onChange={(e) => setForm({ ...form, shareDelta: e.target.value })} /></Field>
         </div>
         <Field label={t('fields.reason')}><Textarea rows={3} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} /></Field>
+        <CommandRefusal refusal={refusal} fallback={t('plans.reserveFailed')} />
       </div>
     </UrlDrawer>
   )
@@ -278,6 +286,7 @@ function ReserveDrawer({ plan, context, closeHref }: { plan: { id: string; code:
 export function EquityStakeholdersPanel({ view }: { view: StakeholdersViewData | null }) {
   const t = useTranslations('equity')
   const shares = useShares()
+  const percentText = usePercent()
   if (!view) return null
   return (
     <RegisteredListTable
@@ -285,6 +294,7 @@ export function EquityStakeholdersPanel({ view }: { view: StakeholdersViewData |
       rows={view.table.holders}
       rowKey={(row) => row.holderPartyId}
       empty={t('stakeholders.empty')}
+      urlState={{ pageKey: 'page', page: view.context.list.page, searchKey: 'q', query: view.context.list.query }}
       toolbarAfter={<EquityAsOfControl control={view.asOfControl} />}
       columns={[
         {

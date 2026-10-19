@@ -3,7 +3,7 @@ import test from 'node:test'
 import React, { act } from 'react'
 import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
 import { stubModules } from '../../../testing/stub-modules'
-import type { CapTable } from '@openbooks/engine/equity'
+import type { CapTable, PendingRequest } from '@openbooks/engine/equity'
 
 await bootJsdomEnvironment({ url: 'http://localhost/equity', matchMediaMatches: false })
 Object.assign(globalThis, { React })
@@ -26,6 +26,10 @@ const { EquityCapTablePanel } = await import('./CapTablePanel')
 const { capTableExportData } = await import('../../../lib/equity-cap-table-export')
 const { EquityRunsPanel } = await import('./RunsPanel')
 const { EquityWaterfallPanel } = await import('./WaterfallPanel')
+const { EquitySecuritiesPanel } = await import('./SecuritiesPanel')
+const { EquityStakeholdersPanel } = await import('./StructurePanels')
+const { EquityRoundsPanel } = await import('./RoundsPanel')
+const { PendingActions } = await import('./shared')
 
 async function mount(node: React.ReactNode, url = '/equity') {
   window.history.replaceState({}, '', url)
@@ -43,8 +47,10 @@ async function mount(node: React.ReactNode, url = '/equity') {
 const text = (element: Element | null) => (element?.textContent ?? '').replace(/\s+/g, ' ').trim()
 const cells = (row: Element) => [...row.querySelectorAll('td')].map((cell) => text(cell)).filter(Boolean).join(' ')
 const SUB = 'a0000000-0000-4000-8000-000000000001'
-const context = (overrides: { canManage?: boolean } = {}) => ({
-  subsidiaryId: SUB, currency: 'USD', asOf: '2026-12-15', canManage: true, pending: [], params: { sub: SUB, view: 'compensation' } as Record<string, string>, ...overrides,
+const ACTOR = 'u0000000-0000-4000-8000-000000000001'
+const context = (overrides: { canManage?: boolean; pending?: PendingRequest[]; list?: { page: number; query: string } } = {}) => ({
+  subsidiaryId: SUB, currency: 'USD', asOf: '2026-12-15', canManage: true, actorId: ACTOR, pending: [] as PendingRequest[],
+  params: { sub: SUB, view: 'compensation' } as Record<string, string>, list: { page: 1, query: '' }, ...overrides,
 })
 const asOfControl = { defaultPeriod: 'today', periodPresets: ['today', 'yesterday', 'tomorrow', 'custom'] }
 
@@ -72,9 +78,9 @@ test('the ownership hero and activity render populated and empty compositions', 
   const populated = await mount(
     <>
       <EquityOwnership empty="No shares" slices={[
-        { key: 'class:cs', label: 'CS · Common', shares: '12000000', percent: '56.9200' },
-        { key: 'option', label: 'Options', shares: '1500000', percent: '7.1150' },
-        { key: 'pool', label: 'Available pool', shares: '800000', percent: '3.7944' },
+        { key: 'class:cs', label: 'CS · Common', shares: '12000000', percent: '56.9200', colorSlot: 0 },
+        { key: 'option', label: 'Options', shares: '1500000', percent: '7.1150', colorSlot: 3 },
+        { key: 'pool', label: 'Available pool', shares: '800000', percent: '3.7944', colorSlot: -1 },
       ]} />
       <EquityActivityList empty="No activity" items={[{ key: 'event:1', date: 'Oct 1, 2026', text: 'Exercise · OPT-0007 · Maya Chen · 12,000 shares', href: '/equity?view=securities&security=x' }]} />
       <AttentionList allClear="Nothing needs attention." items={[{ tone: 'warning', text: 'Stock compensation is not posted through Sep 30, 2026', href: '/equity?view=compensation' }]} />
@@ -116,9 +122,10 @@ const capTable: CapTable = {
     conversionPrice: null, outstandingPercent: '100.0000', fullyDilutedPercent: '100.0000',
   }],
   holders: [
-    { holderPartyId: HOLDER, sharesByClass: { [COMMON]: '4000000' }, asConvertedOutstanding: '4000000', options: '0', rsus: '0', warrants: '0', vestedAwards: '0', fullyDiluted: '4000000', outstandingPercent: '100.0000', fullyDilutedPercent: '98.8142' },
-    { holderPartyId: EMPLOYEE, sharesByClass: {}, asConvertedOutstanding: '0', options: '48000', rsus: '0', warrants: '0', vestedAwards: '12000', fullyDiluted: '48000', outstandingPercent: '0.0000', fullyDilutedPercent: '1.1858' },
+    { holderPartyId: HOLDER, sharesByClass: { [COMMON]: '4000000' }, asConvertedOutstanding: '4000000', options: '0', rsus: '0', warrants: '0', vestedAwards: '0', fullyDiluted: '4000000', outstandingPercent: '100.0000', fullyDilutedPercent: '80.0000' },
+    { holderPartyId: EMPLOYEE, sharesByClass: {}, asConvertedOutstanding: '0', options: '48000', rsus: '0', warrants: '0', vestedAwards: '12000', fullyDiluted: '48000', outstandingPercent: '0.0000', fullyDilutedPercent: '0.9600' },
   ],
+  unallocatedPool: { fullyDiluted: '952000', fullyDilutedPercent: '19.0400' },
   plans: [],
   holdings: [
     { securityId: 's1', securityNumber: 'CS-0001', kind: 'share' as const, holderPartyId: HOLDER, shareClassId: COMMON, planId: null, status: 'outstanding' as const, outstanding: '4000000', vested: '4000000', unvested: '0', asConverted: '4000000', exercisePrice: null },
@@ -153,11 +160,14 @@ test('the cap table export holds exactly the rows, columns and totals on screen 
   const parties = { [HOLDER]: 'Founder One', [EMPLOYEE]: 'Employee One' }
   const labels = (messages as unknown as { equity: { capTable: { columns: Record<string, string> }; waterfall: { columns: { total: string } } } }).equity
   const exportLabels = {
-    title: 'Cap table', dateRange: 'As of', class: labels.capTable.columns.class!, holder: labels.capTable.columns.holder!, kind: () => 'common',
+    title: 'Cap table', dateRange: 'As of', class: labels.capTable.columns.class!, holder: labels.capTable.columns.holder!, kind: () => 'common', pool: 'Available pool',
     column: (key: string) => labels.capTable.columns[key === 'instrumentOutstanding' ? 'optionOutstanding' : key]!, total: labels.waterfall.columns.total,
   }
   // The page groups digits and shows a dash for none; the file keeps exact text.
-  const plain = (value: string) => { const bare = value.replace(/,/g, ''); return bare === '—' || bare === '0' ? '' : bare }
+  const plain = (value: string) => {
+    const bare = value.replace(/[,%]/g, '').replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+    return bare === '—' || bare === '0' ? '' : bare
+  }
   for (const [dimension, instrument, query] of [['class', 'all', ''], ['holder', 'all', ''], ['holder', 'option', ''], ['holder', 'share', ''], ['holder', 'all', 'employee'], ['class', 'option', 'cs']] as const) {
     const params = { sub: SUB, view: 'captable', by: dimension, instrument, q: query }
     const view = {
@@ -180,15 +190,21 @@ test('the cap table export holds exactly the rows, columns and totals on screen 
   }
 })
 
-const periods = [{ id: 'p11', name: '2026-11', endsOn: '2026-11-30' }, { id: 'p10', name: '2026-10', endsOn: '2026-10-31' }]
+const periods = [
+  { id: 'p11', label: 'P11 FY2026', endsOn: '2026-11-30', closeHref: '/close?run=close-p11' },
+  { id: 'p10', label: 'P10 FY2026', endsOn: '2026-10-31', closeHref: '/close?fy=2026&q=P10+FY2026' },
+]
 const runsView = (overrides: Record<string, unknown> = {}) => ({
   context: context(), run: 'compensation' as const, lines: 'expense' as const, periods, periodId: 'p11', throughDate: '2026-11-30',
   compensation: {
-    subsidiaryId: SUB, throughDate: '2026-11-30', currency: 'USD', lastRunThrough: '2026-10-31', total: '1250.0000', releaseTotal: '0.0000', releases: [],
+    subsidiaryId: SUB, throughDate: '2026-11-30', currency: 'USD', lastRunThrough: '2026-10-31', total: '1250.0000', releaseTotal: '0.0000', releases: [], due: true,
     lines: [{ securityId: 'o1', securityNumber: 'OPT-0001', holderPartyId: EMPLOYEE, kind: 'option' as const, cumulative: '5250.0000', previous: '4000.0000', period: '1250.0000' }],
   },
   interest: null, refusal: null,
-  compensationRuns: [{ id: 'run1', throughDate: '2026-10-31', total: '4000.0000', currency: 'USD', journalEntryId: 'je1', entryNumber: 'EQ-SBC-2026-10-31', createdAt: '2026-11-02' }],
+  compensationRuns: [{
+    id: 'run1', throughDate: '2026-10-31', total: '4000.0000', currency: 'USD', journalEntryId: 'je1', entryNumber: 'EQ-SBC-2026-10-31',
+    releaseTotal: '1800.0000', releaseJournalEntryId: 'je2', releaseEntryNumber: 'EQ-RSR-2026-10-31', createdAt: '2026-11-02',
+  }],
   interestRuns: [], parties: { [EMPLOYEE]: 'Employee One' }, historyOpen: false,
   historyHref: `/equity?sub=${SUB}&view=compensation&history=1`, historyCloseHref: `/equity?sub=${SUB}&view=compensation`,
   reportHref: '/reports/custom/run/r3', periodsSetupHref: '/admin/setup/period-close',
@@ -200,12 +216,14 @@ test('stock compensation posts as a period run from its table toolbar, with run 
   try {
     const toolbarLabels = [...screen.host.querySelectorAll('label span')].map((span) => text(span))
     for (const label of ['Run', 'Period', 'Lines']) assert.ok(toolbarLabels.includes(label), `${label} is a toolbar filter`)
-    const post = [...screen.host.querySelectorAll('button')].find((button) => text(button) === 'Post stock compensation for 2026-11')
+    const post = [...screen.host.querySelectorAll('button')].find((button) => text(button) === 'Post stock compensation for P11 FY2026')
     assert.ok(post && !post.disabled, 'the run action names its period')
     assert.ok(post.closest('table') === null && post.closest('div')?.textContent?.includes('Run history'), 'the action sits with the run filters, not in the body')
     assert.equal(screen.host.querySelector(`a[href="/equity?sub=${SUB}&view=compensation&history=1"]`)?.textContent, 'Run history')
     assert.equal(screen.host.querySelector('a[href="/reports/custom/run/r3"]')?.textContent, 'Open the expense schedule report')
     assert.ok(text(screen.host).includes('This run is a period close task.'))
+    assert.equal(screen.host.querySelector('a[href="/close?run=close-p11"]')?.textContent, 'Open the P11 FY2026 close', 'the close link opens this period’s close')
+    assert.ok(text(screen.host).includes('Through Nov 30, 2026'), 'dates read in the native format')
     assert.equal(screen.host.querySelectorAll('button[role=tab]').length, 0, 'no sub-tabs')
   } finally {
     await screen.close()
@@ -224,9 +242,9 @@ test('stock compensation posts as a period run from its table toolbar, with run 
   } finally {
     await posted.close()
   }
-  const interest = await mount(<EquityRunsPanel view={runsView({ run: 'interest', compensation: null, interest: { subsidiaryId: SUB, throughDate: '2026-11-30', currency: 'USD', lastRunThrough: null, total: '82.1900', lines: [] } })} />)
+  const interest = await mount(<EquityRunsPanel view={runsView({ run: 'interest', compensation: null, interest: { subsidiaryId: SUB, throughDate: '2026-11-30', currency: 'USD', lastRunThrough: null, total: '82.1900', lines: [], due: true } })} />)
   try {
-    assert.ok([...interest.host.querySelectorAll('button')].some((button) => text(button) === 'Post note interest for 2026-11'))
+    assert.ok([...interest.host.querySelectorAll('button')].some((button) => text(button) === 'Post note interest for P11 FY2026'))
     assert.ok(![...interest.host.querySelectorAll('label span')].some((span) => text(span) === 'Lines'), 'note interest has no release lines')
   } finally {
     await interest.close()
@@ -275,14 +293,14 @@ test('the waterfall opens computed on the latest post-money, with preset multipl
   try {
     const chips = [...screen.host.querySelectorAll('button[aria-pressed]')]
     assert.deepEqual(chips.map((chip) => [text(chip), chip.getAttribute('aria-pressed')]), [['0.5×', 'false'], ['1×', 'true'], ['2×', 'false'], ['5×', 'false']])
-    assert.equal(screen.host.querySelector<HTMLInputElement>('input[inputmode=decimal]')?.value, '67200000.0000')
+    assert.equal(screen.host.querySelector<HTMLInputElement>('input[inputmode=decimal]')?.value, '67200000', 'the exit reads as typed, without ledger zeros')
     const body = text(screen.host)
     for (const label of ['Proceeds to holders', 'Per common share', 'Payment cascade', 'Conversion decisions', 'As of']) assert.ok(body.includes(label), label)
     assert.ok(body.includes('Converts to common for $14,000,000.00; keeping its $14,000,000.00 preference would pay $14,000,000.00.'))
     const payouts = [...screen.host.querySelectorAll('tbody tr')].map(cells)
     assert.equal(payouts.length, 3)
     assert.ok(payouts[0]!.startsWith('SERIESA Converts to common'))
-    assert.equal(payouts[2], 'Total $67,200,000.00 100%', 'the payouts sum to the proceeds')
+    assert.equal(payouts[2], 'Total $67,200,000.00 100.00%', 'the payouts sum to the proceeds')
   } finally {
     await screen.close()
   }
@@ -293,5 +311,153 @@ test('the waterfall opens computed on the latest post-money, with preset multipl
     assert.equal(prompt.host.querySelectorAll('button[aria-pressed]').length, 0)
   } finally {
     await prompt.close()
+  }
+})
+
+const pending = (requestedBy: string): PendingRequest => ({
+  id: 'r0000000-0000-4000-8000-000000000001', action: 'reserve_change', subjectId: 'p1', subjectLabel: 'EIP', effectiveOn: '2026-07-15',
+  reason: 'Board approved a pool top-up', requestedBy, requestedByName: 'Equity Manager', createdAt: '2026-07-15T10:00:00Z',
+})
+
+test('a pending governed action links to the Inbox, and only its requester may withdraw it there', async () => {
+  const own = await mount(<PendingActions context={{ pending: [pending(ACTOR)], actorId: ACTOR }} />)
+  try {
+    assert.ok(text(own.host).includes('Reserve change · EIP · effective Jul 15, 2026 · requested by Equity Manager'), 'the date reads in the native format')
+    assert.equal(own.host.querySelector('a')?.getAttribute('href'), '/inbox?tab=submitted', 'the requester follows it to their submissions')
+    assert.equal(text(own.host.querySelector('a')), 'Open Inbox')
+    assert.ok([...own.host.querySelectorAll('button')].some((button) => text(button) === 'Withdraw submission'))
+  } finally {
+    await own.close()
+  }
+  const other = await mount(<PendingActions context={{ pending: [pending('u0000000-0000-4000-8000-000000000099')], actorId: ACTOR }} />)
+  try {
+    assert.equal(other.host.querySelector('a')?.getAttribute('href'), '/inbox', 'everyone else follows it to the approvals home')
+    assert.equal(other.host.querySelectorAll('button').length, 0, 'no one else is offered the withdrawal')
+  } finally {
+    await other.close()
+  }
+})
+
+test('run history opens each posted entry, release entries included, through the native journal-entry link', async () => {
+  const screen = await mount(<EquityRunsPanel view={runsView({ historyOpen: true })} />, `/equity?view=compensation&sub=${SUB}&history=1`)
+  try {
+    const dialog = document.querySelector('[role=dialog]') ?? screen.host
+    const links = [...dialog.querySelectorAll('a')].map((link) => [text(link), link.getAttribute('href')])
+    assert.ok(links.some(([label, href]) => label === 'EQ-SBC-2026-10-31' && href?.includes('txn=je1')), JSON.stringify(links))
+    assert.ok(links.some(([label, href]) => label === 'EQ-RSR-2026-10-31' && href?.includes('txn=je2')), 'the restricted-stock release entry is linked')
+    assert.ok(!links.some(([, href]) => href?.includes('/journal?entry=')), 'never the manual-journal editor')
+    assert.ok(text(dialog).includes('Oct 31, 2026'))
+    assert.ok(text(dialog).includes('$1,800.00'), 'the deposits the run released')
+  } finally {
+    await screen.close()
+  }
+})
+
+test('the cap table totals fill authorized shares and percentages, and the holder view carries the unallocated pool', async () => {
+  const base = {
+    context: { ...context(), params: { sub: SUB, view: 'captable' } }, asOfControl, query: '', table: capTable,
+    parties: { [HOLDER]: 'Founder One', [EMPLOYEE]: 'Employee One' },
+    hasAccountPolicy: true, accountsSetupHref: '/admin/setup/equity-account-policies', reportHref: null, asOfReportHref: null,
+  }
+  const byClass = await mount(<EquityCapTablePanel view={{ ...base, dimension: 'class' as const, instrument: 'all' as const }} />)
+  try {
+    const rows = [...byClass.host.querySelectorAll('tbody tr')].map(cells)
+    assert.equal(rows.at(-1), 'Total 10,000,000 4,000,000 4,000,000 48,000 952,000 5,000,000 100.00% 100.00%')
+  } finally {
+    await byClass.close()
+  }
+  const byHolder = await mount(<EquityCapTablePanel view={{ ...base, dimension: 'holder' as const, instrument: 'all' as const }} />)
+  try {
+    const rows = [...byHolder.host.querySelectorAll('tbody tr')].map(cells)
+    assert.ok(rows.includes('Available pool — — — — 952,000 — 19.04%'), JSON.stringify(rows))
+    assert.equal(rows.at(-1), 'Total 4,000,000 48,000 — — 5,000,000 100.00% 100.00%', 'holders and the pool add up to the fully diluted total')
+  } finally {
+    await byHolder.close()
+  }
+})
+
+const securityRow = (overrides: Record<string, unknown> = {}) => ({
+  id: 's0000000-0000-4000-8000-000000000001', securityNumber: 'OPT-0004', kind: 'option' as const, holderPartyId: EMPLOYEE, holderName: 'Employee One',
+  shareClassCode: 'CS', planCode: 'EIP', issueDate: '2024-06-27', status: 'outstanding', quantity: '48000', outstanding: '48000', vested: '12000',
+  price: '0.7897999205', principal: null, outstandingAmount: null, resultingSecurityId: null, resultingSecurityNumber: null, currency: 'USD', election83b: null,
+  href: '/equity?view=securities&security=s1', ...overrides,
+})
+
+test('the securities register reads dates and prices in the native formats and keeps its page in the URL', async () => {
+  const rows = Array.from({ length: 12 }, (_, index) => securityRow({ id: `s0000000-0000-4000-8000-0000000000${String(index).padStart(2, '0')}`, securityNumber: `OPT-${String(index + 1).padStart(4, '0')}` }))
+  const view = {
+    context: { ...context(), params: { sub: SUB, view: 'securities' }, list: { page: 2, query: '' } }, asOfControl,
+    kind: null, status: null, holderPartyId: null, holders: [], rows, convertibles: [], reportHref: '/reports/custom/run/r1?period=custom&from=2026-12-15&to=2026-12-15',
+  }
+  const screen = await mount(<EquitySecuritiesPanel view={view} />, `/equity?view=securities&sub=${SUB}&page=2`)
+  try {
+    const first = [...screen.host.querySelectorAll('tbody tr')].map(cells)[0]!
+    assert.ok(first.startsWith('OPT-0011'), 'the second page opens from the URL')
+    assert.ok(first.includes('Jun 27, 2024'), 'the issue date reads natively')
+    assert.ok(first.includes('$0.7898'), 'a long stored price reads at four places')
+    assert.equal(screen.host.querySelector('a[href^="/reports/custom/run/r1"]')?.getAttribute('href'), '/reports/custom/run/r1?period=custom&from=2026-12-15&to=2026-12-15', 'the register opens as of this date')
+  } finally {
+    await screen.close()
+  }
+})
+
+test('stakeholder search reads from the URL and writes back as it changes', async () => {
+  const view = {
+    context: { ...context(), params: { sub: SUB, view: 'stakeholders' }, list: { page: 1, query: 'Employee' } }, asOfControl, table: capTable,
+    parties: { [HOLDER]: { name: 'Founder One', kind: 'person', email: null }, [EMPLOYEE]: { name: 'Employee One', kind: 'person', email: 'employee@example.com' } },
+  }
+  const screen = await mount(<EquityStakeholdersPanel view={view} />, `/equity?view=stakeholders&sub=${SUB}&q=Employee`)
+  try {
+    assert.equal((screen.host.querySelector('input[aria-label="Search"]') as HTMLInputElement).value, 'Employee')
+    const rows = [...screen.host.querySelectorAll('tbody tr')].map(cells)
+    assert.equal(rows.length, 1)
+    assert.ok(rows[0]!.startsWith('Employee One'))
+    assert.equal(new URL(window.location.href).searchParams.get('q'), 'Employee')
+  } finally {
+    await screen.close()
+  }
+})
+
+test('the round modeller names its pool top-up and pool share unambiguously, and a refused model shows its refusal instead of stale results', async () => {
+  const originalFetch = globalThis.fetch
+  const responses = [
+    new Response(JSON.stringify({
+      result: {
+        pricePerShare: '3.5172186210', postMoneyValuation: '80000000.0000', investorShares: '3980000', investorPercent: '17.5000', fullyDilutedAfter: '22742857',
+        conversionShares: '0', poolTopUp: '931902', poolPercentAfter: '10.0000', antiDilutionShares: '0', investorCashRounding: '0.4100', dilution: [], conversions: [],
+      },
+      parties: {},
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    new Response(JSON.stringify({ error: 'The investment must be greater than zero.', remedy: 'Enter the new money the round raises.' }), { status: 422, headers: { 'Content-Type': 'application/json' } }),
+  ]
+  globalThis.fetch = (async () => responses.shift()!) as typeof fetch
+  const view = {
+    context: { ...context(), params: { sub: SUB, view: 'rounds', model: 'round' } },
+    structure: { entity: { id: SUB, name: 'Main', currency: 'USD' }, classes: [], plans: [], rounds: [], voidedRounds: [] },
+    modelOpen: true, modelHref: '/equity?model=round', modelCloseHref: '/equity', roundId: null, roundCloseHref: '/equity?view=rounds',
+  } as unknown as Parameters<typeof EquityRoundsPanel>[0]['view']
+  const screen = await mount(<EquityRoundsPanel view={view} />, `/equity?view=rounds&sub=${SUB}&model=round`)
+  try {
+    const dialog = document.querySelector('[role=dialog]')!
+    const inputs = [...dialog.querySelectorAll('input')] as HTMLInputElement[]
+    const type = async (input: HTMLInputElement, value: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+      input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    })
+    await type(inputs[0]!, '66000000')
+    await type(inputs[1]!, '14000000')
+    const run = [...dialog.querySelectorAll('button')].find((button) => text(button) === 'Model')!
+    await act(async () => { run.click(); await new Promise((resolve) => setTimeout(resolve, 20)) })
+    const body = text(dialog)
+    assert.ok(body.includes('Pool top-up931,902 new shares'), body)
+    assert.ok(body.includes('Pool after the round10.00% of fully diluted'))
+    assert.ok(body.includes('$3.5172'), 'the round price reads at four places')
+    await act(async () => { run.click(); await new Promise((resolve) => setTimeout(resolve, 20)) })
+    const refused = text(dialog)
+    assert.ok(refused.includes('The investment must be greater than zero.'), 'the refusal pins beside the form')
+    assert.ok(!refused.includes('931,902'), 'the refused run leaves no stale result')
+  } finally {
+    globalThis.fetch = originalFetch
+    await screen.close()
   }
 })

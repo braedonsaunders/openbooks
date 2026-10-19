@@ -7,12 +7,23 @@ import { toChartNumber } from '@/lib/chart-number'
 import { normalizeDecimal, roundMoney } from '@openbooks/engine/money'
 import { formatExactPercent } from '@/lib/format'
 
+/** The unallocated pool's neutral slice. */
+const POOL_COLOR = '#cbd5e1'
+
+/**
+ * A slice's colour from its stable palette slot (a share class keeps its
+ * colour whatever the as-of date shows; -1 is the neutral pool).
+ */
+export function ownershipColor(slot: number): string {
+  return slot < 0 ? POOL_COLOR : PALETTE[slot % PALETTE.length]!
+}
+
 /** The overview's ownership hero: the fully diluted capitalization by class, awards and the unallocated pool. */
-export function EquityOwnership({ slices, empty }: { slices: { key: string; label: string; shares: string; percent: string }[]; empty: string }) {
+export function EquityOwnership({ slices, empty }: { slices: { key: string; label: string; shares: string; percent: string; colorSlot: number }[]; empty: string }) {
   const locale = useLocale()
   const count = (value: string) => new Intl.NumberFormat(locale).format(BigInt(value))
   if (slices.length === 0) return <p className="px-2 py-10 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
-  const colors = slices.map((slice, index) => (slice.key === 'pool' ? '#cbd5e1' : PALETTE[index % PALETTE.length]!))
+  const colors = slices.map((slice) => ownershipColor(slice.colorSlot))
   return (
     <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-5">
       <div className="md:col-span-2">
@@ -29,7 +40,7 @@ export function EquityOwnership({ slices, empty }: { slices: { key: string; labe
           <li key={slice.key} className="flex items-center gap-3 py-2 text-sm">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: colors[index] }} aria-hidden />
             <span className="min-w-0 flex-1 truncate text-slate-700 dark:text-slate-200">{slice.label}</span>
-            <span className="tabular-nums text-slate-500 dark:text-slate-400">{count(slice.shares)}</span>
+            <span className="whitespace-nowrap tabular-nums text-slate-500 dark:text-slate-400">{count(slice.shares)}</span>
             <span className="w-16 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">{formatExactPercent(normalizeDecimal(roundMoney(slice.percent, 1), 1), locale, 1)}</span>
           </li>
         ))}
@@ -46,7 +57,7 @@ export function EquityActivityList({ items, empty }: { items: { key: string; dat
       {items.map((item) => {
         const body = (
           <>
-            <span className="w-24 shrink-0 text-xs tabular-nums text-slate-400 dark:text-slate-500">{item.date}</span>
+            <span className="w-24 shrink-0 text-xs whitespace-nowrap tabular-nums text-slate-400 dark:text-slate-500">{item.date}</span>
             <span className="min-w-0 flex-1 text-slate-700 dark:text-slate-300">{item.text}</span>
           </>
         )

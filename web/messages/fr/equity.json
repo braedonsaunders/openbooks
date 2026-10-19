@@ -200,9 +200,9 @@
     "unvestedRepurchaseBasis": "Prix de rachat des actions non acquises",
     "conversionClass": "Convertit en",
     "partyKind": "Type de tiers",
+    "issuedTerms": "Conditions à l'émission",
     "liquidationPreferenceBasis": "Préférence calculée sur",
-    "preMoneyBasisReason": "Base de la valorisation pré-money",
-    "issuedTerms": "Conditions à l'émission"
+    "preMoneyBasisReason": "Base de la valorisation pré-money"
   },
   "capTable": {
     "by": {
@@ -334,7 +334,31 @@
       "discount": "Décote",
       "postMoney": "Valorisation post-money"
     },
-    "model": "Modéliser une levée"
+    "model": "Modéliser une levée",
+    "voidedBadge": "Annulée",
+    "voidedDescription": "Annulée le {date} ; conservée pour l’historique et exclue de tous les chiffres.",
+    "voidedReason": "Motif : {reason}",
+    "actionFailed": "La levée n’a pas pu être modifiée",
+    "voided": "Levée annulée",
+    "amended": "Levée modifiée",
+    "drawerDescription": "{code} · clôturée le {date}",
+    "impliedPreMoney": "Prix × capital dilué avant",
+    "fullyDilutedBefore": "Capital entièrement dilué avant la levée",
+    "basisReason": "Base de la valorisation pré-money : {reason}",
+    "lockedBy": "{count, plural, one {# titre en vigueur relève} other {# titres en vigueur relèvent}} de cette levée : son prix et sa date restent tels qu’enregistrés et elle ne peut pas être annulée :",
+    "historyTitle": "Modifications",
+    "change": "Modification",
+    "changedName": "Renommée {name}",
+    "changedPrice": "Prix {price}",
+    "changedPreMoney": "Pré-money {amount}",
+    "changedBasis": "Base pré-money enregistrée",
+    "actions": "Actions sur la levée",
+    "amend": "Modifier",
+    "void": "Annuler la levée",
+    "amendHelp": "Corrigez le nom, le prix ou la valorisation pré-money enregistrés. Un champ vide conserve sa valeur ; la modification est une opération encadrée.",
+    "voidLocked": "Une levée ne peut être annulée que si aucun titre en vigueur n’en relève : annulez d’abord ces titres.",
+    "voidHelp": "Annulez une levée enregistrée par erreur. Elle reste listée pour l’historique et sort de tous les chiffres ; l’annulation est une opération encadrée.",
+    "priceLocked": "Des titres en vigueur sont émis à ce prix."
   },
   "model": {
     "description": "Fixe le prix d’une levée selon la méthode pré-money à partir de la table de capitalisation à la date retenue : les SAFE et obligations en circulation sont convertis, les catégories protégées reçoivent leurs actions anti-dilution et la réserve est complétée jusqu’à sa cible au sein de la valorisation pré-money. Rien n’est enregistré.",
@@ -371,7 +395,11 @@
       "price": "Prix de conversion",
       "shares": "Actions"
     },
-    "prompt": "Saisissez une valorisation pré-money et les fonds levés pour valoriser la levée sur la table de capitalisation à la date de référence."
+    "prompt": "Saisissez une valorisation pré-money et les fonds levés pour valoriser la levée sur la table de capitalisation à la date de référence.",
+    "sharesOfFullyDiluted": "{shares} · {percent} du capital entièrement dilué",
+    "newShares": "{shares} actions nouvelles",
+    "poolAfter": "Réserve après la levée",
+    "percentOfFullyDiluted": "{percent} du capital entièrement dilué"
   },
   "waterfall": {
     "exitValue": "Valeur de sortie",
@@ -414,6 +442,7 @@
       "priceSub": "Porteurs ordinaires et convertissants",
       "preferred": "Aux actions de préférence",
       "common": "Aux ordinaires et attributions",
+      "noShare": "Aucun produit à répartir",
       "ofProceeds": "{percent} % du produit"
     },
     "cascadeTitle": "Cascade des paiements",
@@ -442,7 +471,27 @@
       "safe_converts": "Convertit pour {amount} ; le remboursement rapporterait {alternative}.",
       "safe_converts_only": "Convertit pour {amount}, plus que son montant de remboursement de {entitlement}.",
       "safe_cash_out": "Reçoit son montant de remboursement de {entitlement} ; convertir rapporterait {alternative}.",
-      "safe_cash_out_only": "Reçoit son montant de remboursement de {entitlement}."
+      "safe_cash_out_only": "Reçoit son montant de remboursement de {entitlement}.",
+      "keeps_preference_partial": "Reçoit {paid} de sa préférence de {entitlement}, que le produit ne couvre qu’en partie ; convertir rapporterait {alternative}.",
+      "keeps_preference_partial_only": "Reçoit {paid} de sa préférence de {entitlement}, que le produit ne couvre qu’en partie.",
+      "keeps_preference_none": "Ne reçoit rien : le produit n’atteint pas sa préférence de {entitlement} ; convertir rapporterait {alternative}.",
+      "keeps_preference_none_only": "Ne reçoit rien : le produit n’atteint pas sa préférence de {entitlement}.",
+      "participates_partial": "Reçoit {paid} de sa préférence de {entitlement}, que le produit ne couvre qu’en partie ; il ne reste rien à partager.",
+      "participates_none": "Ne reçoit rien : le produit n’atteint pas sa préférence de {entitlement}.",
+      "participates_capped_partial": "Reçoit {paid} de sa préférence de {entitlement}, que le produit ne couvre qu’en partie ; convertir rapporterait {alternative}.",
+      "participates_capped_partial_only": "Reçoit {paid} de sa préférence de {entitlement}, que le produit ne couvre qu’en partie.",
+      "participates_capped_none": "Ne reçoit rien : le produit n’atteint pas sa préférence de {entitlement} ; convertir rapporterait {alternative}.",
+      "participates_capped_none_only": "Ne reçoit rien : le produit n’atteint pas sa préférence de {entitlement}.",
+      "safe_cash_out_partial": "Reçoit {paid} de son montant de remboursement de {entitlement}, que le produit ne couvre qu’en partie ; convertir rapporterait {alternative}.",
+      "safe_cash_out_partial_only": "Reçoit {paid} de son montant de remboursement de {entitlement}, que le produit ne couvre qu’en partie.",
+      "safe_cash_out_none": "Ne reçoit rien : le produit n’atteint pas son montant de remboursement de {entitlement} ; convertir rapporterait {alternative}.",
+      "safe_cash_out_none_only": "Ne reçoit rien : le produit n’atteint pas son montant de remboursement de {entitlement}."
+    },
+    "invalid": {
+      "exit": "La valeur de sortie doit être un montant décimal d’au plus quatre décimales.",
+      "exitRemedy": "Saisissez la valeur de sortie sans séparateurs, par exemple 25000000.",
+      "fees": "Les frais de transaction doivent être un montant décimal d’au plus quatre décimales.",
+      "feesRemedy": "Saisissez les frais payés sur la sortie, par exemple 750000, ou laissez le champ vide."
     },
     "curveTitle": "Produit selon la valeur de sortie",
     "curveHint": "De zéro au double de cette sortie",
@@ -474,7 +523,9 @@
       "releasedShares": "Actions restreintes libérées",
       "deposit": "Dépôt libéré",
       "reclass": "Valeur à la date d’attribution",
-      "par": "Valeur nominale"
+      "par": "Valeur nominale",
+      "releaseTotal": "Dépôts libérés",
+      "releaseEntry": "Écriture de libération"
     },
     "releases": "Libérations d’actions restreintes",
     "releasesEmpty": "Aucune action restreinte n’est acquise jusqu’à cette date."
@@ -522,6 +573,9 @@
     "reversed": "Extourné",
     "accrualEntry": "Constatation des intérêts courus",
     "reverse": "Extourner",
+    "releasesTitle": "Libérations d’actions restreintes",
+    "releasedThisRun": "Libérées par l’exécution",
+    "expectedValue": "Attendu après déchéances",
     "depositUnvested": "Dépôt sur actions non acquises",
     "outstandingPrincipal": "En cours",
     "convertedInto": "Converti en",
@@ -604,6 +658,7 @@
     "createStakeholder": "Créer et émettre un titre",
     "stakeholderHelp": "Un porteur est une personne ou une société de votre annuaire. Après l’enregistrement, émettez son premier titre pour l’inscrire à la table de capitalisation.",
     "stakeholderSaved": "{name} ajouté. Émettez son premier titre.",
+    "emailInvalid": "Saisissez une adresse e-mail valide, par exemple nom@example.com, ou laissez le champ vide.",
     "preMoneyBasisHint": "Nécessaire seulement lorsque la valorisation pré-money n'est pas le prix multiplié par les actions entièrement diluées avant le tour, par exemple si elle inclut une hausse de la réserve ou des conversions."
   },
   "dayCount": {
@@ -690,10 +745,10 @@
   },
   "approval": {
     "pendingTitle": "En attente d’approbation",
-    "openApprovals": "Ouvrir les approbations",
+    "openApprovals": "Ouvrir la boîte de réception",
     "pendingItem": "{action} · {subject} · en vigueur le {date} · demandé par {requester}",
     "unknownRequester": "un ancien utilisateur",
-    "submitted": "Soumis à approbation. L’opération s’applique lorsqu’un approbateur l’approuve dans Approbations.",
+    "submitted": "Soumis à approbation. L’opération s’applique lorsqu’un approbateur l’approuve dans la boîte de réception.",
     "action": {
       "void": "Annulation",
       "reverse": "Extourne",
@@ -706,8 +761,13 @@
       "mfn_election": "Élection NPF",
       "compensation_run": "Calcul de rémunération en actions",
       "interest_run": "Calcul des intérêts d’obligations",
-      "account_policy": "Version de la politique de comptes"
-    }
+      "account_policy": "Version de la politique de comptes",
+      "mfn_reversal": "Annulation de l’élection NPF",
+      "round_amendment": "Modification de levée",
+      "round_void": "Annulation de levée"
+    },
+    "withdrawFailed": "L’opération n’a pas pu être retirée",
+    "withdrawn": "Demande retirée — rien n’a été appliqué"
   },
   "classes": {
     "empty": "Aucune catégorie d’actions. Utilisez Nouvelle catégorie d’actions pour enregistrer la première catégorie de l’entité.",
@@ -762,7 +822,9 @@
       "interestDue": "Les intérêts des obligations ne sont pas courus jusqu’au {date} : {amount} à comptabiliser",
       "interestRefused": "Les intérêts des obligations jusqu’au {date} ne peuvent pas être évalués : {message}",
       "pending": "{count, plural, one {# opération sur capital attend une approbation} other {# opérations sur capital attendent une approbation}}",
-      "policyMissing": "Aucune règle de comptes de capitaux propres n’est en vigueur au {date} ; rien ne peut être comptabilisé avant sa configuration"
+      "policyMissing": "Aucune règle de comptes de capitaux propres n’est en vigueur au {date} ; rien ne peut être comptabilisé avant sa configuration",
+      "conversionTermsVoid": "{holder} · {number} a été converti en {certificate} aux conditions de {source}, annulé depuis. Ouvrez {number} pour annuler son élection NPF et corriger la conversion.",
+      "electionTermsVoid": "{holder} · {number} a adopté les conditions de {source}, annulé depuis. Ouvrez {number} pour annuler son élection NPF avant la conversion."
     },
     "activity": {
       "title": "Activité récente",
@@ -809,7 +871,7 @@
     "alreadyPosted": "Comptabilisé pour cette période",
     "backdated": "Les traitements sont comptabilisés jusqu’au {date} ; choisissez une période ultérieure",
     "closeTask": "Ce traitement est une tâche de la clôture de période.",
-    "openClose": "Ouvrir la clôture",
+    "openClose": "Ouvrir la clôture de {period}",
     "noPeriods": "Aucune période comptable",
     "noPeriodsRemedy": "Les traitements comptabilisent jusqu’à la fin d’une période comptable. Générez les périodes du calendrier fiscal pour traiter la rémunération en actions et les intérêts des obligations.",
     "setUpPeriods": "Configurer les périodes",

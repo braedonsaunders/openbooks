@@ -1,17 +1,31 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { AlertTriangle } from 'lucide-react'
+import { toast } from 'sonner'
+import type { ActionResult } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { Button, EmptyState } from '@openbooks/ui'
 import type { PendingRequest } from '@openbooks/engine/equity'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { APPROVALS_HOME_HREF, APPROVALS_SUBMITTED_HREF } from '@openbooks/engine/navigation/approvals-home'
+import { normalizeDecimal, roundMoney } from '@openbooks/engine/money'
+import { fetchAppAction } from '@/lib/api-error'
+import { formatCivilDate, formatExactPercent } from '@/lib/format'
+import { formatDecimal } from '@/lib/money-format'
+import { promptDialog } from '@/lib/prompt'
+import { useAppAction } from '@/lib/use-app-action'
+import { useMoney } from '@/components/money-provider'
 
 export const CELL = 'px-4 py-2.5'
-export const HEAD = 'px-4 py-2 font-medium'
+export const HEAD = 'px-4 py-2 font-medium whitespace-nowrap'
 export const NUM_HEAD = `${HEAD} text-right`
-export const NUM_CELL = `${CELL} text-right tabular-nums`
+/** Numbers never wrap inside a narrow column. */
+export const NUM_CELL = `${CELL} text-right tabular-nums whitespace-nowrap`
+/** Dates never wrap inside a narrow column. */
+export const DATE_CELL = `${CELL} tabular-nums whitespace-nowrap`
 export const LINK = 'font-medium text-teal-700 hover:underline dark:text-teal-300'
 /** A totals row after a table's records, the house totals composition. */
 export const TOTAL_ROW = 'border-t-2 border-slate-200 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-950/40'
@@ -40,25 +54,65 @@ export function useShares(): (value: string | null | undefined) => string {
   }
 }
 
-/** A stored ten-place price, trimmed of trailing zeros beyond two places for reading. */
-export function priceText(value: string | null | undefined): string {
-  if (!value) return '—'
-  const [whole, fraction = ''] = value.split('.')
-  const trimmed = fraction.replace(/0+$/, '')
-  return `${whole}.${trimmed.padEnd(2, '0')}`
+/**
+ * The fraction digits a stored per-share price reads with: at least two, up
+ * to four, and more only when four would round a non-zero price (a par value
+ * such as 0.00001) to nothing. Prices are stored to ten places.
+ */
+export function priceFractionDigits(value: string): number {
+  const fraction = (value.split('.')[1] ?? '').replace(/0+$/, '')
+  if (fraction.length <= 4) return Math.max(2, fraction.length)
+  return /[1-9]/.test(fraction.slice(0, 4)) ? 4 : Math.min(10, fraction.length)
 }
 
-export const percentText = (value: string | null | undefined): string => (value ? `${value}%` : '—')
+const DECIMAL = /^-?\d+(\.\d+)?$/
+
+/** A per-share price in a currency, at reading precision. */
+export function usePrice(): (value: string | null | undefined, currency?: string) => string {
+  const { money } = useMoney()
+  return (value, currency) => {
+    if (!value || !DECIMAL.test(value)) return '—'
+    const digits = priceFractionDigits(value)
+    return money(value, { currency, minimumFractionDigits: 2, maximumFractionDigits: digits })
+  }
+}
+
+/** A multiple or other plain decimal (1×, 1.5×), trimmed for reading. */
+export function useDecimal(): (value: string | null | undefined) => string {
+  const locale = useLocale()
+  return (value) => (value && DECIMAL.test(value) ? formatDecimal(locale, value, { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : '—')
+}
+
+/** A stored percentage (`53.6481` for 53.6481%) in the viewer's locale, to two places. */
+export function usePercent(): (value: string | null | undefined, fractionDigits?: number) => string {
+  const locale = useLocale()
+  return (value, fractionDigits = 2) => {
+    if (!value || !DECIMAL.test(value)) return '—'
+    return formatExactPercent(normalizeDecimal(roundMoney(value, fractionDigits), fractionDigits), locale, fractionDigits)
+  }
+}
+
+/** A civil date (YYYY-MM-DD) as the native medium date in the viewer's locale. */
+export function useCivilDate(): (value: string | null | undefined) => string {
+  const locale = useLocale()
+  return (value) => (value && /^\d{4}-\d{2}-\d{2}/.test(value) ? formatCivilDate(value, locale) : '—')
+}
 
 export function searchText(row: object): string {
   return Object.values(row).filter((value) => typeof value === 'string' || typeof value === 'number').join(' ')
 }
 
-/** POST JSON and return the parsed body; a refusal throws its message and remedy. */
-export async function postJson<T>(url: string, body: unknown, fallback: string): Promise<T> {
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallback))
-  return (await res.json()) as T
+/**
+ * POST a command as JSON through the app's action read: never throws, and a
+ * refusal keeps the server's message, remedy and code for the pinned alert.
+ */
+export function postCommand<T>(url: string, body: unknown, fallback: string): Promise<ActionResult<T>> {
+  return fetchAppAction<T>(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, { fallback })
+}
+
+/** A refusal pinned beside the form it blocks until the next attempt (the house action-error path). */
+export function CommandRefusal({ refusal, fallback }: { refusal: Parameters<typeof ActionAlert>[0]['error']; fallback: string }) {
+  return <ActionAlert error={refusal} fallbackMessage={fallback} />
 }
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -120,33 +174,63 @@ export function isPendingApproval(result: unknown): boolean {
 
 /**
  * Governed actions held by an Equity action Flow for a decision, shown where
- * they apply until an approver decides them in Approvals. Nothing renders
- * when none is pending.
+ * they apply until an approver decides them in the Inbox. The requester can
+ * withdraw their own request here, with a reason. Nothing renders when none
+ * is pending.
  */
-export function PendingActions({ pending, filter }: { pending: readonly PendingRequest[]; filter?: (request: PendingRequest) => boolean }) {
+export function PendingActions({ context, filter }: { context: { pending: readonly PendingRequest[]; actorId: string }; filter?: (request: PendingRequest) => boolean }) {
   const t = useTranslations('equity')
-  const rows = filter ? pending.filter(filter) : pending
+  const tc = useTranslations('common')
+  const date = useCivilDate()
+  const router = useRouter()
+  const { busy, refusal, execute } = useAppAction()
+  const rows = filter ? context.pending.filter(filter) : context.pending
+  const withdraw = useCallback(async (request: PendingRequest) => {
+    const reason = await promptDialog({
+      title: tc('approvalFlow.withdrawTitle'),
+      label: tc('approvalFlow.withdrawReasonLabel'),
+      confirmLabel: tc('actions.withdrawSubmission'),
+    })
+    if (!reason) return
+    await execute(() => postCommand(`/api/equity/requests/${request.id}/withdraw`, { reason }, t('approval.withdrawFailed')), {
+      fallbackMessage: t('approval.withdrawFailed'),
+      successMessage: t('approval.withdrawn'),
+      onOk: () => router.refresh(),
+    })
+  }, [execute, router, t, tc])
   if (rows.length === 0) return null
+  const own = rows.some((row) => row.requestedBy === context.actorId)
   return (
-    <section className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40" aria-label={t('approval.pendingTitle')}>
+    <section className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40" aria-label={t('approval.pendingTitle')}>
       <div className="flex items-center justify-between gap-3">
         <h3 className="font-semibold text-amber-900 dark:text-amber-200">{t('approval.pendingTitle')}</h3>
-        <Link className={LINK} href="/approvals">{t('approval.openApprovals')}</Link>
+        <Link className={LINK} href={own ? APPROVALS_SUBMITTED_HREF : APPROVALS_HOME_HREF}>{t('approval.openApprovals')}</Link>
       </div>
-      <ul className="mt-2 space-y-1 text-amber-900 dark:text-amber-100">
+      <ul className="space-y-1 text-amber-900 dark:text-amber-100">
         {rows.map((row) => (
-          <li key={row.id}>
-            {t('approval.pendingItem', {
-              action: t(`approval.action.${row.action}`),
-              subject: row.subjectLabel,
-              date: row.effectiveOn,
-              requester: row.requestedByName ?? t('approval.unknownRequester'),
-            })}
+          <li key={row.id} className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              {t('approval.pendingItem', {
+                action: t(`approval.action.${row.action}`),
+                subject: row.subjectLabel,
+                date: date(row.effectiveOn),
+                requester: row.requestedByName ?? t('approval.unknownRequester'),
+              })}
+            </span>
+            {row.requestedBy === context.actorId && (
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => void withdraw(row)}>{tc('actions.withdrawSubmission')}</Button>
+            )}
           </li>
         ))}
       </ul>
+      <ActionAlert error={refusal} fallbackMessage={t('approval.withdrawFailed')} />
     </section>
   )
+}
+
+/** A governed command's success: applied now, or submitted to its Flow for a decision. */
+export function toastGoverned(result: unknown, applied: string, submitted: string): void {
+  toast.success(isPendingApproval(result) ? submitted : applied)
 }
 
 /** A named refusal in place of the body it blocks: the message, its remedy and, when one exists, the place to fix it. */

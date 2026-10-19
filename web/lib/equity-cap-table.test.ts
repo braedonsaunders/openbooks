@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { CapTable } from '@openbooks/engine/equity'
-import { capTableFilters, capTableLayout, parseDimension, parseInstrument } from './equity-cap-table'
+import { capTableFilters, capTableLayout, exactPercent, parseDimension, parseInstrument } from './equity-cap-table'
 
 const COMMON = 'c0000000-0000-4000-8000-000000000001'
 const SERIES = 'c0000000-0000-4000-8000-000000000002'
@@ -32,6 +32,7 @@ const table: CapTable = {
     { holderPartyId: INVESTOR, sharesByClass: { [SERIES]: '1000000' }, asConvertedOutstanding: '1000000', options: '0', rsus: '0', warrants: '10000', vestedAwards: '10000', fullyDiluted: '1010000', outstandingPercent: '20.0000', fullyDilutedPercent: '18.3303' },
     { holderPartyId: EMPLOYEE, sharesByClass: {}, asConvertedOutstanding: '0', options: '48000', rsus: '2000', warrants: '0', vestedAwards: '12000', fullyDiluted: '50000', outstandingPercent: '0.0000', fullyDilutedPercent: '0.9074' },
   ],
+  unallocatedPool: { fullyDiluted: '440000', fullyDilutedPercent: '7.9855' },
   plans: [],
   holdings: [
     holding('s1', 'share', FOUNDER, COMMON, '4000000', '4000000'),
@@ -58,8 +59,23 @@ test('by class across every instrument, the totals reconcile to the fully dilute
   assert.deepEqual(layout.lines.map((line) => line.shareClassId), [COMMON, SERIES])
   assert.equal(layout.totals.fullyDiluted, table.totals.fullyDiluted)
   assert.equal(layout.totals.pool, table.totals.poolAvailable)
-  assert.equal(layout.totals.authorized, undefined, 'authorized shares are per class and never summed')
-  assert.equal(layout.totals.outstandingPercent, undefined, 'percentages are never summed')
+  assert.equal(layout.totals.authorized, '20000000', 'the total authorized across the classes')
+  // Percentages are the lines' share of the whole table from exact counts,
+  // never a sum of rounded line percentages.
+  assert.equal(layout.totals.outstandingPercent, '100.0000')
+  assert.equal(layout.totals.fullyDilutedPercent, '100.0000')
+  const seriesOnly = capTableLayout(table, { dimension: 'class', instrument: 'all', query: 'sa' })
+  assert.equal(seriesOnly.totals.outstandingPercent, '20.0000', 'a filtered table totals the share it shows')
+  assert.equal(seriesOnly.totals.fullyDilutedPercent, exactPercent(1_000_000n, 5_510_000n))
+})
+
+test('an exact percentage rounds half up to four places without crossing a float', () => {
+  assert.equal(exactPercent(1n, 3n), '33.3333')
+  assert.equal(exactPercent(2n, 3n), '66.6667')
+  assert.equal(exactPercent(1n, 80_000_000n), '0.0000')
+  assert.equal(exactPercent(1n, 20_000n), '0.0050')
+  assert.equal(exactPercent(9_007_199_254_740_993n, 9_007_199_254_740_993n), '100.0000')
+  assert.equal(exactPercent(5n, 0n), '0.0000', 'an empty table has no share to give')
 })
 
 test('one award kind by class or holder lists only who holds it, with its vested and unvested units', () => {
@@ -79,15 +95,19 @@ test('shares by holder show each class column and leave out holders with only aw
   assert.equal(layout.totals[`class:${COMMON}`], '4000000')
   assert.equal(layout.totals.asConverted, table.totals.asConvertedOutstanding)
   const everything = capTableLayout(table, { dimension: 'holder', instrument: 'all', query: '' })
-  assert.equal(everything.lines.length, 3)
+  assert.equal(everything.lines.length, 4, 'every holder, then the unallocated pool')
+  const pool = everything.lines.at(-1)!
+  assert.equal(pool.pool, true)
+  assert.deepEqual([pool.holderPartyId, pool.values.fullyDiluted, pool.values.fullyDilutedPercent], [null, '440000', '7.9855'])
   assert.equal(everything.totals.options, '48000')
-  assert.equal(everything.totals.fullyDiluted, '5060000', 'holder totals exclude the unallocated pool')
+  assert.equal(everything.totals.fullyDiluted, '5500000', 'holders and the pool total the fully diluted shares')
+  assert.equal(layout.lines.some((line) => line.pool), false, 'shares outstanding carry no pool line')
 })
 
 test('a search keeps the matching classes or holders and totals what remains', () => {
   const parties = { [FOUNDER]: 'Founder One', [INVESTOR]: 'Seed Fund', [EMPLOYEE]: 'Employee One' }
   const holders = capTableLayout(table, capTableFilters({ by: 'holder', q: '  one ' }), parties)
-  assert.deepEqual(holders.lines.map((line) => line.holderPartyId), [FOUNDER, EMPLOYEE], 'case-folded substring of the holder name')
+  assert.deepEqual(holders.lines.map((line) => line.holderPartyId), [FOUNDER, EMPLOYEE], 'case-folded substring of the holder name; the pool names no holder')
   assert.equal(holders.totals.fullyDiluted, '4050000')
   const classes = capTableLayout(table, capTableFilters({ q: 'sa' }), parties)
   assert.deepEqual(classes.lines.map((line) => line.shareClassId), [SERIES], 'the class code or name matches')

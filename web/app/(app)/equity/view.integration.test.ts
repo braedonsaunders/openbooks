@@ -61,7 +61,13 @@ test('every equity view loads from one recorded book and composes its spec', { s
     assert.equal(waterfall.waterfall?.anchor?.postMoney, '5000000.0000', 'the default exit is the Seed post-money')
     assert.equal(waterfall.waterfall?.inputs.exitValue, '5000000.0000')
     assert.equal(waterfall.waterfall?.scenario?.result.exitValue, '5000000.0000', 'the first paint is already computed')
-    assert.equal(waterfall.waterfall?.scenario?.curve.length, 17)
+    // The curve keeps its 17 even samples and adds the points beside each bend of a payout.
+    const curve = waterfall.waterfall?.scenario?.curve ?? []
+    assert.ok(curve.length >= 17)
+    const exits = curve.map((point) => point.exitValue)
+    assert.deepEqual(exits, [...exits].sort((a, b) => Number(a) - Number(b)), 'in exit order')
+    assert.equal(exits[0], '0.0000')
+    assert.equal(exits.at(-1), '10000000.0000', 'up to twice the scenario exit')
     assert.equal(waterfall.newAction, null, 'the waterfall records nothing, so it has no New action')
 
     const runs = await loadEquity(sp({ view: 'compensation' }))

@@ -78,7 +78,13 @@ export function Chart({ option, height }: { option: EChartsOption; height: Chart
   return <InsightChart option={option} height={height === 'fill' ? undefined : height} />
 }
 
-/** Multi-series line / area over month labels. */
+/** A point's y value: category-axis series carry a bare value, value-axis series an [x, y] pair. */
+const pointValue = (value: unknown): number | null => {
+  const y = Array.isArray(value) ? value[1] : value
+  return typeof y === 'number' ? y : null
+}
+
+/** Multi-series line / area over month labels, or over numeric x values. */
 export function TrendChart({
   labels,
   series,
@@ -87,7 +93,9 @@ export function TrendChart({
   pctAxis = false,
   maxTicks,
   format = 'money',
+  xValues,
 }: {
+  /** The x-axis labels; with `xValues`, the tooltip title of each point. */
   labels: string[]
   /** A null point is a period with no margin to plot: ECharts leaves a gap,
    * never a zero stand-in. */
@@ -101,31 +109,51 @@ export function TrendChart({
   /** What the values are: money (the default, formatted in the org's
    *  currency) or a plain count (headcount, requests) with no currency sign. */
   format?: 'money' | 'count'
+  /**
+   * Plot each point at its own x value on a value axis formatted like the
+   * series (money or count) instead of evenly spaced labels, joined by
+   * straight segments with every point marked: unevenly spaced x values keep
+   * their true slopes, and a piecewise-linear quantity reads exactly at each
+   * of its points. One value per label.
+   */
+  xValues?: number[]
 }) {
   const money = useChartMoney()
   const { number } = useViewerFormat()
   const count = (value: number | string) => number(Number(value))
   const plain = (value: number | string) => (format === 'count' ? count(value) : money(value))
+  const numericX = xValues !== undefined
+  const shape = (data: (number | null)[]) => (numericX ? data.map((value, index) => [xValues?.[index] ?? null, value]) : data)
   const option: EChartsOption = {
     grid: baseGrid,
     tooltip: {
       ...tooltip,
       valueFormatter: undefined,
-      formatter: (params: ChartParam[]) =>
-        [escapeTooltipHtml(params[0]?.axisValue), ...params.filter((p) => (p.value as unknown) !== null).map((p) => `${p.marker} ${escapeTooltipHtml(p.seriesName)}: ${p.seriesIndex != null && series[p.seriesIndex]?.pct ? pct(p.value) : plain(p.value)}`)].join('<br/>'),
+      formatter: (params: ChartParam[]) => {
+        const title = numericX ? labels[params[0]?.dataIndex ?? -1] : params[0]?.axisValue
+        const rows = params.flatMap((p) => {
+          const value = pointValue(p.value)
+          if (value === null) return []
+          return [`${p.marker} ${escapeTooltipHtml(p.seriesName)}: ${p.seriesIndex != null && series[p.seriesIndex]?.pct ? pct(value) : plain(value)}`]
+        })
+        return [escapeTooltipHtml(title), ...rows].join('<br/>')
+      },
     },
     legend: series.length > 1 ? { top: 0, right: 0, textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 } : undefined,
-    xAxis: catAxis(labels, maxTicks),
+    xAxis: numericX
+      ? { ...valAxis(money, format === 'count' ? 'raw' : 'money'), min: 'dataMin', max: 'dataMax', splitLine: { show: false }, axisLine: { lineStyle: { color: SPLIT } } }
+      : catAxis(labels, maxTicks),
     yAxis: valAxis(money, pctAxis ? 'pct' : format === 'count' ? 'raw' : 'money'),
     series: series.map((s, i) => ({
       name: s.name,
       type: 'line',
-      smooth: true,
-      showSymbol: false,
+      smooth: !numericX,
+      showSymbol: numericX,
+      symbolSize: numericX ? 4 : undefined,
       lineStyle: { width: 2, color: s.color ?? PALETTE[i % PALETTE.length] },
       itemStyle: { color: s.color ?? PALETTE[i % PALETTE.length] },
       areaStyle: area ? { opacity: 0.12, color: s.color ?? PALETTE[i % PALETTE.length] } : undefined,
-      data: s.pct ? s.data.map((v) => (v === null ? null : pctAxis ? v * 100 : v)) : s.data,
+      data: shape(s.pct ? s.data.map((v) => (v === null ? null : pctAxis ? v * 100 : v)) : s.data),
     })),
   }
   return <Chart option={option} height={height} />
@@ -229,42 +257,27 @@ export function Waterfall({
   height = 240,
   magnitudeLabels = false,
 }: {
-  steps: { label: string; amount: number; kind: 'start' | 'deduct' | 'subtotal' | 'total' }[]
+  /** Amounts are numbers, or exact decimal strings when every step has one:
+   *  exact steps place each bar with ledger arithmetic and project only the
+   *  finished coordinates onto the chart, so a cascade that pays out the
+   *  whole start lands exactly on zero. */
+  steps: { label: string; amount: number | string; kind: 'start' | 'deduct' | 'subtotal' | 'total' }[]
   height?: number
   /** Label each deduction by its size rather than its sign: a payout cascade
-   *  reads "$4.0M to Series A", not a negative amount. */
+   *  reads "$4.0M to Series A", not a negative amount. The value axis keeps
+   *  its signs. */
   magnitudeLabels?: boolean
 }) {
   const chartMoney = useChartMoney()
   const money: MoneyLabel = magnitudeLabels
     ? (value) => chartMoney(typeof value === 'number' ? Math.abs(value) : value.replace(/^-/, ''))
     : chartMoney
-  // Compute running base for floating bars.
-  let running = 0
-  const base: number[] = []
-  const bar: number[] = []
-  const colors: string[] = []
-  steps.forEach((s) => {
-    if (s.kind === 'start' || s.kind === 'subtotal' || s.kind === 'total') {
-      base.push(0)
-      bar.push(s.amount)
-      running = s.amount
-      colors.push(s.kind === 'total' ? PALETTE[0]! : s.amount >= 0 ? '#14b8a6' : NEG)
-    } else {
-      // deduct: floating bar from running down by |amount|
-      const top = running
-      const bottom = running + s.amount // amount is negative
-      base.push(Math.min(top, bottom))
-      bar.push(Math.abs(s.amount))
-      running = bottom
-      colors.push('#f59e0b')
-    }
-  })
+  const { base, bar, colors } = waterfallBars(steps)
   const option: EChartsOption = {
     grid: baseGrid,
     tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${escapeTooltipHtml(ps[0]?.axisValue)}: ${money(steps[ps[0]?.dataIndex ?? -1]?.amount ?? 0)}` },
     xAxis: catAxis(steps.map((s) => s.label)),
-    yAxis: valAxis(money),
+    yAxis: valAxis(chartMoney),
     series: [
       { type: 'bar', stack: 'wf', data: base.map((v) => ({ value: v, itemStyle: { color: 'transparent' } })), silent: true },
       {
@@ -277,6 +290,51 @@ export function Waterfall({
     ],
   }
   return <Chart option={option} height={height} />
+}
+
+type WaterfallStepInput = { amount: number | string; kind: 'start' | 'deduct' | 'subtotal' | 'total' }
+
+/** Floating-bar geometry for a bridge: each bar's transparent base, its visible height and its color. */
+export function waterfallBars(steps: readonly WaterfallStepInput[]): { base: number[]; bar: number[]; colors: string[] } {
+  const base: number[] = []
+  const bar: number[] = []
+  const colors: string[] = []
+  const colorOf = (step: WaterfallStepInput, negative: boolean) => (step.kind === 'deduct' ? '#f59e0b' : step.kind === 'total' ? PALETTE[0]! : negative ? NEG : '#14b8a6')
+  if (steps.length > 0 && steps.every((s) => typeof s.amount === 'string')) {
+    let running = '0'
+    for (const s of steps) {
+      const amount = s.amount as string
+      if (s.kind === 'deduct') {
+        // A deduction floats from the running total down by its size.
+        const bottom = moneyAdd(running, amount)
+        base.push(toChartNumber(moneyCmp(running, bottom) <= 0 ? running : bottom))
+        bar.push(toChartNumber(moneyAbs(amount)))
+        running = bottom
+      } else {
+        base.push(0)
+        bar.push(toChartNumber(amount))
+        running = amount
+      }
+      colors.push(colorOf(s, moneyCmp(amount, '0') < 0))
+    }
+    return { base, bar, colors }
+  }
+  let running = 0
+  for (const s of steps) {
+    const amount = typeof s.amount === 'number' ? s.amount : toChartNumber(s.amount)
+    if (s.kind === 'deduct') {
+      const bottom = running + amount // amount is negative
+      base.push(Math.min(running, bottom))
+      bar.push(Math.abs(amount))
+      running = bottom
+    } else {
+      base.push(0)
+      bar.push(amount)
+      running = amount
+    }
+    colors.push(colorOf(s, amount < 0))
+  }
+  return { base, bar, colors }
 }
 
 /** Donut for revenue mix / variance distribution. */
