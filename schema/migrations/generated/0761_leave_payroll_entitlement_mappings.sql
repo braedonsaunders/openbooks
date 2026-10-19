@@ -1,4 +1,4 @@
--- Effective-dated entitlement destinations for approved HR leave inputs.
+-- Migration 0761: effective-dated entitlement destinations for approved HR leave inputs.
 -- Banked leave never falls through to the vacation plan: each bank_in leave
 -- type needs an explicit mapping to an active hours entitlement plan.
 -- Backfill: approved payroll inputs inherit their leave type from the source
