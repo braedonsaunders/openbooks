@@ -842,11 +842,15 @@ test("a foreign-currency credit settles its currency's invoice at carrying amoun
       credits: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId }],
     }));
     const application = (await withBypass(async () => (await db.execute<{
-      amount: string; source_amount: string; target_transaction_amount: string; fx_gain_loss_entry_id: string | null;
-    }>(sql`select amount::text, source_amount::text, target_transaction_amount::text, fx_gain_loss_entry_id
+      amount: string; source_amount: string; source_transaction_amount: string; target_transaction_amount: string; fx_gain_loss_entry_id: string | null;
+    }>(sql`select amount::text, source_amount::text, source_transaction_amount::text, target_transaction_amount::text, fx_gain_loss_entry_id
              from applications where org_id = ${org.orgId} and id = ${result.applicationIds[0]!}`)).rows[0]))!;
-    assert.deepEqual([application.amount, application.source_amount, application.target_transaction_amount],
-      ["130.0000", "140.0000", "100.0000"]);
+    assert.deepEqual([
+      application.amount,
+      application.source_amount,
+      application.source_transaction_amount,
+      application.target_transaction_amount,
+    ], ["130.0000", "140.0000", "100.0000", "100.0000"]);
     assert.ok(application.fx_gain_loss_entry_id, "the carrying difference is realized");
     const fxLines = new Map((await withBypass(async () => (await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount::text from journal_lines
@@ -858,7 +862,12 @@ test("a foreign-currency credit settles its currency's invoice at carrying amoun
        where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ar} and e.status in ('posted', 'reversed')`)).rows[0]))!.total;
     assert.equal(await arBalance(), "0.0000", "both items closed leaves nothing on the receivable control");
 
-    await withBypass(() => unapplyCreditSettlement(org.orgId, userId, result.applicationIds[0]!));
+    const released = await withBypass(() => unapplyCreditSettlement(org.orgId, userId, result.applicationIds[0]!));
+    assert.equal(released.amount, "100.0000", "release returns the source transaction amount");
+    const audit = (await withBypass(async () => (await db.execute<{ changes: { before: { amount: string; targetCarryingAmount: string } } }>(sql`
+      select changes from audit_log where org_id = ${org.orgId} and row_id = ${result.applicationIds[0]!}
+        and action = 'delete' order by created_at desc limit 1`)).rows[0]))!;
+    assert.deepEqual(audit.changes.before, { amount: "100.0000", targetCarryingAmount: "130.0000" });
     const fxStatus = (await withBypass(async () => (await db.execute<{ status: string }>(sql`
       select status from journal_entries where org_id = ${org.orgId} and id = ${application.fx_gain_loss_entry_id}`)).rows[0]))!.status;
     assert.equal(fxStatus, "reversed");
