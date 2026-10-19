@@ -10,6 +10,7 @@ import {
   mergeProjects,
   previewProjectMerge,
   PROJECT_MERGE_EXCLUSIONS,
+  PROJECT_MERGE_SPECIAL_FK_HANDLINGS,
   PROJECT_REFS,
   ProjectMergeError,
 } from "./merge.ts";
@@ -1019,10 +1020,9 @@ test("project merge refuses field-time and HRM day/kind collisions by name", { s
 // project_id column in the catalog must either move with the merge
 // (PROJECT_REFS, each with its both-sides collision guard where storage
 // keys collide) or carry an explicit reviewed exclusion naming why
-// (PROJECT_MERGE_EXCLUSIONS). Foreign keys to projects agree: the only
-// project-linked column that is neither a project_id move nor an exclusion
-// is projects.parent_id, which the merge handles as hierarchy, not as a
-// reference row.
+// (PROJECT_MERGE_EXCLUSIONS). Direct project foreign keys outside project_id
+// carry a column-specific handling, including hierarchy and immutable source
+// identity certifications that block the merge.
 
 test("project merge covers every catalog project_id column or excludes it by review", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -1037,8 +1037,17 @@ test("project merge covers every catalog project_id column or excludes it by rev
     assert.ok(columns.length > 30, "catalog enumeration returned a plausible project_id population");
     const refs = new Map(PROJECT_REFS.map(([table, column]) => [`${table}.${column}`, table]));
     const exclusions = new Map(PROJECT_MERGE_EXCLUSIONS);
+    const specialForeignKeys = new Map(
+      PROJECT_MERGE_SPECIAL_FK_HANDLINGS.map(([table, column, reason]) => [
+        `${table}.${column}`,
+        reason,
+      ]),
+    );
     for (const [table, reason] of PROJECT_MERGE_EXCLUSIONS) {
       assert.ok(reason.length > 50, `${table} exclusion carries a reviewed reason, not a stub`);
+    }
+    for (const [reference, reason] of specialForeignKeys) {
+      assert.ok(reason.length > 50, `${reference} carries a reviewed merge handling, not a stub`);
     }
     const uncovered = columns.filter(
       (row) => !refs.has(`${row.table_name}.${row.column_name}`) && !exclusions.has(row.table_name),
@@ -1071,12 +1080,19 @@ test("project merge covers every catalog project_id column or excludes it by rev
            and c.confrelid = 'projects'::regclass and fa.attname = 'id'`)
     ).rows;
     const projectIdSet = new Set(columns.map((row) => `${row.table_name}.${row.column_name}`));
+    const directForeignKeys = new Set(fkColumns.map((row) => `${row.table_name}.${row.column_name}`));
     assert.deepEqual(
       fkColumns
-        .filter((row) => !projectIdSet.has(`${row.table_name}.${row.column_name}`))
+        .filter((row) => {
+          const reference = `${row.table_name}.${row.column_name}`;
+          return !projectIdSet.has(reference) && !specialForeignKeys.has(reference);
+        })
         .map((row) => `${row.table_name}.${row.column_name}`),
-      ["projects.parent_id"],
+      [],
     );
+    for (const reference of specialForeignKeys.keys()) {
+      assert.ok(directForeignKeys.has(reference), `${reference} is listed but has no direct project foreign key`);
+    }
   } finally {
     await dropScratchOrg(org.orgId);
   }

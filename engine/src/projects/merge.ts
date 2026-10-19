@@ -124,15 +124,19 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
  * Merges keep this evidence on its original project and refuse when the
  * duplicate owns any such rows.
  */
-const APPEND_ONLY_PROJECT_REF_TABLES: ReadonlySet<string> = new Set([
-  "project_overhead_adjustments",
-  "project_financial_adjustments",
-  "project_budget_baselines",
-  "project_budget_baseline_lines",
-  "project_forecasts",
-  "project_progress_entries",
-  "project_revenue_accruals",
-]);
+const APPEND_ONLY_PROJECT_REFERENCES = [
+  ["project_overhead_adjustments", "project_id"],
+  ["project_financial_adjustments", "project_id"],
+  ["project_budget_baselines", "project_id"],
+  ["project_budget_baseline_lines", "project_id"],
+  ["project_forecasts", "project_id"],
+  ["project_progress_entries", "project_id"],
+  ["project_revenue_accruals", "project_id"],
+  ["field_ticket_source_certifications", "native_project_id"],
+] as const;
+const APPEND_ONLY_PROJECT_REF_TABLES: ReadonlySet<string> = new Set(
+  APPEND_ONLY_PROJECT_REFERENCES.map(([table]) => table),
+);
 
 /**
  * Typed `project_id` columns that deliberately do NOT follow a merge, each
@@ -144,6 +148,24 @@ export const PROJECT_MERGE_EXCLUSIONS: readonly (readonly [table: string, reason
   [
     "hrm_certified_payroll_runs",
     "filed compliance evidence stays on its original project: generated and submitted runs snapshot the week's project data into a payload whose rendered report file is housed in that project's file folder, amendment chains link runs across weeks, and draft members of a chain stay with the filed runs they amend. Re-pointing any of them would rewrite filed history — amend or regenerate under the survivor instead.",
+  ],
+];
+
+/** Direct project foreign keys with a column-specific merge strategy. */
+export const PROJECT_MERGE_SPECIAL_FK_HANDLINGS: readonly (readonly [
+  table: string,
+  column: string,
+  reason: string,
+])[] = [
+  [
+    "projects",
+    "parent_id",
+    "Child project hierarchy is re-parented to the survivor; a survivor beneath the duplicate adopts the duplicate's parent.",
+  ],
+  [
+    "field_ticket_source_certifications",
+    "native_project_id",
+    "Identity certifications bind an exact native Field Ticket to its original project and are append-only; merges refuse while a certification names the duplicate.",
   ],
 ];
 
@@ -494,11 +516,11 @@ async function planMerge(
     );
   }
   const appendOnlyEvidence: string[] = [];
-  for (const table of APPEND_ONLY_PROJECT_REF_TABLES) {
+  for (const [table, column] of APPEND_ONLY_PROJECT_REFERENCES) {
     const count = (await runner.execute<{ n: string }>(sql`
       select count(*)::text as n from ${sql.identifier(table)}
-       where org_id = ${orgId} and project_id = ${duplicateId}`)).rows[0]?.n;
-    if (count !== "0") appendOnlyEvidence.push(`${count ?? "0"} ${table}`);
+       where org_id = ${orgId} and ${sql.identifier(column)} = ${duplicateId}`)).rows[0]?.n;
+    if (count !== "0") appendOnlyEvidence.push(`${count ?? "0"} ${table}.${column}`);
   }
   if (appendOnlyEvidence.length > 0) {
     throw new ProjectMergeError(
