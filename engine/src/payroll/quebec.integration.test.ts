@@ -69,13 +69,11 @@ describe("quebec", () => {
           on conflict do nothing`);
 
         await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
               wageExpenseAccountId: wageExpense,
               burdenExpenseAccountId: burdenExpense,
               netPayAccountId: netPayable,
-              cppPayableAccountId: craPayable,
-              eiPayableAccountId: craPayable,
-              taxPayableAccountId: craPayable,
-              vacationPayableAccountId: vacationPayable,
+
               wagesTo: "expense",
               craRemittancePartyId: org.vendorId,
               // The pack's regional declaration routes a QC stub's QPP/QPP2/QPIP
@@ -342,13 +340,11 @@ describe("quebec-hsf", () => {
           on conflict do nothing`);
 
         await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
               wageExpenseAccountId: wageExpense,
               burdenExpenseAccountId: burdenExpense,
               netPayAccountId: netPayable,
-              cppPayableAccountId: craPayable,
-              eiPayableAccountId: craPayable,
-              taxPayableAccountId: craPayable,
-              vacationPayableAccountId: vacationPayable,
+
               wagesTo: "expense",
               craRemittancePartyId: org.vendorId,
               // The pack's regional declaration routes a QC stub's HSF here
@@ -523,13 +519,11 @@ describe("qpip-employer-cap", () => {
           values (${rqVendorId}, ${org.orgId}, 'company', 'Revenu Québec', true, '{}'::jsonb)`);
         await seedPayrollVendorRole(org.orgId, rqVendorId, actorId);
         await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
               wageExpenseAccountId: wageExpense,
               burdenExpenseAccountId: burdenExpense,
               netPayAccountId: netPayable,
-              cppPayableAccountId: craPayable,
-              eiPayableAccountId: craPayable,
-              taxPayableAccountId: craPayable,
-              vacationPayableAccountId: vacationPayable,
+
               wagesTo: "expense",
               craRemittancePartyId: org.vendorId,
               rqRemittancePartyId: rqVendorId,
@@ -565,7 +559,6 @@ describe("qpip-employer-cap", () => {
           country: 'CA', province: 'QC', payBasis: 'hourly', federalClaimCode: 1,
           wcbExempt: true, wcbExemptReason: 'quebec fixture: workers-compensation coverage out of scope',
         }, { percentFloor: '0', method: 'accrue' });
-
 
         // The QC stubs price CNT too: classify the employer (asserted nowhere in this test).
         await seedCntSubjectEmployerFixture(org.orgId, actorId, org.subsidiaryId, craPayable);

@@ -360,13 +360,11 @@ test(
       const wcbPayable = await account("2330", "WSIB payable", "liability_current");
       const ehtPayable = await account("2340", "EHT payable", "liability_current");
       await seedEnabledPayrollConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
             wageExpenseAccountId: wageExpense,
             burdenExpenseAccountId: burdenExpense,
             netPayAccountId: netPayable,
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable,
+
             wagesTo: "expense",
             countries: ["CA"],
           });

@@ -37,10 +37,6 @@ const ALLOWED: Record<string, readonly string[]> = {
   wageExpenseAccountId: ['expense', 'expense_other', 'expense_deferred', 'cogs'],
   burdenExpenseAccountId: ['expense', 'expense_other', 'expense_deferred', 'cogs'],
   netPayAccountId: ['liability_payable', 'liability_current_other'],
-  cppPayableAccountId: ['liability_payable', 'liability_current_other'],
-  eiPayableAccountId: ['liability_payable', 'liability_current_other'],
-  taxPayableAccountId: ['liability_payable', 'liability_current_other'],
-  vacationPayableAccountId: ['liability_payable', 'liability_current_other'],
 }
 
 interface SeededAccount { number: string; name: string; type: string }
@@ -106,8 +102,7 @@ test('cogs is allowed for wage and burden only, never for a payable', () => {
   // this fails.
   assert.ok(ALLOWED.wageExpenseAccountId!.includes('cogs'))
   assert.ok(ALLOWED.burdenExpenseAccountId!.includes('cogs'))
-  for (const key of ['netPayAccountId', 'cppPayableAccountId', 'eiPayableAccountId',
-    'taxPayableAccountId', 'vacationPayableAccountId']) {
+  for (const key of ['netPayAccountId']) {
     assert.ok(!ALLOWED[key]!.includes('cogs'), `${key} must not accept a cost-of-sales account`)
   }
 })

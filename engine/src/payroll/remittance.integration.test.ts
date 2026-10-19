@@ -613,10 +613,10 @@ test(
         returning party_id`);
       assert.equal(vendorRole.rows.length, 1, "end-to-end CRA fixture must establish its payee role");
       await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
             wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
-            netPayAccountId: netPayable, cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable, taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable, wagesTo: "expense",
+            netPayAccountId: netPayable,
+             wagesTo: "expense",
             craRemittancePartyId: org.vendorId,
           });
       await seedPayrollComponents(org.orgId, actorId);
@@ -659,7 +659,6 @@ test(
           { programKey: "ca_cnt", region: "QC", federalAccountId: null, amount: "0" },
         ],
       });
-
 
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -1604,10 +1603,10 @@ test(
         returning party_id`);
       assert.equal(vendorRole.rows.length, 1, "snapshot-payee fixture must establish its vendor role");
       await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
             wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
-            netPayAccountId: netPayable, cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable, taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable, wagesTo: "expense",
+            netPayAccountId: netPayable,
+             wagesTo: "expense",
           });
       await seedPayrollComponents(org.orgId, actorId);
       // The vendor assigned BEFORE commit is the one history must keep.

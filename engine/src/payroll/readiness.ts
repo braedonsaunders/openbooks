@@ -750,7 +750,7 @@ export async function payRunReadiness(
   // --- Org configuration: a commit cannot balance without these ------------
   const setupHref = "/admin/setup/payroll";
   let settings: Awaited<ReturnType<typeof payrollSettings>> | null = null;
-  let legacy: Record<string, unknown> = {};
+  let payrollPolicy: Record<string, unknown> = {};
   let installed: string[] = [];
   try {
     settings = await payrollSettings(orgId, allowedSubsidiaryIds);
@@ -770,8 +770,8 @@ export async function payRunReadiness(
     const blob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
       select settings->'payroll' as p from orgs where id = ${orgId}
     `));
-    legacy = blob.rows[0]?.p ?? {};
-    installed = await installedPayrollCountries(orgId, legacy, allowedSubsidiaryIds);
+    payrollPolicy = blob.rows[0]?.p ?? {};
+    installed = await installedPayrollCountries(orgId, payrollPolicy, allowedSubsidiaryIds);
     const countriesInRun = new Set(people.map((p) => p.country));
     // Slots that do not apply where this run's people work are absent, not
     // demanded — an Ontario-only run is never blocked on Québec accounts.
@@ -1026,7 +1026,7 @@ export async function payRunReadiness(
   // the SAME message, so the wizard names the problem before the run does.
   // With no holiday in the period, an undeclared jurisdiction calculates
   // exactly as it always has and nothing is flagged.
-  if ((legacy as { statutoryHolidayPay?: unknown }).statutoryHolidayPay === true) {
+  if ((payrollPolicy as { statutoryHolidayPay?: unknown }).statutoryHolidayPay === true) {
     // An EXPLICIT labour jurisdiction no pack declares is its own blocker,
     // whether or not a holiday lands in the period: the value means nothing, so
     // the employment would silently be governed by the work region's calendar —

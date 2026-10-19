@@ -36,9 +36,9 @@ test("quantity-unit lines pay their amount and count zero hours", { skip: !DB },
     const cra = await seedPostingAccount(org.orgId, "2310", "CRA payable", "liability_current");
     const vacation = await seedPostingAccount(org.orgId, "2320", "Vacation payable", "liability_current");
     await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: cra, ei: cra, qpip: cra, income_tax: cra, vacation: vacation } },
       wageExpenseAccountId: expense, burdenExpenseAccountId: burden, netPayAccountId: netPay,
-      cppPayableAccountId: cra, eiPayableAccountId: cra, taxPayableAccountId: cra,
-      vacationPayableAccountId: vacation, wagesTo: "expense",
+       wagesTo: "expense",
     });
     await seedPayrollComponents(org.orgId, actorId, "CA");
     await seedOntarioEhtFixture(org.orgId, actorId);

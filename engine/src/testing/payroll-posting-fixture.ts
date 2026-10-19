@@ -10,13 +10,11 @@ export async function seedCanadianPostingAccounts(orgId: string, options: { liab
   const craPayable = await account("2310", "CRA remittances payable", liability);
   const vacationPayable = await account("2320", "Vacation payable", liability);
   await (options.enablePayroll === false ? seedPayrollAccountingConfiguration : seedEnabledPayrollConfiguration)(orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
     wageExpenseAccountId: wageExpense,
     burdenExpenseAccountId: burdenExpense,
     netPayAccountId: netPayable,
-    cppPayableAccountId: craPayable,
-    eiPayableAccountId: craPayable,
-    taxPayableAccountId: craPayable,
-    vacationPayableAccountId: vacationPayable,
+
     wagesTo: "expense",
   });
   return { wageExpense, burdenExpense, netPayable, craPayable, vacationPayable };
@@ -32,10 +30,10 @@ export async function seedUnionPostingAccounts(orgId: string, withDues: boolean)
   const duesPayable = withDues ? await account("2330", "Union dues payable", "liability_current") : null;
   const fringePayable = await account("2340", "Union fringes payable", "liability_current");
   await seedEnabledPayrollConfiguration(orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: craPayable } },
     wageExpenseAccountId: wageExpense, burdenExpenseAccountId: fringeExpense,
-    netPayAccountId: netPayable, cppPayableAccountId: craPayable,
-    eiPayableAccountId: craPayable, taxPayableAccountId: craPayable,
-    vacationPayableAccountId: craPayable, wagesTo: "expense",
+    netPayAccountId: netPayable,
+     wagesTo: "expense",
   });
   return { wageExpense, fringeExpense, netPayable, craPayable, duesPayable, fringePayable };
 }

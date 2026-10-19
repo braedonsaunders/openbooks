@@ -53,14 +53,11 @@ test(
       const craPayable = await account("2310", "CRA remittances payable", "liability_current");
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
       await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
             wageExpenseAccountId: wageExpense,
             burdenExpenseAccountId: burdenExpense,
             netPayAccountId: netPayable,
 
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable,
             wagesTo: "expense",
           });
       await seedPayrollComponents(org.orgId, actorId);
@@ -90,7 +87,6 @@ test(
         country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
         wcbExempt: true, wcbExemptReason: 'retro fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
-
 
       const filingAccountId = await seedCanadianFilingAccountForTest(org.orgId, actorId, {
         subsidiaryId: org.subsidiaryId, accountNumber: "123456789RP0001", name: "CRA payroll",
@@ -433,14 +429,11 @@ test(
       const craPayable = await account("2310", "CRA remittances payable", "liability_current");
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
       await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
             wageExpenseAccountId: wageExpense,
             burdenExpenseAccountId: burdenExpense,
             netPayAccountId: netPayable,
 
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable,
             wagesTo: "expense",
           });
       await seedPayrollComponents(org.orgId, actorId);
@@ -466,7 +459,6 @@ test(
         country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
         wcbExempt: true, wcbExemptReason: 'retro fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
-
 
       // One committed period: 30 h on job A at $30.00/h = $900.00.
       for (const [day, hours] of [["2026-01-06", 20], ["2026-01-13", 10]] as const) {
@@ -637,14 +629,11 @@ test(
       const craPayable = await account("2310", "CRA remittances payable", "liability_current");
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
       await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
             wageExpenseAccountId: wageExpense,
             burdenExpenseAccountId: burdenExpense,
             netPayAccountId: netPayable,
 
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable,
             wagesTo: "expense",
           });
       await seedPayrollComponents(org.orgId, actorId);
@@ -670,7 +659,6 @@ test(
         country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
         wcbExempt: true, wcbExemptReason: 'retro fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
-
 
       // One committed period: 20 h + 10 h on job A at $30.00/h = $900.00.
       for (const [day, hours] of [["2026-01-06", 20], ["2026-01-13", 10]] as const) {
@@ -794,12 +782,10 @@ test(
       const netPayable = await account("2300", "Wages payable", "liability_current");
       const craPayable = await account("2310", "CRA remittances payable", "liability_current");
       await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { vacation: netPayable, cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } },
             wageExpenseAccountId: wageExpense,
             netPayAccountId: netPayable,
-        vacationPayableAccountId: netPayable,
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
+
             wagesTo: "expense",
           });
       await seedPayrollComponents(org.orgId, actorId);

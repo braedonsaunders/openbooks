@@ -192,13 +192,11 @@ async function payrollOrg(): Promise<Fixture> {
     vacationPayable: await account(org.orgId, "2320", "Vacation payable", "liability_current"),
   };
   await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: accounts.craPayable, ei: accounts.craPayable, qpip: accounts.craPayable, income_tax: accounts.craPayable, vacation: accounts.vacationPayable } },
         wageExpenseAccountId: accounts.wageExpense,
         burdenExpenseAccountId: accounts.burdenExpense,
         netPayAccountId: accounts.netPayable,
-        cppPayableAccountId: accounts.craPayable,
-        eiPayableAccountId: accounts.craPayable,
-        taxPayableAccountId: accounts.craPayable,
-        vacationPayableAccountId: accounts.vacationPayable,
+
         wagesTo: "expense",
       });
   await seedPayrollComponents(org.orgId, actorId, "CA");

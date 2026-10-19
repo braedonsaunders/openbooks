@@ -253,13 +253,11 @@ async function payrollOrg(opts: { eht?: { rate: string; annualExemption: string 
     otherPayable: await account(org.orgId, "2330", "Other payable", "liability_current"),
   };
   await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: accounts.craPayable, ei: accounts.craPayable, qpip: accounts.craPayable, income_tax: accounts.craPayable, vacation: accounts.vacationPayable } },
         wageExpenseAccountId: accounts.wageExpense,
         burdenExpenseAccountId: accounts.burdenExpense,
         netPayAccountId: accounts.netPayable,
-        cppPayableAccountId: accounts.craPayable,
-        eiPayableAccountId: accounts.craPayable,
-        taxPayableAccountId: accounts.craPayable,
-        vacationPayableAccountId: accounts.vacationPayable,
+
         wagesTo: "expense",
       });
   await seedPayrollComponents(org.orgId, actorId, "CA");

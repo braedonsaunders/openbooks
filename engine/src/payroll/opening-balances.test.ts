@@ -222,13 +222,11 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
   const craPayable = await account("2310", "CRA remittances payable", "liability_current_other");
   const vacationPayable = await account("2320", "Vacation payable", "liability_current_other");
   await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
-        vacationPayableAccountId: vacationPayable,
+
         wagesTo: "expense",
       });
   await seedPayrollComponents(org.orgId, actorId, "CA");

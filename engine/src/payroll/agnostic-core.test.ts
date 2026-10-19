@@ -635,12 +635,10 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   const netPayable = await account("2300", "Wages payable", "liability_current");
   const craPayable = await account("2310", "CRA remittances payable", "liability_current");
   await seedPayrollAccountingConfiguration(orgId, {
+    slotAccounts: { CA: { vacation: netPayable, cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } },
         wageExpenseAccountId: wageExpense,
         netPayAccountId: netPayable,
-        vacationPayableAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
+
         wagesTo: "expense",
       });
   await seedPayrollComponents(orgId, actorId, "CA");

@@ -588,9 +588,10 @@ test('approved packages calculate and post natively only after changed employmen
     const netPayable = await seedPostingAccount(f.org.orgId,'2300','Wages payable','liability_current');
     const craPayable = await seedPostingAccount(f.org.orgId,'2310','CRA payable','liability_current');
     const vacationPayable = await seedPostingAccount(f.org.orgId,'2320','Vacation payable','liability_current');
-    await seedEnabledPayrollConfiguration(f.org.orgId, { wageExpenseAccountId:wageExpense,burdenExpenseAccountId:burdenExpense,
-      netPayAccountId:netPayable,cppPayableAccountId:craPayable,eiPayableAccountId:craPayable,taxPayableAccountId:craPayable,
-      vacationPayableAccountId:vacationPayable,wagesTo:'expense' });
+    await seedEnabledPayrollConfiguration(f.org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } }, wageExpenseAccountId:wageExpense,burdenExpenseAccountId:burdenExpense,
+      netPayAccountId:netPayable,
+      wagesTo:'expense' });
     await setFeatures(f.org.orgId, { compensationPackages: true });
     await seedCanadianPayrollComponentsForTest(f.org.orgId,f.authorId);
     await seedVacationTerms(f.org.orgId,f.employmentId,f.authorId);
@@ -684,7 +685,6 @@ test('native package inputs retain dated work and fixed configuration coverage w
     });
   });
 });
-
 
 test('automatic compensation completion preserves the human gate and submitted revision without routing proof', { skip: !DB }, async () => {
   await withHarness(() => setup(), async (f) => {

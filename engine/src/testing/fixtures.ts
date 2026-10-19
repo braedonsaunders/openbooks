@@ -91,12 +91,36 @@ export async function seedPayrollSettings(orgId: string, settings: Record<string
 
 /** Enable payroll for a posting scenario with only its explicitly supplied accounting configuration. */
 export async function seedEnabledPayrollConfiguration(orgId: string, payroll: Record<string, unknown>): Promise<void> {
-  await seedPayrollSettings(orgId, { features: { payroll: true }, payroll });
+  await seedPayrollSettings(orgId, { features: { payroll: true } });
+  await seedPayrollAccountingConfiguration(orgId, payroll);
 }
 
-/** Replace payroll accounting settings while retaining the scenario's existing feature state. */
+/** Declare policy and native component accounts; slot declarations install exactly their named packs. */
 export async function seedPayrollAccountingConfiguration(orgId: string, payroll: Record<string, unknown>): Promise<void> {
-  await seedPayrollSettings(orgId, { payroll });
+  const { slotAccounts, ...policy } = payroll;
+  await seedPayrollSettings(orgId, { payroll: policy });
+  if (slotAccounts === undefined) return;
+  if (!slotAccounts || typeof slotAccounts !== "object" || Array.isArray(slotAccounts)) {
+    throw new Error("Payroll fixtures must declare country-pack slot accounts as an object");
+  }
+  const { ensureComponents, payRunComponentDeclarations, seedPayrollComponents } = await import("../payroll/run-setup.ts");
+  const { payrollPack } = await import("../payroll/packs.ts");
+  for (const [country, mappings] of Object.entries(slotAccounts)) {
+    if (!mappings || typeof mappings !== "object" || Array.isArray(mappings)) {
+      throw new Error("Each payroll fixture country must declare its native slot accounts");
+    }
+    const pack = payrollPack(country);
+    await ensureComponents(db, orgId, null, payRunComponentDeclarations(country));
+    for (const [key, accountId] of Object.entries(mappings)) {
+      const slot = pack.statutorySlots.find(candidate => candidate.key === key);
+      if (!slot || slot.components.length === 0) throw new Error(`Payroll fixture slot ${country}/${key} is not declared`);
+      const changed = await db.execute(sql`update pay_components set liability_account_id=${accountId}
+        where org_id=${orgId} and country=${country}
+          and code in (${sql.join(slot.components.map(component => sql`${component.code}`), sql`, `)}) returning id`);
+      if (changed.rows.length !== slot.components.length) throw new Error(`Payroll fixture slot ${country}/${key} was not fully configured`);
+    }
+    await seedPayrollComponents(orgId, null, country);
+  }
 }
 
 type ProfileFixture = Omit<Partial<typeof employeePayrollProfiles.$inferInsert>,

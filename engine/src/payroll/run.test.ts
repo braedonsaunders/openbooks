@@ -113,12 +113,10 @@ async function hourlyCalcFixture(label: string, days: { workedOn: string; hours:
   const netPayable = await account('2300', 'Wages payable', 'liability_current')
   const craPayable = await account('2310', 'CRA remittances payable', 'liability_current')
   await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { vacation: netPayable, cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } },
         wageExpenseAccountId: wageExpense,
         netPayAccountId: netPayable,
-        vacationPayableAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
+
         wagesTo: 'expense',
       });
   await seedPayrollComponents(org.orgId, actorId, 'CA')
@@ -165,13 +163,10 @@ test('a retro run settles quantified back pay; a regular run never does', { skip
     const craPayable = await account('2310', 'CRA remittances payable', 'liability_current')
     const vacationPayable = await account('2320', 'Vacation payable', 'liability_current')
     await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
           wageExpenseAccountId: wageExpense,
           netPayAccountId: netPayable,
 
-          cppPayableAccountId: craPayable,
-          eiPayableAccountId: craPayable,
-          taxPayableAccountId: craPayable,
-          vacationPayableAccountId: vacationPayable,
           wagesTo: 'expense',
         });
     await seedPayrollComponents(org.orgId, actorId, 'CA')
@@ -374,12 +369,10 @@ async function partialRefusalFixture(label: string) {
   const netPayable = await account('2300', 'Wages payable', 'liability_current')
   const craPayable = await account('2310', 'CRA remittances payable', 'liability_current')
   await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { vacation: netPayable, cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } },
         wageExpenseAccountId: wageExpense,
         netPayAccountId: netPayable,
-        vacationPayableAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
+
         wagesTo: 'expense',
       });
   await seedPayrollComponents(org.orgId, actorId, 'CA')
@@ -638,12 +631,10 @@ test('a run where every in-scope employee refuses is not a success', { skip: !DB
     const netPayable = await account('2300', 'Wages payable', 'liability_current')
     const craPayable = await account('2310', 'CRA remittances payable', 'liability_current')
     await seedPayrollAccountingConfiguration(org.orgId, {
+    slotAccounts: { CA: { vacation: netPayable, cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } },
           wageExpenseAccountId: wageExpense,
           netPayAccountId: netPayable,
-        vacationPayableAccountId: netPayable,
-          cppPayableAccountId: craPayable,
-          eiPayableAccountId: craPayable,
-          taxPayableAccountId: craPayable,
+
           wagesTo: 'expense',
         });
     await seedPayrollComponents(org.orgId, actorId, 'CA')
