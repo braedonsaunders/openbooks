@@ -12,7 +12,6 @@ import {
   Card,
   CardContent,
   Drawer,
-  EmptyState,
   Input,
   Label,
   Select,
@@ -220,22 +219,21 @@ export function SubcontractsWorkspace({
   const detailDirty = !!selectedId && dirtyDetail?.id === selectedId && dirtyDetail.dirty
   const reportDetailDirty = useCallback((dirty: boolean) => {
     if (selectedId) setDirtyDetail({ id: selectedId, dirty })
-  }, [selectedId])
+  }, [selectedId, setDirtyDetail])
 
   const loadDetail = useCallback(
-    async (id: string, signal?: AbortSignal) => {
-      const response = await fetch(`/api/subcontracts?id=${encodeURIComponent(id)}`, {
+    (id: string, signal?: AbortSignal) => fetch(`/api/subcontracts?id=${encodeURIComponent(id)}`, {
         cache: 'no-store',
         ...(signal ? { signal } : {}),
-      })
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.detailFailed')))
-      const loaded = await response.json() as Detail
-      setLoadedDetail({ id, detail: loaded })
-      setDetailFailure(null)
-      setDirtyDetail(null)
-      return loaded
-    },
-    [t],
+      }).then(async (response) => {
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.detailFailed')))
+        const loaded = await response.json() as Detail
+        setLoadedDetail({ id, detail: loaded })
+        setDetailFailure(null)
+        setDirtyDetail(null)
+        return loaded
+      }),
+    [t, setLoadedDetail, setDetailFailure, setDirtyDetail],
   );
 
   useEffect(() => {
@@ -496,7 +494,7 @@ function Overview({
     defaultRetainagePercent: s.defaultRetainagePercent,
     startsOn: s.startsOn || "",
     endsOn: s.endsOn || "",
-  }), [s.id, s.updatedAt]);
+  }), [s.title, s.description, s.originalCommitment, s.defaultRetainagePercent, s.startsOn, s.endsOn]);
   const [form, setForm] = useState(initialForm);
   const dirty = form.title !== initialForm.title
     || form.description !== initialForm.description
