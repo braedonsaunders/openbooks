@@ -6,6 +6,7 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import type { ModuleHomeTab } from '../../../components/module-home/tab-types'
 import { can, getAuthz, requirePermission } from '../../../lib/authz'
 import { ownTimeOnly, supervisesTime as supervisesTimeCommand, timeCommandGrants } from '../../../lib/time-workspace'
 import { isFeatureEnabled } from '../../../lib/features'
@@ -286,7 +287,7 @@ export async function loadTimesheets(
 
 const f = ref<TimesheetsData>()
 
-export function timesheetsSpec(data: TimesheetsData): PageSpec {
+export function timesheetsSpec(data: TimesheetsData, moduleTabs?: ModuleHomeTab[]): PageSpec {
   const newTimesheet = { widget: 'new-timesheet', props: data.newButton }
   return page({
     route: data.basePath,
@@ -297,6 +298,7 @@ export function timesheetsSpec(data: TimesheetsData): PageSpec {
         description: f('description'),
         // HR-20: field-time nav rides the header behind its own switches.
         actions: [
+          ...(moduleTabs ? [widget('module-home-tabs', { tabs: moduleTabs })] : []),
           widget(newTimesheet.widget, newTimesheet.props, f('canStartTimesheet')),
           widget('link-button', { href: f('clockButton.href'), label: f('clockButton.label'), variant: 'outline' }, f('showClockLink')),
           widget('link-button', { href: f('crewButton.href'), label: f('crewButton.label'), variant: 'outline' }, f('showCrewLink')),

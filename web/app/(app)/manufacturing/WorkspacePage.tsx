@@ -1,322 +1,245 @@
-import { readWorkListFilters } from "@openbooks/engine/organization/work-list-filters";
-import { readWorkListPresentation } from "@openbooks/engine/organization/list-presentation";
-import { WorkListPresentation } from "@/components/work-list-presentation";
-import { manufacturingFeatureEnabled } from "@openbooks/engine/manufacturing/gate";
-import { RecordBoard } from '@/components/record-board';
-import { listOperatingProfileChoices } from '@openbooks/engine/organization/operating-profiles';
-import Link from "next/link";
-import { getTranslations, getLocale } from "next-intl/server";
-import { uuidString } from "@openbooks/engine/platform/identifiers";
-import { db } from "@openbooks/engine/platform/db";
-import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
+import { readWorkListFilters } from '@openbooks/engine/organization/work-list-filters'
+import { listOperatingProfileChoices } from '@openbooks/engine/organization/operating-profiles'
+import { manufacturingFeatureEnabled } from '@openbooks/engine/manufacturing/gate'
 import {
   listManufacturingRecords,
   manufacturingOptions,
   searchManufacturingChoices,
   type ManufacturingRow,
   type ManufacturingView,
-} from "@openbooks/engine/manufacturing/workspace";
-import { routingDirectApplyAllowed } from "@openbooks/engine/manufacturing/routings";
-import { requirePermission, can } from "@/lib/authz";
-import { requireFeatureEnabled } from "@/lib/feature-gates";
-import {
-  PageHeader,
-  Button,
-  Input,
-  Label,
-  Select,
-  EmptyState,
-  Badge,
-} from "@openbooks/ui";
-import { ListPageLayout } from "@/components/page-layout";
-import { ServerPagedTable } from "@/components/server-paged-table";
-import { formatDecimal } from "@/lib/money-format";
-import { dateLabel, dateTime } from "@/lib/format";
-import { ManufacturingRecordHost } from "./RecordHost";
+} from '@openbooks/engine/manufacturing/workspace'
+import { routingDirectApplyAllowed } from '@openbooks/engine/manufacturing/routings'
+import { requirePermission, can } from '@/lib/authz'
+import { requireFeatureEnabled } from '@/lib/feature-gates'
+import { timeCommandGrants } from '@/lib/time-workspace'
+import { formatDecimal } from '@/lib/money-format'
+import { formatCivilDate, dateTime } from '@/lib/format'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { db } from '@openbooks/engine/platform/db'
+import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
+import { ModuleView } from '@/components/viewspec/module-view'
+import { manufacturingModuleTabs, type ManufacturingTabLabels } from '@/lib/module-home/manufacturing-tabs'
+import type { ListToolbarFilter } from '@/components/list-toolbar'
+import { manufacturingWorkspaceSpec, type ManufacturingWorkspaceData, type ManufacturingWorkspaceRow } from './workspace-view'
+import { ManufacturingRecordHost } from './RecordHost'
 
-export type SearchParams = Record<string, string | string[] | undefined>;
-const value = (v: string | string[] | undefined) =>
-  Array.isArray(v) ? v[0] : v;
-const uuid = (v: unknown) => {
-  const parsed = uuidString().safeParse(v);
-  return parsed.success ? parsed.data : undefined;
-};
-export const manufacturingSources = {
-  "work-orders": "manufacturing_work_orders",
-  "work-centers": "manufacturing_work_centers",
-  routings: "manufacturing_routings",
-  mrp: "manufacturing_mrp",
-} as const;
-const fields: Record<ManufacturingView, string[]> = {
-  "work-orders": [
-    "number",
-    "itemName",
-    "status",
-    "priority",
-    "quantityOrdered",
-    "quantityCompleted",
-    "quantityScrapped",
-    "unit",
-    "plannedStart",
-    "plannedEnd",
+export type SearchParams = Record<string, string | string[] | undefined>
+const value = (input: string | string[] | undefined) => Array.isArray(input) ? input[0] : input
+const uuid = (input: unknown) => {
+  const parsed = uuidString().safeParse(input)
+  return parsed.success ? parsed.data : undefined
+}
+
+const fields: Record<ManufacturingView, { key: string; label: string; linked?: boolean }[]> = {
+  'work-orders': [
+    { key: 'number', label: 'number', linked: true },
+    { key: 'itemName', label: 'itemName' },
+    { key: 'status', label: 'status' },
+    { key: 'priority', label: 'priority' },
+    { key: 'quantityOrdered', label: 'quantityOrdered' },
+    { key: 'quantityCompleted', label: 'quantityCompleted' },
+    { key: 'plannedStart', label: 'plannedStart' },
+    { key: 'plannedEnd', label: 'plannedEnd' },
   ],
-  "work-centers": [
-    "code",
-    "name",
-    "kind",
-    "status",
-    "capacityHoursPerDay",
-    "efficiencyPct",
+  'work-centers': [
+    { key: 'code', label: 'code', linked: true },
+    { key: 'name', label: 'name' },
+    { key: 'kind', label: 'kind' },
+    { key: 'status', label: 'status' },
+    { key: 'capacityHoursPerDay', label: 'capacityHoursPerDay' },
+    { key: 'efficiencyPct', label: 'efficiencyPct' },
   ],
   routings: [
-    "code",
-    "name",
-    "itemName",
-    "version",
-    "status",
-    "effectiveFrom",
-    "effectiveTo",
+    { key: 'code', label: 'code', linked: true },
+    { key: 'name', label: 'name' },
+    { key: 'itemName', label: 'itemName' },
+    { key: 'version', label: 'version' },
+    { key: 'status', label: 'status' },
+    { key: 'effectiveFrom', label: 'effectiveFrom' },
+    { key: 'effectiveTo', label: 'effectiveTo' },
   ],
-  mrp: ["number", "status", "horizonStart", "horizonEnd", "ranAt"],
-};
+  mrp: [
+    { key: 'number', label: 'number', linked: true },
+    { key: 'status', label: 'status' },
+    { key: 'horizonStart', label: 'horizonStart' },
+    { key: 'horizonEnd', label: 'horizonEnd' },
+    { key: 'ranAt', label: 'ranAt' },
+  ],
+}
+
 const statuses: Record<ManufacturingView, string[]> = {
-  "work-orders": [
-    "draft",
-    "released",
-    "in_progress",
-    "on_hold",
-    "done",
-    "cancelled",
-  ],
-  "work-centers": ["active", "inactive"],
-  routings: ["draft", "active", "archived"],
-  mrp: ["draft", "complete", "superseded"],
-};
+  'work-orders': ['draft', 'released', 'in_progress', 'on_hold', 'done', 'cancelled'],
+  'work-centers': ['active', 'inactive'],
+  routings: ['draft', 'active', 'archived'],
+  mrp: ['draft', 'complete', 'superseded'],
+}
+
 export async function ManufacturingWorkspacePage({
   view,
   searchParams,
 }: {
-  view: ManufacturingView;
-  searchParams: SearchParams;
+  view: ManufacturingView
+  searchParams: SearchParams
 }) {
-  const authz = await requirePermission("manufacturing.read");
-  await requireFeatureEnabled(
-    authz.user.orgId,
-    view === "mrp" ? "manufacturingMrp" : "manufacturing",
-  );
-  const t = await getTranslations("manufacturing"),
-    locale = await getLocale(),
-    basePath = "/manufacturing/" + view;
+  const authz = await requirePermission('manufacturing.read')
+  await requireFeatureEnabled(authz.user.orgId, view === 'mrp' ? 'manufacturingMrp' : 'manufacturing')
+  const [t, tNav, genealogyT, tOperating, locale] = await Promise.all([
+    getTranslations('manufacturing'),
+    getTranslations('nav'),
+    getTranslations('manufacturing.genealogy'),
+    getTranslations('operatingProfiles'),
+    getLocale(),
+  ])
+  const basePath = `/manufacturing/${view}`
+  const rawSub = value(searchParams.sub) ?? value(searchParams.subsidiaryId)
+  const rawStatus = value(searchParams.status)
+  const status = statuses[view].includes(rawStatus ?? '') ? rawStatus : undefined
   const query = {
     q: value(searchParams.q)?.slice(0, 200),
     workflow: value(searchParams.workflowFilter),
     department: value(searchParams.department),
-    status: value(searchParams.status),
-    subsidiaryId: uuid(value(searchParams.subsidiaryId)),
-    page: Math.max(
-      1,
-      Number.parseInt(value(searchParams.page) ?? "1", 10) || 1,
-    ),
-    perPage: Math.min(
-      100,
-      Math.max(
-        10,
-        Number.parseInt(value(searchParams.perPage) ?? "25", 10) || 25,
-      ),
-    ),
-  };
-  const canGovernRevisions = can(authz,"manufacturing.manage") && authz.allowedSubsidiaryIds===null;
-  const { page, options, operatingChoices, preferredPresentation, workFilters, routingDirectApply } = await withScopeSnapshot(
-    authz.user.orgId,
-    async () => ({
-      routingDirectApply: view==='routings' && canGovernRevisions ? await routingDirectApplyAllowed(db,authz.user.orgId) : false,
-      workFilters: view==='work-orders' ? await readWorkListFilters(db,authz.user.orgId,authz.user.id,'production') : null,
-      preferredPresentation: view==='work-orders' ? await readWorkListPresentation(db,authz.user.orgId,authz.user.id,'manufacturing_work_order') : null,
-      page: await listManufacturingRecords(
-        db,
-        authz.user.orgId,
-        authz.allowedSubsidiaryIds,
-        view,
-        query,
-        authz.user.id,
-      ),
-      operatingChoices: view==='work-orders' ? await listOperatingProfileChoices(db,authz.user.orgId,authz.user.id,'production',uuid(value(searchParams.departmentId))??null) : [],
-      options: await manufacturingOptions(
-        db,
-        authz.user.orgId,
-        authz.allowedSubsidiaryIds,
-        can(authz, "ap.create"),
-      ),
-    }),
-  );
-  const selectedItemId=uuid(value(searchParams.producedItemId));
-  let initialItemId:string|undefined;
-  if(view==='work-orders'&&selectedItemId) {
-    const matches=await withScopeSnapshot(authz.user.orgId,()=>searchManufacturingChoices(db,authz.user.orgId,authz.allowedSubsidiaryIds,'items','',selectedItemId));
-    const selected=matches.find(item=>item.value===selectedItemId);
-    if(selected) {initialItemId=selectedItemId;if(!options.items.some(item=>item.value===selectedItemId))options.items.push(selected);}
+    status,
+    subsidiaryId: uuid(rawSub),
+    page: Math.max(1, Number.parseInt(value(searchParams.page) ?? '1', 10) || 1),
+    perPage: Math.min(100, Math.max(10, Number.parseInt(value(searchParams.perPage) ?? '25', 10) || 25)),
   }
-  const initialEntityId=options.subsidiaries.some(entity=>entity.value===value(searchParams.subsidiaryId))?value(searchParams.subsidiaryId):undefined;
-  const tOperating = await getTranslations('operatingProfiles');
-  const presentation = view==='work-orders' && (value(searchParams.presentation) ?? preferredPresentation ?? operatingChoices.find(choice=>choice.isDefault)?.definition.presentation.defaultView ?? 'board') === 'board' ? 'board' : 'list';
-  const recordId = value(searchParams.record),
-    validRecord =
-      recordId === "new"
-        ? can(authz, "manufacturing.manage")
-          ? "new"
-          : undefined
-        : uuid(recordId);
-  const params = new URLSearchParams();
-  for (const [key, val] of Object.entries(searchParams)) {
-    if (key !== "record" && typeof val === "string") params.set(key, val);
-  }
-  const closeHref = basePath + (params.size ? "?" + params.toString() : ""),
-    newParams = new URLSearchParams(params);
-  newParams.set("record", "new");
-  const label = (v: unknown) =>
-    v === null || v === undefined
-      ? "—"
-      : t.has("values." + String(v))
-        ? t("values." + String(v))
-        : String(v);
-  function cell(key: string, row: ManufacturingRow) {
-    if (key === "number" || key === "code") {
-      const href = new URLSearchParams(params);
-      href.set("record", row.id);
-      return (
-        <Link
-          className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-          href={(basePath + "?" + href) as never}
-        >
-          {label(row[key])}
-        </Link>
-      );
+  const canGovernRevisions = can(authz, 'manufacturing.manage') && authz.allowedSubsidiaryIds === null
+  const loaded = await withScopeSnapshot(authz.user.orgId, async () => {
+    const options = await manufacturingOptions(db, authz.user.orgId, authz.allowedSubsidiaryIds, can(authz, 'ap.create'), authz.user.id)
+    const selectedSubsidiaryId = options.subsidiaries.some((option) => option.value === query.subsidiaryId) ? query.subsidiaryId : undefined
+    const [routingDirectApply, workFilters, page, operatingChoices] = await Promise.all([
+      view === 'routings' && canGovernRevisions ? routingDirectApplyAllowed(db, authz.user.orgId) : false,
+      view === 'work-orders' ? readWorkListFilters(db, authz.user.orgId, authz.user.id, 'production') : null,
+      listManufacturingRecords(db, authz.user.orgId, authz.allowedSubsidiaryIds, view, { ...query, subsidiaryId: selectedSubsidiaryId }, authz.user.id),
+      view === 'work-orders' ? listOperatingProfileChoices(db, authz.user.orgId, authz.user.id, 'production', uuid(value(searchParams.departmentId)) ?? null) : [],
+    ])
+    return { routingDirectApply, workFilters, page, operatingChoices, options, selectedSubsidiaryId }
+  })
+  const selectedSubsidiaryId = loaded.selectedSubsidiaryId
+  const selectedItemId = uuid(value(searchParams.producedItemId))
+  let initialItemId: string | undefined
+  if (view === 'work-orders' && selectedItemId) {
+    const matches = await withScopeSnapshot(authz.user.orgId, () => searchManufacturingChoices(db, authz.user.orgId, authz.allowedSubsidiaryIds, 'items', '', selectedItemId))
+    if (matches.some((item) => item.value === selectedItemId)) {
+      initialItemId = selectedItemId
+      if (!loaded.options.items.some((item) => item.value === selectedItemId)) loaded.options.items.push(matches.find((item) => item.value === selectedItemId)!)
     }
-    const val = row[key];
-    const display =
-      typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val)
-        ? dateLabel(new Date(val + "T00:00:00Z"), locale)
-        : key.endsWith("At") && typeof val === "string"
-          ? dateTime(val, locale)
-          : /(quantity|Hours|Pct)/i.test(key) && typeof val === "string"
-            ? formatDecimal(locale, val, { maximumFractionDigits: 4 })
-            : label(val);
-    return key === "status" ? <Badge>{display}</Badge> : display;
   }
-  return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t("titles." + view)}
-          description={t("descriptions." + view)}
-          actions={
-            can(authz, "manufacturing.manage") ? (
-              <Button asChild>
-                <Link href={(basePath + "?" + newParams) as never}>
-                  {t("new." + view)}
-                </Link>
-              </Button>
-            ) : undefined
-          }
-        />
-      }
-    >
-      <ServerPagedTable
-        source={manufacturingSources[view]}
-        presentationBody={presentation==='board' ? <div className="p-3"><RecordBoard lanes={statuses[view].map(status=>({value:status,label:label(status)}))}
-          cards={page.rows.map(row=>({id:row.id,lane:String(row.status),title:cell('number',row),subtitle:String(row.itemName ?? ''),detail:<div className="flex justify-between gap-3"><span>{cell('quantityCompleted',row)} / {cell('quantityOrdered',row)} {label(row.unit)}</span><span>{label(row.priority)}</span></div>}))}
-          emptyLabel={tOperating('views.emptyLane')} pageLabel={tOperating('views.pageScope')} /></div> : undefined}
-        rows={page.rows}
-        columns={fields[view].map((key) => ({
-          key,
-          header: t("fields." + key),
-          cell: (row: ManufacturingRow) => cell(key, row),
-        }))}
-        rowKey={(row) => row.id}
-        basePath={basePath}
-        currentParams={Object.fromEntries(params)}
-        total={page.total}
-        page={page.page}
-        perPage={page.perPage}
-        empty={
-          <EmptyState
-            title={t("empty." + view)}
-            description={t("emptyNote." + view)}
-          />
-        }
-        toolbar={
-          <form action={basePath} className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1">
-              <Label htmlFor="mfg-search">{t("search")}</Label>
-              <Input
-                id="mfg-search"
-                name="q"
-                defaultValue={query.q}
-                placeholder={t("searchPlaceholder")}
-                className="w-52"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="mfg-status">{t("fields.status")}</Label>
-              <Select
-                id="mfg-status"
-                name="status"
-                defaultValue={query.status ?? ""}
-              >
-                <option value="">{t("allStatuses")}</option>
-                {statuses[view].map((status) => (
-                  <option key={status} value={status}>
-                    {label(status)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="mfg-entity">{t("fields.subsidiaryId")}</Label>
-              <Select
-                id="mfg-entity"
-                name="subsidiaryId"
-                defaultValue={query.subsidiaryId ?? ""}
-              >
-                <option value="">{t("allEntities")}</option>
-                {options.subsidiaries.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            {workFilters?<><div className="space-y-1"><Label htmlFor="mfg-workflow">{tOperating('filters.workflow')}</Label><Select id="mfg-workflow" name="workflowFilter" defaultValue={query.workflow??'all'}><option value="all">{tOperating('filters.allWorkflows')}</option><option value="legacy">{tOperating('filters.legacy')}</option>{workFilters.profiles.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</Select></div><div className="space-y-1"><Label htmlFor="mfg-department">{tOperating('filters.department')}</Label><Select id="mfg-department" name="department" defaultValue={query.department??'all'}><option value="all">{tOperating('filters.allDepartments')}</option><option value="unassigned">{tOperating('filters.unassigned')}</option>{workFilters.departments.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</Select></div></>:null}
-            {view==='work-orders' ? <><input type="hidden" name="presentation" value={presentation}/><WorkListPresentation context="manufacturing_work_order" value={presentation} basePath={basePath} currentParams={searchParams}/></> : null}
-            <input type="hidden" name="perPage" value={page.perPage} />
-            <Button type="submit" variant="outline">
-              {t("filter")}
-            </Button>
-            {params.size ? (
-              <Button variant="ghost" asChild>
-                <Link href={basePath as never}>{t("clear")}</Link>
-              </Button>
-            ) : null}
-          </form>
-        }
-      />
-      <ManufacturingRecordHost
-        view={view}
-        recordId={validRecord}
-        closeHref={closeHref}
-        options={options}
-        initialWorkflow={operatingChoices.find(choice=>choice.value===value(searchParams.workflow))}
-        initialDepartmentId={uuid(value(searchParams.departmentId))}
-        initialValues={{producedItemId:initialItemId,subsidiaryId:initialEntityId,quantityOrdered:value(searchParams.quantityOrdered)}}
-        canManage={can(authz, "manufacturing.manage")}
-        canPost={can(authz, "items.post")}
-        canBuy={authz.permissions.has("ap.create")}
-        canSubcontract={await manufacturingFeatureEnabled(authz.user.orgId,"manufacturingSubcontract")} canReadQuality={can(authz,"items.read")}
-        canReadJournal={can(authz, "gl.read")}
-        canGovernRevisions={canGovernRevisions}
-        routingDirectApply={routingDirectApply}
-        canRollup={can(authz,"manufacturing.manage") && can(authz,"items.manage") && can(authz,"items.post") && authz.allowedSubsidiaryIds===null}
-      />
-    </ListPageLayout>
-  );
+  const params = new URLSearchParams()
+  for (const [key, item] of Object.entries(searchParams)) if (!['record', 'sub', 'subsidiaryId'].includes(key) && typeof item === 'string') params.set(key, item)
+  if (selectedSubsidiaryId) params.set('sub', selectedSubsidiaryId)
+  const closeHref = basePath + (params.size ? `?${params}` : '')
+  const newParams = new URLSearchParams(params)
+  newParams.set('record', 'new')
+  const recordId = value(searchParams.record)
+  const validRecord = recordId === 'new'
+    ? can(authz, 'manufacturing.manage') ? 'new' : undefined
+    : uuid(recordId)
+
+  const tabLabels: ManufacturingTabLabels = {
+    home: tNav('manufacturing'),
+    'work-orders': tNav('manufacturing-work-orders'),
+    'work-centers': tNav('manufacturing-work-centers'),
+    routings: tNav('manufacturing-routings'),
+    mrp: tNav('manufacturing-mrp'),
+    quality: tNav('manufacturing-quality'),
+    genealogy: genealogyT('title'),
+    time: tNav('manufacturing-time'),
+  }
+  const mrpEnabled = await manufacturingFeatureEnabled(authz.user.orgId, 'manufacturingMrp')
+  const timeGrants = timeCommandGrants('time.read')
+  const tabs = manufacturingModuleTabs(view, tabLabels, {
+    mrp: mrpEnabled,
+    quality: can(authz, 'items.read'),
+    genealogy: can(authz, 'items.read'),
+    time: [...timeGrants.all, ...timeGrants.own].some((permission) => can(authz, permission)),
+    subsidiaryId: selectedSubsidiaryId,
+  })
+
+  const filters: ListToolbarFilter[] = [
+    {
+      paramKey: 'status', label: t('fields.status'), allLabel: t('allStatuses'),
+      options: statuses[view].map((value) => ({ value, label: t.has(`values.${value}`) ? t(`values.${value}`) : value })),
+    },
+    {
+      paramKey: 'sub', label: t('fields.subsidiaryId'), allLabel: t('allEntities'),
+      options: loaded.options.subsidiaries.map((option) => ({ value: option.value, label: option.label })),
+    },
+  ]
+  if (view === 'work-orders' && loaded.workFilters) {
+    filters.push({
+      paramKey: 'workflowFilter', label: tOperating('filters.workflow'), allLabel: tOperating('filters.allWorkflows'),
+      options: [
+        { value: 'legacy', label: tOperating('filters.legacy') },
+        ...loaded.workFilters.profiles.map((option) => ({ value: option.value, label: option.label })),
+      ],
+    })
+    filters.push({
+      paramKey: 'department', label: tOperating('filters.department'), allLabel: tOperating('filters.allDepartments'),
+      options: [
+        { value: 'unassigned', label: tOperating('filters.unassigned') },
+        ...loaded.workFilters.departments.map((option) => ({ value: option.value, label: option.label })),
+      ],
+    })
+  }
+
+  const labelValue = (key: string, value: unknown) => {
+    if (value === null || value === undefined || value === '') return '—'
+    const raw = String(value)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return formatCivilDate(raw, locale)
+    if (key.endsWith('At') && typeof value === 'string') return dateTime(value, locale)
+    if (/(quantity|Hours|Pct)/i.test(key) && typeof value === 'string') return formatDecimal(locale, value, { maximumFractionDigits: 4 })
+    return t.has(`values.${raw}`) ? t(`values.${raw}`) : raw
+  }
+  const rows: ManufacturingWorkspaceRow[] = loaded.page.rows.map((record: ManufacturingRow) => {
+    const row: ManufacturingWorkspaceRow = { id: record.id, href: '' }
+    for (const field of fields[view]) row[field.key] = labelValue(field.key, record[field.key])
+    const rowParams = new URLSearchParams(params)
+    rowParams.set('record', record.id)
+    row.href = `${basePath}?${rowParams}`
+    return row
+  })
+  const data: ManufacturingWorkspaceData = {
+    view,
+    title: t(`titles.${view}`),
+    description: t(`descriptions.${view}`),
+    emptyTitle: t(`empty.${view}`),
+    emptyDescription: t(`emptyNote.${view}`),
+    newLabel: t(`new.${view}`),
+    newRecordHref: `${basePath}?${newParams}`,
+    canCreate: can(authz, 'manufacturing.manage'),
+    basePath,
+    currentParams: { ...searchParams, sub: selectedSubsidiaryId, subsidiaryId: undefined },
+    rows,
+    total: loaded.page.total,
+    page: loaded.page.page,
+    perPage: loaded.page.perPage,
+    tabs,
+    columns: fields[view],
+    searchPlaceholder: t('searchPlaceholder'),
+    filters,
+  }
+
+  return <>
+    <ModuleView spec={manufacturingWorkspaceSpec(data)} data={data} searchParams={searchParams} trusted/>
+    <ManufacturingRecordHost
+      view={view}
+      recordId={validRecord}
+      closeHref={closeHref}
+      options={loaded.options}
+      initialWorkflow={loaded.operatingChoices.find((choice) => choice.value === value(searchParams.workflowFilter))}
+      initialDepartmentId={uuid(value(searchParams.departmentId))}
+      initialValues={{ producedItemId: initialItemId, subsidiaryId: selectedSubsidiaryId, quantityOrdered: value(searchParams.quantityOrdered) }}
+      canManage={can(authz, 'manufacturing.manage')}
+      canPost={can(authz, 'items.post')}
+      canBuy={can(authz, 'ap.create')}
+      canSubcontract={await manufacturingFeatureEnabled(authz.user.orgId, 'manufacturingSubcontract')}
+      canReadQuality={can(authz, 'items.read')}
+      canReadJournal={can(authz, 'gl.read')}
+      canGovernRevisions={canGovernRevisions}
+      routingDirectApply={loaded.routingDirectApply}
+      canRollup={can(authz, 'manufacturing.manage') && can(authz, 'items.manage') && can(authz, 'items.post') && authz.allowedSubsidiaryIds === null}
+    />
+  </>
 }

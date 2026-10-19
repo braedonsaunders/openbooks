@@ -36,7 +36,7 @@ import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile } from "../i
 import { recordNormalScrap } from "./scrap.ts";
 import { executeManufacturingReceipt, executeManufacturingIssue, executeManufacturingCompletionDateCorrection } from "./execution.ts";
 import { correctWorkOrderCompletionDate } from "./completion-redate.ts";
-import { readManufacturingRecord, listManufacturingRecords, searchManufacturingChoices, manufacturingOptions, manufacturingTracking } from "./workspace.ts";
+import { readManufacturingRecord, listManufacturingRecords, readManufacturingHomeSummary, searchManufacturingChoices, manufacturingOptions, manufacturingTracking } from "./workspace.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import { add,cmp,normalizeMoney } from "../money/money.ts";
 import { ManufacturingError } from "./errors.ts";
@@ -50,7 +50,7 @@ import { completeWorkOrder, markWorkOrderDone, reverseMaterialIssue, waiveMateri
 import { previewStandardRollup,proposeStandardRollup,applyStandardRollup } from "./standard-rollup.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
 import { decideGate } from "../flows/gates.ts";
-import { searchManufacturingGenealogySeeds, traceManufacturingGenealogy } from "./genealogy.ts";
+import { countManufacturingGenealogySeeds, searchManufacturingGenealogySeeds, traceManufacturingGenealogy } from "./genealogy.ts";
 import { readOperatingSetupJourney } from "./setup-journey.ts";
 import { ensureLot,ensureSerial } from "../inventory/tracking.ts";
 import { applyProductionTimeCorrections } from "./conversion.ts";
@@ -428,6 +428,7 @@ const cases: Case[] = [
     const allowed=new Set([f.org.subsidiaryId]);
     assert.equal((await run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'},allowed))).edges.length,2);
     assert.deepEqual((await run(tx=>searchManufacturingGenealogySeeds(tx,f.org.orgId,f.actorId,{kind:'lot',q:'RAW-TRACE'},allowed))).map(seed=>seed.value),[raw]);
+    assert.equal(await run(tx=>countManufacturingGenealogySeeds(tx,f.org.orgId,f.actorId,allowed)),1);
     const otherEntity=randomUUID(),otherLocation=randomUUID(),otherStock=randomUUID();
     await run(async tx=>{
       assert.equal((await tx.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active) values(${otherEntity},${f.org.orgId},${f.org.subsidiaryId},'Independent trace owner','CAD','CA',true) returning id`)).rows.length,1);
@@ -437,6 +438,7 @@ const cases: Case[] = [
     await withBypassContext(()=>receiveInventory(f.org.orgId,f.actorId,{itemId:f.org.items.component,stockLocationId:otherStock,quantity:'1',unitCost:'3',subsidiaryId:otherEntity,offsetAccountId:f.org.accounts.clearing,date:f.org.date,lotId:raw}));
     const ownershipState=await counts(f);
     assert.deepEqual(await run(tx=>searchManufacturingGenealogySeeds(tx,f.org.orgId,f.actorId,{kind:'lot',q:'RAW-TRACE'},allowed)),[],'the seed picker cannot reveal an identity with a foreign owner');
+    assert.equal(await run(tx=>countManufacturingGenealogySeeds(tx,f.org.orgId,f.actorId,allowed)),0,'the directory count shares seed visibility');
     await assert.rejects(run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'},allowed)),/not[ _]found/i);
     assert.deepEqual(await counts(f),ownershipState,'a trace seed cannot reveal a shared identifier whose current native owners are outside its authorized entities');
     assert.equal((await run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'}))).edges.length,2,'organization-wide authority retains the trace without inventing edges for ordinary receipts');
@@ -996,6 +998,8 @@ cases.push({ name: "native workspace uses organization item identity and current
   assert.equal((await read("routings", parentResource.routing_id)).sections.operations!.length, 1);
   assert.equal((await list("routings")).total, 2);
   assert.equal((await list("work-centers")).total, 2);
+  assert.equal((await run(tx => readManufacturingHomeSummary(tx,f.org.orgId,f.actorId,allowed,{today:f.postingDate}))).openWorkOrders,2);
+  assert.equal((await run(tx => readManufacturingHomeSummary(tx,f.org.orgId,f.actorId,new Set(),{today:f.postingDate}))).openWorkOrders,0);
   const options = await run(tx => manufacturingOptions(tx, f.org.orgId, allowed));
   assert.ok(options.items.some(item => item.value === f.org.items.assembly));
   assert.equal(options.routings.length, 2);
@@ -1299,6 +1303,8 @@ cases.push(
   await withBypassContext(()=>setStockHold(f.org.orgId,f.actorId,{kind:'lot',id:lotId,held:false,reason:'Safety review completed independently'}));assert.equal((await available()).available,'2.0000');
   assert.equal((await run(tx=>readManufacturingInspection(tx,f.org.orgId,f.actorId,inspection.id))).receiptMovementId,receipt.movementId);
   assert.equal((await run(tx=>listManufacturingInspections(tx,f.org.orgId,f.actorId,{status:'fail'}))).total,1);
+  assert.equal((await run(tx=>listManufacturingInspections(tx,f.org.orgId,f.actorId,{status:'fail',subsidiaryId:f.org.subsidiaryId,q:plan.name}))).total,1);
+  assert.equal((await run(tx=>listManufacturingInspections(tx,f.org.orgId,f.actorId,{status:'fail',q:'unmatched inspection search'}))).total,0,'search count remains filtered when no queue rows match');
  }},
  {name:'quality scrap disposes the exact receipt layers, balances once and refuses revoked replay without changes',run:async f=>{
   const itemId=f.org.items.fifo,{lotId,receipt,inspection}=await trackedQualityReceipt(f,itemId);
