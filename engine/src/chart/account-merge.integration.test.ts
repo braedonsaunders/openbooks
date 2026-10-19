@@ -52,21 +52,26 @@ async function enableMerges(orgId: string, enabled = true): Promise<void> {
      where id = ${orgId}`));
 }
 
-async function post(org: ScratchOrg, lines: { accountId: string; amount: string; departmentId?: string | null }[], postingDate = org.date) {
+async function post(
+  org: ScratchOrg,
+  lines: { accountId: string; amount: string; departmentId?: string | null }[],
+  postingDate = org.date,
+  periodId = org.periodId,
+) {
   return withOrgContext(org.orgId, () => postEntry(db, {
     orgId: org.orgId,
     bookId: org.bookId,
     subsidiaryId: org.subsidiaryId,
     entryNumber: `T-${randomUUID().slice(0, 8)}`,
     postingDate,
-    periodId: org.periodId,
+    periodId,
     origin: "manual",
     currency: "CAD",
     lines,
   }));
 }
 
-async function scenario(): Promise<Scenario> {
+async function scenario(options: { seedBalances?: boolean } = {}): Promise<Scenario> {
   installEngineSeams();
   const org = await createScratchOrg();
   const actors = await seedFlowActors(org.orgId);
@@ -79,14 +84,16 @@ async function scenario(): Promise<Scenario> {
     const vendorRole = randomUUID();
     await db.execute(sql`insert into vendor_roles (id, org_id, party_id, default_expense_account_id)
       values (${vendorRole}, ${org.orgId}, ${org.vendorId}, ${source})`);
-    await post(org, [
-      { accountId: source, amount: "120.0000", departmentId: department },
-      { accountId: org.accounts.bank, amount: "-120.0000" },
-    ]);
-    await post(org, [
-      { accountId: source, amount: "30.0000" },
-      { accountId: org.accounts.bank, amount: "-30.0000" },
-    ]);
+    if (options.seedBalances !== false) {
+      await post(org, [
+        { accountId: source, amount: "120.0000", departmentId: department },
+        { accountId: org.accounts.bank, amount: "-120.0000" },
+      ]);
+      await post(org, [
+        { accountId: source, amount: "30.0000" },
+        { accountId: org.accounts.bank, amount: "-30.0000" },
+      ]);
+    }
     return { org, actorId: actors.adminId, source, target, department, vendorRole };
   });
 }
@@ -127,7 +134,7 @@ async function camPool(s: Scenario, status: "open" | "finalized" | "invoiced", e
 }
 
 test("P&L merge balances and period locks follow each subsidiary's fiscal calendar", { skip: !DB }, async () => {
-  const s = await scenario();
+  const s = await scenario({ seedBalances: false });
   try {
     const januaryPeriod = randomUUID();
     const marchPeriod = randomUUID();
@@ -162,6 +169,15 @@ test("P&L merge balances and period locks follow each subsidiary's fiscal calend
         (org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason,created_by)
         values(${s.org.orgId},${s.org.subsidiaryId},'2026-04-01',${entityCalendar},'April fiscal-year calendar',${s.actorId})`);
     });
+
+    await post(s.org, [
+      { accountId: s.source, amount: "120.0000", departmentId: s.department },
+      { accountId: s.org.accounts.bank, amount: "-120.0000" },
+    ], "2026-07-15", entityPeriods[3]!.id);
+    await post(s.org, [
+      { accountId: s.source, amount: "30.0000" },
+      { accountId: s.org.accounts.bank, amount: "-30.0000" },
+    ], "2026-07-15", entityPeriods[3]!.id);
 
     const requestInput = { sourceAccountId:s.source,targetAccountId:s.target,effectiveDate:EFFECTIVE };
     const open = await previewAccountMerge(s.org.orgId,requestInput,null);
