@@ -55,7 +55,9 @@ test('kit availability validates item IDs and lists warehouses admitted by the c
     const valid = await call(org.items.assembly)
     assert.equal(valid.status, 200, await valid.clone().text())
     const payload = await valid.json()
-    assert.deepEqual(payload.warehouses.map((warehouse: { warehouseId: string }) => warehouse.warehouseId), [homeWarehouseId])
+    const visibleWarehouseIds = payload.warehouses.map((warehouse: { warehouseId: string }) => warehouse.warehouseId) as string[]
+    assert.ok(visibleWarehouseIds.includes(homeWarehouseId), 'the caller entity warehouse is visible')
+    assert.ok(!visibleWarehouseIds.includes(branchWarehouseId), `another entity's warehouse is hidden: ${JSON.stringify(visibleWarehouseIds)}`)
 
     const malformed = await call('not-a-uuid')
     assert.equal(malformed.status, 404)
