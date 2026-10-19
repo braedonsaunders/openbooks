@@ -26,6 +26,9 @@ import { emailActionUrls } from "./email-tokens.ts";
 import { lockFlowSubjectDecision } from "./decision-lock.ts";
 import { resolveApprovalRequestNotices } from "./approval-notices.ts";
 import { sanitizeDecisionCause } from "./decision-cause.ts";
+import { sodBlockedIds } from "./sod.ts";
+
+export { sodBlockedIds } from "./sod.ts";
 
 /**
  * Gate lifecycle — decide / worklist / delegate / timers. OpenBooks resumes
@@ -255,13 +258,16 @@ async function assertGateSubsidiaryScope(
  * record. Adapters that do not separate the two leave makerUserId unset and
  * behave exactly as before.
  */
-export function sodBlockedIds(
-  subject: Pick<FlowSubjectContext, "submitterUserId" | "makerUserId"> | null,
-): ReadonlySet<string> {
-  const ids = new Set<string>();
-  if (subject?.submitterUserId) ids.add(subject.submitterUserId);
-  if (subject?.makerUserId) ids.add(subject.makerUserId);
-  return ids;
+async function gateDecisionSodBlocked(
+  gate: GateRow,
+  adapter: FlowSubjectAdapter | null | undefined,
+  subject: FlowSubjectContext | null | undefined,
+  identities: readonly (string | null | undefined)[],
+): Promise<boolean> {
+  const blocked = sodBlockedIds(subject ?? null)
+  if (!identities.some((id) => id !== null && id !== undefined && blocked.has(id))) return false
+  const node = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId, gate.runId)
+  return adapter?.selfApprovalPolicy === "forbidden" || !node || node.preventSelfApproval !== false
 }
 
 /**
@@ -286,24 +292,23 @@ export async function gateDecisionCapability(
   }
   const canDelegate = gate.assigneeUserId === userId || (await userRoleKeys(gate.orgId, userId)).has(GATE_ADMIN_ROLE);
   let authorized = await canActOnGate(gate, userId);
+  let onBehalfOf: ResolvedUser | null = null;
   if (!authorized && gate.assigneeUserId) {
-    authorized =
-      (await activeDelegationPrincipal(gate.orgId, gate.assigneeUserId, userId)) !== null;
+    onBehalfOf = await activeDelegationPrincipal(gate.orgId, gate.assigneeUserId, userId);
+    authorized = onBehalfOf !== null;
   }
   if (!authorized) {
     return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: false, canDelegate };
   }
   const adapter = getFlowAdapter(gate.subjectKind);
   const subject = await adapter?.loadContext(gate.subjectId);
-  if (subject && sodBlockedIds(subject).has(userId)) {
-    const node = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId, gate.runId);
-    if (
-      adapter?.selfApprovalPolicy === "forbidden" ||
-      !node ||
-      node.preventSelfApproval !== false
-    ) {
-      return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: true, canDelegate };
-    }
+  if (await gateDecisionSodBlocked(
+    gate,
+    adapter,
+    subject,
+    [userId, onBehalfOf?.id, gate.delegatedFromUserId],
+  )) {
+    return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: true, canDelegate };
   }
   return { canAct: true, signatureRequired: gate.signatureRequired, sodBlocked: false, canDelegate };
 }
@@ -478,21 +483,19 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
   // teamwork (maker, submitter, and an independent approver) keeps working.
   const preAdapter = getFlowAdapter(pre.subjectKind);
   const preSubject = await preAdapter?.loadContext(pre.subjectId);
-  if (preSubject && sodBlockedIds(preSubject).has(userId)) {
-    const node = await gateNodeData(pre.orgId, pre.flowId, pre.nodeId, pre.runId);
-    if (
-      preAdapter?.selfApprovalPolicy === "forbidden" ||
-      !node ||
-      node.preventSelfApproval !== false
-    ) {
-      // A timesheet's enterer reads a timesheet-worded refusal; every other
-      // subject keeps the established generic text its tests assert.
-      const message = pre.subjectKind === "timesheet_week"
-        ? "You entered this timesheet; another approver must approve it."
-        : "you cannot approve your own submission — you created or submitted this record. " +
-          "Route it to another approver to decide.";
-      throw new GateError(message, "self_approval_forbidden");
-    }
+  if (await gateDecisionSodBlocked(
+    pre,
+    preAdapter,
+    preSubject,
+    [userId, onBehalfOf?.id, pre.delegatedFromUserId],
+  )) {
+    // A timesheet's enterer reads a timesheet-worded refusal; every other
+    // subject keeps the established generic text its tests assert.
+    const message = pre.subjectKind === "timesheet_week"
+      ? "You entered this timesheet; another approver must approve it."
+      : "you cannot approve your own submission — you created or submitted this record. " +
+        "Route it to another approver to decide.";
+    throw new GateError(message, "self_approval_forbidden");
   }
 
   // -- Serialized decision: a subject lock coordinates every governing policy,
@@ -1540,6 +1543,14 @@ export async function delegateGate(
   }
   const to = await verifyUser(gate.orgId, toUserId);
   if (!to) throw new GateError("delegate target is not an active user in this org");
+  const adapter = getFlowAdapter(gate.subjectKind);
+  const subject = await adapter?.loadContext(gate.subjectId);
+  if (await gateDecisionSodBlocked(gate, adapter, subject, [to.id])) {
+    throw new GateError(
+      "an approval cannot be delegated to its submitter or maker",
+      "self_approval_forbidden",
+    );
+  }
   // Preserve the ORIGINAL assignee (the first hand-off wins — a chain of
   // delegations still points back to who the gate was authored to).
   const delegatedFrom = gate.delegatedFromUserId ?? gate.assigneeUserId ?? fromUserId;
