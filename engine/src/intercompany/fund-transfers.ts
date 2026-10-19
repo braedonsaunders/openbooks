@@ -19,7 +19,7 @@ import { postEntry, type PostEntryResult } from "../journal/post-entry.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { auditIntercompany, IntercompanyError, INTERCOMPANY_NETTING_DISABLED, requireOneRow, requireIntercompanyPermission } from "./errors.ts";
 import {
-  assertIntercompanyPeriodOpen,
+  assertIntercompanyPeriodsOpen,
   intercompanyPostingBook,
   intercompanyPostingPeriod,
   intercompanyPostingRefusal,
@@ -177,9 +177,9 @@ export async function postIntercompanyFundTransfer(
     const toSub = ctx.byId.get(input.toSubsidiaryId);
     if (!fromSub || !toSub) refuse("a chosen subsidiary does not exist in this organization", 404);
     const bookId = await intercompanyPostingBook(db, orgId);
-    const periodId = await intercompanyPostingPeriod(db, orgId, input.transferDate);
-    await assertIntercompanyPeriodOpen(db, {
-      orgId, periodId, bookId, subsidiaryIds: [input.fromSubsidiaryId, input.toSubsidiaryId], modules: ["banking"],
+    const periodId = await intercompanyPostingPeriod(db, orgId, input.transferDate, input.fromSubsidiaryId);
+    await assertIntercompanyPeriodsOpen(db, {
+      orgId, date: input.transferDate, bookId, subsidiaryIds: [input.fromSubsidiaryId, input.toSubsidiaryId], modules: ["banking"],
     });
     const rates = await resolveSpotRates(db, orgId, input.transferDate, [
       { from: currency, to: fromSub.baseCurrency },
@@ -307,9 +307,9 @@ export async function reverseIntercompanyFundTransfer(
     if (transfer.status === "reversed") return;
     if (input.reversalDate < transfer.transfer_date) refuse(`the reversal date cannot be before the transfer date ${transfer.transfer_date}`);
     const bookId = await intercompanyPostingBook(db, orgId);
-    const periodId = await intercompanyPostingPeriod(db, orgId, input.reversalDate);
-    await assertIntercompanyPeriodOpen(db, {
-      orgId, periodId, bookId, subsidiaryIds: [transfer.from_subsidiary_id, transfer.to_subsidiary_id], modules: ["banking"],
+    const periodId = await intercompanyPostingPeriod(db, orgId, input.reversalDate, transfer.from_subsidiary_id);
+    await assertIntercompanyPeriodsOpen(db, {
+      orgId, date: input.reversalDate, bookId, subsidiaryIds: [transfer.from_subsidiary_id, transfer.to_subsidiary_id], modules: ["banking"],
     });
     const reversalEntryId = await postMirrorReversal(db, {
       orgId,

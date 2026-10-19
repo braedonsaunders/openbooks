@@ -23,8 +23,13 @@ export async function intercompanyPostingBook(runner: SqlExecutor, orgId: string
   return bookId;
 }
 
-export async function intercompanyPostingPeriod(runner: SqlExecutor, orgId: string, date: string): Promise<string> {
-  const period = await resolveCoveringPeriod(runner, orgId, date);
+export async function intercompanyPostingPeriod(
+  runner: SqlExecutor,
+  orgId: string,
+  date: string,
+  subsidiaryId: string,
+): Promise<string> {
+  const period = await resolveCoveringPeriod(runner, orgId, date, subsidiaryId);
   if (!period) {
     throw new IntercompanyError(`no accounting period covers ${date}; open the period from Accounting → Periods or choose a date inside an existing period`);
   }
@@ -41,6 +46,23 @@ export async function assertIntercompanyPeriodOpen(
   } catch (error) {
     if (error instanceof CloseError) throw new IntercompanyError(error.message);
     throw error;
+  }
+}
+
+/** Check the effective posting period of every entity affected by a transaction. */
+export async function assertIntercompanyPeriodsOpen(
+  runner: SqlExecutor,
+  input: { orgId: string; date: string; bookId: string; subsidiaryIds: string[]; modules: CloseModule[] },
+): Promise<void> {
+  for (const subsidiaryId of [...new Set(input.subsidiaryIds)].sort()) {
+    const periodId = await intercompanyPostingPeriod(runner, input.orgId, input.date, subsidiaryId);
+    await assertIntercompanyPeriodOpen(runner, {
+      orgId: input.orgId,
+      periodId,
+      bookId: input.bookId,
+      subsidiaryIds: [subsidiaryId],
+      modules: input.modules,
+    });
   }
 }
 
