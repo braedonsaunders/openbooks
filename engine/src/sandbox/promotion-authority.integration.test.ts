@@ -33,9 +33,6 @@ for (const scenario of ["no sandbox authority", "no role authority", "outside ce
       if (scenario === "remove higher grant" || scenario === "within ceiling") {
         await createScratchUser(org.orgId, "Posting user", "target");
         await db.execute(sql`update app_roles set permissions=${JSON.stringify(scenario === "within ceiling" ? ["gl.read"] : ["gl.post", "gl.read"])}::jsonb where org_id=${org.orgId} and key='target'`);
-        if (scenario === "within ceiling") {
-          await db.execute(sql`update app_roles set subsidiary_restriction=null where org_id=${org.orgId} and key='target'`);
-        }
       }
       const key = scenario === "remove higher grant" || scenario === "within ceiling" ? "target" : "manager";
       const before = (await db.execute<{ permissions: string[] }>(sql`select permissions from app_roles where org_id=${org.orgId} and key=${key}`)).rows[0]!.permissions;

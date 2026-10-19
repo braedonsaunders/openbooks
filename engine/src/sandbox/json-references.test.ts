@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { remapFlowGraphSubjectScope, remapScopeFilter } from "./json-references.ts";
+import { remapFlowGraphSubjectScope, remapRoleRestriction, remapScopeFilter } from "./json-references.ts";
 
 const ids = {
   subsidiaries: new Map([["11111111-1111-4111-8111-111111111111", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]]),
@@ -96,4 +96,13 @@ test("remapScopeFilter refuses unknown keys, non-objects and identities without 
   assert.throws(() => remapScopeFilter({ location_id: "x" }, ids, "row"), /row: scope filter carries an unknown key location_id/);
   assert.throws(() => remapScopeFilter({ department_id: "33333333-3333-4333-8333-333333333333" }, ids, "row"), /row: scope filter department_id has no counterpart in the target organization/);
   assert.throws(() => remapScopeFilter({ employer_subsidiary_id: 7 }, ids, "row"), /row: scope filter employer_subsidiary_id has no counterpart/);
+});
+
+
+test("legacy unrestricted role captures use the current explicit policy while unknown scope refuses", () => {
+  assert.deepEqual(remapRoleRestriction(null, ids.subsidiaries, "role"), { mode: "all" });
+  assert.deepEqual(remapRoleRestriction({ mode: "all" }, ids.subsidiaries, "role"), { mode: "all" });
+  assert.deepEqual(remapRoleRestriction({ mode: "list", subsidiaryIds: [] }, ids.subsidiaries, "role"), { mode: "list", subsidiaryIds: [] });
+  assert.throws(() => remapRoleRestriction(undefined, ids.subsidiaries, "role"), /invalid subsidiary restriction/);
+  assert.throws(() => remapRoleRestriction({ mode: "unknown" }, ids.subsidiaries, "role"), /invalid subsidiary restriction/);
 });
