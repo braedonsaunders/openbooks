@@ -4,8 +4,11 @@ import { CloseError } from "../periods/period-policy.ts";
 import {
   reconciliationStaleness,
   reconciliationTotals,
+  sourceEvidencePolicyActive,
   type BankingContext,
 } from "../banking/banking.ts";
+import { closeBankStatementScope } from "./close-scope.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 
 /**
  * Close policy code an organization may create (Setup → period close →
@@ -71,9 +74,7 @@ async function bankingClosePopulation(
   args: { periodId: string; bookId: string; subsidiaryId?: string },
   periodEndsOn: string,
 ): Promise<{ id: string; number: string | null; name: string }[]> {
-  const accountScope = args.subsidiaryId
-    ? sql`(a.subsidiary_id is null or a.subsidiary_id = ${args.subsidiaryId}::uuid)`
-    : sql`true`;
+  const statementScope = closeBankStatementScope(orgId, args.subsidiaryId ? [args.subsidiaryId] : []);
   const lineScope = args.subsidiaryId
     ? sql`jl.subsidiary_id = ${args.subsidiaryId}::uuid`
     : sql`true`;
@@ -81,26 +82,28 @@ async function bankingClosePopulation(
     select a.id, a.number, a.name
       from accounts a
      where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
-       and (${accountScope})
        and (
          exists (
            select 1 from bank_statement_lines bsl
             where bsl.org_id = ${orgId} and bsl.account_id = a.id
+              and (${statementScope})
               and bsl.posted_on between
                 (select starts_on from accounting_periods where id = ${args.periodId} and org_id = ${orgId})
                 and ${periodEndsOn}::date
          )
          or exists (
            select 1 from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-            where jl.org_id = ${orgId} and jl.account_id = a.id and je.period_id = ${args.periodId}
+            where jl.org_id = ${orgId} and jl.account_id = a.id and coalesce(jl.period_id, je.period_id) = ${args.periodId}
               and je.book_id = ${args.bookId} and je.status in ('posted','reversed') and (${lineScope})
+              and ${excludePeriodEndJournals(sql`je.origin`)}
          )
          or exists (
            select 1 from journal_lines jl
            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-           join accounting_periods jp on jp.id = je.period_id and jp.org_id = je.org_id
+           join accounting_periods jp on jp.id = coalesce(jl.period_id, je.period_id) and jp.org_id = je.org_id
             where jl.org_id = ${orgId} and jl.account_id = a.id and je.book_id = ${args.bookId}
               and je.status in ('posted','reversed') and jp.ends_on <= ${periodEndsOn}
+              and ${excludePeriodEndJournals(sql`je.origin`)}
               and (${lineScope})
             group by jl.subsidiary_id having sum(jl.amount) <> 0
          )
@@ -119,6 +122,7 @@ export async function bankingCloseStatus(
   `)).rows[0];
   if (!period) throw new CloseError("period not found");
   const accounts = await bankingClosePopulation(orgId, args, period.ends_on);
+  const sourceEvidenceOn = await sourceEvidencePolicyActive(orgId);
   // The route already enforced the operator's subsidiary scope; the session
   // readers below run unrestricted so shared (null-subsidiary) accounts —
   // visible only to unrestricted callers — resolve instead of refusing.
@@ -133,6 +137,7 @@ export async function bankingCloseStatus(
       select id, through_date::text as through_date from reconciliations
        where org_id = ${orgId} and account_id = ${account.id} and status = 'signed_off'
          and through_date >= ${period.ends_on}::date
+         and (${sourceEvidenceOn} or evidence_kind = 'statement')
        order by through_date desc limit 1
     `)).rows[0];
     if (covering) {

@@ -348,19 +348,30 @@ export async function readinessChecks(
       db.execute(sql`
       select count(*) as count
         from (
-          select distinct l.currency, s.base_currency
+          select distinct l.currency, l.subsidiary_id,
+                 public.accounting_book_currency(${orgId}, e.book_id, l.subsidiary_id) as measurement_currency
             from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-            join subsidiaries s on s.id=l.subsidiary_id and s.org_id=l.org_id
            where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id}
              and e.status in ('posted','reversed') and ${inScope(sql`l.subsidiary_id`)}
-             and l.currency <> s.base_currency
+             and l.currency is distinct from public.accounting_book_currency(${orgId}, e.book_id, l.subsidiary_id)
         ) c
        where not exists (
          select 1 from fx_rates f where f.org_id = ${orgId}
-           and ((f.from_currency=c.currency and f.to_currency=c.base_currency)
-             or (f.from_currency=c.base_currency and f.to_currency=c.currency))
+           and ((f.from_currency=c.currency and f.to_currency=c.measurement_currency)
+             or (f.from_currency=c.measurement_currency and f.to_currency=c.currency))
            and f.rate_type = 'spot' and f.rate > 0 and f.as_of <= ${ctx.ends_on}
            and f.as_of >= ${ctx.ends_on}::date - ${closingRateLimit.maxAgeDays}::int
+       ) and not exists (
+         select 1 from fx_revaluation_rate_evidence evidence
+          where evidence.org_id = ${orgId} and evidence.book_id = ${ctx.book_id}
+            and evidence.period_id = ${ctx.period_id} and evidence.rate_date = ${ctx.ends_on}::date
+            and evidence.subsidiary_id = c.subsidiary_id
+            and evidence.transaction_currency = c.currency
+            and evidence.measurement_currency = c.measurement_currency and evidence.rate > 0
+            and not exists (
+              select 1 from fx_revaluation_rate_evidence successor
+               where successor.org_id = evidence.org_id and successor.supersedes_id = evidence.id
+            )
        )`),
       // The revaluation ENGINE decides fx readiness: the same monetary
       // population, spot-rate lookup, and delta arithmetic runRevaluation

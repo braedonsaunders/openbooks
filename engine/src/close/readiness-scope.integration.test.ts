@@ -7,6 +7,7 @@ import { finalizeCloseFlowApproval } from "./approvals.ts";
 import { periodFingerprint } from "./readiness.ts";
 import { refreshCloseRun } from "./run-automation.ts";
 import { startCloseRun } from "./run-start.ts";
+import { recordClosingFxRateEvidence } from "./fx-revaluation-evidence.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
 
 const enabled = !!process.env.OPENBOOKS_DB_URL;
@@ -83,11 +84,19 @@ test('scoped close ignores another entity drafts and assets but retains its own 
   } finally {await dropScratchOrg(org.orgId);}
 });
 
-test('close FX checks use entity functional currency and accept inverse spot quotes', {skip:!enabled}, async () => {
+test('close FX checks use book measurement currency and accept current closing evidence', {skip:!enabled}, async () => {
   const {org,actor,other}=await setup();
   try {
     await journal(org,actor,other,'10','USD');
-    await journal(org,actor,org.subsidiaryId,'10','USD');
+    const foreignEntry = randomUUID();
+    await db.execute(sql`insert into journal_entries
+      (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
+      values (${foreignEntry},${org.orgId},${org.bookId},${org.subsidiaryId},${foreignEntry},${org.date},${org.periodId},'draft','manual')`);
+    await db.execute(sql`insert into journal_lines
+      (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+      values (${org.orgId},${foreignEntry},1,${org.accounts.bank},${org.subsidiaryId},'12.5000','USD','10.0000','1.25'),
+             (${org.orgId},${foreignEntry},2,${org.accounts.bank},${org.subsidiaryId},'-12.5000','USD','-10.0000','1.25')`);
+    await db.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${actor} where id=${foreignEntry}`);
     await db.execute(sql`insert into fx_rates (org_id,from_currency,to_currency,rate_type,as_of,rate)
       values (${org.orgId},'CAD','USD','spot',${org.date},1)`);
     const runId=await run(org,actor);
@@ -96,7 +105,15 @@ test('close FX checks use entity functional currency and accept inverse spot quo
     await db.execute(sql`update close_runs set scope=${JSON.stringify({subsidiaryIds:[other]})}::jsonb where id=${runId}`);
     assert.equal((await counts(org.orgId,runId))['fx-missing']??0,0,'USD entity needs no USD/CAD quote');
     await db.execute(sql`update close_runs set scope=${JSON.stringify({subsidiaryIds:[org.subsidiaryId]})}::jsonb where id=${runId}`);
-    assert.equal((await counts(org.orgId,runId))['fx-missing'],1,'CAD entity foreign activity still requires a quote');
+    assert.equal((await counts(org.orgId,runId))['fx-missing'],1,'the CAD entity currency pair needs a usable quote or closing evidence');
+    await recordClosingFxRateEvidence({orgId:org.orgId,actorId:actor,input:{
+        bookId:org.bookId,subsidiaryId:org.subsidiaryId,periodId:org.periodId,accountId:org.accounts.bank,
+        transactionCurrency:'USD',measurementCurrency:'CAD',rate:'1.2500000000',
+        source:'Closing rate source',reason:'Rate evidence for the July close',
+        expectedCurrentId:null,requestId:randomUUID(),
+      }});
+    assert.equal((await counts(org.orgId,runId))['fx-missing']??0,0,
+      'current position evidence satisfies FX readiness without a duplicate global spot quote');
   } finally {await dropScratchOrg(org.orgId);}
 });
 
