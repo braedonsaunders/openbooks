@@ -3,6 +3,7 @@ import { parseJsonBody } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { parseInternalOrgId, requestHasInternalToken } from '../../../../../lib/internal-token'
 import { OverheadPublishError, publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
@@ -10,7 +11,7 @@ import { unexpectedServerError } from '../../../../../lib/api/unexpected'
 
 export const runtime = 'nodejs'
 const publishBody = z.object({
-  orgId: z.string().uuid(),
+  orgId: uuidString(),
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 }).strict()
 

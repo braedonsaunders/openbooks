@@ -1,5 +1,6 @@
 import 'server-only'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/platform/db'
 import { can } from '../authz'
@@ -11,8 +12,8 @@ import { conflict, forbidden, invalidInput, notFound } from './errors'
 import type { ApplicationContext } from './context'
 
 const actionInput = z.object({
-  screenKey: z.string().min(1).max(64), versionId: z.string().uuid(),
-  invocationId: z.string().uuid(), input: z.record(z.string(), z.unknown()),
+  screenKey: z.string().min(1).max(64), versionId: uuidString(),
+  invocationId: uuidString(), input: z.record(z.string(), z.unknown()),
 }).strict()
 
 /** Native forms use the same sandbox, actor/grant intersection and atomic

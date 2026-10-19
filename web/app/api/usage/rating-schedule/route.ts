@@ -1,9 +1,10 @@
 import { listUsageRatingSettings, saveUsageRatingSchedule } from "@openbooks/engine/billing";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 const Body = z.object({
-  linkId: z.string().uuid().nullish(),
+  linkId: uuidString().nullish(),
   cadence: z.enum(["billing_period", "monthly", "paused"]).optional(),
   graceDays: z.number().int().min(0).max(30).optional(),
   mode: z.enum(["draft", "auto_commit"]).optional(),

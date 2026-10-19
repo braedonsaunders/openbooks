@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/database'
 import { buyShipmentLabel, getShipmentLabels } from '@openbooks/engine/sales/shipping-labels'
 import { notFound } from '@/lib/api/responses'
@@ -22,10 +23,10 @@ export const GET = defineRoute({
 })
 
 const buyBody = z.object({
-  shipmentId: z.string().uuid(),
-  handlingUnitId:z.string().uuid(),
+  shipmentId: uuidString(),
+  handlingUnitId:uuidString(),
   providerRateId: z.string().min(1).max(200),
-  accountId: z.string().uuid().nullable().optional(),
+  accountId: uuidString().nullable().optional(),
   direction: z.enum(['outbound', 'return']).optional(),
 })
 

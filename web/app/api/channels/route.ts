@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { created } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   channelAttention,
   createChannel,
@@ -15,7 +16,7 @@ export const runtime = "nodejs";
 const createBodySchema = z.strictObject({
   kind: z.string().trim().min(1),
   name: z.string().trim().min(1),
-  subsidiaryId: z.string().uuid().nullish(),
+  subsidiaryId: uuidString().nullish(),
   currency: z.string().trim().min(3).max(3),
   externalAccount: z.string().trim().min(1),
   secrets: z.record(z.string(), z.json()).nullish(),

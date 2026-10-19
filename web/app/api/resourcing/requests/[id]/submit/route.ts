@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { submitResourceRequest } from "@openbooks/engine/resourcing/requests";
 import { defineRoute } from "@/lib/api/route";
 
-const Params = z.object({ id: z.string().uuid() }).strict();
+const Params = z.object({ id: uuidString() }).strict();
 
 export const POST = defineRoute({
   permission: "resourcing.manage",

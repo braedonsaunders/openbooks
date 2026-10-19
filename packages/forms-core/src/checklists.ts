@@ -1,11 +1,12 @@
 import { z } from 'zod'
+import { uuidString } from './identifiers'
 import { RECORD_FIELD_TYPES } from './record-data'
 import { evaluateLogicRule } from './evaluator'
 import { formSchemaV1Schema, logicRuleSchema, lintFormSchema, type LogicRule } from './schema'
 
 export const CHECKLIST_STEP_SUBJECT_KIND = 'hrm_process_step'
 export const checklistContextFields = ['employerSubsidiaryId', 'departmentId', 'kind'] as const
-const id = z.string().uuid()
+const id = uuidString()
 export const checklistStepDesignSchema = z.object({
   section: z.string().max(120).default(''),
   dependencies: z.array(id).max(100).default([]),

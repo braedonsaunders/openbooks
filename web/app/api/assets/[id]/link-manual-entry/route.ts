@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
@@ -6,8 +7,8 @@ import { linkManualDepreciationEntry } from "@openbooks/engine/assets/depreciati
 import { isUuid } from "../../../../../lib/list-params";
 
 const postBodySchema0 = z.strictObject({
-  lineId: z.string().uuid("lineId must be a valid id"),
-  entryId: z.string().uuid("entryId must be a valid id"),
+  lineId: uuidString("lineId must be a valid id"),
+  entryId: uuidString("entryId must be a valid id"),
 });
 
 export const runtime = "nodejs";

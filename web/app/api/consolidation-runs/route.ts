@@ -2,12 +2,13 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { runConsolidationGroup } from '@openbooks/engine/billing'
 
 export const runtime = 'nodejs'
 
 const runBody = z.strictObject({
-  groupId: z.string().uuid(),
+  groupId: uuidString(),
   periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   autoPost: z.boolean().optional(),

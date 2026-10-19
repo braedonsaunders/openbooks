@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
@@ -11,7 +12,7 @@ import {
 } from "../../../../lib/file-zip";
 import { fileViewer } from "../lib";
 const postBodySchema0 = z.strictObject({
-  fileIds: z.array(z.string().uuid("fileIds must contain valid ids")).min(1, "select at least one file"),
+  fileIds: z.array(uuidString("fileIds must contain valid ids")).min(1, "select at least one file"),
 });
 
 export const runtime = "nodejs";

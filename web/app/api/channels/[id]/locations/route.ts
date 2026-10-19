@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   CommerceError,
   listChannelLocations,
@@ -18,7 +19,7 @@ const locationsBodySchema = z.discriminatedUnion("action", [
     action: z.literal("upsert"),
     externalLocationId: z.string().trim().min(1).max(120),
     externalName: z.string().trim().min(1).max(200),
-    stockLocationId: z.string().uuid().nullish(),
+    stockLocationId: uuidString().nullish(),
     syncInventory: z.boolean().optional(),
     fulfilsOrders: z.boolean().optional(),
     bufferQuantity: z.string().trim().min(1).max(30).nullish(),

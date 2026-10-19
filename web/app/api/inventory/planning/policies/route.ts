@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { listDemandPolicies, saveDemandPolicy } from "@openbooks/engine/inventory";
 import { db } from "@openbooks/engine/platform/database";
 import { guardSubsidiaryScope } from "@/lib/authz";
@@ -7,14 +8,14 @@ import { planningTransaction } from "../_transaction";
 
 const Params = z.object({}).strict();
 const Body = z.object({
-  itemId: z.string().uuid(),
-  subsidiaryId: z.string().uuid(),
+  itemId: uuidString(),
+  subsidiaryId: uuidString(),
   leadTimeDays: z.number().int().min(0).nullable(),
   reviewCycleDays: z.number().int().min(0).nullable(),
   serviceLevel: z.string().nullable(),
   moqQty: z.string().nullable(),
   casePackQty: z.string().nullable(),
-  preferredSupplierId: z.string().uuid().nullable(),
+  preferredSupplierId: uuidString().nullable(),
   forecastMethod: z.enum(["auto", "seasonal", "intermittent", "average"]).nullable(),
   historyWeeks: z.number().int().min(4).max(156).nullable(),
 }).strict();

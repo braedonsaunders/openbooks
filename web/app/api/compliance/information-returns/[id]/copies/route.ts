@@ -1,5 +1,6 @@
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
@@ -21,7 +22,7 @@ import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({
-  recipientId: z.string().uuid({ error: 'recipientId must be a valid recipient id' }).nullable().optional(),
+  recipientId: uuidString({ error: 'recipientId must be a valid recipient id' }).nullable().optional(),
 })
 
 

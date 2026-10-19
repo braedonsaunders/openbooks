@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -7,7 +8,7 @@ import { PostingError } from "@openbooks/engine/journal/contracts";
 import { isUuid } from '../../../../../../lib/list-params'
 import { addJournalMatchFromLine, JournalPostingDeniedError } from '../../../../../../lib/banking-rules'
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ reconciliationId: z.string().uuid(), offsetAccountId: z.string().uuid() });
+const POSTBodySchema1 = z.object({ reconciliationId: uuidString(), offsetAccountId: uuidString() });
 
 
 

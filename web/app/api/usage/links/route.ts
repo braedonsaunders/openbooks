@@ -2,13 +2,14 @@ import { createSubscriptionUsageLink, listSubscriptionUsageLinks } from "@openbo
 import { defineRoute } from "@/lib/api/route";
 import { idempotentUsageCreate } from "../_idempotent";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
-const Query = z.object({ subscriptionId: z.string().uuid().optional(), customerId: z.string().uuid().optional() }).strict();
+const Query = z.object({ subscriptionId: uuidString().optional(), customerId: uuidString().optional() }).strict();
 const Body = z.object({
-  subscriptionId: z.string().uuid(),
-  customerId: z.string().uuid(),
-  planVersionId: z.string().uuid(),
-  meterIds: z.array(z.string().uuid()).min(1).max(500),
+  subscriptionId: uuidString(),
+  customerId: uuidString(),
+  planVersionId: uuidString(),
+  meterIds: z.array(uuidString()).min(1).max(500),
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   commitAmount: z.string().nullable().optional(),

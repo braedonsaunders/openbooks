@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { checkWorkOrderCreateReplay, createWorkOrder, type WorkOrderInput } from "@openbooks/engine/manufacturing/work-orders";
 import { db } from "@openbooks/engine/platform/db";
 import { guardSubsidiaryScope } from "@/lib/authz";
@@ -9,14 +10,14 @@ import { manufacturingTransaction } from "../_transaction";
 
 const Params = z.object({}).strict();
 const Body = z.object({
-  producedItemId: z.string().uuid(), quantityOrdered: z.string(), subsidiaryId: z.string().uuid(),
+  producedItemId: uuidString(), quantityOrdered: z.string(), subsidiaryId: uuidString(),
   productionMode:z.enum(["order","batch","continuous"]).optional(),campaignReference:z.string().trim().max(100).nullable().optional(),
-  issueLocationId: z.string().uuid().nullable().optional(), receiptLocationId: z.string().uuid().nullable().optional(),
+  issueLocationId: uuidString().nullable().optional(), receiptLocationId: uuidString().nullable().optional(),
   plannedStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   plannedEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  routingId: z.string().uuid().nullable().optional(), priority: z.enum(["low", "normal", "high", "rush"]).optional(),
-  source: z.enum(["manual", "sales_order"]).optional(), sourceRefId: z.string().uuid().nullable().optional(),
-  operatingProfile: z.string().nullable().optional(), operatingDepartmentId: z.string().uuid().nullable().optional(),
+  routingId: uuidString().nullable().optional(), priority: z.enum(["low", "normal", "high", "rush"]).optional(),
+  source: z.enum(["manual", "sales_order"]).optional(), sourceRefId: uuidString().nullable().optional(),
+  operatingProfile: z.string().nullable().optional(), operatingDepartmentId: uuidString().nullable().optional(),
 }).strict();
 
 export const POST = defineRoute({

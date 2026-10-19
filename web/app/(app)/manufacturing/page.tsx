@@ -3,7 +3,7 @@ import { readWorkListPresentation } from "@openbooks/engine/organization/list-pr
 import { WorkListPresentation } from "@/components/work-list-presentation";
 import { manufacturingFeatureEnabled } from "@openbooks/engine/manufacturing/gate";
 import Link from "next/link";
-import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { getTranslations, getLocale } from "next-intl/server";
 import { db } from "@openbooks/engine/platform/db";
 import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
@@ -46,7 +46,7 @@ export default async function ManufacturingHome({searchParams}:{searchParams:Pro
   if(can(authz,"items.read"))tabs.push({href:"/manufacturing/quality",label:t("quality.title"),active:false});
   const presentation=(scalar(sp.presentation)??data.presentation??"board")==="list"?"list":"board";
 
-  const record=scalar(sp.record),parsedRecord=z.string().uuid().safeParse(record),recordId=record==="new"?record:parsedRecord.success?parsedRecord.data:undefined;
+  const record=scalar(sp.record),parsedRecord=uuidString().safeParse(record),recordId=record==="new"?record:parsedRecord.success?parsedRecord.data:undefined;
   return <ListPageLayout header={<PageHeader title={t("title")} description={t("cockpit.description")} actions={view!=="start"&&can(authz,"manufacturing.manage")?<Button asChild><Link href="/manufacturing?view=start">{t("cockpit.new")}</Link></Button>:undefined}/>}>
     <div className="space-y-5"><ModuleHomeTabs tabs={tabs}/>{view==="setup"?<ManufacturingSetupJourney/>:view==="start"?<div className="space-y-5">{canSetup?<p className="text-sm text-slate-500">{t("cockpit.firstTime")} <Link className="font-medium text-teal-700 hover:underline" href="/admin/setup/manufacturing">{t("cockpit.setup")}</Link></p>:null}<WorkflowStart choices={data.choices}/><p className="max-w-3xl text-sm text-slate-500">{t("cockpit.projectNote")}</p></div>:<ServerPagedTable source="manufacturing_home_queue" rows={data.orders.rows} columns={[
       {key:"number",header:t("fields.number"),cell:row=><Link className="font-medium text-teal-700" href={(closeHref+(closeHref.includes("?")?"&":"?")+"record="+row.id) as never}>{String(row.number)}</Link>},

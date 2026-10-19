@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -10,7 +11,7 @@ import { BudgetMutationError } from '../../../../lib/budget-mutations'
 import { scenarioOutOfScopeSubsidiaryNames } from '../../../../lib/budget-scope'
 import { notFound } from "@/lib/api/responses";
 const PATCHBodySchema1 = z.object({
-  bookId: z.string().uuid().optional(), description: z.string().nullable().optional(), expectedRevision: z.number().int().positive(),
+  bookId: uuidString().optional(), description: z.string().nullable().optional(), expectedRevision: z.number().int().positive(),
   fiscalYear: z.number().int().optional(), kind: z.enum(['budget', 'forecast']).optional(), name: z.string().trim().min(1).optional(),
 });
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -8,7 +9,7 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const POSTBodySchema1 = z.object({
   periodStart: isoDate.nullable().optional(),
   periodEnd: isoDate,
-  projectIds: z.array(z.string().uuid()).max(1000).nullable().optional(),
+  projectIds: z.array(uuidString()).max(1000).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
 

@@ -2,6 +2,7 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import {
   LossOfControlProposalError,
@@ -19,36 +20,36 @@ const lossOfControlSchema = z.object({
   idempotencyKey: z.string().min(1).max(120),
   assessment: z.string().trim().min(8).max(4000),
   ociAssessment: z.string().trim().min(8).max(4000),
-  eliminationSubsidiaryId: z.uuid(),
+  eliminationSubsidiaryId: uuidString(),
   proceeds: exactMoney(),
-  proceedsAccountId: z.uuid(),
+  proceedsAccountId: uuidString(),
   parentInvestmentCarrying: exactMoney(),
   parentRetainedCarrying: exactMoney(),
   parentToGroupRate: rate,
-  investmentTranslationAccountId: z.uuid(),
+  investmentTranslationAccountId: uuidString(),
   retainedFairValue: exactMoney(),
   retainedPercent: exactMoney(),
   retainedMethod: z.enum(["none", "equity", "financial_asset"]),
-  retainedAccountId: z.uuid(),
-  gainLossAccountId: z.uuid(),
-  parentGainLossAccountId: z.uuid(),
-  equityIncomeAccountId: z.uuid(),
-  distributionAccountId: z.uuid().nullable(),
-  distributionIncomeAccountId: z.uuid().nullable(),
+  retainedAccountId: uuidString(),
+  gainLossAccountId: uuidString(),
+  parentGainLossAccountId: uuidString(),
+  equityIncomeAccountId: uuidString(),
+  distributionAccountId: uuidString().nullable(),
+  distributionIncomeAccountId: uuidString().nullable(),
   rates: z
-    .array(z.object({ subsidiaryId: z.uuid(), rate }))
+    .array(z.object({ subsidiaryId: uuidString(), rate }))
     .min(1)
     .max(1000),
   additionalConsolidationLines: z
-    .array(z.object({ lineId: z.uuid(), amount: exactMoney() }))
+    .array(z.object({ lineId: uuidString(), amount: exactMoney() }))
     .max(2000),
   oci: z
     .array(
       z.object({
-        accountId: z.uuid(),
+        accountId: uuidString(),
         balance: exactMoney(),
         treatment: z.enum(["profit_loss", "retained_earnings"]),
-        destinationAccountId: z.uuid(),
+        destinationAccountId: uuidString(),
         description: z.string().trim().min(1).max(1000),
       }),
     )

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { defineRoute } from '@/lib/api/route'
@@ -19,7 +20,7 @@ export const runtime = 'nodejs'
  */
 const body = z.strictObject({
   key: z.enum(RATIO_INPUT_KEYS),
-  accountIds: z.array(z.string().uuid()).max(500),
+  accountIds: z.array(uuidString()).max(500),
 })
 
 export const GET = defineRoute({

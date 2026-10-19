@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -30,14 +31,14 @@ export const POST = defineRoute({
   handler: async ({ request: request, authz: routeAuthz }) => {
     const gate = routeAuthz;
     const routeBodySchema1 = z.discriminatedUnion('action', [
-      z.object({ action: z.literal('preview-page'), draftId: z.string().uuid(), route: z.string().min(1) }),
+      z.object({ action: z.literal('preview-page'), draftId: uuidString(), route: z.string().min(1) }),
       z.object({
         action: z.literal('draft'), bundle: z.json(), reason: z.string().min(1),
-        expectedBaseVersionId: z.string().uuid().nullable().optional(),
-        sourceDraft: z.object({ id: z.string().uuid(), contentHash: z.string().min(1) }).optional(),
+        expectedBaseVersionId: uuidString().nullable().optional(),
+        sourceDraft: z.object({ id: uuidString(), contentHash: z.string().min(1) }).optional(),
       }),
-      z.object({ action: z.literal('discard'), draftId: z.string().uuid(), contentHash: z.string().min(1) }),
-      z.object({ action: z.literal('activate'), draftId: z.string().uuid(), contentHash: z.string().min(1) }),
+      z.object({ action: z.literal('discard'), draftId: uuidString(), contentHash: z.string().min(1) }),
+      z.object({ action: z.literal('activate'), draftId: uuidString(), contentHash: z.string().min(1) }),
     ]);
     const parsed = await parseJsonBody(request, routeBodySchema1, { maxBodyBytes: MAX_DRAFT_BODY_BYTES })
     if (!parsed.ok) return parsed.response

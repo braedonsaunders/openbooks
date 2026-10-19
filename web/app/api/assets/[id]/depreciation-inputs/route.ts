@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
@@ -19,8 +20,8 @@ const postBodySchema0 = z.strictObject({
   kind: z.enum(["manual", "production_usage"]),
   value: exactMoney("value must be a decimal string; JSON numbers are refused"),
   memo: z.string().trim().max(2000),
-  evidenceFileId: z.string().uuid("evidenceFileId must be a valid id"),
-  bookId: z.string().uuid("bookId must be a valid id").optional(),
+  evidenceFileId: uuidString("evidenceFileId must be a valid id"),
+  bookId: uuidString("bookId must be a valid id").optional(),
 });
 
 export const runtime = "nodejs";

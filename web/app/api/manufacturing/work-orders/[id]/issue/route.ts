@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { isoDate } from "@/lib/api/json";
 import { issueMaterials } from "@openbooks/engine/manufacturing/materials";
 import { executeManufacturingIssue } from "@openbooks/engine/manufacturing/execution";
@@ -8,11 +9,11 @@ import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../../../_transaction";
 import { loadScopedWorkOrder } from "../../_scope";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({
   lines: z.array(z.object({
-    materialId: z.string().uuid(), quantity: z.string(), lotId: z.string().uuid().nullable().optional(),
-    serialId: z.string().uuid().nullable().optional(),
+    materialId: uuidString(), quantity: z.string(), lotId: uuidString().nullable().optional(),
+    serialId: uuidString().nullable().optional(),
   }).strict()).min(1).max(500),
   issuedOn: isoDate().nullable().optional(),
 }).strict();

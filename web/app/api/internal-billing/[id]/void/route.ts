@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { voidInternalBilling } from '@openbooks/engine/internal-billing'
@@ -9,7 +10,7 @@ export const runtime = 'nodejs'
 export const POST = defineRoute({
   permission: 'gl.post',
   feature: 'internalBilling',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   body: z.object({
     reason: z.string(),
     reversalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),

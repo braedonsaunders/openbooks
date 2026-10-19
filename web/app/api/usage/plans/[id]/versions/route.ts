@@ -2,8 +2,9 @@ import { createUsageRatingPlanVersion } from "@openbooks/engine/billing/usage/ra
 import { defineRoute } from "@/lib/api/route";
 import { idempotentUsageCreate } from "../../../_idempotent";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
-const Params = z.object({ id: z.string().uuid() }).strict();
+const Params = z.object({ id: uuidString() }).strict();
 const Body = z.object({ effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict();
 
 export const POST = defineRoute({

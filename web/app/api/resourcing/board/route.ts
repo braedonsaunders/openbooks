@@ -1,14 +1,15 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { loadResourcingBoard } from "@/lib/resourcing/queries";
 
 const Query = z.object({
   firstSunday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   lastSunday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  projectId: z.string().uuid().optional(),
-  departmentId: z.string().uuid().optional(),
+  projectId: uuidString().optional(),
+  departmentId: uuidString().optional(),
   jobTitle: z.string().trim().min(1).optional(),
-  qualificationTypeId: z.string().uuid().optional(),
+  qualificationTypeId: uuidString().optional(),
   page: z.coerce.number().int().min(1).optional(),
 }).strict();
 

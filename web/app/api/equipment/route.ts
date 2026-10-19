@@ -2,6 +2,7 @@ import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { cmp, normalizeMoney, wholeDigits } from "@openbooks/engine/money";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
@@ -22,8 +23,7 @@ const OPTIONAL_UUID_REMEDIES: Record<string, string> = {
 }
 const optionalUuidField = (field: keyof typeof OPTIONAL_UUID_REMEDIES) => z.preprocess(
   (value) => value === '' ? null : value,
-  z.string({ error: `${field} must be a UUID; ${OPTIONAL_UUID_REMEDIES[field]}` })
-    .uuid({ error: `${field} must be a UUID; ${OPTIONAL_UUID_REMEDIES[field]}` })
+  uuidString({ error: `${field} must be a UUID; ${OPTIONAL_UUID_REMEDIES[field]}` })
     .nullable()
     .optional(),
 )

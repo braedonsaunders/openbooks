@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
@@ -8,7 +9,7 @@ import { readPayRunPaymentEvidence } from '@openbooks/engine/payroll/payment'
 
 export const GET = defineRoute({
   permission: 'payroll.read', feature: 'payroll',
-  params: z.object({ id: z.string().uuid().transform(value => value.toLowerCase()) }),
+  params: z.object({ id: uuidString().transform(value => value.toLowerCase()) }),
   handler: async ({ request, authz, params }) => {
     try {
       const evidence = await readPayRunPaymentEvidence({ orgId: authz.user.orgId, actorId: authz.user.id,

@@ -1,6 +1,7 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { parseJsonBody } from '@/lib/api/json';
 import { NextResponse } from 'next/server'
 import {
@@ -18,12 +19,12 @@ const bodyObjectSchema = z.object({
   expectedRevision: z.string().min(1),
   targets: z.array(z.object({
     sequence: z.number().int().nonnegative().optional(),
-    targetAccountId: z.string().uuid().nullable().optional(),
-    departmentId: z.string().uuid().nullable().optional(),
-    locationId: z.string().uuid().nullable().optional(),
-    classId: z.string().uuid().nullable().optional(),
-    projectId: z.string().uuid().nullable().optional(),
-    subsidiaryId: z.string().uuid().nullable().optional(),
+    targetAccountId: uuidString().nullable().optional(),
+    departmentId: uuidString().nullable().optional(),
+    locationId: uuidString().nullable().optional(),
+    classId: uuidString().nullable().optional(),
+    projectId: uuidString().nullable().optional(),
+    subsidiaryId: uuidString().nullable().optional(),
     extraDims: z.record(z.string(), z.string()).optional(),
     fixedPercent: z.string().nullable().optional(),
     weight: z.string().nullable().optional(),

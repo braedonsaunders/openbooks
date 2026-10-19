@@ -1,5 +1,6 @@
 import { notFound } from '@/lib/api/responses';
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
@@ -13,7 +14,7 @@ import {
   recordReportRun,
 } from '../../../../lib/custom-reports'
 const POSTBodySchema1 = z.object({
-  query: z.json().optional(), definitionId: z.string().uuid().optional(), preview: z.boolean().optional(),
+  query: z.json().optional(), definitionId: uuidString().optional(), preview: z.boolean().optional(),
 }).refine((body) => body.query !== undefined || body.definitionId !== undefined, { message: 'query or definitionId is required' });
 
 

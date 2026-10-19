@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -12,9 +13,9 @@ import { notFound } from "@/lib/api/responses";
 const PATCHBodySchema1 = z.object({
   expectedRevision: z.number().int().positive(),
   cells: z.array(z.object({
-    accountId: z.string().uuid(), periodId: z.string().uuid(), amount: z.string(), note: z.string().nullable().optional(),
-    subsidiaryId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(),
-    projectId: z.string().uuid().nullable().optional(), locationId: z.string().uuid().nullable().optional(), classId: z.string().uuid().nullable().optional(),
+    accountId: uuidString(), periodId: uuidString(), amount: z.string(), note: z.string().nullable().optional(),
+    subsidiaryId: uuidString().nullable().optional(), departmentId: uuidString().nullable().optional(),
+    projectId: uuidString().nullable().optional(), locationId: uuidString().nullable().optional(), classId: uuidString().nullable().optional(),
     // Custom segment values (fund included) keyed by segment key; validated against the active segments on save.
     extraDims: z.record(z.string(), z.string()).nullable().optional(),
   })).min(1),

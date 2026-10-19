@@ -20,6 +20,7 @@ import {
 } from "@openbooks/engine/organization/actor-subsidiaries";
 import { isUuid } from "../../../../lib/list-params";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 const apiKeyExpirySchema = z.string()
   .datetime({ offset: true, error: "expiresAt must be an ISO date-time with a timezone or null" })
@@ -38,7 +39,7 @@ const createApiKeyBodySchema = z.object({
 });
 
 const updateApiKeyBodySchema = z.object({
-  id: z.string().uuid(),
+  id: uuidString(),
   description: z.string().nullable().optional(),
   expiresAt: apiKeyExpirySchema,
   isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
@@ -47,7 +48,7 @@ const updateApiKeyBodySchema = z.object({
   scopes: z.array(z.string().trim().min(1), { error: "at least one scope is required" }).min(1, { error: "at least one scope is required" }).optional(),
 });
 
-const revokeApiKeyBodySchema = z.object({ id: z.string().uuid() });
+const revokeApiKeyBodySchema = z.object({ id: uuidString() });
 
 
 export const runtime = "nodejs";

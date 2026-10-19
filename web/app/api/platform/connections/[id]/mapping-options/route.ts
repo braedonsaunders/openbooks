@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { buildSource, getConnection } from "@openbooks/engine/sync/connection";
@@ -14,7 +15,7 @@ const querySchema = z.object({ field: z.string().min(1).max(120), parent: z.stri
 export const GET = defineRoute({
   permission: "admin.setup.manage",
   feature: { none: "Connector configuration is organization setup and has no separate feature gate." },
-  scope: "unrestricted", params: z.object({ id: z.string().uuid() }),
+  scope: "unrestricted", params: z.object({ id: uuidString() }),
   handler: async ({ request, params: { id }, authz }) => {
     const query = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!query.success) return NextResponse.json({ error: "Choose a supported mapping field and parent record" }, { status: 422 });

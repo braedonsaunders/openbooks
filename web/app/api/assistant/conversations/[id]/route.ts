@@ -12,7 +12,7 @@ import { abortActiveRun } from "../../../../../lib/assistant/owned-runs";
 import { createDbOwnedRunStore } from "../../../../../lib/assistant/owned-runs-db";
 import { markTitleRenamed } from "../../../../../lib/assistant/conversation-title";
 import { notFound } from "@/lib/api/responses";
-import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { isUuid, uuidString } from "@openbooks/engine/platform/identifiers";
 import { conversationScope } from "../../../../../lib/assistant/conversation-scopes";
 
 /** The conversation's scope from `?scope=`; the general assistant when absent. */
@@ -30,7 +30,7 @@ const renameBody = z.object({ title: z.string().trim().min(1) }).strict();
 export const GET = defineRoute({
   permission: "assistant.use",
   feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   handler: async ({ request: req, authz: gate, params }) => {
   const { id } = params;
   if (!(await ownsConversation(gate, id, scopeOf(req)))) {
@@ -53,7 +53,7 @@ export const GET = defineRoute({
 export const PATCH = defineRoute({
   permission: "assistant.use",
   feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   body: renameBody,
   handler: async ({ request, authz: gate, params, body }) => {
   const { id } = params;
@@ -69,7 +69,7 @@ export const PATCH = defineRoute({
 export const DELETE = defineRoute({
   permission: "assistant.use",
   feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   handler: async ({ request, authz: gate, params }) => {
   const { id } = params;
   const scope = scopeOf(request);

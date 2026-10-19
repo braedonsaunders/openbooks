@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
@@ -82,7 +83,7 @@ export const POST = defineRoute({
     const gate = routeAuthz;
     const { user } = gate
     const routeBodySchema1 = z.object({
-      accountId: z.string().uuid().optional(), source: z.enum(['ofx', 'csv', 'camt053', 'bai2', 'mt940']).optional(),
+      accountId: uuidString().optional(), source: z.enum(['ofx', 'csv', 'camt053', 'bai2', 'mt940']).optional(),
       text: z.string().optional(), sourceBytesBase64: z.string().nullable().optional(),
       filename: z.string().nullable().optional(), contentType: z.string().nullable().optional(),
       mapping: z.object({ date: z.number().int().nonnegative(), amount: z.number().int().nonnegative(), description: z.number().int().nonnegative(), counterpartyRef: z.number().int().nonnegative().optional(), bankTransactionId: z.number().int().nonnegative().optional(), debitAmount: z.number().int().nonnegative().optional() }).optional(),

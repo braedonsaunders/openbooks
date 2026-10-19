@@ -4,21 +4,22 @@ import {
 } from "@openbooks/engine/sync";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 const Config = z.object({
   mode: z.enum(["post_historical", "opening_balances"]).optional(),
   cutoverOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
   historyDepthMonths: z.number().int().positive().nullish(),
-  incomeAccountId: z.string().uuid().nullish(),
-  clearingAccountId: z.string().uuid().nullish(),
-  taxCodeId: z.string().uuid().nullish(),
-  planMap: z.record(z.string(), z.string().uuid()).optional(),
-  customerMap: z.record(z.string(), z.string().uuid()).optional(),
+  incomeAccountId: uuidString().nullish(),
+  clearingAccountId: uuidString().nullish(),
+  taxCodeId: uuidString().nullish(),
+  planMap: z.record(z.string(), uuidString()).optional(),
+  customerMap: z.record(z.string(), uuidString()).optional(),
   autoSync: z.boolean().optional(),
 }).strict();
 
 const Body = z.object({
-  runId: z.string().uuid(),
+  runId: uuidString(),
   config: Config,
 }).strict();
 

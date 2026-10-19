@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { sql } from 'drizzle-orm'
 import { db, withOrgContext, withOrgTransaction } from '@openbooks/engine/platform/database'
 import { defineRoute } from '@/lib/api/route'
@@ -8,7 +9,7 @@ import { digest, loadTransfer, recordTransferEvent, transferAuthority } from '@/
 import { TRANSFER_CHUNK_BYTES, TransferRefusal } from '@/lib/data-io/transfer-contract'
 import { transferDownloadRange } from '@/lib/data-io/download-range'
 export const runtime = 'nodejs'
-export const GET = defineRoute({ authorize: authorizeTransfers, feature: transferFeature, params: z.object({ id: z.uuid() }),
+export const GET = defineRoute({ authorize: authorizeTransfers, feature: transferFeature, params: z.object({ id: uuidString() }),
   handler: async ({ authz, params, request }) => {
     const orgId = authz.user.orgId
     const job = await withOrgTransaction(orgId, async () => {

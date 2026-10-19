@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -20,23 +21,23 @@ import { toActionFailure } from './action-failure'
 import { notFound, postingRefusal } from "@/lib/api/responses";
 import { partylessControlLines } from '../../../../lib/journal-warnings'
 const POSTBodySchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('submit'), documentId: z.string().uuid() }),
-  z.object({ action: z.literal('post'), documentId: z.string().uuid() }),
+  z.object({ action: z.literal('submit'), documentId: uuidString() }),
+  z.object({ action: z.literal('post'), documentId: uuidString() }),
   z.object({
     action: z.literal('return_to_draft'),
-    documentId: z.string().uuid(),
+    documentId: uuidString(),
     reason: z.string().trim().min(5, 'a return reason between 5 and 500 characters is required').max(500),
     expectedUpdatedAt: z.string().min(1).optional(),
   }),
   z.object({
     action: z.literal('withdraw'),
-    documentId: z.string().uuid(),
+    documentId: uuidString(),
     reason: z.string().trim().min(5, 'a withdrawal reason between 5 and 500 characters is required').max(500),
     expectedUpdatedAt: z.string().min(1).optional(),
   }),
   z.object({
     action: z.literal('retry-effects'),
-    documentId: z.string().uuid(),
+    documentId: uuidString(),
     reason: z.string().max(1000, 'A 10–1000 character review reason is required to retry posting effects').refine(
       (reason) => reason.trim().length >= 10,
       'A 10–1000 character review reason is required to retry posting effects',

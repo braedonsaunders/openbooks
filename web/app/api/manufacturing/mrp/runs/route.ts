@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { findMrpRunRecord, listMrpRuns, runMrp } from "@openbooks/engine/manufacturing/mrp";
 import { db } from "@openbooks/engine/platform/db";
 import { guardSubsidiaryScope } from "@/lib/authz";
@@ -8,14 +9,14 @@ import { manufacturingTransaction } from "../../_transaction";
 
 const Params = z.object({}).strict();
 const Body = z.object({
-  subsidiaryId: z.string().uuid(), horizonDays: z.number().int().min(1).max(366).optional(),
+  subsidiaryId: uuidString(), horizonDays: z.number().int().min(1).max(366).optional(),
   capacityCheck: z.boolean().optional(),
 }).strict();
 
 export const GET = defineRoute({
   permission: "manufacturing.read", feature: "manufacturingMrp", params: Params,
   handler: async ({ request, authz }) => manufacturingTransaction(authz.user.orgId, async () => {
-    const parsed = z.string().uuid().safeParse(new URL(request.url).searchParams.get("subsidiaryId"));
+    const parsed = uuidString().safeParse(new URL(request.url).searchParams.get("subsidiaryId"));
     if (!parsed.success) return Response.json({ error: "subsidiaryId must be a UUID" }, { status: 400 });
     const denied = guardSubsidiaryScope(authz, parsed.data);
     if (denied) return denied;

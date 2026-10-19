@@ -1,13 +1,14 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { canonicalDecimal } from './exact-decimal'
 import { moneyRefusal } from './payroll-decimal-refusal'
 
-const project = { projectId: z.string().uuid() }
+const project = { projectId: uuidString() }
 const taskPatchShape = {
   phaseId: z.string().nullable().optional(),
-  calendarId: z.string().uuid().nullable().optional(),
-  parentTaskId: z.string().uuid().nullable().optional(),
+  calendarId: uuidString().nullable().optional(),
+  parentTaskId: uuidString().nullable().optional(),
   outlineLevel: z.number().int().min(0).optional(),
   name: z.string().trim().min(1).max(500).optional(),
   description: z.string().max(5000).optional(),
@@ -20,7 +21,7 @@ const taskPatchShape = {
   assignee: z.string().max(500).optional(),
   order: z.number().int().min(0).optional(),
   resourceAssignments: z.array(z.strictObject({
-    resourceId: z.string().uuid(),
+    resourceId: uuidString(),
     units: z.number().finite().positive().optional(),
     role: z.string().max(200).optional(),
   })).optional(),
@@ -33,8 +34,8 @@ const taskPatchShape = {
 const taskPatch = z.strictObject(taskPatchShape)
 const taskCreate = z.strictObject({ ...taskPatchShape, name: z.string().trim().min(1).max(500) })
 const dependencyInput = z.strictObject({
-  predecessorId: z.string().uuid(),
-  successorId: z.string().uuid(),
+  predecessorId: uuidString(),
+  successorId: uuidString(),
   type: z.enum(['FS', 'SS', 'FF', 'SF']).optional(),
   lagDays: z.number().int().min(-2147483648).max(2147483647).optional(),
 })
@@ -45,7 +46,7 @@ const baselineInput = z.strictObject({
   isPrimary: z.boolean().optional(),
 })
 const calendarInput = z.strictObject({
-  id: z.string().uuid().optional(),
+  id: uuidString().optional(),
   name: z.string().trim().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
   workingDays: z.record(z.string().regex(/^[0-6]$/), z.boolean()).optional(),
@@ -58,11 +59,11 @@ const costRate = z.string().superRefine((value, ctx) => {
   if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: 'custom', message: moneyRefusal('Cost rate', value) })
 })
 const resourceInput = z.strictObject({
-  id: z.string().uuid().optional(),
+  id: uuidString().optional(),
   name: z.string().trim().min(1).max(200).optional(),
   role: z.string().max(200).optional(),
   kind: z.enum(['labor', 'crew', 'equipment', 'subcontractor']).optional(),
-  calendarId: z.string().uuid().nullable().optional(),
+  calendarId: uuidString().nullable().optional(),
   defaultUnits: z.number().finite().positive().optional(),
   capacityPerDay: z.number().finite().positive().optional(),
   costRate: costRate.nullable().optional(),
@@ -71,15 +72,15 @@ const resourceInput = z.strictObject({
 })
 export const projectScheduleBody = z.discriminatedUnion('action', [
   z.strictObject({ ...project, action: z.literal('createTask'), input: taskCreate }),
-  z.strictObject({ ...project, action: z.literal('updateTask'), taskId: z.string().uuid(), patch: taskPatch }),
-  z.strictObject({ ...project, action: z.literal('batchUpdateTasks'), updates: z.array(z.strictObject({ id: z.string().uuid(), ...taskPatchShape })).min(1) }),
-  z.strictObject({ ...project, action: z.literal('deleteTask'), taskId: z.string().uuid() }),
+  z.strictObject({ ...project, action: z.literal('updateTask'), taskId: uuidString(), patch: taskPatch }),
+  z.strictObject({ ...project, action: z.literal('batchUpdateTasks'), updates: z.array(z.strictObject({ id: uuidString(), ...taskPatchShape })).min(1) }),
+  z.strictObject({ ...project, action: z.literal('deleteTask'), taskId: uuidString() }),
   z.strictObject({ ...project, action: z.literal('createDependency'), input: dependencyInput }),
-  z.strictObject({ ...project, action: z.literal('deleteDependency'), id: z.string().uuid() }),
+  z.strictObject({ ...project, action: z.literal('deleteDependency'), id: uuidString() }),
   z.strictObject({ ...project, action: z.literal('createBaseline'), input: baselineInput }),
-  z.strictObject({ ...project, action: z.literal('deleteBaseline'), id: z.string().uuid() }),
+  z.strictObject({ ...project, action: z.literal('deleteBaseline'), id: uuidString() }),
   z.strictObject({ ...project, action: z.literal('saveCalendar'), input: calendarInput }),
-  z.strictObject({ ...project, action: z.literal('deleteCalendar'), id: z.string().uuid() }),
+  z.strictObject({ ...project, action: z.literal('deleteCalendar'), id: uuidString() }),
   z.strictObject({ ...project, action: z.literal('saveResource'), input: resourceInput }),
-  z.strictObject({ ...project, action: z.literal('deleteResource'), id: z.string().uuid() }),
+  z.strictObject({ ...project, action: z.literal('deleteResource'), id: uuidString() }),
 ])

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { endWorkCenterRate, getWorkCenter } from "@openbooks/engine/manufacturing/work-centers";
 import { guardSubsidiaryScope } from "@/lib/authz";
@@ -6,7 +7,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { manufacturingTransaction } from "../../../../_transaction";
 
-const Params = z.object({ id: z.string().uuid(), rateId: z.string().uuid() });
+const Params = z.object({ id: uuidString(), rateId: uuidString() });
 const Body = z.object({ effectiveTo: z.string() });
 
 export const PATCH = defineRoute({

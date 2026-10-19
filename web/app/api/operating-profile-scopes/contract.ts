@@ -1,2 +1,3 @@
 import { z } from 'zod'
-export const ScopeBody = z.object({ departmentId: z.string().uuid().nullable(), family: z.enum(['project', 'production']), profileIds: z.array(z.string().uuid()).min(1).max(100), defaultProfileId: z.string().uuid().nullable(), reason: z.string(), expectedRevision: z.number().int().positive().optional() }).strict()
+import { uuidString } from '@openbooks/engine/platform/identifiers'
+export const ScopeBody = z.object({ departmentId: uuidString().nullable(), family: z.enum(['project', 'production']), profileIds: z.array(uuidString()).min(1).max(100), defaultProfileId: uuidString().nullable(), reason: z.string(), expectedRevision: z.number().int().positive().optional() }).strict()

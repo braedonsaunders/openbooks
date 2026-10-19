@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { getTranslations } from "next-intl/server";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { traceManufacturingGenealogy } from "@openbooks/engine/manufacturing/genealogy";
@@ -10,7 +11,7 @@ import { ListPageLayout } from "@/components/page-layout";
 import { GenealogyTable } from "./GenealogyTable";
 
 export const dynamic = "force-dynamic";
-const Query = z.object({ kind:z.enum(["lot","serial"]),id:z.string().uuid(),direction:z.enum(["forward","backward"]).default("forward"),maxDepth:z.coerce.number().int().min(1).max(32).default(8) });
+const Query = z.object({ kind:z.enum(["lot","serial"]),id:uuidString(),direction:z.enum(["forward","backward"]).default("forward"),maxDepth:z.coerce.number().int().min(1).max(32).default(8) });
 export default async function Page({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}) {
   const authz=await requirePermission("manufacturing.read");
   await requireFeatureEnabled(authz.user.orgId,"manufacturing");

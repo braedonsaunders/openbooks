@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { sql } from 'drizzle-orm';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -20,7 +21,7 @@ const PUTBodySchema = z.object({
     customerKind: z.enum(['consumer', 'business']),
     // A credit memo names the posted invoice it corrects (null clears it);
     // absent leaves the relationship untouched.
-    correctsDocumentId: z.string().uuid().nullable().optional(),
+    correctsDocumentId: uuidString().nullable().optional(),
   }),
   evidence: z.array(EvidenceSchema).max(6),
 });
@@ -41,7 +42,7 @@ type EvidenceRow = {
 export const GET = defineRoute({
   permission: 'ar.read',
   feature: 'crossBorderTax',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   handler: async ({ authz: routeAuthz, params }) => {
     const gate = routeAuthz;
     try {
@@ -72,7 +73,7 @@ export const GET = defineRoute({
 export const PUT = defineRoute({
   permission: 'ar.create',
   feature: 'crossBorderTax',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   body: PUTBodySchema,
   handler: async ({ authz: routeAuthz, params, body: routeBody }) => {
     const gate = routeAuthz;

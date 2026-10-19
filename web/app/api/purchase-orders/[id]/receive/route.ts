@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/db'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { lineRequiresReceipt } from '@openbooks/engine/records/stock-receipt'
@@ -17,10 +18,10 @@ import { readDocumentScope, readPurchaseOrderLinesForReceipt } from '../../../..
 
 export const runtime = 'nodejs'
 
-const params = z.object({ id: z.string().uuid() })
+const params = z.object({ id: uuidString() })
 
 const receiveLineBody = z.object({
-  sourceLineId: z.string().uuid(),
+  sourceLineId: uuidString(),
   quantity: z.string().min(1).max(50),
 }).strict()
 

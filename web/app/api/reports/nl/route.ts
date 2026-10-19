@@ -1,6 +1,7 @@
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { REPORT_ENTITY_MAP } from "@openbooks/reports";
 import { draftNlReport, listNlDrafts, transitionNlDraft, validateNlDefinition } from "@openbooks/engine/hrm/ai/nl-reports";
 import { logDecision } from "@openbooks/engine/hrm/ai/governance";
@@ -111,7 +112,7 @@ export const GET = defineRoute({
 });
 
 const nlTransitionBody = z.object({
-  draftId: z.string().uuid(),
+  draftId: uuidString(),
   status: z.enum(["saved", "discarded"]),
 });
 

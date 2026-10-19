@@ -1,7 +1,8 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 
 const clock = z.string().regex(/^\d{2}:\d{2}$/)
-const uuid = z.string().uuid()
+const uuid = uuidString()
 /** A shift pattern as Setup submits it; the engine validates slots, target and qualifications. */
 export const patternBody = z.strictObject({
   subsidiaryId: uuid.nullable(),

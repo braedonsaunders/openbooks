@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
@@ -48,23 +49,23 @@ const paymentFormatBodySchema = z.object({
   settings: z.record(z.string(), z.json()).optional(), isActive: z.boolean().optional(),
 })
 const paymentProfileBodySchema = z.object({
-  name: z.string().trim().min(1).max(200), bankAccountId: z.string().uuid(), paymentFormatId: z.string().uuid(),
-  subsidiaryId: z.string().uuid().nullable().optional(), country: countrySchema, currency: currencySchema,
+  name: z.string().trim().min(1).max(200), bankAccountId: uuidString(), paymentFormatId: uuidString(),
+  subsidiaryId: uuidString().nullable().optional(), country: countrySchema, currency: currencySchema,
   originatorSecrets: z.record(z.string(), z.string()).nullable().optional(),
-  settings: z.record(z.string(), z.json()).optional(), sftpServerId: z.string().uuid().nullable().optional(),
+  settings: z.record(z.string(), z.json()).optional(), sftpServerId: uuidString().nullable().optional(),
   sftpFolder: z.string().nullable().optional(), autoRemittance: z.boolean().optional(), isActive: z.boolean().optional(),
 })
 const paymentScheduleBodySchema = z.object({
-  name: z.string().trim().min(1).max(200), paymentBankProfileId: z.string().uuid(), cron: z.string().trim().min(1).max(200),
+  name: z.string().trim().min(1).max(200), paymentBankProfileId: uuidString(), cron: z.string().trim().min(1).max(200),
   timezone: z.string().trim().min(1).max(100).optional(), selectionCriteria: selectionCriteriaSchema.optional(),
   action: z.enum(['create_draft', 'submit_for_approval']).optional(), isActive: z.boolean().optional(),
 })
 const paymentMandateBodySchema = z.object({
-  partyId: z.string().uuid(), partyBankAccountId: z.string().uuid(), mandateReference: z.string().trim().min(1).max(200),
+  partyId: uuidString(), partyBankAccountId: uuidString(), mandateReference: z.string().trim().min(1).max(200),
   scheme: z.enum(['nacha', 'sepa_core', 'sepa_b2b', 'custom']).optional(),
   status: z.enum(['pending', 'active', 'suspended', 'revoked', 'expired']).optional(),
   signedOn: calendarDateSchema.optional(), validFrom: calendarDateSchema.optional(), expiresOn: calendarDateSchema.optional(),
-  proofFileId: z.string().uuid().optional(),
+  proofFileId: uuidString().optional(),
 })
 const requestBodySchema = z.union([
   paymentFormatBodySchema, paymentProfileBodySchema, paymentScheduleBodySchema, paymentMandateBodySchema,

@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { confirmPlanSuggestion, getPlanSuggestion } from "@openbooks/engine/inventory";
 import { db } from "@openbooks/engine/platform/database";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { planningTransaction } from "../../../_transaction";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({}).strict();
 
 export const POST = defineRoute({

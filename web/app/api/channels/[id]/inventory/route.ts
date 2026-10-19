@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   CommerceError,
   listInventoryConflicts,
@@ -24,7 +25,7 @@ const resolutionSchema = z.enum(["pushed_openbooks", "accepted_shopify"]);
 const inventoryBodySchema = z.discriminatedUnion("action", [
   z.strictObject({
     action: z.literal("resolve"),
-    conflictId: z.string().uuid(),
+    conflictId: uuidString(),
     resolution: resolutionSchema,
   }),
   z.strictObject({
@@ -33,19 +34,19 @@ const inventoryBodySchema = z.discriminatedUnion("action", [
   }),
   z.strictObject({
     action: z.literal("push-now"),
-    stockLocationId: z.string().uuid().nullish(),
-    itemId: z.string().uuid().nullish(),
+    stockLocationId: uuidString().nullish(),
+    itemId: uuidString().nullish(),
   }),
   z.strictObject({
     action: z.literal("set-policy"),
-    itemId: z.string().uuid(),
+    itemId: uuidString(),
     bufferQuantity: z.string().trim().min(1).max(30).nullish(),
     stopSellingAtZero: z.boolean().nullish(),
     syncInventory: z.boolean().optional(),
   }),
   z.strictObject({
     action: z.literal("clear-policy"),
-    itemId: z.string().uuid(),
+    itemId: uuidString(),
   }),
 ]);
 

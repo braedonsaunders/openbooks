@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { createBookAccountMap, listBookAccountMaps } from '@openbooks/engine/multibook'
@@ -6,10 +7,10 @@ import { createBookAccountMap, listBookAccountMaps } from '@openbooks/engine/mul
 export const runtime = 'nodejs'
 
 const createBody = z.object({
-  bookId: z.string().uuid(),
-  subsidiaryId: z.string().uuid().nullable().optional(),
-  sourceAccountId: z.string().uuid(),
-  targetAccountId: z.string().uuid(),
+  bookId: uuidString(),
+  subsidiaryId: uuidString().nullable().optional(),
+  sourceAccountId: uuidString(),
+  targetAccountId: uuidString(),
   effectiveFrom: z.string(),
   effectiveTo: z.string().nullable().optional(),
   reason: z.string(),

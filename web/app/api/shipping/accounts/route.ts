@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/database'
 import { connectShippingAccount, listShippingAccounts } from '@openbooks/engine/sales/shipping-labels'
 import { defineRoute } from '@/lib/api/route'
@@ -15,7 +16,7 @@ export const GET = defineRoute({
 })
 
 const connectBody = z.object({
-  accountId: z.string().uuid().nullable().optional(),
+  accountId: uuidString().nullable().optional(),
   name: z.string().min(1).max(120),
   provider: z.enum(['easypost', 'shippo']),
   mode: z.enum(['test', 'live']),

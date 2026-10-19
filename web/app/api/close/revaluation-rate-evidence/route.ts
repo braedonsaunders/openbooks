@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
 import { applicationContextFromSession } from "@/lib/application/context";
@@ -12,18 +13,18 @@ export const runtime = "nodejs";
 const currencyCode = z.string().regex(/^[A-Z]{3}$/);
 
 const recordBodySchema = z.object({
-  bookId: z.string().uuid(),
-  subsidiaryId: z.string().uuid(),
-  periodId: z.string().uuid(),
-  accountId: z.string().uuid(),
+  bookId: uuidString(),
+  subsidiaryId: uuidString(),
+  periodId: uuidString(),
+  accountId: uuidString(),
   transactionCurrency: currencyCode,
   measurementCurrency: currencyCode,
   rateDate: z.string().date().optional(),
   rate: z.string().min(1),
   source: z.string().min(1),
   reason: z.string().min(1),
-  expectedCurrentId: z.string().uuid().nullable(),
-  requestId: z.string().uuid(),
+  expectedCurrentId: uuidString().nullable(),
+  requestId: uuidString(),
 }).strict();
 
 /**
@@ -40,7 +41,7 @@ export const GET = defineRoute({
     const search = new URL(request.url).searchParams;
     const periodId = search.get("periodId") ?? "";
     const bookId = search.get("bookId") ?? "";
-    if (!z.string().uuid().safeParse(periodId).success || !z.string().uuid().safeParse(bookId).success) {
+    if (!uuidString().safeParse(periodId).success || !uuidString().safeParse(bookId).success) {
       return NextResponse.json(
         { error: "Choose the close period and book to load FX exposures for." },
         { status: 400 },

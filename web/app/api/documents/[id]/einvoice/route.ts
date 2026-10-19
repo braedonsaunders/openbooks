@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/database'
 import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import {
@@ -19,10 +20,10 @@ import { assertEInvoicePdfDesign, eInvoicePdfValues } from '@/lib/pdf-templates/
 import { listEInvoiceArchives, readEInvoiceArchive, readEInvoiceSubject } from '@/lib/einvoice/document-reads'
 
 export const runtime = 'nodejs'
-const params = z.object({ id: z.string().uuid() })
+const params = z.object({ id: uuidString() })
 const profileKey = z.string().refine((value): value is EInvoiceProfileKey => isEInvoiceProfileKey(value), 'Choose a supported e-invoice profile.')
 const issueBody = z.object({ profile: profileKey, buyerReference: z.string().trim().min(1).max(200).nullable().optional() }).strict()
-const querySchema = z.object({ profile: profileKey.optional(), buyerReference: z.string().trim().max(200).optional(), validate: z.enum(['1']).optional(), issued: z.string().uuid().optional() }).strict()
+const querySchema = z.object({ profile: profileKey.optional(), buyerReference: z.string().trim().max(200).optional(), validate: z.enum(['1']).optional(), issued: uuidString().optional() }).strict()
 
 function refusal(error: unknown): NextResponse | null {
   const renderer = rendererUnavailableResponse(error)

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
 import { isUuid } from '../../../../../lib/list-params'
@@ -8,7 +9,7 @@ import { listForecasts, recordForecast } from '@openbooks/engine/projects/foreca
 
 const params = z.object({ id: z.string() })
 const forecastBody = z.object({
-  taskId: z.string().uuid(),
+  taskId: uuidString(),
   asOfDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   method: z.enum(['manual', 'remaining_budget', 'units_productivity', 'cost_performance']),
   costToComplete: z.string().max(40).nullable().optional(),

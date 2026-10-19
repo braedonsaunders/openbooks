@@ -1,18 +1,19 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { updateDraftWorkOrder, type WorkOrderPatch } from "@openbooks/engine/manufacturing/work-orders";
 import { db } from "@openbooks/engine/platform/db";
 import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../../_transaction";
 import { loadScopedWorkOrder } from "../_scope";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Patch = z.object({
   quantityOrdered: z.string().optional(),
   productionMode:z.enum(["order","batch","continuous"]).optional(),campaignReference:z.string().trim().max(100).nullable().optional(),
-  issueLocationId: z.string().uuid().nullable().optional(), receiptLocationId: z.string().uuid().nullable().optional(),
+  issueLocationId: uuidString().nullable().optional(), receiptLocationId: uuidString().nullable().optional(),
   plannedStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   plannedEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  routingId: z.string().uuid().nullable().optional(),
+  routingId: uuidString().nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0);
 
 export const GET = defineRoute({

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   convertTransferSuggestion,
   getPlanSuggestion,
@@ -11,13 +12,13 @@ import { defineRoute } from "@/lib/api/route";
 import { planningTransaction } from "../../../_transaction";
 import { convertBuyGroup } from "../../../_buy";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 // A purchase takes its vendor from the body, falling back to the suggestion's
 // resolved supplier; a transfer takes its source location from the body.
 const Body = z.union([
   z.object({}).strict().transform(() => ({ vendorId: undefined, fromLocationId: undefined })),
-  z.object({ vendorId: z.string().uuid(), fromLocationId: z.string().uuid().optional() }).strict(),
-  z.object({ fromLocationId: z.string().uuid(), vendorId: z.string().uuid().optional() }).strict(),
+  z.object({ vendorId: uuidString(), fromLocationId: uuidString().optional() }).strict(),
+  z.object({ fromLocationId: uuidString(), vendorId: uuidString().optional() }).strict(),
 ], { error: "Send an empty object for the saved plan, or valid vendor/location identifiers." });
 
 export const POST = defineRoute({

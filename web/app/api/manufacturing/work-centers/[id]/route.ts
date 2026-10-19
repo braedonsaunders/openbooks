@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { deactivateWorkCenter, getWorkCenter, reactivateWorkCenter, updateWorkCenter, type WorkCenterInput } from "@openbooks/engine/manufacturing/work-centers";
 import { guardSubsidiaryScope } from "@/lib/authz";
@@ -6,13 +7,13 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { manufacturingTransaction } from "../../_transaction";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Patch = z.object({
   code: z.string().trim().min(1).optional(), name: z.string().trim().min(1).optional(),
-  subsidiaryId: z.string().uuid().nullable().optional(), kind: z.enum(["machine", "labor", "cell"]).optional(),
+  subsidiaryId: uuidString().nullable().optional(), kind: z.enum(["machine", "labor", "cell"]).optional(),
   capacityHoursPerDay: z.string().optional(), efficiencyPct: z.string().optional(),
-  departmentId: z.string().uuid().nullable().optional(), absorbsOverhead: z.boolean().optional(),
-  calendarId: z.string().uuid().nullable().optional(), isActive: z.boolean().optional(),
+  departmentId: uuidString().nullable().optional(), absorbsOverhead: z.boolean().optional(),
+  calendarId: uuidString().nullable().optional(), isActive: z.boolean().optional(),
 }).refine((value) => Object.keys(value).length > 0);
 
 export const GET = defineRoute({

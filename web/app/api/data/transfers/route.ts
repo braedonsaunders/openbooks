@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/database'
 import { defineRoute } from '@/lib/api/route'
@@ -9,7 +10,7 @@ import type { TransferSummary } from '@/lib/data-io/transfer-contract'
 
 export const runtime = 'nodejs'
 const body = z.object({
-  requestKey: z.uuid(), kind: z.enum(['import', 'export']), resource: z.string().min(1).max(200),
+  requestKey: uuidString(), kind: z.enum(['import', 'export']), resource: z.string().min(1).max(200),
   format: z.enum(['csv', 'xlsx', 'json']), filename: z.string().min(1).max(255).regex(/^[^\r\n/\\]+$/),
   bytes: z.number().int().min(0).max(1_099_511_627_776),
   options: z.object({ columns: z.array(z.string()).min(1).max(16_384) }).optional(),

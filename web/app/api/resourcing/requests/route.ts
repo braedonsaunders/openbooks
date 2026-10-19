@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { resRequests } from "@openbooks/schema";
 import { createResourceRequest } from "@openbooks/engine/resourcing/requests";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
@@ -9,17 +10,17 @@ import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, vali
 import { idempotentResourcingCreate } from "../_idempotent";
 
 const Common = {
-  projectId: z.string().uuid(),
+  projectId: uuidString(),
   firstWeek: z.string(),
   lastWeek: z.string(),
   hoursPerWeek: z.string(),
   isBillable: z.boolean().optional(),
-  billItemId: z.string().uuid().nullable().optional(),
+  billItemId: uuidString().nullable().optional(),
   reason: z.string().nullable().optional(),
   custom: z.record(z.string(), z.unknown()).optional(),
 };
 const Body = z.union([
-  z.object({ ...Common, employeePartyId: z.string().uuid() }).strict(),
+  z.object({ ...Common, employeePartyId: uuidString() }).strict(),
   z.object({ ...Common, jobTitle: z.string().trim().min(1) }).strict(),
 ]);
 const Params = z.object({}).strict();

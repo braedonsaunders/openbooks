@@ -1,6 +1,7 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { parseJsonBody } from '@/lib/api/json';
 import { NextResponse } from 'next/server'
 import { fromUnits, toUnits } from '@openbooks/engine/money/money'
@@ -18,16 +19,16 @@ export const runtime = 'nodejs'
 const bodyObjectSchema = z.object({
   versionId: z.string().optional(),
   line: z.object({
-    accountId: z.string().uuid(),
+    accountId: uuidString(),
     documentKind: z.string().nullable().optional(),
-    departmentId: z.string().uuid().nullable().optional(),
-    locationId: z.string().uuid().nullable().optional(),
-    classId: z.string().uuid().nullable().optional(),
-    projectId: z.string().uuid().nullable().optional(),
-    subsidiaryId: z.string().uuid().nullable().optional(),
-    partyId: z.string().uuid().nullable().optional(),
-    itemId: z.string().uuid().nullable().optional(),
-    payComponentId: z.string().uuid().nullable().optional(),
+    departmentId: uuidString().nullable().optional(),
+    locationId: uuidString().nullable().optional(),
+    classId: uuidString().nullable().optional(),
+    projectId: uuidString().nullable().optional(),
+    subsidiaryId: uuidString().nullable().optional(),
+    partyId: uuidString().nullable().optional(),
+    itemId: uuidString().nullable().optional(),
+    payComponentId: uuidString().nullable().optional(),
     payrollExpense: z.boolean().optional(),
     extraDims: z.record(z.string(), z.string()).optional(),
   }).strict().optional(),

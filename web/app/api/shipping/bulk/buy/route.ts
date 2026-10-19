@@ -1,6 +1,7 @@
 import { PDFDocument } from 'pdf-lib'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/database'
 import {
   buyShipmentLabel,
@@ -10,13 +11,13 @@ import {
 import { defineRoute } from '@/lib/api/route'
 
 const buyItem = z.object({
-  shipmentId: z.string().uuid(),
-  handlingUnitId:z.string().uuid(),
+  shipmentId: uuidString(),
+  handlingUnitId:uuidString(),
   providerRateId: z.string().min(1).max(200),
 })
 
 const bulkBuyBody = z.object({
-  accountId: z.string().uuid().nullable().optional(),
+  accountId: uuidString().nullable().optional(),
   items: z.array(buyItem).min(1).max(100),
 })
 

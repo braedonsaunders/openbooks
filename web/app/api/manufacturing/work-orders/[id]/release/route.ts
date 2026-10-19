@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { getWorkOrder, releaseWorkOrder } from "@openbooks/engine/manufacturing/work-orders";
 import { db } from "@openbooks/engine/platform/db";
 import { ManufacturingError } from "@openbooks/engine/manufacturing/errors";
@@ -7,7 +8,7 @@ import { manufacturingTransaction } from "../../../_transaction";
 import { dispatchWorkOrderFlow } from "../../_flows";
 import { loadScopedWorkOrder } from "../../_scope";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({ reason: z.string().trim().max(500).nullable().optional() }).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 export const POST = defineRoute({

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { CommerceError, pushItemToShopify } from "@openbooks/engine/commerce";
@@ -14,7 +15,7 @@ export const POST = defineRoute({
   feature: "salesChannels",
   params: z.object({ id: z.string() }),
   body: z.strictObject({
-    itemId: z.string().uuid(),
+    itemId: uuidString(),
     fields: z.array(z.enum(["price", "title"])).optional(),
   }),
   handler: async ({ authz: gate, params, body }) => {

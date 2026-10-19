@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
@@ -15,8 +16,8 @@ export const runtime = 'nodejs';
 
 const POSTBodySchema = z.object({
   matches: z.array(z.object({
-    billLineId: z.string().uuid(),
-    purchaseOrderLineId: z.string().uuid(),
+    billLineId: uuidString(),
+    purchaseOrderLineId: uuidString(),
   })).min(1).max(200),
   expectedUpdatedAt: z.string().min(1).optional(),
 });

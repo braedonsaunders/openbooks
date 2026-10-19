@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   automationActions,
   automationConditions,
@@ -6,7 +7,7 @@ import {
   automationTrigger,
 } from "@openbooks/engine/automations/triggers";
 
-const uuid = z.string().uuid("must be a valid id");
+const uuid = uuidString("must be a valid id");
 
 export const createAutomationBody = z.object({
   name: z.string().trim().min(1).max(200),

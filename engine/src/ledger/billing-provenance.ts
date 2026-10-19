@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { lineRequiresReceipt } from "../records/stock-receipt.ts";
 import { type SqlExecutor } from "../platform/db.ts";
+import { UUID_RE } from "../platform/uuid.ts";
 import { laterProgressApplicationNumbers, laterProgressApplicationsRefusal } from "../projects/construction-billing.ts";
 import { laterVendorApplicationNumbers, laterVendorApplicationsRefusal } from "../projects/subcontracts.ts";
 import {
@@ -372,7 +373,6 @@ export async function releaseVendorRetainageProvenance(
   `);
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Restore the billed-quantity advances a converted or captured child consumed

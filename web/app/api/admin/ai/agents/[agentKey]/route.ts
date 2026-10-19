@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
@@ -19,7 +20,7 @@ const requestBodySchema = z.object({
   materialityThreshold: materialityThresholdSchema,
   detectors: z.array(z.object({ detectorKey: z.enum(detectorKeys), enabled: z.boolean(), materialityThreshold: materialityThresholdSchema.nullable(), parameters: z.record(z.string(), z.number()) })),
   analysis: z.object({ rootCauseAnalysis: z.boolean(), recommendations: z.boolean(), narrative: z.boolean(), modelTier: z.enum(["fast", "smart"]), maxToolSteps: z.number().int().min(4).max(30) }),
-  notification: z.object({ mode: z.enum(["findings_only", "digest", "immediate"]), roleIds: z.array(z.string().uuid()).max(100), userIds: z.array(z.string().uuid()).max(100) }).nullable().optional(),
+  notification: z.object({ mode: z.enum(["findings_only", "digest", "immediate"]), roleIds: z.array(uuidString()).max(100), userIds: z.array(uuidString()).max(100) }).nullable().optional(),
 });
 
 

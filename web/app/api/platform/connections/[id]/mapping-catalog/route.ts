@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { notFound } from '@/lib/api/responses';
 import { buildSource, getConnection } from '@openbooks/engine/sync/connection';
@@ -13,7 +14,7 @@ const query = z.object({ entity: z.string().max(120).optional(), target: z.strin
 export const GET = defineRoute({
   permission: 'admin.setup.manage', scope: 'unrestricted',
   feature: { none: 'Connection mappings belong to organization setup and retain native feature enforcement during sync.' },
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   handler: async ({ request, params: { id }, authz }) => {
     const parsed = query.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!parsed.success || ((parsed.data.target || parsed.data.sourceField) && !parsed.data.entity) || (parsed.data.target && parsed.data.sourceField) || ((parsed.data.q || parsed.data.selected) && !parsed.data.target && !parsed.data.sourceField)) return NextResponse.json({ error: 'Choose a supported entity and mapping field' }, { status: 422 });

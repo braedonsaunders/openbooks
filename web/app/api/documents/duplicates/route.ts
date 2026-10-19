@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { getAuthz } from "@/lib/authz";
 import { canReadDocumentKind } from "@/lib/flow-subject-authz";
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
 const querySchema = z
   .object({
     kind: z.enum(["customer_invoice", "vendor_bill"]),
-    partyId: z.string().uuid(),
+    partyId: uuidString(),
     documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     total: z.string().min(1).max(32),
     referenceNumber: z.string().max(200).optional(),

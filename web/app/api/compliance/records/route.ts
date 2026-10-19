@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
@@ -19,9 +20,9 @@ import { notFound } from "@/lib/api/responses";
 // domain refusals (422) raised by optionalCoverageMoney before any write.
 const requestMoney = z.string().nullable()
 const requestBodySchema = z.object({
-  partyId: z.string().uuid({ error: 'partyId must be a valid vendor id' }),
-  requirementId: z.string().uuid({ error: 'requirementId must be a valid compliance requirement id' }),
-  projectId: z.string().uuid({ error: 'projectId must be a valid project id' }).nullable().optional(),
+  partyId: uuidString({ error: 'partyId must be a valid vendor id' }),
+  requirementId: uuidString({ error: 'requirementId must be a valid compliance requirement id' }),
+  projectId: uuidString({ error: 'projectId must be a valid project id' }).nullable().optional(),
   issuerName: z.string().trim().max(200).nullable().optional(),
   policyNumber: z.string().trim().max(200).nullable().optional(),
   effectiveFrom: z.string().refine(isIsoCalendarDate, 'effectiveFrom must be a real calendar date (YYYY-MM-DD)'),
@@ -33,7 +34,7 @@ const requestBodySchema = z.object({
   waiverOfSubrogation: z.boolean().optional(),
   primaryNoncontributory: z.boolean().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
-  supersedesId: z.string().uuid({ error: 'supersedesId must be a valid certificate id' }).nullable().optional(),
+  supersedesId: uuidString({ error: 'supersedesId must be a valid certificate id' }).nullable().optional(),
 })
 
 

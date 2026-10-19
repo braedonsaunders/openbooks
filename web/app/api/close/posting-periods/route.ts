@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
@@ -13,9 +14,9 @@ import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
 
 const requestBodySchema = z.object({
-  bookId: z.string().uuid(),
-  documentIds: z.array(z.string().uuid()).max(1000).optional(),
-  adjustmentPeriodId: z.string().uuid().optional(),
+  bookId: uuidString(),
+  documentIds: z.array(uuidString()).max(1000).optional(),
+  adjustmentPeriodId: uuidString().optional(),
 });
 
 

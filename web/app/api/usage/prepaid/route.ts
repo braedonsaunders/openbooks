@@ -3,11 +3,12 @@ import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentUsageCreate } from "../_idempotent";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 const Query = z.object({ asOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict();
 const Body = z.object({
-  customerId: z.string().uuid(),
-  sourceDocumentLineId: z.string().uuid(),
+  customerId: uuidString(),
+  sourceDocumentLineId: uuidString(),
   amount: z.string(),
   currency: z.string().regex(/^[A-Z]{3}$/),
   expiresOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),

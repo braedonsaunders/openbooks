@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { applicationContextFromSession } from "@/lib/application/context";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
@@ -8,8 +9,8 @@ import { dropShipRecordScope, routeSalesOrderLine } from "@/lib/drop-ship";
 export const POST = defineRoute({
   permission: "orders.fulfill",
   feature: "dropShipping",
-  params: z.object({ id: z.string().uuid() }),
-  body: z.object({ salesOrderLineId: z.string().uuid(), routed: z.boolean() }).strict(),
+  params: z.object({ id: uuidString() }),
+  body: z.object({ salesOrderLineId: uuidString(), routed: z.boolean() }).strict(),
   handler: async ({ request, authz, params, body }) => {
     const scope = await dropShipRecordScope(authz.user.orgId, params.id, "sales_order");
     if (!scope || guardSubsidiaryScope(authz, scope.subsidiaryId)) return notFound("record");

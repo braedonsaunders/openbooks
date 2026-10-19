@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { getPlanSuggestion, listPlanSuggestions } from "@openbooks/engine/inventory";
 import { db } from "@openbooks/engine/platform/database";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { planningTransaction } from "../../_transaction";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 
 /**
  * One suggestion with its run's entity, so the drawer resolves the right

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import {
@@ -13,7 +14,7 @@ import { fileViewer, requireFolderAccess } from "../../lib";
 import { notFound } from "@/lib/api/responses";
 const patchBodySchema0 = z
   .strictObject({
-    parentId: z.string().uuid("parentId must be a valid id").nullable().optional(),
+    parentId: uuidString("parentId must be a valid id").nullable().optional(),
     name: z.string().trim().min(1, "name cannot be empty").max(255).optional(),
     isPrivate: z.boolean().optional(),
     isInactive: z.boolean().optional(),

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { can } from "@/lib/authz";
@@ -11,15 +12,15 @@ import {
 
 export const runtime = "nodejs";
 
-const params = z.object({ id: z.string().uuid() });
+const params = z.object({ id: uuidString() });
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD");
 
 const mergeBody = z.strictObject({
-  targetAccountId: z.string().uuid(),
+  targetAccountId: uuidString(),
   effectiveDate: isoDate,
   reason: z.string().trim().min(8, "record a reason of at least 8 characters").max(1000),
   expectedDigest: z.string().regex(/^[0-9a-f]{64}$/, "preview the merge before confirming it"),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidString(),
 });
 
 /** Preview merging this account into a surviving account: refusals and consequences. */
@@ -32,7 +33,7 @@ export const GET = defineRoute({
     const url = new URL(request.url);
     const target = url.searchParams.get("target") ?? "";
     const effectiveDate = url.searchParams.get("date") ?? "";
-    if (!z.string().uuid().safeParse(target).success || !isoDate.safeParse(effectiveDate).success) {
+    if (!uuidString().safeParse(target).success || !isoDate.safeParse(effectiveDate).success) {
       return NextResponse.json({ error: "Choose the surviving account and the effective date." }, { status: 422 });
     }
     try {

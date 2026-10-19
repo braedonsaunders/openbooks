@@ -1,10 +1,11 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { lockActorCommandAuthority } from '@openbooks/engine/organization/actor-command-authority'
 import { searchProductionTimeChoices } from '@openbooks/engine/manufacturing/workspace'
 import { defineRoute } from '@/lib/api/route'
 import { authorizeTimeWorkspace } from '@/lib/time-workspace'
-const Query = z.strictObject({ workFamily: z.literal('production'), q:z.string().max(200).optional(), selected:z.uuid().optional(), workOrderId:z.uuid().optional() })
+const Query = z.strictObject({ workFamily: z.literal('production'), q:z.string().max(200).optional(), selected:uuidString().optional(), workOrderId:uuidString().optional() })
 export const runtime = 'nodejs'
 export const GET = defineRoute({
   authorize: authorizeTimeWorkspace('time.read'),

@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { resRetainers } from "@openbooks/schema";
 import { createRetainer } from "@openbooks/engine/resourcing/retainers";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
@@ -9,8 +10,8 @@ import { idempotentResourcingCreate } from "../_idempotent";
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
 
 const Body = z.object({
-  projectId: z.string().uuid(),
-  customerPartyId: z.string().uuid(),
+  projectId: uuidString(),
+  customerPartyId: uuidString(),
   kind: z.enum(["hours", "fees"]),
   currency: z.string().length(3).transform((value) => value.toUpperCase()).optional(),
   totalAmount: z.string().optional(),
@@ -18,7 +19,7 @@ const Body = z.object({
   unitRate: z.string().optional(),
   startsOn: z.string(),
   endsOn: z.string(),
-  retainerItemId: z.string().uuid(),
+  retainerItemId: uuidString(),
   custom: z.record(z.string(), z.json()).optional(),
 }).strict();
 const Params = z.object({}).strict();

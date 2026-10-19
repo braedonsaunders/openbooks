@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -15,9 +16,9 @@ import { DOC_KINDS, documentEditPermission } from '../../../../lib/document-kind
 
 const DefaultsQuerySchema = z.object({
   kind: z.enum(Object.keys(DOC_KINDS) as [string, ...string[]]),
-  partyId: z.string().uuid().optional(),
+  partyId: uuidString().optional(),
   documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  itemIds: z.array(z.string().uuid()).max(200),
+  itemIds: z.array(uuidString()).max(200),
 })
 
 export const runtime = 'nodejs'

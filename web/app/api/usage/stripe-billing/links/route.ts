@@ -1,11 +1,12 @@
 import { linkStripeCustomer, linkStripeSubscription } from "@openbooks/engine/sync";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 const Body = z.object({
   objectType: z.enum(["customer", "subscription"]),
   stripeId: z.string().min(1).max(255),
-  nativeId: z.string().uuid(),
+  nativeId: uuidString(),
 }).strict();
 
 export const POST = defineRoute({

@@ -1,5 +1,6 @@
 import { canonicalNonNegativeDecimal } from "../money/exact-decimal.ts";
 import { z } from "zod";
+import { uuidString } from "../platform/uuid.ts";
 import {
   makeEffectiveInterval,
   parseCivilDate,
@@ -119,7 +120,7 @@ const civilDate = (field: string) =>
     { message: `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999` },
   );
 
-const uuidField = (field: string) => z.string().uuid(`${field} must be a uuid`);
+const uuidField = (field: string) => uuidString(`${field} must be a uuid`);
 
 const fteField = z
   .string()

@@ -1,6 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   readV1JsonObject,
   requireV1IdempotencyKey,
@@ -11,7 +12,7 @@ import { runPeriodRevaluation } from "../../../../../lib/application/close";
 const runPeriodRevaluationBody = z.looseObject({
   periodId: z.string().min(1),
   bookId: z.string().min(1).optional(),
-  subsidiaryIds: z.array(z.string().uuid().transform(id => id.toLowerCase())).min(1).max(1000).optional(),
+  subsidiaryIds: z.array(uuidString().transform(id => id.toLowerCase())).min(1).max(1000).optional(),
 });
 
 export const runtime = "nodejs";

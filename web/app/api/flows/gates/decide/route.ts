@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
@@ -8,7 +9,7 @@ import { isUuid } from '../../../../../lib/list-params'
 import { gateErrorResponse, loadGateHeader } from '../../_lib'
 
 const requestBodySchema = z.object({
-  gateId: z.string().uuid(), decision: z.enum(["approved", "rejected"]),
+  gateId: uuidString(), decision: z.enum(["approved", "rejected"]),
   comment: z.string().max(2000).optional(), signature: z.string().max(400_000).optional(),
 });
 

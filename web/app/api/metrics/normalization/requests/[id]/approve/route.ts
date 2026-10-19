@@ -3,8 +3,9 @@ import { defineRoute } from "@/lib/api/route";
 import { can, getAuthz } from "@/lib/authz";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 
 /**
  * Approval establishes BOTH permissions before params/body parsing: the

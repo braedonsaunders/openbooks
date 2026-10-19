@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
@@ -11,7 +12,7 @@ import { exactMoney, parseJsonBody } from "@/lib/api/json";
 export const runtime = "nodejs";
 const date = z.string().refine(isIsoCalendarDate, "enter a calendar date");
 const proposal = z.object({
-  sourceEventId: z.uuid(),
+  sourceEventId: uuidString(),
   effectiveOn: date,
   carryingValue: exactMoney(),
   buyerToGroupRate: z.string().min(1).max(40),

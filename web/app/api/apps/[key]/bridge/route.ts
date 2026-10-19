@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { can } from '@/lib/authz'
@@ -7,7 +8,7 @@ import { runBridgeMethod } from '@/lib/apps/store'
 const POSTBodySchema1 = z.object({
   method: z.string().min(1),
   payload: z.json().optional(),
-  versionId: z.string().uuid().optional(),
+  versionId: uuidString().optional(),
   invocationKey: z.string().optional(),
 });
 

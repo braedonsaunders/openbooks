@@ -3,9 +3,9 @@ import { assertManufacturingFeature } from "@openbooks/engine/manufacturing/gate
 import { sql } from "drizzle-orm";
 import { ManufacturingError, ManufacturingIdempotencyConflictError } from "@openbooks/engine/manufacturing/errors";
 import { db } from "@openbooks/engine/platform/db";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 import { claimIdempotentCreate, resolveIdempotentReplay } from "@/lib/api/idempotency";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Called only inside withOrgTransaction so the key lock, claim, domain write, and audit commit together. */
 export async function idempotentManufacturingCreate<T>(input: {
@@ -14,7 +14,7 @@ export async function idempotentManufacturingCreate<T>(input: {
   load: () => Promise<T | null>;
 }): Promise<T> {
   const key = input.request.headers.get("Idempotency-Key")?.trim() ?? "";
-  if (!UUID.test(key)) {
+  if (!isUuid(key)) {
     throw new ManufacturingError("A UUID Idempotency-Key header is required for this create.", {
       status: 400, code: "invalid_idempotency_key", remedy: "Retry the create with a new UUID Idempotency-Key.",
     });

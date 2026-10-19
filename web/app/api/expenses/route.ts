@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -18,7 +19,7 @@ import { notFound } from '@/lib/api/responses'
 import { authorizeExpenses, expenseAccess } from '../../../lib/expense-access'
 import { expenseEmployeeForAccess, ExpenseSelfServiceRefusal } from '@openbooks/engine/records/expense-access'
 
-const nullableId = z.string().uuid().nullable();
+const nullableId = uuidString().nullable();
 const POSTBodySchema = z.object({
   // Same edit shape as the draft PATCH; prepareExpenseEdit owns every domain
   // rule and refuses by name with the line number.

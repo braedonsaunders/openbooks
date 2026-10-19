@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import {
@@ -39,7 +40,7 @@ const assetChangeSchema = z.object({
       books: z
         .array(
           z.object({
-            bookId: z.uuid(),
+            bookId: uuidString(),
             cost: exactMoney(),
             accumulated: exactMoney(),
             salvage: exactMoney(),
@@ -52,36 +53,36 @@ const assetChangeSchema = z.object({
     }),
   ]),
   proceeds: exactMoney(),
-  proceedsAccountId: z.uuid(),
+  proceedsAccountId: uuidString(),
   transfer: z
     .object({
-      subsidiaryId: z.uuid(),
-      categoryId: z.uuid(),
+      subsidiaryId: uuidString(),
+      categoryId: uuidString(),
       assetNumber: z.string().trim().min(1).max(100),
       name: z.string().trim().min(1).max(255),
       buyerAmount: exactMoney(),
       buyerSalvage: exactMoney(),
       buyerProductionUnits: exactMoney().optional(),
       lifeMonths: z.number().int().min(1).max(1200),
-      payableAccountId: z.uuid(),
-      eliminationSubsidiaryId: z.uuid(),
+      payableAccountId: uuidString(),
+      eliminationSubsidiaryId: uuidString(),
       sellerToGroupRate: z.string().max(40),
       buyerToGroupRate: z.string().max(40),
       sellerToBuyerRate: z.string().max(40),
-      ctaAccountId: z.uuid(),
-      groupAssetAccountId: z.uuid(),
-      groupAccumulatedAccountId: z.uuid(),
-      groupDepreciationAccountId: z.uuid(),
-      groupGainLossAccountId: z.uuid(),
+      ctaAccountId: uuidString(),
+      groupAssetAccountId: uuidString(),
+      groupAccumulatedAccountId: uuidString(),
+      groupDepreciationAccountId: uuidString(),
+      groupGainLossAccountId: uuidString(),
       taxRatePercent: exactMoney(),
-      deferredTaxAccountId: z.uuid(),
-      taxExpenseAccountId: z.uuid(),
+      deferredTaxAccountId: uuidString(),
+      taxExpenseAccountId: uuidString(),
       exchangeRateEvidence: z.string().trim().min(8).max(4000),
       groupAssessment: z.string().trim().min(8).max(4000),
       groupPlans: z
         .array(
           z.object({
-            bookId: z.uuid(),
+            bookId: uuidString(),
             lines: z.array(z.object({ date, amount: exactMoney() })).max(1200),
           }),
         )

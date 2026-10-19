@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { admitAttendanceBatch, processBatchAttendance } from '@openbooks/engine/schedule-boards/attendance'
@@ -13,22 +14,22 @@ const instant = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 export const POST = defineRoute({
   permission: 'hrm.attendance.manage',
   feature: 'hrmAttendance',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   body: z.strictObject({
-    id: z.string().uuid(),
+    id: uuidString(),
     completeThrough: instant.nullable(),
     correction: z.boolean().optional(),
     sourceEvidence: z.record(z.string(), z.json()).refine((value) => typeof value.source === 'string' && value.source.trim().length > 0, 'Name the source connection or import file'),
     reason: z.string().trim().min(1).max(2000),
     events: z.array(z.strictObject({
-      id: z.string().uuid(),
+      id: uuidString(),
       sourceEventId: z.string().trim().min(1).max(160),
       sourceVersion: z.number().int().positive(),
       sourceWorkerId: z.string().trim().min(1).max(160),
       kind: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end', 'void']),
       occurredAt: instant,
       sourcePayload: z.record(z.string(), z.json()),
-      supersedesId: z.string().uuid().nullable(),
+      supersedesId: uuidString().nullable(),
     })).max(10000),
   }),
   handler: async ({ authz, params, body }) => {

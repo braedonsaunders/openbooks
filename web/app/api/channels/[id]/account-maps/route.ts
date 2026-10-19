@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   CHANNEL_ACCOUNT_ROLES,
   CommerceError,
@@ -17,7 +18,7 @@ export const runtime = "nodejs";
 const upsertBodySchema = z.strictObject({
   role: z.enum(CHANNEL_ACCOUNT_ROLES),
   key: z.string().max(120).optional(),
-  accountId: z.string().uuid(),
+  accountId: uuidString(),
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "effectiveFrom must be YYYY-MM-DD"),
 });
 

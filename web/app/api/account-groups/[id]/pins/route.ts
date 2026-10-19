@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -7,7 +8,7 @@ import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization
 import { guardSubsidiaryScope, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ accountId: z.string().uuid() });
+const POSTBodySchema1 = z.object({ accountId: uuidString() });
 
 
 

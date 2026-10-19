@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
 import { applicationContextFromSession } from "@/lib/application/context";
@@ -8,9 +9,9 @@ export const runtime = "nodejs";
 
 /** Required exact scope, canonicalized once so scope checks compare like case. */
 const locksQuerySchema = z.object({
-  periodId: z.string().uuid().transform((value) => value.toLowerCase()),
-  bookId: z.string().uuid().transform((value) => value.toLowerCase()),
-  subsidiaryId: z.string().uuid().transform((value) => value.toLowerCase()),
+  periodId: uuidString().transform((value) => value.toLowerCase()),
+  bookId: uuidString().transform((value) => value.toLowerCase()),
+  subsidiaryId: uuidString().transform((value) => value.toLowerCase()),
 });
 
 /**

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { checklistDocumentSchema } from '@openbooks/forms-core'
 import {
@@ -17,12 +18,12 @@ import { notFound } from '@/lib/api/responses'
 import { processErrorResponse } from '../../processes/_lib'
 
 export const runtime = 'nodejs'
-const identity = { templateId: z.string().uuid(), revision: z.number().int().nonnegative() }
+const identity = { templateId: uuidString(), revision: z.number().int().nonnegative() }
 const bodySchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('load'), templateId: z.string().uuid() }),
+  z.object({ action: z.literal('load'), templateId: uuidString() }),
   z.object({
     action: z.literal('version'),
-    templateId: z.string().uuid(),
+    templateId: uuidString(),
     version: z.number().int().positive(),
   }),
   z.object({ action: z.literal('save'), ...identity, document: checklistDocumentSchema }),
@@ -38,7 +39,7 @@ const bodySchema = z.discriminatedUnion('action', [
   }),
   z.object({
     action: z.literal('preview'),
-    employmentId: z.string().uuid(),
+    employmentId: uuidString(),
     effectiveDate: civilDateInput(),
     document: checklistDocumentSchema,
   }),

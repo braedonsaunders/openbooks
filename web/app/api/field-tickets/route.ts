@@ -4,6 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/db'
 import { guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
@@ -13,7 +14,7 @@ import { notFound, unprocessable } from "@/lib/api/responses";
 
 export const runtime = 'nodejs'
 const createBody = z.object({
-  projectId: z.string().uuid().optional(),
+  projectId: uuidString().optional(),
   period: z.enum(TICKET_PERIODS).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 }).strict()

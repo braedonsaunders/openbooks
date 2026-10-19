@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -13,7 +14,7 @@ import { dunningStageIdentities } from '@/lib/dunning-stage-identity'
 import { notFound } from "@/lib/api/responses";
 import { autopayFieldError, normalizeExpiryNoticeDays, normalizeFinalAction, normalizeRetryOffsets, requireAutopayWrite, retryOffsetsSql } from '../autopay-fields'
 const stageSchema = z.object({
-  id: z.string().uuid().optional(),
+  id: uuidString().optional(),
   sequence: z.number().int(), name: z.string().min(1), offsetDays: z.number().int(),
   subjectTemplate: z.string(), bodyTemplate: z.string(), escalate: z.boolean().optional(),
 });

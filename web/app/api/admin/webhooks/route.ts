@@ -3,6 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/database";
 import {
   createWebhookEndpoint,
@@ -35,13 +36,13 @@ const createBodySchema = z.object({
 });
 
 const updateBodySchema = z.object({
-  id: z.string().uuid(),
+  id: uuidString(),
   op: z.enum(["update", "disable", "enable", "rotate", "redeliver", "ping"]).optional(),
   url: z.string().trim().min(1).max(2000).optional(),
   description: z.string().max(500).nullable().optional(),
   events: z.array(z.string()).optional(),
   reason: z.string().max(500).optional(),
-  deliveryId: z.string().uuid().optional(),
+  deliveryId: uuidString().optional(),
 });
 
 function endpointErrorResponse(error: unknown) {

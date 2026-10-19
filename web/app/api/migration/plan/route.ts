@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { MIGRATION_PATHS } from '@/lib/migration/plan-model'
 import { updateMigrationPlan } from '@/lib/migration/plan'
@@ -10,9 +11,9 @@ const body = z.object({
   path: z.enum(MIGRATION_PATHS).nullable().optional(),
   sourceSystem: z.string().max(40).nullable().optional(),
   sourceLabel: z.string().max(120).nullable().optional(),
-  connectionId: z.uuid().nullable().optional(),
+  connectionId: uuidString().nullable().optional(),
   cutoverDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  openingBalanceAccountId: z.uuid().nullable().optional(),
+  openingBalanceAccountId: uuidString().nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
 }).strict()
 

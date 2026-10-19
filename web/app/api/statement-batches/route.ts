@@ -4,6 +4,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { enqueueStatementBatchJobs } from '@openbooks/jobs'
 import { resolveOrgEmailTransportDetailed } from '@openbooks/engine/delivery/email-config/module'
 import {
@@ -29,7 +30,7 @@ const batchBody = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   overdueOnly: z.boolean().optional(),
-  subsidiaryId: z.string().uuid().nullable().optional(),
+  subsidiaryId: uuidString().nullable().optional(),
   currency: z.string().regex(/^[A-Za-z]{3}$/).nullable().optional(),
 }).strict()
 

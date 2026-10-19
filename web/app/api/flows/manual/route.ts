@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
@@ -17,7 +18,7 @@ import { loadFlowSubjectSubsidiary, requireFlowsRecordReader } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
 
 const requestBodySchema = z.object({
-  buttonId: z.string().trim().min(1).max(100), subjectId: z.string().uuid(), subjectKind: z.string().trim().min(1).max(100),
+  buttonId: z.string().trim().min(1).max(100), subjectId: uuidString(), subjectKind: z.string().trim().min(1).max(100),
 });
 
 

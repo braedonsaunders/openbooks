@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { listPlanSuggestions } from "@openbooks/engine/inventory";
 import { db } from "@openbooks/engine/platform/database";
 import { guardSubsidiaryScope } from "@/lib/authz";
@@ -12,7 +13,7 @@ export const GET = defineRoute({
   permission: "inventory.plan", feature: "demandPlanning", params: Params,
   handler: async ({ request, authz }) => planningTransaction(authz.user.orgId, async () => {
     const url = new URL(request.url);
-    const subsidiary = z.string().uuid().safeParse(url.searchParams.get("subsidiaryId"));
+    const subsidiary = uuidString().safeParse(url.searchParams.get("subsidiaryId"));
     if (!subsidiary.success) return Response.json({ error: "subsidiaryId must be a UUID" }, { status: 400 });
     const denied = guardSubsidiaryScope(authz, subsidiary.data);
     if (denied) return denied;

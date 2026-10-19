@@ -1,4 +1,5 @@
 import { canonicalDecimal } from '../money/exact-decimal.ts';
+import { isUuid } from '../platform/uuid.ts';
 
 /** The connector's normalized field contract is shared by sync and its editor. */
 export type MappingScalar = string | boolean | string[];
@@ -201,7 +202,7 @@ export function validateMappingScalar(field: EntityMappingField, value: unknown)
   if (typeof value !== 'string') throw new Error(`${field.label} requires a text value`);
   if (!value.length) throw new Error(`Supply a value for ${field.label}`);
   if (field.kind === 'choice' && !field.options?.some(option => option.value === value)) throw new Error(`Choose a supported value for ${field.label}`);
-  if (field.kind === 'reference' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) throw new Error(`Choose a native record for ${field.label}`);
+  if (field.kind === 'reference' && !isUuid(value)) throw new Error(`Choose a native record for ${field.label}`);
   if (field.kind === 'decimal' && canonicalDecimal(value, field.maxScale ?? 8) === null) throw new Error(`${field.label} requires an exact decimal`);
   if (field.kind === 'date' && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value)) throw new Error(`${field.label} requires a valid date`);
   return value;

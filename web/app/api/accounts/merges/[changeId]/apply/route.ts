@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { can } from "@/lib/authz";
@@ -12,7 +13,7 @@ export const POST = defineRoute({
   permission: "gl.manage",
   feature: "accountMerges",
   scope: "unrestricted",
-  params: z.object({ changeId: z.string().uuid() }),
+  params: z.object({ changeId: uuidString() }),
   handler: async ({ authz, params: { changeId } }) => {
     if (!can(authz, "gl.post")) {
       return NextResponse.json(

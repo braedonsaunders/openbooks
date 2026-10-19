@@ -1,9 +1,10 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 export const resourceRecipientBody = z.strictObject({
-  boardId: z.string().uuid(),
-  equipmentUnitId: z.string().uuid().nullable(),
-  resourceLocationId: z.string().uuid().nullable(),
-  partyId: z.string().uuid(),
+  boardId: uuidString(),
+  equipmentUnitId: uuidString().nullable(),
+  resourceLocationId: uuidString().nullable(),
+  partyId: uuidString(),
   reason: z.string().trim().min(1).max(2000),
   isActive: z.boolean(),
 })

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { defineRoute } from "../../../../../../lib/api/route";
 import { createDbOwnedRunStore } from "../../../../../../lib/assistant/owned-runs-db";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
@@ -14,7 +15,7 @@ export const runtime = "nodejs";
 export const POST = defineRoute({
   permission: "assistant.use",
   feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
-  params: z.object({ runId: z.string().uuid() }),
+  params: z.object({ runId: uuidString() }),
   handler: async ({ authz, params }) => {
   const { runId } = params;
   const aborted = await createDbOwnedRunStore(authz).requestAbort(runId);

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -10,10 +11,10 @@ import { lockBankMatchRuleSet } from '../../../../lib/banking-rule-set-lock'
 import { notFound } from "@/lib/api/responses";
 const ruleFields = {
   name: z.string().trim().min(1).max(200),
-  criteria: z.object({ version: z.literal(2), match: z.json(), accountScope: z.array(z.string().uuid()).optional() }),
+  criteria: z.object({ version: z.literal(2), match: z.json(), accountScope: z.array(uuidString()).optional() }),
   outcome: z.json(), priority: z.number().int().optional(), isActive: z.boolean().optional(),
 };
-const PATCHBodySchema1 = z.object({ id: z.string().uuid(), ...ruleFields });
+const PATCHBodySchema1 = z.object({ id: uuidString(), ...ruleFields });
 
 const POSTBodySchema1 = z.object(ruleFields);
 

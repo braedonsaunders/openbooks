@@ -1,9 +1,9 @@
 import { sql } from "drizzle-orm";
 import { ResourcingRefusal } from "@openbooks/engine/resourcing/errors";
 import { db } from "@openbooks/engine/platform/db";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 import { claimIdempotentCreate, resolveIdempotentReplay } from "@/lib/api/idempotency";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type CreateTable = "res_demand_lines" | "res_requests" | "res_retainers";
 
 /** Call inside withOrgTransaction so the lock, create, and audit commit together. */
@@ -16,7 +16,7 @@ export async function idempotentResourcingCreate<T>(input: {
   load: () => Promise<T | null>;
 }): Promise<T> {
   const key = input.request.headers.get("Idempotency-Key")?.trim() ?? "";
-  if (!UUID.test(key)) {
+  if (!isUuid(key)) {
     throw new ResourcingRefusal(
       400,
       "invalid_idempotency_key",

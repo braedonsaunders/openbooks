@@ -3,6 +3,7 @@ import { parseJsonBody, isoDate } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { previewDepreciation } from "@openbooks/engine/assets/depreciation";
 import {
@@ -18,11 +19,11 @@ export const runtime = "nodejs";
 // schedule extension, no claims, no postings. Allocation and posting happen
 // exclusively in POST /api/assets/run-depreciation after Confirm.
 const previewBody = z.strictObject({
-  bookId: z.string().uuid("bookId must be a valid id").nullable().optional(),
-  periodId: z.string().uuid("periodId must be a valid id").nullable().optional(),
+  bookId: uuidString("bookId must be a valid id").nullable().optional(),
+  periodId: uuidString("periodId must be a valid id").nullable().optional(),
   throughDate: isoDate("throughDate must be a valid calendar date").nullable().optional(),
   postingDate: isoDate("postingDate must be a valid calendar date").nullable().optional(),
-  assetIds: z.array(z.string().uuid("assetIds must contain valid ids")).optional(),
+  assetIds: z.array(uuidString("assetIds must contain valid ids")).optional(),
 });
 
 function bad(error: string, field?: string, status = 422) {

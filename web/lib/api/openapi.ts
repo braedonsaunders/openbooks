@@ -1,4 +1,12 @@
+import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { v1PrettyResourcePath, type ApiRecordTypeSchema } from "./registry-data";
+
+/**
+ * Record identifiers are the house 8-4-4-4-12 hex shape, published as a
+ * pattern rather than `format: uuid`: sandbox and sample organizations carry
+ * ids outside RFC 9562 version/variant, which a strict client would refuse.
+ */
+const ID_SCHEMA = { type: "string", pattern: UUID_RE.source } as const;
 
 interface OpenApiSchema {
   properties?: Record<string, OpenApiSchema>;
@@ -149,7 +157,7 @@ export function buildOpenApiSpec(
             { name: "q", in: "query", schema: { type: "string" }, description: "Search query" },
             { name: "page", in: "query", schema: { type: "integer", default: 1, minimum: 1 } },
             { name: "perPage", in: "query", schema: { type: "integer", default: 25, minimum: 5, maximum: 100 } },
-            { name: "subsidiaryId", in: "query", schema: { type: "string", format: "uuid" }, description: "Optional subsidiary filter; actor restrictions still apply." },
+            { name: "subsidiaryId", in: "query", schema: ID_SCHEMA, description: "Optional subsidiary filter; actor restrictions still apply." },
           ],
           responses: {
             "200": {
@@ -185,7 +193,7 @@ export function buildOpenApiSpec(
           tags: [rt.dynamic ? "Custom Records" : "Records"],
           security: [{ BearerAuth: [] }],
           parameters: [
-            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+            { name: "id", in: "path", required: true, schema: ID_SCHEMA },
           ],
           responses: {
             "200": {
@@ -233,7 +241,7 @@ export function buildOpenApiSpec(
           tags: [rt.dynamic ? "Custom Records" : "Records"],
           security: [{ BearerAuth: [] }],
           parameters: [
-            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+            { name: "id", in: "path", required: true, schema: ID_SCHEMA },
             idempotencyParameter,
           ],
           requestBody: {
@@ -262,7 +270,7 @@ export function buildOpenApiSpec(
           tags: [rt.dynamic ? "Custom Records" : "Records"],
           security: [{ BearerAuth: [] }],
           parameters: [
-            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+            { name: "id", in: "path", required: true, schema: ID_SCHEMA },
             idempotencyParameter,
           ],
           responses: {
@@ -387,7 +395,7 @@ export function buildOpenApiSpec(
         "Documents",
       ),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         { name: "action", in: "path", required: true, schema: { type: "string", enum: ["submit", "post", "void", "correct"] } },
         idempotencyParameter,
       ],
@@ -408,7 +416,7 @@ export function buildOpenApiSpec(
     post: {
       ...idempotentPost("Post a journal", "Journals skip the generic document lifecycle.", "Documents"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
     },
@@ -437,7 +445,7 @@ export function buildOpenApiSpec(
           "Orders",
         ),
         parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "id", in: "path", required: true, schema: ID_SCHEMA },
           idempotencyParameter,
         ],
       },
@@ -478,7 +486,7 @@ export function buildOpenApiSpec(
       tags: ["Orders"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
       requestBody: {
@@ -510,7 +518,7 @@ export function buildOpenApiSpec(
         "Orders",
       ),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
       responses: {
@@ -539,7 +547,7 @@ export function buildOpenApiSpec(
     patch: {
       ...idempotentPost("Update a payment draft", "Header and exact open-item allocations.", "Payments"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
     },
@@ -548,7 +556,7 @@ export function buildOpenApiSpec(
     post: {
       ...idempotentPost("Post a payment", "Submit and post with open-item applications.", "Payments"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
     },
@@ -573,7 +581,7 @@ export function buildOpenApiSpec(
       tags: ["Close"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "periodId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "periodId", in: "query", schema: ID_SCHEMA },
         { name: "state", in: "query", schema: { type: "string", enum: ["open", "soft_closed", "closed"] } },
         { name: "module", in: "query", schema: { type: "string", enum: ["ar", "ap", "banking", "assets", "tax", "gl"] } },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
@@ -586,7 +594,7 @@ export function buildOpenApiSpec(
       summary: "Get a close run",
       tags: ["Close"],
       security: [{ BearerAuth: [] }],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
       responses: { "200": { description: "Close run" } },
     },
   };
@@ -594,7 +602,7 @@ export function buildOpenApiSpec(
     post: {
       ...idempotentPost("Advance a close run", "refresh, request_approval, attest, close, or publish.", "Close"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
     },
@@ -607,7 +615,7 @@ export function buildOpenApiSpec(
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "status", in: "query", schema: { type: "string", enum: ["requested", "approved", "rejected", "expired", "reclosed"] } },
-        { name: "periodId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "periodId", in: "query", schema: ID_SCHEMA },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
       ],
       responses: { "200": { description: "Reopen requests" }, "403": { description: "Caller is subsidiary-restricted" } },
@@ -618,7 +626,7 @@ export function buildOpenApiSpec(
     post: {
       ...idempotentPost("Decide a reopen request", "Independent approval of a controlled reopen.", "Close"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
     },
@@ -799,7 +807,7 @@ export function buildOpenApiSpec(
       description: "This author's exact unpublished package, base version and hash.",
       tags: ["Apps"],
       security: [{ BearerAuth: [] }],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
       responses: { "200": { description: "App draft" }, "404": { description: "Not found" } },
     },
   };
@@ -807,7 +815,7 @@ export function buildOpenApiSpec(
     post: {
       ...plainPost("Activate a reviewed app draft", "Activate the exact reviewed draft via { contentHash }. Refuses stale bases.", "Apps"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
       ],
     },
   };
@@ -815,7 +823,7 @@ export function buildOpenApiSpec(
     post: {
       ...plainPost("Discard an app draft", "Discard an unpublished draft via { contentHash }, preserving source and audit evidence.", "Apps"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
       ],
     },
   };
@@ -827,7 +835,7 @@ export function buildOpenApiSpec(
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "key", in: "path", required: true, schema: { type: "string" } },
-        { name: "versionId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "versionId", in: "query", schema: ID_SCHEMA },
       ],
       responses: { "200": { description: "App package" }, "404": { description: "Not found" } },
     },
@@ -848,7 +856,7 @@ export function buildOpenApiSpec(
       tags: ["Banking"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "accountId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "accountId", in: "query", schema: ID_SCHEMA },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
       responses: { "200": { description: "Unmatched lines" }, "404": { description: "banking is off" } },
@@ -861,7 +869,7 @@ export function buildOpenApiSpec(
       tags: ["Banking"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "accountId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "accountId", in: "query", schema: ID_SCHEMA },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
       responses: { "200": { description: "Reconciliation sessions" }, "404": { description: "banking is off" } },
@@ -874,7 +882,7 @@ export function buildOpenApiSpec(
       description: "One session's workspace/sign-off totals. Balances are exact decimal strings.",
       tags: ["Banking"],
       security: [{ BearerAuth: [] }],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
       responses: { "200": { description: "Reconciliation" }, "404": { description: "Not found or banking is off" } },
     },
   };
@@ -882,7 +890,7 @@ export function buildOpenApiSpec(
     post: {
       ...idempotentPost("Sign off a reconciliation", "Zero-difference sessions only. Permanent.", "Banking"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
     },
@@ -891,7 +899,7 @@ export function buildOpenApiSpec(
     post: {
       ...idempotentPost("Match a bank line", "Pair one unmatched statement line with posted journal lines.", "Banking"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
     },
@@ -900,7 +908,7 @@ export function buildOpenApiSpec(
     post: {
       ...idempotentPost("Match a bank line with a journal", "Create a categorizing journal and match it in-session.", "Banking"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
     },
@@ -909,7 +917,7 @@ export function buildOpenApiSpec(
     post: {
       ...idempotentPost("Unmatch a bank line", "Signed-off sessions refuse.", "Banking"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
     },
@@ -929,7 +937,7 @@ export function buildOpenApiSpec(
       description: "One scenario through the same loader as the budgets screen.",
       tags: ["Budgets"],
       security: [{ BearerAuth: [] }],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
       responses: { "200": { description: "Budget scenario" }, "404": { description: "Not found or budgets is off" } },
     },
   };
@@ -937,7 +945,7 @@ export function buildOpenApiSpec(
     post: {
       ...idempotentPost("Update budget cells", "Draft scenarios only. expectedRevision must match.", "Budgets"),
       parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
       ],
     },
@@ -949,7 +957,7 @@ export function buildOpenApiSpec(
       tags: ["Files"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "folderId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "folderId", in: "query", schema: ID_SCHEMA },
         { name: "q", in: "query", schema: { type: "string" }, description: "Match file name" },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
         { name: "offset", in: "query", schema: { type: "integer", minimum: 0 } },
@@ -973,7 +981,7 @@ export function buildOpenApiSpec(
       description: "Metadata only. Unseen files read as not found. Never returns contents.",
       tags: ["Files"],
       security: [{ BearerAuth: [] }],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
       responses: { "200": { description: "File" }, "404": { description: "Not found" } },
     },
   };
@@ -1005,7 +1013,7 @@ export function buildOpenApiSpec(
       parameters: [
         { name: "side", in: "query", required: true, schema: { type: "string", enum: ["ar", "ap"] } },
         { name: "asOf", in: "query", schema: { type: "string", format: "date" } },
-        { name: "partyId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "partyId", in: "query", schema: ID_SCHEMA },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
       responses: { "200": { description: "Open items" }, "422": { description: "side missing or not ar/ap" } },
@@ -1055,7 +1063,7 @@ export function buildOpenApiSpec(
           name: "locationId",
           in: "query",
           required: false,
-          schema: { type: "string", format: "uuid" },
+          schema: ID_SCHEMA,
           description: "Repeatable: warehouse or stock location id.",
         },
         {
@@ -1101,8 +1109,8 @@ export function buildOpenApiSpec(
       tags: ["Inventory"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "itemId", in: "query", schema: { type: "string", format: "uuid" } },
-        { name: "stockLocationId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "itemId", in: "query", schema: ID_SCHEMA },
+        { name: "stockLocationId", in: "query", schema: ID_SCHEMA },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
       responses: { "200": { description: "Inventory levels" }, "404": { description: "inventory is off" } },
@@ -1209,7 +1217,7 @@ export function buildOpenApiSpec(
       description: "One opportunity through the same loader as the opportunity drawer. Amounts are exact decimal strings.",
       tags: ["CRM"],
       security: [{ BearerAuth: [] }],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
       responses: { "200": { description: "Opportunity" }, "404": { description: "Not found or crm is off" } },
     },
   };
@@ -1233,7 +1241,7 @@ export function buildOpenApiSpec(
       description: "One account through the same loader as the account drawer. Amounts are exact decimal strings.",
       tags: ["CRM"],
       security: [{ BearerAuth: [] }],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
       responses: { "200": { description: "CRM account" }, "404": { description: "Not found or crm is off" } },
     },
   };
@@ -1272,7 +1280,7 @@ export function buildOpenApiSpec(
       tags: ["Reports"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "partyId", in: "query", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "partyId", in: "query", required: true, schema: ID_SCHEMA },
         { name: "side", in: "query", required: true, schema: { type: "string", enum: ["ar", "ap"] } },
         { name: "from", in: "query", required: true, schema: { type: "string", format: "date" } },
         { name: "to", in: "query", required: true, schema: { type: "string", format: "date" } },
@@ -1362,7 +1370,7 @@ export function buildOpenApiSpec(
         { name: "from", in: "query", required: true, schema: { type: "string", format: "date" } },
         { name: "to", in: "query", required: true, schema: { type: "string", format: "date" } },
         { name: "subsidiary", in: "query", schema: { type: "string" }, description: "Filing-entity subsidiary id; repeat or comma-separate. Omit for the org-wide return (full-scope callers only)." },
-        { name: "registration", in: "query", schema: { type: "string", format: "uuid" }, description: "Pin the registration whose number travels on the return." },
+        { name: "registration", in: "query", schema: ID_SCHEMA, description: "Pin the registration whose number travels on the return." },
         { name: "presentationCurrency", in: "query", schema: { type: "string", minLength: 3, maxLength: 3 } },
         { name: "rateType", in: "query", schema: { type: "string" } },
         { name: "rateDate", in: "query", schema: { type: "string", format: "date" } },
@@ -1385,7 +1393,7 @@ export function buildOpenApiSpec(
       summary: "Get a report definition",
       tags: ["Reports"],
       security: [{ BearerAuth: [] }],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
       responses: { "200": { description: "Report definition" }, "404": { description: "Not found" } },
     },
   };
@@ -1395,7 +1403,7 @@ export function buildOpenApiSpec(
       description: "Execute a definition through the same report engine as the Reports hub. Restricted subsidiary scopes are refused.",
       tags: ["Reports"],
       security: [{ BearerAuth: [] }],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
       requestBody: {
         required: true,
         content: { "application/json": { schema: { type: "object", additionalProperties: true } } },

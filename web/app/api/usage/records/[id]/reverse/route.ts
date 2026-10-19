@@ -1,8 +1,9 @@
 import { reverseUsageRecord } from "@openbooks/engine/billing/usage/records";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
-const Params = z.object({ id: z.string().uuid() }).strict();
+const Params = z.object({ id: uuidString() }).strict();
 const Body = z.object({
   reason: z.string().trim().min(1),
   occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

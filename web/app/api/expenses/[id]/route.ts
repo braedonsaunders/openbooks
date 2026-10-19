@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -23,13 +24,13 @@ const DELETEBodySchema1 = z.object({
   expectedUpdatedAt: z.string().min(1).optional(),
 });
 
-const nullableId = z.string().uuid().nullable();
+const nullableId = uuidString().nullable();
 const receiptLineSchema = z.strictObject({
-  captureId: z.string().uuid(),
+  captureId: uuidString(),
   lineIndex: z.number().int().min(0),
   transactionDate: z.string(),
   merchantName: z.string(),
-  merchantPartyId: z.string().uuid().nullable(),
+  merchantPartyId: uuidString().nullable(),
 });
 type ReceiptLineBody = z.output<typeof receiptLineSchema>
 const PATCHBodySchema1 = z.object({

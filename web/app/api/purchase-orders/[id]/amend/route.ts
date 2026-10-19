@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { withOrgTransaction } from '@openbooks/engine/platform/db'
 import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
@@ -11,10 +12,10 @@ import { readDocumentScope } from '@/lib/record-scope-reads'
 
 export const runtime = 'nodejs'
 
-const params = z.object({ id: z.string().uuid() })
+const params = z.object({ id: uuidString() })
 
 const amendLineBody = z.object({
-  lineId: z.string().uuid(),
+  lineId: uuidString(),
   quantity: z.string().min(1).max(50).optional(),
   unitPrice: z.string().min(1).max(50).optional(),
 }).strict()

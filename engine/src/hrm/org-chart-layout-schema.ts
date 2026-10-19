@@ -1,10 +1,11 @@
 import { z } from 'zod'
+import { uuidString } from '../platform/uuid.ts'
 
 const coordinate = z.number().finite().min(-100000).max(100000)
 const node = z.object({
-  id: z.string().uuid(),
+  id: uuidString(),
   kind: z.enum(['employee', 'vacancy', 'department', 'team', 'role']),
-  referenceId: z.string().uuid().optional(),
+  referenceId: uuidString().optional(),
   label: z.string().trim().min(1).max(100).optional(),
   note: z.string().trim().max(200).optional(),
   position: z.object({ x: coordinate, y: coordinate }).strict(),
@@ -19,7 +20,7 @@ const node = z.object({
 /** Presentation-only diagram; its connectors never mutate employment reporting lines. */
 export const orgChartLayoutSchema = z.object({
   nodes: z.array(node).max(10000),
-  edges: z.array(z.object({ source: z.string().uuid(), target: z.string().uuid() }).strict()).max(10000),
+  edges: z.array(z.object({ source: uuidString(), target: uuidString() }).strict()).max(10000),
 }).strict().superRefine((layout, ctx) => {
   const ids = new Set<string>()
   const references = new Set<string>()

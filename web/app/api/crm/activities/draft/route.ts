@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { crmSubjectVisible, lockCrmLinkSubject } from '../../../../../lib/crm-scope'
 import { parseJsonBody } from "@/lib/api/json"
@@ -11,7 +12,7 @@ import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({
   kind: z.enum(['task', 'call', 'event', 'email', 'note']).optional(),
-  subjectId: z.string().uuid().optional(),
+  subjectId: uuidString().optional(),
   subjectKind: z.enum(['account', 'contact', 'opportunity', 'document', 'project']).optional(),
 }).refine(
   (body) => (body.subjectKind === undefined) === (body.subjectId === undefined),

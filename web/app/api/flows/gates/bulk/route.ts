@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
@@ -9,7 +10,7 @@ import { loadGateHeader } from '../../_lib'
 import { MAX_BULK_ITEMS } from './bulk-limit'
 
 const requestBodySchema = z.object({
-  items: z.array(z.object({ gateId: z.string().uuid() })).min(1).max(MAX_BULK_ITEMS, { error: `too many items (max ${MAX_BULK_ITEMS})` }),
+  items: z.array(z.object({ gateId: uuidString() })).min(1).max(MAX_BULK_ITEMS, { error: `too many items (max ${MAX_BULK_ITEMS})` }),
   decision: z.enum(["approved", "rejected"]),
   comment: z.string().trim().max(2000).optional(),
 });

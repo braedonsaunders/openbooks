@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { isIsoCalendarDate } from "@openbooks/engine/crm/sales/contracts";
 import { canonicalDecimal, compareDecimal } from "../exact-decimal";
 import { moneyRefusal } from "../payroll-decimal-refusal";
@@ -6,7 +7,7 @@ import { moneyRefusal } from "../payroll-decimal-refusal";
 const date = z
   .string()
   .refine(isIsoCalendarDate, "Enter a valid calendar date.");
-const nullableId = z.string().uuid().nullable();
+const nullableId = uuidString().nullable();
 const position = z.tuple([
   z.number().min(-180).max(180),
   z.number().min(-90).max(90),
@@ -40,10 +41,10 @@ export const salesGeographySchema = z.object({
     .max(20),
 });
 const common = {
-  id: z.string().uuid().optional(),
+  id: uuidString().optional(),
   expectedRevision: z.number().int().positive().optional(),
   name: z.string().trim().min(1).max(200),
-  subsidiaryId: z.string().uuid(),
+  subsidiaryId: uuidString(),
 };
 const rule = z
   .object({
@@ -107,7 +108,7 @@ export const salesTerritorySchema = z.strictObject({
 export const salesCommandSchema = z.discriminatedUnion("action", [
   z.strictObject({
     action: z.literal("representative"),
-    employeeId: z.string().uuid(),
+    employeeId: uuidString(),
     enabled: z.boolean(),
     since: date,
     expectedRevision: z.string().min(1),
@@ -120,7 +121,7 @@ export const salesCommandSchema = z.discriminatedUnion("action", [
     members: z
       .array(
         z.object({
-          employeeId: z.string().uuid(),
+          employeeId: uuidString(),
           role: z.enum(["manager", "member"]),
           validFrom: date,
         }),
@@ -172,7 +173,7 @@ export const salesCommandSchema = z.discriminatedUnion("action", [
     }),
   z.strictObject({
     action: z.literal("quota-transition"),
-    id: z.string().uuid(),
+    id: uuidString(),
     expectedRevision: z.number().int().positive(),
     lifecycle: z.enum(["draft", "pending_approval", "approved", "closed"]),
     reason: z.string().trim().min(1).max(4000),

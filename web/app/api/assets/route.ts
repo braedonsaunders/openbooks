@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { UUID_RE, uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { cmp } from "@openbooks/engine/money/money";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
@@ -56,7 +57,7 @@ const blankAmount = (field: string) => z.preprocess((value, context) => {
 }, z.string());
 const nullableDate = (field: string) =>
   z.union([isoDate(`${field} must be a valid calendar date`), z.literal("")]).nullable();
-const nullableId = z.string().uuid("must be a valid id").nullable();
+const nullableId = uuidString("must be a valid id").nullable();
 const taxElection = z.strictObject({
   classCode: z.string().trim().nullable().optional(),
   businessUsePercent: blankAmount("Business use percent").optional(),
@@ -67,7 +68,7 @@ const createAssetSchema = z.strictObject({
   name: z.string({ error: "name is required" }),
   assetNumber: z.string().trim().max(80).nullable().optional(),
   description: z.string().nullable().optional(),
-  categoryId: z.string({ error: "categoryId is required" }).uuid("categoryId must be a valid id"),
+  categoryId: z.string({ error: "categoryId is required" }).regex(UUID_RE, "categoryId must be a valid id"),
   subsidiaryId: nullableId.optional(),
   acquisitionCost: blankAmount("Acquisition cost").nullable().optional(),
   salvageValue: blankAmount("Salvage value").nullable().optional(),

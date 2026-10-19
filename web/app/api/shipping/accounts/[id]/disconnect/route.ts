@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/database'
 import { disconnectShippingAccount } from '@openbooks/engine/sales/shipping-labels'
 import { notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'
 
-const accountParams = z.object({ id: z.string().uuid() })
+const accountParams = z.object({ id: uuidString() })
 
 /** Park an account without deleting its labels, quotes, or cost history. */
 export const POST = defineRoute({

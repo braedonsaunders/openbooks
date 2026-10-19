@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { defineRoute } from '@/lib/api/route'
@@ -12,19 +13,19 @@ import { isUuid } from '../../../../lib/list-params'
 export const runtime = 'nodejs'
 
 const WindowQuery = z.object({
-  tillAccountId: z.string().uuid(),
+  tillAccountId: uuidString(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'drop date must be YYYY-MM-DD'),
-  subsidiaryId: z.string().uuid().nullable(),
+  subsidiaryId: uuidString().nullable(),
 })
 
 const POSTBodySchema = z.object({
-  tillAccountId: z.string().uuid(),
+  tillAccountId: uuidString(),
   amount: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'drop date must be YYYY-MM-DD'),
   coversThrough: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'cash cutoff must be YYYY-MM-DD').nullable().optional(),
-  bankAccountId: z.string().uuid(),
+  bankAccountId: uuidString(),
   slipNumber: z.string().min(1).max(120),
-  subsidiaryId: z.string().uuid().nullable().optional(),
+  subsidiaryId: uuidString().nullable().optional(),
   reason: z.string().max(500).nullable().optional(),
 })
 

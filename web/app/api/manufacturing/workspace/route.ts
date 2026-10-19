@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
 import { listManufacturingRecords } from "@openbooks/engine/manufacturing/workspace";
@@ -10,7 +11,7 @@ const Query = z
     perPage: z.coerce.number().int().min(10).max(100).optional(),
     q: z.string().max(200).optional(),
     status: z.string().max(30).optional(),
-    subsidiaryId: z.string().uuid().optional(),
+    subsidiaryId: uuidString().optional(),
   })
   .strict();
 export const GET = defineRoute({

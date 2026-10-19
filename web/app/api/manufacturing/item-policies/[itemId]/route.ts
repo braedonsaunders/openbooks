@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { getItemPolicy, upsertItemPolicy, type ItemPolicyInput } from "@openbooks/engine/manufacturing/item-policies";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { manufacturingTransaction } from "../../_transaction";
 
-const Params = z.object({ itemId: z.string().uuid() });
+const Params = z.object({ itemId: uuidString() });
 const Body = z.object({
   supplyMethod: z.enum(["make", "buy", "transfer"]), leadTimeDays: z.number().int().nonnegative().nullable(),
   safetyStockQty: z.string(), minimumQty: z.string(), orderMultipleQty: z.string(), scrapPctPlanned: z.string(),

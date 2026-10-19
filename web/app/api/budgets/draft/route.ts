@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -9,9 +10,9 @@ import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { BUDGET_KINDS } from '../../../../lib/budgets'
 const POSTBodySchema1 = z.object({
-  bookId: z.string({ error: 'invalid_book_id' }).uuid({ error: 'invalid_book_id' }).optional(), description: z.string({ error: 'invalid_description' }).max(2000, { error: 'invalid_description' }).optional(),
+  bookId: uuidString({ error: 'invalid_book_id' }).optional(), description: z.string({ error: 'invalid_description' }).max(2000, { error: 'invalid_description' }).optional(),
   fiscalYear: z.number({ error: 'invalid_fiscal_year' }).int({ error: 'invalid_fiscal_year' }).min(1900, { error: 'invalid_fiscal_year' }).max(9999, { error: 'invalid_fiscal_year' }).optional(), kind: z.enum(['forecast', 'budget'], { error: 'invalid_kind' }).optional(),
-  name: z.string().max(200).optional(), sourceScenarioId: z.string({ error: 'invalid_source_scenario_id' }).uuid({ error: 'invalid_source_scenario_id' }).optional(),
+  name: z.string().max(200).optional(), sourceScenarioId: uuidString({ error: 'invalid_source_scenario_id' }).optional(),
 }).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { loadRetainerForUpdate, updateRetainerDraft } from "@openbooks/engine/resourcing/retainers";
 import { ResourcingRefusal } from "@openbooks/engine/resourcing/errors";
 import { withOrgTransaction } from "@openbooks/engine/platform/db";
@@ -6,10 +7,10 @@ import { defineRoute } from "@/lib/api/route";
 import { unprocessable } from "@/lib/api/responses";
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({
-  projectId: z.string().uuid().optional(),
-  customerPartyId: z.string().uuid().optional(),
+  projectId: uuidString().optional(),
+  customerPartyId: uuidString().optional(),
   kind: z.enum(["hours", "fees"]).optional(),
   currency: z.string().length(3).transform((value) => value.toUpperCase()).optional(),
   totalAmount: z.string().optional(),
@@ -17,7 +18,7 @@ const Body = z.object({
   unitRate: z.string().nullable().optional(),
   startsOn: z.string().optional(),
   endsOn: z.string().optional(),
-  retainerItemId: z.string().uuid().optional(),
+  retainerItemId: uuidString().optional(),
   custom: z.record(z.string(), z.json()).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0 && Object.values(value).some((field) => field !== undefined),
   "Supply at least one retainer field to update.");

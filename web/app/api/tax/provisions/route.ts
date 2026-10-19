@@ -1,5 +1,6 @@
 import type { Authz } from "@/lib/authz";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
@@ -47,7 +48,7 @@ const bodyObjectSchema = z.object({
   }).strict()).optional(),
   lossCarryforwardUsed: provisionAmount('lossCarryforwardUsed').optional(),
   valuationAllowance: provisionAmount('valuationAllowance').optional(),
-  entities: z.record(z.string().uuid(), z.object({
+  entities: z.record(uuidString(), z.object({
     permanentDifferences: z.array(z.object({ description: z.string().optional(), amount: provisionAmount('amount').optional() }).strict()).optional(),
     additionalDifferences: z.array(z.object({
       category: differenceCategory.optional(),

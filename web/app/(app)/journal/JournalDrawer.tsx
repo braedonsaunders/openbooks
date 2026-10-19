@@ -14,6 +14,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ActionError } from '@braedonsaunders/appkit-errors'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { fetchAppAction } from '@/lib/api-error'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { PeriodClosedRefusal } from '@/components/period-closed-refusal'
@@ -1348,7 +1349,7 @@ function JournalDrawerBody({
             await execute(async () => {
               const result = await fetchAppAction('/api/journals/reversals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'run_due'})},{fallback:t('postFailed')})
               if (!result.ok) return result
-              const parsed = z.object({reversed:z.number().int().nonnegative(),blocked:z.array(z.object({id:z.string().uuid(),message:z.string().min(1)}))}).safeParse(result.data)
+              const parsed = z.object({reversed:z.number().int().nonnegative(),blocked:z.array(z.object({id:uuidString(),message:z.string().min(1)}))}).safeParse(result.data)
               if (!parsed.success) return {ok:false,error:new ActionError({kind:'unexpected',serverMessage:t('postFailed')})}
               if (parsed.data.blocked.length) return {ok:false,error:new ActionError({kind:'refused',serverMessage:parsed.data.blocked.map(row=>row.message).join('; ')})}
               return {...result,data:parsed.data}

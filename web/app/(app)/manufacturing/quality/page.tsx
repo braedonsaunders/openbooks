@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { getTranslations,getLocale } from 'next-intl/server';
 import { db } from '@openbooks/engine/platform/db';
 import { withScopeSnapshot } from '@openbooks/engine/organization/scope';
@@ -20,14 +21,14 @@ export default async function Quality({searchParams}:{searchParams:Promise<Recor
   const sp=await searchParams,t=await getTranslations('manufacturing.quality'),m=await getTranslations('manufacturing'),locale=await getLocale();
   const scalar=(value:string|string[]|undefined)=>Array.isArray(value)?value[0]:value;
   const status=z.enum(['pending','pass','fail']).safeParse(scalar(sp.status)??'pending');
-  const work=z.string().uuid().safeParse(scalar(sp.workOrderId));
+  const work=uuidString().safeParse(scalar(sp.workOrderId));
   const data=await withScopeSnapshot(authz.user.orgId,async()=>{
     const scope=await lockManufacturingReadAuthority(db,authz.user.orgId,authz.user.id,authz.allowedSubsidiaryIds,['manufacturing.read','items.read']);
     return {queue:await listManufacturingInspections(db,authz.user.orgId,authz.user.id,{status:status.success?status.data:undefined,workOrderId:work.success?work.data:undefined,page:Number.parseInt(scalar(sp.page)??'1',10)||1}),options:await manufacturingOptions(db,authz.user.orgId,scope)};
   });
   const params=new URLSearchParams();for(const key of ['status','workOrderId','page'])if(scalar(sp[key]))params.set(key,scalar(sp[key])!);
   const closeHref='/manufacturing/quality'+(params.size?'?'+params:'');
-  const selected=z.string().uuid().safeParse(scalar(sp.inspection));
+  const selected=uuidString().safeParse(scalar(sp.inspection));
   return <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} actions={can(authz,'admin.setup.manage')&&authz.allowedSubsidiaryIds===null?<Button variant="outline" asChild><Link href="/admin/setup/manufacturing?tab=inspection-plans">{t('plans')}</Link></Button>:undefined}/>}><div className="space-y-5"><ModuleHomeTabs tabs={[{href:'/manufacturing?view=work',label:m('cockpit.work'),active:false},{href:'/manufacturing/quality',label:t('title'),active:true}]}/><ServerPagedTable source="manufacturing_quality" rows={data.queue.rows} columns={[
     {key:'name',header:t('plan'),cell:row=><Link className="font-medium text-teal-700 hover:underline" href={(closeHref+(closeHref.includes('?')?'&':'?')+'inspection='+row.id) as never}>{row.name}</Link>},
     {key:'itemName',header:t('item'),cell:row=>row.itemName},

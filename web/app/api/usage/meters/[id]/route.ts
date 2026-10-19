@@ -1,14 +1,15 @@
 import { updateUsageMeter } from "@openbooks/engine/billing/usage/records";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
-const Params = z.object({ id: z.string().uuid() }).strict();
+const Params = z.object({ id: uuidString() }).strict();
 const Body = z.object({
   key: z.string().trim().min(1).optional(),
   name: z.string().trim().min(1).optional(),
   unit: z.string().trim().min(1).optional(),
   aggregation: z.enum(["sum", "count", "max", "last", "unique_count"]).optional(),
-  itemId: z.string().uuid().nullable().optional(),
+  itemId: uuidString().nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0 && Object.values(value).some((field) => field !== undefined),
   "Supply at least one meter field to update.");
 

@@ -1,6 +1,7 @@
 import { routeSalesAccount } from "@openbooks/engine/crm/sales"
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { crmSharedScope } from '../../../../../lib/crm-scope'
 import { parseJsonBody } from "@/lib/api/json"
@@ -19,7 +20,7 @@ import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const nullableUuid = z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable())
+const nullableUuid = z.preprocess((value) => value === '' ? null : value, uuidString().nullable())
 const optionalCount = z.union([z.number(), z.string()]).nullable().optional()
 const requestBodySchema = z.strictObject({
   annualRevenue: z.string().nullable().optional(),

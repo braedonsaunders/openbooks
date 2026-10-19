@@ -1,6 +1,7 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { proposeRevenueModification } from "@openbooks/engine/revenue/contract-modifications";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { defineRoute } from "@/lib/api/route";
@@ -43,32 +44,32 @@ const revenueModificationSchema = z.object({
   effectiveOn: date,
   reason: z.string().trim().min(8).max(1000),
   idempotencyKey: z.string().min(1).max(120),
-  subsidiaryId: z.uuid(),
+  subsidiaryId: uuidString(),
   enforceableRightsEvidence: z.string().trim().min(8).max(4000),
   assessment: z.string().trim().min(8).max(4000),
   bookRates: z
-    .array(z.object({ bookId: z.uuid(), fxRate: rateInput("FX rate") }))
+    .array(z.object({ bookId: uuidString(), fxRate: rateInput("FX rate") }))
     .min(1)
     .max(100),
   groups: z
     .array(
       z.object({
         treatment: z.enum(["separate", "prospective", "catch_up"]),
-        existingObligationIds: z.array(z.uuid()).max(500),
+        existingObligationIds: z.array(uuidString()).max(500),
         considerationChange: monetaryInput("Consideration change"),
         remainingDistinct: z.boolean(),
         additionsAtStandalonePrice: z.boolean(),
         promises: z
           .array(
             z.object({
-              existingId: z.uuid().optional(),
+              existingId: uuidString().optional(),
               description: z.string().trim().min(1).max(1000),
               standaloneSellingPrice: monetaryInput("Standalone selling price"),
-              recognitionRuleId: z.uuid(),
+              recognitionRuleId: uuidString(),
               recognitionEndsOn: date.nullable().optional(),
               percentComplete: monetaryInput("Progress"),
-              deferredAccountId: z.uuid(),
-              recognizedAccountId: z.uuid(),
+              deferredAccountId: uuidString(),
+              recognizedAccountId: uuidString(),
               events: z
                 .array(
                   z.object({

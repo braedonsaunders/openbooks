@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { addAttendancePolicy } from '@openbooks/engine/schedule-boards/attendance'
@@ -10,7 +11,7 @@ export const POST = defineRoute({
   permission: 'hrm.attendance.manage',
   feature: 'hrmAttendance',
   body: z.strictObject({
-    boardId: z.string().uuid(),
+    boardId: uuidString(),
     effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     captureBeforeMinutes: minutes,
     captureAfterMinutes: minutes,

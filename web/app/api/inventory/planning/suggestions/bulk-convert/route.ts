@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   convertTransferSuggestion,
   listPlanSuggestions,
@@ -12,11 +13,11 @@ import { convertBuyGroup, type BuyConvertLine } from "../../_buy";
 
 const Params = z.object({}).strict();
 const Body = z.object({
-  subsidiaryId: z.string().uuid(),
+  subsidiaryId: uuidString(),
   lines: z.array(z.object({
-    id: z.string().uuid(),
-    vendorId: z.string().uuid().optional(),
-    fromLocationId: z.string().uuid().optional(),
+    id: uuidString(),
+    vendorId: uuidString().optional(),
+    fromLocationId: uuidString().optional(),
   }).strict()).min(1).max(200),
 }).strict();
 

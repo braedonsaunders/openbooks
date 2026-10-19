@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
 import { isUuid } from '../../../../../lib/list-params'
@@ -10,7 +11,7 @@ const params = z.object({ id: z.string() })
 const progressBody = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('record'),
-    taskId: z.string().uuid(),
+    taskId: uuidString(),
     entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     quantity: z.string().min(1).max(40),
     unit: z.string().min(1).max(32),
@@ -18,7 +19,7 @@ const progressBody = z.discriminatedUnion('action', [
   }).strict(),
   z.object({
     action: z.literal('reverse'),
-    entryId: z.string().uuid(),
+    entryId: uuidString(),
     reason: z.string().min(1).max(500),
   }).strict(),
 ])

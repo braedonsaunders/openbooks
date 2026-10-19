@@ -3,6 +3,7 @@ import { isUuid } from "@/lib/list-params";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { allocateDocumentNumber } from "@openbooks/engine/records/numbering";
@@ -49,7 +50,7 @@ const assistantCommitBody = z.object({
     documentDate: z.string(),
     memo: z.string().nullable(),
     lines: z.array(z.object({
-      accountId: z.string().uuid(),
+      accountId: uuidString(),
       accountLabel: z.string(),
       description: z.string().nullable(),
       amount: z.string().min(1),

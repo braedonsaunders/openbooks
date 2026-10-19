@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   catalogQueueCounts,
   CommerceError,
@@ -18,7 +19,7 @@ export const runtime = "nodejs";
 const updateBodySchema = z
   .strictObject({
     name: z.string().trim().min(1).optional(),
-    subsidiaryId: z.string().uuid().nullish(),
+    subsidiaryId: uuidString().nullish(),
     currency: z.string().trim().min(3).max(3).optional(),
     secrets: z.record(z.string(), z.json()).nullish(),
     webhookSecret: z.string().trim().min(1).nullish(),

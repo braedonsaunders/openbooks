@@ -211,7 +211,7 @@ test('invalid gate IDs are refused by the request boundary before database work'
 
   assert.equal(response.status, 422)
   const refusal = await response.json() as { error: string; issues: { path: string }[] }
-  assert.equal(refusal.error, 'Invalid UUID')
+  assert.equal(refusal.error, 'must be a valid id')
   assert.ok(refusal.issues.some((issue) => issue.path.startsWith('items.')))
   assert.deepEqual(routeState.loadCalls, [])
   assert.deepEqual(routeState.decideCalls, [])

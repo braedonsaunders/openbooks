@@ -1,9 +1,10 @@
 import { runBillingImportById } from "@openbooks/engine/sync";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 const Body = z.object({
-  runId: z.string().uuid(),
+  runId: uuidString(),
 }).strict();
 
 export const POST = defineRoute({

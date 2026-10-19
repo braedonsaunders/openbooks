@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
@@ -34,9 +35,9 @@ const overheadProfileSchema = z.discriminatedUnion("method", [
 ]);
 const requestBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("publish"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), rates: z.array(z.object({ departmentId: z.string().nullable(), ratePerHour: exactDecimalText("Overhead rate") })).max(500).optional(), acknowledgeZeroOverStandard: z.boolean().optional() }),
-  z.object({ action: z.literal("apply"), projectTypeIds: z.array(z.string().uuid()).min(1).max(500), overhead: overheadProfileSchema, effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("apply"), projectTypeIds: z.array(uuidString()).min(1).max(500), overhead: overheadProfileSchema, effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().max(500).optional() }),
   z.object({ action: z.literal("set-lifecycle"), mode: z.enum(["manual", "scheduled", "live"]).optional(), cadence: z.enum(["monthly", "quarterly"]).optional() }),
-  z.object({ action: z.literal("set-application"), mode: z.enum(["report_only", "net_zero_pair", "off"]).optional(), accountId: z.string().uuid().nullable().optional() }),
+  z.object({ action: z.literal("set-application"), mode: z.enum(["report_only", "net_zero_pair", "off"]).optional(), accountId: uuidString().nullable().optional() }),
   z.object({ action: z.literal("backfill-overhead") }),
 ]);
 

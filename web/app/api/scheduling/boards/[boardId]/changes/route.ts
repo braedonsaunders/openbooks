@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
 import { defineRoute } from '@/lib/api/route'
@@ -11,24 +12,24 @@ const span = z.discriminatedUnion('mode', [
   z.strictObject({ mode: z.literal('day') }),
   z.strictObject({ mode: z.literal('timed'), starts: clock, ends: clock, breakMinutes: z.number().int().min(0).max(240) }),
 ])
-const target = z.strictObject({ kind: z.enum(['customer', 'project', 'location', 'code']), id: z.string().uuid() }).nullable()
+const target = z.strictObject({ kind: z.enum(['customer', 'project', 'location', 'code']), id: uuidString() }).nullable()
 const fields = {
-  workerPartyId: z.string().uuid().optional(),
-  subject: z.strictObject({ kind: z.enum(['person', 'equipment', 'location']), id: z.string().uuid() }).optional(),
+  workerPartyId: uuidString().optional(),
+  subject: z.strictObject({ kind: z.enum(['person', 'equipment', 'location']), id: uuidString() }).optional(),
   onDate: date,
   target,
-  projectTaskId: z.string().uuid().nullable().optional(),
-  departmentId: z.string().uuid().nullable().optional(),
+  projectTaskId: uuidString().nullable().optional(),
+  departmentId: uuidString().nullable().optional(),
   detail: z.string().max(120).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
   span,
-  seriesId: z.string().uuid().nullable().optional(),
+  seriesId: uuidString().nullable().optional(),
 }
 const change = z.discriminatedUnion('op', [
-  z.strictObject({ op: z.literal('create'), id: z.string().uuid(), ...fields }).refine((value) => Boolean(value.workerPartyId) !== Boolean(value.subject), 'Choose exactly one booking subject'),
+  z.strictObject({ op: z.literal('create'), id: uuidString(), ...fields }).refine((value) => Boolean(value.workerPartyId) !== Boolean(value.subject), 'Choose exactly one booking subject'),
   z.strictObject({
     op: z.literal('update'),
-    id: z.string().uuid(),
+    id: uuidString(),
     expectedRevision: z.number().int().positive(),
     fields: z.strictObject({
       workerPartyId: fields.workerPartyId,
@@ -44,7 +45,7 @@ const change = z.discriminatedUnion('op', [
     }).refine((value) => Object.keys(value).length > 0, 'Name at least one field to change')
       .refine((value) => !(value.workerPartyId && value.subject), 'Choose exactly one booking subject'),
   }),
-  z.strictObject({ op: z.literal('cancel'), id: z.string().uuid(), expectedRevision: z.number().int().positive() }),
+  z.strictObject({ op: z.literal('cancel'), id: uuidString(), expectedRevision: z.number().int().positive() }),
 ])
 const body = z.strictObject({
   changes: z.array(change).min(1).max(500),
@@ -55,7 +56,7 @@ const body = z.strictObject({
 export const POST = defineRoute({
   authorize: ({ params }) => schedulingBoardRouteAuthority(params, 'manage'),
   feature: { none: 'The addressed board is gated and authorized by its native family.' },
-  params: z.object({ boardId: z.string().uuid() }),
+  params: z.object({ boardId: uuidString() }),
   body,
   handler: async ({ authz, params, body }) => {
     const result = await applyBoardChanges({

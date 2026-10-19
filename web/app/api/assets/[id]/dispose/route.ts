@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
@@ -18,7 +19,7 @@ import { exactMoney, isoDate } from "../../../../../lib/api/json";
 const postBodySchema0 = z.strictObject({
   date: isoDate("date must be a valid calendar date").optional(),
   proceeds: exactMoney("proceeds must be a decimal string; JSON numbers are refused").optional(),
-  proceedsAccountId: z.string().uuid("proceedsAccountId must be a valid id").optional(),
+  proceedsAccountId: uuidString("proceedsAccountId must be a valid id").optional(),
   writeOff: z.boolean().optional(),
 });
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import {
@@ -11,7 +12,7 @@ import { can } from "../../../../lib/authz";
 import { fileViewer, requireFolderAccess } from "../lib";
 const postBodySchema0 = z.strictObject({
   name: z.string().trim().min(1, "name is required").max(255),
-  parentId: z.string().uuid("parentId must be a valid id").nullable().optional(),
+  parentId: uuidString("parentId must be a valid id").nullable().optional(),
   isPrivate: z.boolean().optional(),
 });
 

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server';
@@ -31,8 +32,8 @@ function requestBodySchema(messages: { invalidOwnerTarget: string; invalidTeamTa
   return z.strictObject({
     periodStart: z.string().refine(isIsoCalendarDate, 'periodStart must be a real calendar date (YYYY-MM-DD)'),
     periodEnd: z.string().refine(isIsoCalendarDate, 'periodEnd must be a real calendar date (YYYY-MM-DD)'),
-    ownerUserId: z.string({ error: messages.invalidOwnerTarget }).uuid({ error: messages.invalidOwnerTarget }).nullable().optional(),
-    salesTeamId: z.string({ error: messages.invalidTeamTarget }).uuid({ error: messages.invalidTeamTarget }).nullable().optional(),
+    ownerUserId: uuidString({ error: messages.invalidOwnerTarget }).nullable().optional(),
+    salesTeamId: uuidString({ error: messages.invalidTeamTarget }).nullable().optional(),
     overrideAmount: forecastAmount.nullable().optional(),
     snapshotKind: z.enum(['calculated', 'rep_override', 'manager_override']).optional(),
     currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).nullable().optional(),

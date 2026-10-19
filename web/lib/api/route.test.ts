@@ -3,6 +3,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { PaymentRevisionConflictError } from "@openbooks/engine/payments-core/payment-errors";
 import { PayrollError } from "@openbooks/engine/payroll/error";
 
@@ -170,7 +171,7 @@ test("invalid route params fail closed with 400", async () => {
   const handler = defineRoute({
     permission: "x",
     feature: { none: "test surface" },
-    params: z.object({ id: z.string().uuid() }),
+    params: z.object({ id: uuidString() }),
     handler: async ({ params }) => NextResponse.json({ id: params.id }),
   });
   const bad = await handler(get(), { params: Promise.resolve({ id: "nope" }) });
@@ -287,7 +288,7 @@ test('record parameter refusals preserve opaque 404 before parsing edit bodies w
   let invoked = false
   const handler = defineRoute({
     permission: 'expenses.create', feature: 'expenses',
-    params: z.object({id: z.string().uuid()}), invalidParamsNotFound: 'record',
+    params: z.object({id: uuidString()}), invalidParamsNotFound: 'record',
     body: z.object({memo: z.string()}),
     handler: async () => { invoked = true; return ok() },
   })

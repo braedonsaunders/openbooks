@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
@@ -12,13 +13,13 @@ export const runtime = 'nodejs'
 
 const bodySchema = z.strictObject({
   sessionToken: z.string().min(16).max(256),
-  id: z.string().uuid(),
+  id: uuidString(),
   title: z.string().trim().min(1).max(200),
   description: z.string().max(8000).nullable().optional(),
   preferredOn: civilDateInput().nullable().optional(),
   preferredTime: z.enum(['any', 'morning', 'afternoon', 'evening']).optional(),
   urgent: z.boolean().optional(),
-  serviceAddressId: z.string().uuid().nullable().optional(),
+  serviceAddressId: uuidString().nullable().optional(),
 })
 
 /**

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { archiveRouting, getRouting } from "@openbooks/engine/manufacturing/routings";
 import { guardRoutingSubsidiaryScope } from "../../../_scope";
@@ -6,7 +7,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { manufacturingTransaction } from "../../../_transaction";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({}).strict();
 
 export const POST = defineRoute({

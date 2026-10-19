@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -17,7 +18,7 @@ export const runtime = 'nodejs'
 export const POST = defineRoute({
   permission: 'parties.manage',
   feature: 'crossBorderTax',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   handler: async ({ authz: routeAuthz, params }) => {
     const gate = routeAuthz;
     try {

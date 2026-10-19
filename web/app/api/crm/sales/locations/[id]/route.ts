@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { sql } from "drizzle-orm";
 import { defineRoute } from "@/lib/api/route";
 import { db } from "@openbooks/engine/platform/database";
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
 export const PATCH = defineRoute({
   permission: "crm.accounts.manage",
   feature: "geographicTerritories",
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   body: z.strictObject({
     longitude: z.number().min(-180).max(180),
     latitude: z.number().min(-90).max(90),

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from "next/server";
@@ -17,8 +18,7 @@ import {
 } from "../../../../../lib/cash/category-references";
 
 const MANUAL_AMOUNT_MAX = "100000000.0000";
-const categoryUuid = (field: string) => z.string({ error: `${field} must be a UUID; choose a saved record from this organization` })
-  .uuid({ error: `${field} must be a UUID; choose a saved record from this organization` })
+const categoryUuid = (field: string) => uuidString({ error: `${field} must be a UUID; choose a saved record from this organization` })
 const categoryUuidList = (field: string) => z.array(categoryUuid(`${field} entry`), { error: `${field} must be a list of UUID references` })
 
 const categoryBase = {

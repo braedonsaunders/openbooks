@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { departments, resDemandLines } from "@openbooks/schema";
 import { deleteDemandLine, updateDemandLine } from "@openbooks/engine/resourcing/demand-lines";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
@@ -7,15 +8,15 @@ import { db } from "@openbooks/engine/platform/db";
 import { defineRoute } from "@/lib/api/route";
 import { validateDemandCustomValues } from "../_custom";
 
-const Params = z.object({ id: z.string().uuid() }).strict();
+const Params = z.object({ id: uuidString() }).strict();
 const Body = z.object({
-  departmentId: z.string().uuid(),
+  departmentId: uuidString(),
   jobTitle: z.string(),
   firstWeek: z.string(),
   lastWeek: z.string(),
   hoursPerWeek: z.string(),
   note: z.string().nullable().optional(),
-  opportunityId: z.string().uuid().nullable().optional(),
+  opportunityId: uuidString().nullable().optional(),
   custom: z.record(z.string(), z.json()).optional(),
 }).strict();
 

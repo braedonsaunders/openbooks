@@ -4,6 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/db'
 import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { ControlAccountsIncompleteError } from '@openbooks/engine/records/control-accounts'
@@ -28,7 +29,7 @@ export const runtime = 'nodejs'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 const rateComponentSchema = z.object({
-  rateLineId: z.string().uuid().nullable(),
+  rateLineId: uuidString().nullable(),
   unitCode: z.string(),
   unitName: z.string(),
   quantity: z.string(),
@@ -38,17 +39,17 @@ const rateComponentSchema = z.object({
 }).strict()
 const ratePriceSchema = z.object({ amount: z.string(), components: z.array(rateComponentSchema) }).strict()
 const chargeLineSchema = z.object({
-  itemId: z.string().uuid(),
+  itemId: uuidString(),
   quantity: z.string().min(1),
-  equipmentUnitId: z.string().uuid().nullable().optional(),
-  employeeId: z.string().uuid().nullable().optional(),
+  equipmentUnitId: uuidString().nullable().optional(),
+  employeeId: uuidString().nullable().optional(),
   costRate: z.string().nullable().optional(),
   billRate: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
-  accountId: z.string().uuid().nullable().optional(),
+  accountId: uuidString().nullable().optional(),
   isBillable: z.boolean().optional(),
   rateSnapshot: z.object({
-    rateVersionId: z.string().uuid().nullable(),
+    rateVersionId: uuidString().nullable(),
     baseUnit: z.string(),
     baseQuantity: z.string().optional(),
     transactionUnitCode: z.string().nullable().optional(),
@@ -58,7 +59,7 @@ const chargeLineSchema = z.object({
   }).strict().nullable().optional(),
 }).strict()
 const projectChargeBody = z.object({
-  projectId: z.string().uuid(),
+  projectId: uuidString(),
   referenceNumber: z.string().nullable().optional(),
   lines: z.array(chargeLineSchema).min(1),
 }).strict()

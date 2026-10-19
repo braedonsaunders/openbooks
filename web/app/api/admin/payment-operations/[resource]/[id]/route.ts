@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
@@ -33,7 +34,7 @@ const selectionCriteriaSchema = z.object({
 })
 const requestBodySchema = z.object({
   "action": z.enum(["create_draft", "submit_for_approval"], { error: 'action must be create_draft or submit_for_approval' }).optional(),
-  "bankAccountId": z.string().uuid().optional(),
+  "bankAccountId": uuidString().optional(),
   "contentType": z.string().optional(),
   "country": countryPatchSchema,
   "cron": z.string().optional(),
@@ -43,17 +44,17 @@ const requestBodySchema = z.object({
   "formatterScript": z.string().optional(),
   "isActive": z.boolean().optional(),
   "name": z.string().optional(),
-  "paymentBankProfileId": z.string().uuid().optional(),
-  "paymentFormatId": z.string().uuid().optional(),
+  "paymentBankProfileId": uuidString().optional(),
+  "paymentFormatId": uuidString().optional(),
   "selectionCriteria": selectionCriteriaSchema.optional(),
   "settings": z.record(z.string(), z.json()).optional(),
   "originatorSecrets": z.record(z.string(), z.string()).nullable().optional(),
-  "sftpServerId": z.string().uuid().nullable().optional(),
+  "sftpServerId": uuidString().nullable().optional(),
   "sftpFolder": z.string().nullable().optional(),
   "autoRemittance": z.boolean().optional(),
   "signedOn": datePatchSchema,
   "status": z.enum(["pending", "active", "suspended", "revoked", "expired"], { error: 'status must be pending, active, suspended, revoked, or expired' }).optional(),
-  "subsidiaryId": z.string().uuid().nullable().optional(),
+  "subsidiaryId": uuidString().nullable().optional(),
   "timezone": z.string().optional(),
   "validFrom": datePatchSchema,
 }).refine((body) => Object.keys(body).length > 0, 'At least one payment setting is required')

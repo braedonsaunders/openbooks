@@ -1,6 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { replayChannelExceptions } from "@openbooks/engine/commerce";
 import { guardUnrestrictedScope } from "@/lib/authz";
 import { guardChannelScope } from "@/lib/channel-scope";
@@ -8,7 +9,7 @@ import { guardChannelScope } from "@/lib/channel-scope";
 export const runtime = "nodejs";
 
 const replayBodySchema = z.strictObject({
-  channelId: z.string().uuid().nullish(),
+  channelId: uuidString().nullish(),
   code: z.string().max(60).nullish(),
 });
 

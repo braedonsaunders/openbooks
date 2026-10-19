@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
@@ -27,17 +28,17 @@ const cycleDaySchema = z.strictObject({
   }),
 })
 const scheduleScopeSchema = {
-  employeePartyId: z.string().uuid().nullable().optional(),
+  employeePartyId: uuidString().nullable().optional(),
   jobTitle: z.string().trim().max(120).nullable().optional(),
-  tradeId: z.string().uuid().nullable().optional(),
-  departmentId: z.string().uuid().nullable().optional(),
-  subsidiaryId: z.string().uuid().nullable().optional(),
+  tradeId: uuidString().nullable().optional(),
+  departmentId: uuidString().nullable().optional(),
+  subsidiaryId: uuidString().nullable().optional(),
 }
 const requestBodySchema = z.discriminatedUnion('action', [
-  z.strictObject({ action: z.literal('delete'), id: z.string().uuid() }),
+  z.strictObject({ action: z.literal('delete'), id: uuidString() }),
   z.strictObject({
     action: z.literal('save'),
-    id: z.string().uuid().optional(),
+    id: uuidString().optional(),
     ...scheduleScopeSchema,
     name: z.string().trim().max(120).nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { createOwnShiftRequest, listOwnShiftRequests } from '@openbooks/engine/schedule-boards/requests'
@@ -18,12 +19,12 @@ export const POST = defineRoute({
   permission: 'hrm.self.request',
   feature: 'hrmShiftPlanning',
   body: z.strictObject({
-    id: z.string().uuid(),
-    entryId: z.string().uuid(),
+    id: uuidString(),
+    entryId: uuidString(),
     expectedRevision: z.number().int().positive(),
     kind: z.enum(['release', 'change', 'swap']),
     change: z.strictObject({ starts: clock, ends: clock, breakMinutes: z.number().int().min(0).max(240) }).nullable().optional(),
-    counterpartEntryId: z.string().uuid().nullable().optional(),
+    counterpartEntryId: uuidString().nullable().optional(),
     counterpartRevision: z.number().int().positive().nullable().optional(),
     reason: z.string().trim().min(1).max(2000),
   }),

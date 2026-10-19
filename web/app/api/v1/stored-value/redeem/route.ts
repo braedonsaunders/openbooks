@@ -1,6 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   readV1JsonObject,
   requireV1IdempotencyKey,
@@ -11,7 +12,7 @@ import { redeemStoredValueForInvoice } from "../../../../../lib/application/stor
 const redeemBody = z.looseObject({
   code: z.string().min(1).max(64),
   amount: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
-  invoiceId: z.string().uuid(),
+  invoiceId: uuidString(),
 });
 
 export const runtime = "nodejs";

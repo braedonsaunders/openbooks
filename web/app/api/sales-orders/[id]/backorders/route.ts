@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/db'
 import {
   backorderPosition,
@@ -10,12 +11,12 @@ import { guardSubsidiaryScope } from '@/lib/authz'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
 
-const params = z.object({ id: z.string().uuid() })
+const params = z.object({ id: uuidString() })
 
 /** The quantity travels as decimal text so it never crosses a float; the
  *  engine classifies an unreadable value and names the remedy. */
 const cancelBody = z.object({
-  lineId: z.string().uuid(),
+  lineId: uuidString(),
   quantity: z.string().max(40),
   reason: z.string().max(1000),
 })

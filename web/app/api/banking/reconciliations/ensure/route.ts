@@ -1,10 +1,11 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { isUuid } from '../../../../../lib/list-params'
 import { ensureOpenReconciliation } from '../../../../../lib/banking-rules'
-const POSTBodySchema1 = z.object({ accountId: z.string().uuid() });
+const POSTBodySchema1 = z.object({ accountId: uuidString() });
 
 
 export const runtime = 'nodejs'

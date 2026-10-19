@@ -2,19 +2,20 @@ import { ingestUsageRecords, listUsageRecords } from "@openbooks/engine/billing/
 import { defineRoute } from "@/lib/api/route";
 import { created } from "@/lib/api/responses";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 const Query = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  meterId: z.string().uuid().optional(),
-  customerId: z.string().uuid().optional(),
+  meterId: uuidString().optional(),
+  customerId: uuidString().optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 }).strict();
 const RecordInput = z.object({
   meterKey: z.string().trim().min(1),
-  customerId: z.string().uuid(),
-  subscriptionId: z.string().uuid().nullable().optional(),
+  customerId: uuidString(),
+  subscriptionId: uuidString().nullable().optional(),
   occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   quantity: z.string(),
   distinctKey: z.string().nullable().optional(),

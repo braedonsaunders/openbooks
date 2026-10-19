@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
@@ -17,7 +18,7 @@ import { notFound } from "@/lib/api/responses";
 const patchBodySchema0 = z
   .strictObject({
     name: z.string().trim().min(1, "name cannot be empty").max(255).optional(),
-    folderId: z.string().uuid("folderId must be a valid id").optional(),
+    folderId: uuidString("folderId must be a valid id").optional(),
   })
   .refine((body) => Object.keys(body).length > 0, "provide a file name or folderId to update");
 

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { crmSharedScope } from '../../../../../lib/crm-scope'
 import { parseJsonBody } from "@/lib/api/json"
@@ -11,7 +12,7 @@ import '../../../../../lib/list-params';
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({
-  partyId: z.string().uuid().nullable().optional(),
+  partyId: uuidString().nullable().optional(),
 })
 
 

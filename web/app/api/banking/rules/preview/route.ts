@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { isUuid } from '../../../../../lib/list-params'
@@ -7,9 +8,9 @@ import { previewRules } from '../../../../../lib/banking-rules'
 import { validateCriteria, validateOutcome } from '../../../../../lib/banking-rules-validate'
 import { bankRulePriority } from '../../../../../lib/banking-rule-priority'
 const POSTBodySchema1 = z.object({
-  accountId: z.string().uuid(),
-  criteria: z.object({ version: z.literal(2), match: z.json(), accountScope: z.array(z.string().uuid()).optional() }).optional(),
-  id: z.string().uuid().optional(), limit: z.number().int().positive().max(200).optional(),
+  accountId: uuidString(),
+  criteria: z.object({ version: z.literal(2), match: z.json(), accountScope: z.array(uuidString()).optional() }).optional(),
+  id: uuidString().optional(), limit: z.number().int().positive().max(200).optional(),
   onlyUnmatched: z.boolean().optional(), outcome: z.json().optional(),
   priority: z.number().int().optional(), windowDays: z.number().int().positive().max(730).optional(),
 });

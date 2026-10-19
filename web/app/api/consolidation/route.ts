@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardSubsidiaryScope } from '@/lib/authz'
@@ -13,10 +14,10 @@ import {
 import { withOrgTransaction } from '@openbooks/engine/platform/db'
 import { isUuid } from '../../../lib/list-params'
 const POSTBodySchema1 = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('derive-rates'), periodId: z.string().uuid() }),
-  z.object({ action: z.literal('ownership'), periodId: z.string().uuid() }),
-  z.object({ action: z.literal('eliminate'), periodId: z.string().uuid() }),
-  z.object({ action: z.literal('consolidate'), periodId: z.string().uuid() }),
+  z.object({ action: z.literal('derive-rates'), periodId: uuidString() }),
+  z.object({ action: z.literal('ownership'), periodId: uuidString() }),
+  z.object({ action: z.literal('eliminate'), periodId: uuidString() }),
+  z.object({ action: z.literal('consolidate'), periodId: uuidString() }),
 ]);
 
 

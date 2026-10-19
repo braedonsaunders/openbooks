@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
@@ -11,10 +12,10 @@ import { isUuid } from "../../../../../../lib/list-params";
 
 const requestBodySchema = z.object({
   evidenceType: z.enum(["file", "report", "journal", "reconciliation", "link", "note"]),
-  taskId: z.string().uuid(),
+  taskId: uuidString(),
   label: z.string().trim().min(1).max(200),
-  fileId: z.string().uuid().optional(),
-  referenceId: z.string().uuid().optional(),
+  fileId: uuidString().optional(),
+  referenceId: uuidString().optional(),
   referenceUrl: z.string().url().optional(),
   snapshot: z.record(z.string(), z.json()).optional(),
 });

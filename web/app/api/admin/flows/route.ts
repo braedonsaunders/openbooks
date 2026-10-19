@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
@@ -20,7 +21,7 @@ const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map((profile) => profile.su
 const requestBodySchema = z.object({
   name: z.string().trim().min(1).max(200),
   subjectKind: z.enum(FLOW_SUBJECT_KINDS),
-    boardId: z.string().uuid().optional(),
+    boardId: uuidString().optional(),
     schedulePreset: z.literal("weekday-morning-afternoon").optional(),
   ungatedOutcome: z.literal('apply').optional(),
 }).superRefine((value, ctx) => {

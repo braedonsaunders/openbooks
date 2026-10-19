@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/db'
 import { salesOrderScope } from '@openbooks/engine/sales/backorders'
 import { pickCandidates } from '@openbooks/engine/sales/fulfillment/module'
@@ -7,7 +8,7 @@ import { guardSubsidiaryScope } from '@/lib/authz'
 import { defineRoute } from '@/lib/api/route'
 import { notFound, unprocessable } from '@/lib/api/responses'
 
-const query = z.object({ salesOrderId: z.string().uuid() })
+const query = z.object({ salesOrderId: uuidString() })
 
 /**
  * What an issued sales order still has to pick: each open stock line with

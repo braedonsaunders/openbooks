@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
 import { readManufacturingRecord } from "@openbooks/engine/manufacturing/workspace";
 import { defineRoute } from "@/lib/api/route";
 const Params = z.object({
   view: z.enum(["work-orders", "work-centers", "routings", "mrp"]),
-  id: z.string().uuid(),
+  id: uuidString(),
 });
 export const GET = defineRoute({
   permission: "manufacturing.read",

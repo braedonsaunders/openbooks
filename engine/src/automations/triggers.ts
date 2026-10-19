@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "../platform/uuid.ts";
 // Named export, NOT the default: under ESM/tsx the default import resolves to
 // the module namespace (no .parse) — the same interop note as scripting.ts
 // and flows/scheduled.ts.
@@ -69,11 +70,11 @@ export type AutomationTrigger = z.infer<typeof automationTrigger>;
  *  applies_to shape (subsidiary, department, location, worker type,
  *  position) extended with custom-attribute predicates. */
 export const automationRules = z.object({
-  subsidiaryId: z.string().uuid().nullish(),
-  departmentId: z.string().uuid().nullish(),
-  locationId: z.string().uuid().nullish(),
+  subsidiaryId: uuidString().nullish(),
+  departmentId: uuidString().nullish(),
+  locationId: uuidString().nullish(),
   workerType: z.string().nullish(),
-  positionId: z.string().uuid().nullish(),
+  positionId: uuidString().nullish(),
   attributes: z.array(z.object({
     key: z.string().min(1),
     op: z.enum(["eq", "neq", "in"]),
@@ -155,7 +156,7 @@ export const sendNotificationAction = z.object({
 
 export const startProcessAction = z.object({
   kind: z.literal("start_process"),
-  templateId: z.string().uuid(),
+  templateId: uuidString(),
 });
 
 export const startFlowAction = z.object({

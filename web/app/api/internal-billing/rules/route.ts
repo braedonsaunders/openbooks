@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import {
@@ -12,8 +13,8 @@ const createBody = z.object({
   code: z.string(),
   name: z.string(),
   method: z.enum(['revenue_credit', 'cost_transfer', 'intercompany_sale']),
-  debitAccountId: z.string().uuid(),
-  creditAccountId: z.string().uuid(),
+  debitAccountId: uuidString(),
+  creditAccountId: uuidString(),
   billableByDefault: z.boolean().nullable().optional(),
   description: z.string().nullable().optional(),
   effectiveFrom: z.string(),

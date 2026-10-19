@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "../platform/uuid.ts";
 
 /**
  * Outbound webhook event catalog — the stable contract subscribers code
@@ -25,7 +26,7 @@ const basePayload = z.object({
 const minorUnits = z.string().regex(/^-?\d+$/, "minor-unit amounts are decimal integer strings");
 
 export const documentPostedPayload = basePayload.extend({
-  documentId: z.string().uuid(),
+  documentId: uuidString(),
   kind: z.string().min(1),
   documentNumber: z.string().min(1),
   status: z.literal("posted"),
@@ -33,28 +34,28 @@ export const documentPostedPayload = basePayload.extend({
   totalMinor: minorUnits,
   documentDate: z.string().nullable(),
   postingDate: z.string().nullable(),
-  partyId: z.string().uuid().nullable(),
+  partyId: uuidString().nullable(),
 });
 
 export const documentVoidedPayload = basePayload.extend({
-  documentId: z.string().uuid(),
+  documentId: uuidString(),
   kind: z.string().min(1),
   documentNumber: z.string().min(1),
-  reversalEntryId: z.string().uuid().nullable(),
+  reversalEntryId: uuidString().nullable(),
   reason: z.string().nullable(),
 });
 
 export const paymentReceivedPayload = basePayload.extend({
-  paymentId: z.string().uuid(),
+  paymentId: uuidString(),
   documentNumber: z.string().min(1),
   currency: z.string().min(1),
   amountMinor: minorUnits,
-  partyId: z.string().uuid().nullable(),
+  partyId: uuidString().nullable(),
   documentDate: z.string().nullable(),
 });
 
 export const itemUpdatedPayload = basePayload.extend({
-  itemId: z.string().uuid(),
+  itemId: uuidString(),
   code: z.string().nullable(),
   name: z.string().nullable(),
   kind: z.string().nullable(),
@@ -62,13 +63,13 @@ export const itemUpdatedPayload = basePayload.extend({
 });
 
 export const customerUpdatedPayload = basePayload.extend({
-  customerId: z.string().uuid(),
+  customerId: uuidString(),
   displayName: z.string().nullable(),
   email: z.string().nullable(),
 });
 
 export const invoiceOverduePayload = basePayload.extend({
-  invoiceId: z.string().uuid(),
+  invoiceId: uuidString(),
   documentNumber: z.string().min(1),
   currency: z.string().min(1),
   balanceDueMinor: minorUnits,
@@ -77,38 +78,38 @@ export const invoiceOverduePayload = basePayload.extend({
 });
 
 export const inventoryAvailableChangedPayload = basePayload.extend({
-  itemId: z.string().uuid(),
-  stockLocationId: z.string().uuid().nullable(),
+  itemId: uuidString(),
+  stockLocationId: uuidString().nullable(),
   quantityOnHand: z.string().nullable(),
 });
 
 export const subscriptionChangedPayload = basePayload.extend({
-  subscriptionId: z.string().uuid(),
+  subscriptionId: uuidString(),
   change: z.string().min(1),
 });
 
 export const channelOrderExceptionPayload = basePayload.extend({
-  channelOrderId: z.string().uuid(),
+  channelOrderId: uuidString(),
   exceptionCode: z.string().min(1),
   exceptionDetail: z.string().nullable(),
 });
 
 export const entitlementChangedPayload = basePayload.extend({
-  subscriptionId: z.string().uuid(),
+  subscriptionId: uuidString(),
   featureKey: z.string().min(1),
   change: z.string().min(1),
 });
 
 /** Automation point-to-point calls and operator test pings. Never fanned out to subscribers. */
 export const automationFiredPayload = basePayload.extend({
-  automationId: z.string().uuid(),
+  automationId: uuidString(),
   automationName: z.string().min(1),
   subjectKind: z.string().nullable(),
   subjectId: z.string().nullable(),
 });
 
 export const endpointTestedPayload = basePayload.extend({
-  endpointId: z.string().uuid(),
+  endpointId: uuidString(),
   endpointKey: z.string().min(1),
 });
 

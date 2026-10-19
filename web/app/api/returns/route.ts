@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { created, notFound, unprocessable } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'
 import { guardSubsidiaryScope } from '@/lib/authz'
@@ -61,7 +62,7 @@ export const POST = defineRoute({
   body: createBody,
   handler: async ({ request, authz, body }) => {
     const key = request.headers.get('Idempotency-Key')?.trim() ?? ''
-    if (!z.string().uuid().safeParse(key).success) {
+    if (!uuidString().safeParse(key).success) {
       return unprocessable('invalid_idempotency_key', { status: 400 })
     }
     if (guardSubsidiaryScope(authz, body.document.subsidiaryId)) return notFound('subsidiary')

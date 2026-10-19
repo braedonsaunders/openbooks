@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
@@ -13,7 +14,7 @@ import { isUuid } from "../../../../../lib/list-params";
 import { isoDate } from "../../../../../lib/api/json";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({
-  eventId: z.string().uuid("eventId must be a valid id"),
+  eventId: uuidString("eventId must be a valid id"),
   date: isoDate("date must be a valid calendar date"),
   reason: z.string().trim().min(8, "a reversal reason between 8 and 500 characters is required").max(500),
 });

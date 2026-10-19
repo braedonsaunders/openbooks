@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { isoDate } from "@/lib/api/json";
 import { completeWorkOrder } from "@openbooks/engine/manufacturing/completion";
 import { executeManufacturingReceipt } from "@openbooks/engine/manufacturing/execution";
@@ -8,19 +9,19 @@ import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../../../_transaction";
 import { loadScopedWorkOrder } from "../../_scope";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({
   quantity: z.string(),
-  receiptLocationId: z.string().uuid().nullable().optional(),
+  receiptLocationId: uuidString().nullable().optional(),
   receivedOn: isoDate().nullable().optional(),
   lots: z.array(z.object({
-    itemId: z.string().uuid().optional(), quantity: z.string(),
+    itemId: uuidString().optional(), quantity: z.string(),
     lotNumber: z.string().trim().min(1).optional(), expiresOn: isoDate().nullable().optional(),
     serialNumber: z.string().trim().min(1).optional(),
   }).strict()).max(200).optional(),
-  componentSelections:z.array(z.object({movementId:z.string().uuid(),quantity:z.string()}).strict()).min(1).max(500).optional(),
+  componentSelections:z.array(z.object({movementId:uuidString(),quantity:z.string()}).strict()).min(1).max(500).optional(),
   byproductValues: z.array(z.object({
-    itemId: z.string().uuid(), nrvUnit: z.string(), reason: z.string().trim().min(5).max(500),
+    itemId: uuidString(), nrvUnit: z.string(), reason: z.string().trim().min(5).max(500),
   }).strict()).max(100).optional(),
 }).strict();
 

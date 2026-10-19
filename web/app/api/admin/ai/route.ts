@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
@@ -42,7 +43,7 @@ const partialAgentPolicySchema = z.object({
   }).optional(),
   notification: z.object({
     mode: z.enum(["findings_only", "digest", "immediate"]),
-    roleIds: z.array(z.string().uuid()).max(100), userIds: z.array(z.string().uuid()).max(100),
+    roleIds: z.array(uuidString()).max(100), userIds: z.array(uuidString()).max(100),
   }).nullable().optional(),
 });
 

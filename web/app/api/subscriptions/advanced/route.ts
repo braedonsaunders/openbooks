@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
@@ -37,9 +38,9 @@ const planComponentSchema = z.union([
     description: z.string().nullable().optional(),
     quantity: z.unknown().optional(),
     unitPrice: z.unknown().optional(),
-    incomeAccountId: z.string().uuid().nullable().optional(),
-    itemId: z.string().uuid().nullable().optional(),
-    taxCodeId: z.string().uuid().nullable().optional(),
+    incomeAccountId: uuidString().nullable().optional(),
+    itemId: uuidString().nullable().optional(),
+    taxCodeId: uuidString().nullable().optional(),
     isOptional: z.unknown().optional(),
   }),
   z.null(),
@@ -50,10 +51,10 @@ const planComponentSchema = z.union([
 ]);
 const periodCountSchema = z.union([z.number().int().positive(), z.string().regex(/^[1-9]\d*$/)]).nullable().optional();
 const POSTBodySchema1 = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('createVersion'), planId: z.string().uuid(), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), components: z.array(planComponentSchema).optional(), currency: z.string().nullable().optional(), interval: z.enum(['weekly', 'monthly', 'quarterly', 'annually']).optional(), intervalCount: z.union([z.number().int().positive(), z.string().regex(/^[1-9]\d*$/)]).optional(), billingTiming: z.enum(['advance', 'arrears']).optional(), changeSummary: z.string().nullable().optional(), name: z.string().nullable().optional(), description: z.string().nullable().optional() }),
-  z.object({ action: z.literal('publishVersion'), versionId: z.string().uuid() }),
-  z.object({ action: z.literal('activateLifecycle'), subscriptionId: z.string().uuid(), planVersionId: z.string().uuid(), termStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), termEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), trialEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), renewalPolicy: z.enum(['auto', 'manual', 'none']).optional(), renewalTermMonths: periodCountSchema, billFromUnbilledBoundary: z.boolean().nullable().optional() }),
-  z.object({ action: z.literal('amend'), subscriptionId: z.string().uuid(), type: z.enum(['add_component', 'remove_component', 'change_component', 'change_term', 'change_timing', 'renew', 'coterm', 'change_plan']), planVersionId: z.string().uuid().nullable().optional(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), idempotencyKey: z.string().uuid(), quantity: z.string().nullable().optional(), unitPrice: z.string().nullable().optional(), renewalTermMonths: periodCountSchema, reason: z.string().nullable().optional(), componentKey: z.unknown(), name: z.string().nullable().optional(), description: z.string().nullable().optional(), incomeAccountId: z.string().uuid().nullable().optional(), itemId: z.string().uuid().nullable().optional(), taxCodeId: z.string().uuid().nullable().optional(), termEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), billingTiming: z.enum(['advance', 'arrears']).nullable().optional(), anchorSubscriptionId: z.string().uuid().nullable().optional() }),
+  z.object({ action: z.literal('createVersion'), planId: uuidString(), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), components: z.array(planComponentSchema).optional(), currency: z.string().nullable().optional(), interval: z.enum(['weekly', 'monthly', 'quarterly', 'annually']).optional(), intervalCount: z.union([z.number().int().positive(), z.string().regex(/^[1-9]\d*$/)]).optional(), billingTiming: z.enum(['advance', 'arrears']).optional(), changeSummary: z.string().nullable().optional(), name: z.string().nullable().optional(), description: z.string().nullable().optional() }),
+  z.object({ action: z.literal('publishVersion'), versionId: uuidString() }),
+  z.object({ action: z.literal('activateLifecycle'), subscriptionId: uuidString(), planVersionId: uuidString(), termStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), termEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), trialEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), renewalPolicy: z.enum(['auto', 'manual', 'none']).optional(), renewalTermMonths: periodCountSchema, billFromUnbilledBoundary: z.boolean().nullable().optional() }),
+  z.object({ action: z.literal('amend'), subscriptionId: uuidString(), type: z.enum(['add_component', 'remove_component', 'change_component', 'change_term', 'change_timing', 'renew', 'coterm', 'change_plan']), planVersionId: uuidString().nullable().optional(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), idempotencyKey: uuidString(), quantity: z.string().nullable().optional(), unitPrice: z.string().nullable().optional(), renewalTermMonths: periodCountSchema, reason: z.string().nullable().optional(), componentKey: z.unknown(), name: z.string().nullable().optional(), description: z.string().nullable().optional(), incomeAccountId: uuidString().nullable().optional(), itemId: uuidString().nullable().optional(), taxCodeId: uuidString().nullable().optional(), termEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), billingTiming: z.enum(['advance', 'arrears']).nullable().optional(), anchorSubscriptionId: uuidString().nullable().optional() }),
 ]);
 
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { deleteRoutingOperation, getRouting, updateRoutingOperation, type RoutingOperationInput } from "@openbooks/engine/manufacturing/routings";
 import { getWorkCenter } from "@openbooks/engine/manufacturing/work-centers";
@@ -8,9 +9,9 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { manufacturingTransaction } from "../../../../_transaction";
 
-const Params = z.object({ id: z.string().uuid(), opId: z.string().uuid() });
+const Params = z.object({ id: uuidString(), opId: uuidString() });
 const Patch = z.object({
-  sequence: z.number().int().positive().optional(), name: z.string().trim().min(1).optional(), workCenterId: z.string().uuid().optional(),
+  sequence: z.number().int().positive().optional(), name: z.string().trim().min(1).optional(), workCenterId: uuidString().optional(),
   setupMinutes: z.string().optional(), runMinutesPerUnit: z.string().optional(), laborTimeSource: z.enum(["operation", "approved_time"]).optional(), laborMinutesPerUnit: z.string().nullable().optional(),
   backflushAt: z.enum(["none", "start", "finish"]).optional(), qualityGate: z.enum(["none", "measure"]).optional(),
 }).refine((value) => Object.keys(value).length > 0);

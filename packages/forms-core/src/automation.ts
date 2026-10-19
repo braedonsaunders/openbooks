@@ -21,6 +21,7 @@
 // described in the flow execution contract.
 
 import { z } from 'zod'
+import { uuidString } from './identifiers'
 import {
   defaultValueExpressionSchema,
   logicRuleSchema,
@@ -266,7 +267,7 @@ export const flowGraphSubjectScopeSchema = z.object({
     // Canonicalize case at parse: subsidiary ids compare against database
     // uuid output (lowercase), and case-variant spellings of one entity
     // must collapse before the uniqueness check sees them.
-    .array(z.string().uuid().transform((id) => id.toLowerCase()))
+    .array(uuidString().transform((id) => id.toLowerCase()))
     .min(1)
     .max(MAX_FLOW_SUBJECT_SCOPE_ENTITIES)
     .refine((ids) => new Set(ids).size === ids.length, 'Choose each legal entity once.'),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
@@ -8,7 +9,7 @@ import { RevaluationError, RevaluationFeatureDisabledError, RevaluationScopeErro
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.object({ periodId: z.string().uuid(), bookId: z.string().uuid().optional(), subsidiaryIds: z.array(z.string().uuid().transform(id => id.toLowerCase())).min(1).max(1000).optional() });
+const requestBodySchema = z.object({ periodId: uuidString(), bookId: uuidString().optional(), subsidiaryIds: z.array(uuidString().transform(id => id.toLowerCase())).min(1).max(1000).optional() });
 
 
 

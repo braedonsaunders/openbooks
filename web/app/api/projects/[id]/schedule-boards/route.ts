@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { withOrgTransaction } from '@openbooks/engine/platform/db'
@@ -11,7 +12,7 @@ import { readProjectSubsidiary } from '@/lib/record-scope-reads'
 export const GET = defineRoute({
   permission: 'projects.read',
   feature: 'projectScheduling',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   handler: async ({ authz, params }) =>
     withOrgTransaction(authz.user.orgId, async () => {
       const project = await readProjectSubsidiary(authz.user.orgId, params.id)

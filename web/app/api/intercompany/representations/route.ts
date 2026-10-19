@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { intercompanyPartySubject } from '@/lib/posting-review-subjects'
 import { subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
@@ -8,7 +9,7 @@ import { notFound } from '@/lib/api/responses'
 
 export const runtime = 'nodejs'
 
-const query = z.object({ partyId: z.string().uuid() })
+const query = z.object({ partyId: uuidString() })
 
 /** The subsidiaries a visible party represents as intercompany customer or vendor. */
 export const GET = defineRoute({

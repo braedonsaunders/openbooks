@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import {
@@ -18,7 +19,7 @@ const acceptBodySchema = z.strictObject({
     z.strictObject({
       role: z.enum(CHANNEL_ACCOUNT_ROLES),
       key: z.string().max(120).optional(),
-      accountId: z.string().uuid(),
+      accountId: uuidString(),
     }),
   ),
   effectiveFrom: z

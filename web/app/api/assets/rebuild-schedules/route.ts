@@ -3,6 +3,7 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { buildSchedule } from "@openbooks/engine/assets/depreciation";
 import { isUuid } from "../../../../lib/list-params";
@@ -14,8 +15,8 @@ export const runtime = "nodejs";
 // stale: Confirm refuses while any in-scope schedule is stale, so the drawer
 // offers this named remedy and then previews again.
 const rebuildBody = z.strictObject({
-  bookId: z.string().uuid("bookId must be a valid id").nullable().optional(),
-  assetIds: z.array(z.string().uuid("assetIds must contain valid ids"), { error: "assetIds must be a list" }).min(1, "select at least one asset"),
+  bookId: uuidString("bookId must be a valid id").nullable().optional(),
+  assetIds: z.array(uuidString("assetIds must contain valid ids"), { error: "assetIds must be a list" }).min(1, "select at least one asset"),
 });
 
 function bad(error: string, field?: string, status = 422) {

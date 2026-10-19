@@ -3,8 +3,9 @@ import { defineRoute } from "@/lib/api/route";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { notFound } from "@/lib/api/responses";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
-const Params = z.object({ id: z.string().uuid() }).strict();
+const Params = z.object({ id: uuidString() }).strict();
 const Variable = z.object({
   method: z.enum(["expected_value", "most_likely_amount"]),
   outcomes: z.array(z.object({ amount: z.string(), probabilityPercent: z.string() }).strict()).min(1).max(100),

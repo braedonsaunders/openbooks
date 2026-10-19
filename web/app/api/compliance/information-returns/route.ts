@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { exactMoney, parseJsonBody } from "@/lib/api/json"
@@ -22,7 +23,7 @@ import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({
   formType: z.enum(FORM_TYPES, { error: 'formType must name an installed information return form' }),
-  subsidiaryId: z.string().uuid({ error: 'subsidiaryId must be a valid UUID' }).nullable().optional(),
+  subsidiaryId: uuidString({ error: 'subsidiaryId must be a valid UUID' }).nullable().optional(),
   taxYear: z.union([
     z.number().int(),
     z.string().regex(/^\d{4}$/, { error: 'taxYear must be a four-digit year' }).transform(Number),

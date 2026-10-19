@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { traceManufacturingGenealogy } from "@openbooks/engine/manufacturing/genealogy";
 import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../_transaction";
 
-const Query = z.object({ kind: z.enum(["lot", "serial"]), id: z.string().uuid(), direction: z.enum(["forward", "backward"]), maxDepth: z.coerce.number().int().min(1).max(32).default(8) }).strict();
+const Query = z.object({ kind: z.enum(["lot", "serial"]), id: uuidString(), direction: z.enum(["forward", "backward"]), maxDepth: z.coerce.number().int().min(1).max(32).default(8) }).strict();
 export const GET = defineRoute({
   permission: "manufacturing.read", feature: "manufacturing",
   handler: async ({ authz, request }) => {

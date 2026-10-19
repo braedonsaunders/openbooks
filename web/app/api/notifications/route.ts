@@ -1,5 +1,6 @@
 import { notFound } from '@/lib/api/responses';
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -8,7 +9,7 @@ import { db } from '@openbooks/engine/platform/db'
 import { getAuthz } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 const PATCHBodySchema1 = z.object({
-  ids: z.array(z.string().uuid()).min(1).optional(), all: z.boolean().optional(),
+  ids: z.array(uuidString()).min(1).optional(), all: z.boolean().optional(),
 }).refine((body) => body.all === true || (body.ids !== undefined && body.ids.length > 0), { message: 'ids or all is required' });
 
 

@@ -1,6 +1,7 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 
-const id = z.string().uuid().nullable().optional()
+const id = uuidString().nullable().optional()
 const decimal = z.string().nullable().optional()
 
 /** The internal billing document contract shared by create and save. */

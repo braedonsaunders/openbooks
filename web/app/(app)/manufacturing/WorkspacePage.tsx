@@ -6,7 +6,7 @@ import { RecordBoard } from '@/components/record-board';
 import { listOperatingProfileChoices } from '@openbooks/engine/organization/operating-profiles';
 import Link from "next/link";
 import { getTranslations, getLocale } from "next-intl/server";
-import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
 import {
@@ -38,7 +38,7 @@ export type SearchParams = Record<string, string | string[] | undefined>;
 const value = (v: string | string[] | undefined) =>
   Array.isArray(v) ? v[0] : v;
 const uuid = (v: unknown) => {
-  const parsed = z.string().uuid().safeParse(v);
+  const parsed = uuidString().safeParse(v);
   return parsed.success ? parsed.data : undefined;
 };
 export const manufacturingSources = {

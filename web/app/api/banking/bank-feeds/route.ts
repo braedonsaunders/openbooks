@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -11,7 +12,7 @@ import { reconcilableBankMembership } from "../../../../lib/banking-accounts";
 const SYNC_OVERLAP_DAYS_MESSAGE = 'syncOverlapDays must be a whole number of days from 0 to 90';
 const POSTBodySchema1 = z.object({
   name: z.string().trim().min(1), provider: z.enum(['manual', 'sftp', 'plaid', 'gocardless', 'truelayer']),
-  accountId: z.string().uuid(), externalAccountId: z.string().nullable().optional(),
+  accountId: uuidString(), externalAccountId: z.string().nullable().optional(),
   syncCadence: z.enum(['manual', 'hourly', 'daily']).optional(),
   syncOverlapDays: z.number({ error: SYNC_OVERLAP_DAYS_MESSAGE }).int({ error: SYNC_OVERLAP_DAYS_MESSAGE })
     .min(0, { error: SYNC_OVERLAP_DAYS_MESSAGE }).max(90, { error: SYNC_OVERLAP_DAYS_MESSAGE }).nullable().optional(),

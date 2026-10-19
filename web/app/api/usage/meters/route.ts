@@ -1,6 +1,7 @@
 import { createUsageMeter, listUsageMeters } from "@openbooks/engine/billing/usage/records";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { idempotentUsageCreate } from "../_idempotent";
 
 const Body = z.object({
@@ -8,7 +9,7 @@ const Body = z.object({
   name: z.string().trim().min(1),
   unit: z.string().trim().min(1),
   aggregation: z.enum(["sum", "count", "max", "last", "unique_count"]),
-  itemId: z.string().uuid().nullable().optional(),
+  itemId: uuidString().nullable().optional(),
 }).strict();
 
 export const GET = defineRoute({

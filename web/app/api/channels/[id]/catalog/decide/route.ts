@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import {
@@ -13,7 +14,7 @@ import { guardChannelScope } from "@/lib/channel-scope";
 export const runtime = "nodejs";
 
 const decisionSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("match"), nativeTable: z.enum(["items", "item_families"]), nativeId: z.string().uuid() }),
+  z.strictObject({ kind: z.literal("match"), nativeTable: z.enum(["items", "item_families"]), nativeId: uuidString() }),
   z.strictObject({
     kind: z.literal("create_item"),
     itemKind: z.string().optional(),
@@ -35,7 +36,7 @@ export const POST = defineRoute({
   permission: "channels.manage",
   feature: "salesChannels",
   params: z.object({ id: z.string() }),
-  body: z.strictObject({ entryId: z.string().uuid(), decision: decisionSchema }),
+  body: z.strictObject({ entryId: uuidString(), decision: decisionSchema }),
   handler: async ({ authz: gate, params, body }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
@@ -56,7 +57,7 @@ export const PUT = defineRoute({
   permission: "channels.manage",
   feature: "salesChannels",
   params: z.object({ id: z.string() }),
-  body: z.strictObject({ entryIds: z.array(z.string().uuid()).max(200), decision: decisionSchema }),
+  body: z.strictObject({ entryIds: z.array(uuidString()).max(200), decision: decisionSchema }),
   handler: async ({ authz: gate, params, body }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");

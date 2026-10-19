@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -14,14 +15,14 @@ import {
 export const runtime = 'nodejs'
 
 const previewQuerySchema = z.object({
-  periodId: z.string().uuid(),
-  bookId: z.string().uuid().optional(),
+  periodId: uuidString(),
+  bookId: uuidString().optional(),
 }).strict()
 
 const commandSchema = z.object({
   action: z.enum(['generate', 'reverse']),
-  periodId: z.string().uuid(),
-  bookId: z.string().uuid().optional(),
+  periodId: uuidString(),
+  bookId: uuidString().optional(),
   reason: z.string().trim().min(10).max(500),
 }).strict()
 

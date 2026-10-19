@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
@@ -16,20 +17,20 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { activeOperatingSubsidiaryIds } from '@/lib/record-scope-reads'
 
 const SummaryLineSchema = z.object({
-  accountId: z.string().uuid(),
+  accountId: uuidString(),
   amount: z.string().min(1),
   description: z.string().max(500).nullable().optional(),
   quantity: z.string().nullable().optional(),
   unitPrice: z.string().nullable().optional(),
-  taxCodeId: z.string().uuid().nullable().optional(),
-  taxGroupId: z.string().uuid().nullable().optional(),
+  taxCodeId: uuidString().nullable().optional(),
+  taxGroupId: uuidString().nullable().optional(),
 });
 
 const SummaryTenderSchema = z.object({
   kind: z.enum(['cash', 'card', 'bank_transfer', 'wallet', 'gateway', 'stored_value', 'other']),
   methodLabel: z.string().max(120).nullable().optional(),
-  accountId: z.string().uuid().nullable().optional(),
-  storedValueAccountId: z.string().uuid().nullable().optional(),
+  accountId: uuidString().nullable().optional(),
+  storedValueAccountId: uuidString().nullable().optional(),
   amount: z.string().min(1),
   reference: z.string().max(120).nullable().optional(),
   externalRef: z.string().max(120).nullable().optional(),
@@ -39,15 +40,15 @@ const SummaryTenderSchema = z.object({
 
 const POSTBodySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
-  partyId: z.string().uuid().nullable().optional(),
-  subsidiaryId: z.string().uuid().nullable().optional(),
+  partyId: uuidString().nullable().optional(),
+  subsidiaryId: uuidString().nullable().optional(),
   currency: z.string().length(3).nullable().optional(),
   memo: z.string().max(500).nullable().optional(),
   lines: z.array(SummaryLineSchema).min(1).max(500),
   tenders: z.array(SummaryTenderSchema).min(1).max(60),
   closeout: z.object({
     overShort: z.string().nullable().optional(),
-    serverPartyId: z.string().uuid().nullable().optional(),
+    serverPartyId: uuidString().nullable().optional(),
   }).nullable().optional(),
 });
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "./identifiers";
 export const schedulePdfLayoutSchema = z.strictObject({
   paperSize: z.enum(["letter", "a4", "legal", "tabloid"]),
   orientation: z.enum(["portrait", "landscape"]),
@@ -27,7 +28,7 @@ export function configuredSchedulePdfLayout(policy: unknown): SchedulePdfLayout 
 /** Stored native board policy; enabling and timing remain owned by Flows. */
 export const automaticScheduleDeliverySchema = z
   .strictObject({
-    operatorId: z.string().uuid(),
+    operatorId: uuidString(),
     timeZone: z
       .string()
       .min(1)
@@ -46,7 +47,7 @@ export const automaticScheduleDeliverySchema = z
     visibility: z.enum(["personal", "board"]),
     recipientMode: z.enum(["automatic", "selected", "combined"]),
     subjectIds: z
-      .array(z.string().uuid())
+      .array(uuidString())
       .max(500)
       .refine(
         (ids) => new Set(ids).size === ids.length,
@@ -63,7 +64,7 @@ export const automaticScheduleDeliverySchema = z
       )
       .default([]),
     additionalPartyIds: z
-      .array(z.string().uuid())
+      .array(uuidString())
       .max(500)
       .refine(
         (ids) => new Set(ids).size === ids.length,

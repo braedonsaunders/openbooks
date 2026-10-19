@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { closeAssignment } from '@openbooks/engine/schedule-boards/pattern-store'
@@ -7,7 +8,7 @@ import { closeAssignment } from '@openbooks/engine/schedule-boards/pattern-store
 export const PATCH = defineRoute({
   permission: 'hrm.shifts.manage',
   feature: 'hrmShiftPlanning',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   body: z.strictObject({
     action: z.enum(['end', 'cancel']),
     expectedRevision: z.number().int().positive(),

@@ -1,9 +1,10 @@
 import { previewRateRun } from "@openbooks/engine/billing/usage/rate-run";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 const Body = z.object({
-  linkId: z.string().uuid(),
+  linkId: uuidString(),
   periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 }).strict();

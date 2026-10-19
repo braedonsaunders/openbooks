@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { proposeRoutingActivation, getRouting } from "@openbooks/engine/manufacturing/routings";
 import { guardRoutingSubsidiaryScope } from "../../../_scope";
@@ -6,8 +7,8 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { manufacturingTransaction } from "../../../_transaction";
 
-const Params = z.object({ id: z.string().uuid() });
-const Body = z.object({subsidiaryId:z.string().uuid(),reason:z.string().trim().min(8).max(500)}).strict();
+const Params = z.object({ id: uuidString() });
+const Body = z.object({subsidiaryId:uuidString(),reason:z.string().trim().min(8).max(500)}).strict();
 
 export const POST = defineRoute({
   permission: "manufacturing.manage", scope:"unrestricted", feature: "manufacturing", params: Params, body: Body,
@@ -16,7 +17,7 @@ export const POST = defineRoute({
     if (!current) return notFound("routing");
     const denied = guardRoutingSubsidiaryScope(authz, current);
     if (denied) return denied;
-    const key=z.string().uuid().safeParse(request.headers.get("Idempotency-Key"));
+    const key=uuidString().safeParse(request.headers.get("Idempotency-Key"));
     if(!key.success)return Response.json({error:"Provide a UUID Idempotency-Key."},{status:400});
     return Response.json(await proposeRoutingActivation(db,authz.user.orgId,authz.user.id,params.id,{...body,idempotencyKey:key.data}));
   }),

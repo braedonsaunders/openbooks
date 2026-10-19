@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { schedulePdfLayoutSchema } from '@openbooks/forms-core'
 import { previewScheduleBoardReport, downloadScheduleBoardReport } from '@openbooks/engine/schedule-boards/board-report'
@@ -8,7 +9,7 @@ const windowFields = {from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), through: z.
 export const POST = defineRoute({
   authorize: ({params}) => schedulingBoardRouteAuthority(params, 'manage'),
   feature: {none: 'Native board report services enforce scheduling features, operator authority and legal entity scope.'},
-  params: z.object({boardId: z.string().uuid()}),
+  params: z.object({boardId: uuidString()}),
   body: z.discriminatedUnion('command', [
     z.strictObject({command: z.literal('preview'), ...windowFields}),
     z.strictObject({command: z.literal('pdf'), ...windowFields, layout: schedulePdfLayoutSchema, version: z.string().regex(/^[a-f0-9]{64}$/)}),

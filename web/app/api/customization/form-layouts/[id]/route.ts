@@ -4,6 +4,7 @@ import { isUuid } from "@/lib/list-params";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import {
   lockedFormEntriesUnchanged,
@@ -72,13 +73,13 @@ export const PATCH = defineRoute({
   feature: {
     none: "This admin surface is governed by its permission and has no separate organization feature switch.",
   },
-  params: z.object({ id: z.string().uuid("id must be a UUID") }),
+  params: z.object({ id: uuidString("id must be a UUID") }),
   body: z
     .strictObject({
       name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),
       description: z.string().trim().max(2000).nullable().optional(),
       layout: layoutBody.optional(),
-      allowedRoles: z.array(z.string().uuid("allowedRoles must contain role UUIDs"), { error: "allowedRoles must be a list of UUID role ids" }).nullable().optional(),
+      allowedRoles: z.array(uuidString("allowedRoles must contain role UUIDs"), { error: "allowedRoles must be a list of UUID role ids" }).nullable().optional(),
     isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
     isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
     })

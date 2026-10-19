@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
@@ -26,8 +27,8 @@ import {
 } from "../lib";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({
-  fileId: z.string().uuid("fileId must be a valid id"),
-  targetId: z.string().uuid("targetId must be a valid id"),
+  fileId: uuidString("fileId must be a valid id"),
+  targetId: uuidString("targetId must be a valid id"),
   targetTable: z.string().refine(isAttachableTargetTable, "targetTable must be an attachable record type"),
 });
 

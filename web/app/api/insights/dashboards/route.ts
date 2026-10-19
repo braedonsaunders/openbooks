@@ -1,6 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { UNTITLED_DASHBOARD_NAME } from "@/lib/insight-untitled";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
@@ -20,7 +21,7 @@ import {
 export const runtime = "nodejs";
 
 const layoutBody = z.array(z.strictObject({
-  cardId: z.string().uuid("layout.cardId must be a valid id"),
+  cardId: uuidString("layout.cardId must be a valid id"),
   x: z.number().int().min(0).max(11),
   y: z.number().int().min(0).max(999),
   w: z.number().int().min(1).max(12),

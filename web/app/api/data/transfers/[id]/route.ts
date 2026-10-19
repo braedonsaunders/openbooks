@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { withOrgTransaction } from '@openbooks/engine/platform/database'
 import { defineRoute } from '@/lib/api/route'
 import { authorizeTransfers, transferFeature } from '@/lib/data-io/transfer-api'
 import { loadTransfer, publicTransfer, transferAuthority } from '@/lib/data-io/transfer-store'
 import { commandTransfer } from '@/lib/data-io/transfer-commands'
 export const runtime = 'nodejs'
-const params = z.object({ id: z.uuid() })
+const params = z.object({ id: uuidString() })
 export const GET = defineRoute({ authorize: authorizeTransfers, feature: transferFeature, params,
   handler: async ({ authz, params }) => withOrgTransaction(authz.user.orgId, async () => {
     const job = await loadTransfer(authz.user.orgId, params.id)

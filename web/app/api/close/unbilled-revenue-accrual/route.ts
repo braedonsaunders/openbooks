@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -15,7 +16,7 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 
 /** Exactly one period reference: the period itself or the date it ends. */
 const periodRefSchema = z.union([
-  z.object({ periodId: z.string().uuid() }).strict(),
+  z.object({ periodId: uuidString() }).strict(),
   z.object({ periodEnd: isoDate }).strict(),
 ])
 

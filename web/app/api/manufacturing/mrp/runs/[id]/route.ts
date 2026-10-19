@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { getMrpRun } from "@openbooks/engine/manufacturing/mrp";
 import { db } from "@openbooks/engine/platform/db";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../../../_transaction";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 
 export const GET = defineRoute({
   permission: "manufacturing.read", feature: "manufacturingMrp", params: Params,

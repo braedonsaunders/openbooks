@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/database'
 import { importBillingAdjustments } from '@openbooks/engine/sales/shipping-labels'
 import { defineRoute } from '@/lib/api/route'
@@ -15,7 +16,7 @@ const adjustmentItem = z.object({
 })
 
 const importBody = z.object({
-  accountId: z.string().uuid(),
+  accountId: uuidString(),
   items: z.array(adjustmentItem).min(1).max(500),
 })
 

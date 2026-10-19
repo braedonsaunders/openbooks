@@ -1,5 +1,6 @@
 import { lockManufacturingRoutingAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { createRouting, getRouting, type RoutingInput } from "@openbooks/engine/manufacturing/routings";
 import { defineRoute } from "@/lib/api/route";
@@ -8,9 +9,9 @@ import { idempotentManufacturingCreate } from "../_idempotent";
 import { manufacturingTransaction } from "../_transaction";
 
 const Body = z.object({
-  producedItemId: z.string().uuid(), code: z.string().trim().min(1), name: z.string().trim().min(1),
+  producedItemId: uuidString(), code: z.string().trim().min(1), name: z.string().trim().min(1),
   effectiveFrom: z.string(), effectiveTo: z.string().nullable().optional(),
-  defaultIssueLocationId: z.string().uuid().nullable().optional(), defaultReceiptLocationId: z.string().uuid().nullable().optional(),
+  defaultIssueLocationId: uuidString().nullable().optional(), defaultReceiptLocationId: uuidString().nullable().optional(),
   overheadBasis: z.enum(["labor_hours", "machine_hours", "units"]),
 });
 const Params = z.object({}).strict();

@@ -1,8 +1,9 @@
 import { voidAndRebillRateRun } from "@openbooks/engine/billing/usage/rate-run";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
-const Params = z.object({ id: z.string().uuid() }).strict();
+const Params = z.object({ id: uuidString() }).strict();
 // An empty command uses the service's recorded "Usage rating inputs changed"
 // reason; a supplied reason must be usable audit evidence.
 const Body = z.union([

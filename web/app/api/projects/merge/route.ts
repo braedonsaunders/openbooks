@@ -2,6 +2,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import {
@@ -14,7 +15,7 @@ import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
 
-const mergeBody = z.object({ survivorId: z.string().uuid(), duplicateId: z.string().uuid() })
+const mergeBody = z.object({ survivorId: uuidString(), duplicateId: uuidString() })
 
 type Gate = Exclude<Awaited<ReturnType<typeof guardPermission>>, NextResponse>;
 

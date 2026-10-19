@@ -1,5 +1,6 @@
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { crmOpportunityScope, crmSharedScope } from '../../../../../lib/crm-scope'
 import { jsonObject, parseJsonBody, validateJsonBody } from "@/lib/api/json"
@@ -27,7 +28,7 @@ import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/
 import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { notFound } from "@/lib/api/responses";
 
-const nullableUuid = z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable())
+const nullableUuid = z.preprocess((value) => value === '' ? null : value, uuidString().nullable())
 const decimalText = (field: string, nullable = false) => {
   const schema = z.string().superRefine((value, context) => {
     const exact = canonicalDecimal(value, 4)
@@ -40,7 +41,7 @@ const decimalText = (field: string, nullable = false) => {
   return nullable ? schema.nullable() : schema
 }
 const opportunityLineSchema = z.strictObject({
-  itemId: z.string().uuid(),
+  itemId: uuidString(),
   description: z.string(),
   quantity: decimalText('Line quantity'),
   unit: z.string(),
@@ -49,7 +50,7 @@ const opportunityLineSchema = z.strictObject({
   probability: z.number().int().min(0).max(100).nullable().optional(),
 })
 const contributionSchema = z.strictObject({
-  employeeId: z.string().uuid(),
+  employeeId: uuidString(),
   contributionPercent: decimalText('Sales-team contribution'),
   isPrimary: z.boolean().optional(),
 })
@@ -78,7 +79,7 @@ const requestBodySchema = z.strictObject({
   salesTeamId: nullableUuid,
   salesRepId: nullableUuid.optional(),
   stageReason: z.string().nullable().optional(),
-  statusId: z.string().uuid(),
+  statusId: uuidString(),
   team: z.array(contributionSchema).optional(),
   title: z.string().trim().min(1),
   winLossReason: z.string().nullable(),

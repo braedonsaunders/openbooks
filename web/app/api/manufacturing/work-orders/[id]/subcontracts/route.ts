@@ -1,17 +1,18 @@
 import {z} from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import {defineRoute} from '@/lib/api/route';
 import {db,withOrgTransaction} from '@openbooks/engine/platform/db';
 import {readSubcontractWorkspace} from '@openbooks/engine/manufacturing/subcontract-workspace';
 import {createProductionSubcontract,shipSubcontractMaterial,recordSubcontractReturn,capitalizeSubcontractServiceBill,reverseSubcontractServiceCost,returnSubcontractComponents,cancelProductionSubcontract} from '@openbooks/engine/manufacturing/subcontracts';
 import {ManufacturingNotFoundError} from '@openbooks/engine/manufacturing/errors';
 import { subcontractBelongsToWorkOrder } from '@/lib/record-scope-reads'
-const params=z.object({id:z.string().uuid()}).strict();
+const params=z.object({id:uuidString()}).strict();
 export const GET=defineRoute({permission:'manufacturing.read',feature:'manufacturingSubcontract',params,handler:({authz,params,request})=>withOrgTransaction(authz.user.orgId,async()=>{
   const selected=new URL(request.url).searchParams.get('selected');
-  const selection=z.string().uuid().optional().parse(selected??undefined);
+  const selection=uuidString().optional().parse(selected??undefined);
   return Response.json(await readSubcontractWorkspace(db,authz.user.orgId,authz.user.id,params.id,selection));
 })});
-const id=z.string().uuid(),reason=z.string().trim().min(5).max(500),date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const id=uuidString(),reason=z.string().trim().min(5).max(500),date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const body=z.discriminatedUnion('command',[
   z.object({command:z.literal('create'),id,operationId:id,vendorId:id,custodyLocationId:id}).strict(),
   z.object({command:z.literal('ship'),id,subcontractId:id,materialId:id,sourceLocationId:id,quantity:z.string(),date,lotId:id.nullable().optional(),serialId:id.nullable().optional()}).strict(),

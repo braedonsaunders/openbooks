@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { draftFeeDrawdown, draftHoursDrawdown } from "@openbooks/engine/resourcing/retainers";
 import { created } from "@/lib/api/responses";
 import { defineRoute } from "@/lib/api/route";
 
-const Params = z.object({ id: z.string().uuid() }).strict();
+const Params = z.object({ id: uuidString() }).strict();
 const Body = z.union([
   z.object({ sunday: z.string() }).strict(),
   z.object({ sunday: z.string(), amount: z.string() }).strict(),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
@@ -41,7 +42,7 @@ const requestBodySchema = z.object({
   approver: approverSchema,
   preventSelfApproval: z.boolean().optional(),
   /** Legal entities the approval applies to; omitted applies organization-wide. */
-  subsidiaryIds: z.array(z.string().uuid()).min(1).max(100).optional(),
+  subsidiaryIds: z.array(uuidString()).min(1).max(100).optional(),
 });
 
 async function legacyGET(req: Request) {

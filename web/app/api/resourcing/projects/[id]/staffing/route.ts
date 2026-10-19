@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { and, eq, sql } from "drizzle-orm";
 import { projects } from "@openbooks/schema";
 import { db } from "@openbooks/engine/platform/db";
@@ -9,7 +10,7 @@ import { notFound } from "@/lib/api/responses";
 import { loadPlanVsActual } from "@/lib/resourcing/tie-out";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 
-const Params = z.object({ id: z.string().uuid() }).strict();
+const Params = z.object({ id: uuidString() }).strict();
 
 /**
  * Project staffing tie-out for the project cockpit Staffing tab: plan vs

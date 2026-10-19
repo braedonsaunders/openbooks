@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 /**
  * Typed request bodies for /api/hrm/retention-schedules and
@@ -6,7 +7,7 @@ import { z } from "zod";
  * mutation route parses a typed zod schema, never the bare object).
  */
 export const saveScheduleBody = z.object({
-  scheduleId: z.string().uuid().optional(),
+  scheduleId: uuidString().optional(),
   categoryKey: z.string().trim().min(1).max(80),
   retainYears: z.number().int().min(0).max(100),
   fromEvent: z.enum(["completion", "termination", "creation"]),
@@ -15,5 +16,5 @@ export const saveScheduleBody = z.object({
 });
 
 export const requestExportBody = z.object({
-  partyId: z.string().uuid(),
+  partyId: uuidString(),
 });

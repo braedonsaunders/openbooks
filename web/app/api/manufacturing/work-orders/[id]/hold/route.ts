@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { holdWorkOrder } from "@openbooks/engine/manufacturing/work-orders";
 import { db } from "@openbooks/engine/platform/db";
 import { defineRoute } from "@/lib/api/route";
@@ -6,7 +7,7 @@ import { manufacturingTransaction } from "../../../_transaction";
 import { dispatchWorkOrderFlow } from "../../_flows";
 import { loadScopedWorkOrder } from "../../_scope";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({ reason: z.string().trim().min(1).max(500) }).strict();
 
 export const POST = defineRoute({

@@ -4,6 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
@@ -32,38 +33,38 @@ const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 const ticketHeaderBody = z.object({
   expectedRevision: z.string().min(1),
   documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  projectId: z.string().uuid().nullable().optional(),
-  foremanPartyId: z.string().uuid().nullable().optional(),
+  projectId: uuidString().nullable().optional(),
+  foremanPartyId: uuidString().nullable().optional(),
   period: z.enum(['shift', 'daily', 'weekly']).optional(),
   referenceNumber: z.string().nullable().optional(),
   memo: z.string().nullable().optional(),
 }).strict()
 const crewRowBody = z.object({
-  employeePartyId: z.string().uuid(),
-  itemId: z.string().uuid().nullable(),
-  projectTaskId: z.string().uuid().nullable().optional(),
-  timeTypeId: z.string().uuid().nullable(),
+  employeePartyId: uuidString(),
+  itemId: uuidString().nullable(),
+  projectTaskId: uuidString().nullable().optional(),
+  timeTypeId: uuidString().nullable(),
   hours: z.record(z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.union([z.string(), z.number()])),
 }).strict()
 const ticketActionBody = z.discriminatedUnion('action', [
   z.object({ action: z.literal('save-grid'), expectedRevision: z.string().min(1), rows: z.array(crewRowBody) }).strict(),
   z.object({
     action: z.literal('patch'), expectedRevision: z.string().min(1),
-    foremanPartyId: z.string().uuid().nullable().optional(),
+    foremanPartyId: uuidString().nullable().optional(),
     workDescription: z.string().nullable().optional(), poNumber: z.string().nullable().optional(),
   }).strict(),
   z.object({
-    action: z.literal('add-line'), expectedRevision: z.string().min(1), itemId: z.string().uuid(), quantity: z.string().min(1),
-    equipmentUnitId: z.string().uuid().nullable().optional(), rateUnitCode: z.string().nullable().optional(),
-    employeeId: z.string().uuid().nullable().optional(), description: z.string().nullable().optional(),
-    projectTaskId: z.string().uuid().nullable().optional(),
+    action: z.literal('add-line'), expectedRevision: z.string().min(1), itemId: uuidString(), quantity: z.string().min(1),
+    equipmentUnitId: uuidString().nullable().optional(), rateUnitCode: z.string().nullable().optional(),
+    employeeId: uuidString().nullable().optional(), description: z.string().nullable().optional(),
+    projectTaskId: uuidString().nullable().optional(),
   }).strict(),
-  z.object({ action: z.literal('remove-line'), expectedRevision: z.string().min(1), lineId: z.string().uuid() }).strict(),
+  z.object({ action: z.literal('remove-line'), expectedRevision: z.string().min(1), lineId: uuidString() }).strict(),
   z.object({
-    action: z.literal('add-quantity'), expectedRevision: z.string().min(1), projectTaskId: z.string().uuid(),
+    action: z.literal('add-quantity'), expectedRevision: z.string().min(1), projectTaskId: uuidString(),
     quantity: z.string().min(1).max(40), unit: z.string().min(1).max(32), note: z.string().max(500).nullable().optional(),
   }).strict(),
-  z.object({ action: z.literal('remove-quantity'), expectedRevision: z.string().min(1), quantityId: z.string().uuid() }).strict(),
+  z.object({ action: z.literal('remove-quantity'), expectedRevision: z.string().min(1), quantityId: uuidString() }).strict(),
   z.object({ action: z.literal('submit'), expectedRevision: z.string().min(1) }).strict(),
   z.object({ action: z.literal('send-signature'), expectedRevision: z.string().min(1), to: z.string().min(1), message: z.string().nullable().optional() }).strict(),
 ])

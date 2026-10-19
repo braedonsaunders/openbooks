@@ -1,5 +1,6 @@
 import { notFound } from '@/lib/api/responses';
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -18,7 +19,7 @@ import { isUuid } from '@/lib/list-params'
 const POSTBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('publish'), key: z.string().min(1) }),
   z.object({ action: z.literal('unpublish'), key: z.string().min(1) }),
-  z.object({ action: z.literal('install'), listingId: z.string().uuid() }),
+  z.object({ action: z.literal('install'), listingId: uuidString() }),
 ]);
 
 

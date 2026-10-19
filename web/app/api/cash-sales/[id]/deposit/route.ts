@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response';
 import { NextResponse } from 'next/server'
@@ -13,9 +14,9 @@ import { notFound } from "@/lib/api/responses";
 const POSTBodySchema = z.object({
   amount: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'drop date must be YYYY-MM-DD'),
-  bankAccountId: z.string().uuid(),
+  bankAccountId: uuidString(),
   slipNumber: z.string().min(1).max(120),
-  sourceAccountId: z.string().uuid().nullable().optional(),
+  sourceAccountId: uuidString().nullable().optional(),
 });
 
 export const runtime = 'nodejs'

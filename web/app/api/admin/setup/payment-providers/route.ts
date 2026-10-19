@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
@@ -28,21 +29,21 @@ const acceptanceConfigSchema = z.object({
   provider: z.enum(["stripe", "adyen", "gocardless"]),
   displayName: z.string().trim().min(1).max(120).optional(),
   isEnabled: z.boolean().optional(), acceptanceEnabled: z.boolean().optional(),
-  defaultBankAccountId: z.string().uuid().nullable().optional(), surchargeRuleId: z.string().uuid().nullable().optional(),
+  defaultBankAccountId: uuidString().nullable().optional(), surchargeRuleId: uuidString().nullable().optional(),
   publishableKey: z.string().nullable().optional(), apiKey: z.string().nullable().optional(), webhookSecret: z.string().nullable().optional(),
   settings: z.record(z.string(), z.json()).nullable().optional(),
   // Refund/dispute automation half of the same row: the setup screen owns the
   // policy and the posting accounts, so a save names them (explicit null
   // clears a mapping) while an omitted field keeps the stored value.
   refundPolicy: z.enum(["automatic", "review"]).nullable().optional(),
-  defaultDisputedFundsAccountId: z.string().uuid().nullable().optional(),
-  defaultChargebackLossAccountId: z.string().uuid().nullable().optional(),
-  defaultDisputeFeeAccountId: z.string().uuid().nullable().optional(),
+  defaultDisputedFundsAccountId: uuidString().nullable().optional(),
+  defaultChargebackLossAccountId: uuidString().nullable().optional(),
+  defaultDisputeFeeAccountId: uuidString().nullable().optional(),
 });
 const requestBodySchema = z.union([
   z.discriminatedUnion("action", [
-    z.object({ action: z.literal("saveRule"), name: z.string().trim().min(1).max(200), calculation: z.enum(["percent", "fixed", "percent_plus_fixed"]), feeIncomeAccountId: z.string().uuid(), id: z.string().uuid().optional(), provider: z.enum(["stripe", "adyen", "gocardless"]).nullable().optional(), paymentMethod: z.enum(["card", "bank_debit", "all"]).optional(), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), percent: surchargeMoney("Surcharge percent").nullable().optional(), fixedAmount: surchargeMoney("Surcharge fixed amount").nullable().optional(), capAmount: surchargeMoney("Surcharge cap amount").nullable().optional() }),
-    z.object({ action: z.literal("deleteRule"), id: z.string().uuid() }),
+    z.object({ action: z.literal("saveRule"), name: z.string().trim().min(1).max(200), calculation: z.enum(["percent", "fixed", "percent_plus_fixed"]), feeIncomeAccountId: uuidString(), id: uuidString().optional(), provider: z.enum(["stripe", "adyen", "gocardless"]).nullable().optional(), paymentMethod: z.enum(["card", "bank_debit", "all"]).optional(), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), percent: surchargeMoney("Surcharge percent").nullable().optional(), fixedAmount: surchargeMoney("Surcharge fixed amount").nullable().optional(), capAmount: surchargeMoney("Surcharge cap amount").nullable().optional() }),
+    z.object({ action: z.literal("deleteRule"), id: uuidString() }),
     z.object({ action: z.literal("test"), provider: z.enum(["stripe", "adyen", "gocardless"]) }),
   ]),
   acceptanceConfigSchema,

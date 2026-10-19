@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'
 import { guardSubsidiaryScope } from '@/lib/authz'
@@ -10,7 +11,7 @@ const bodySchema = z.object({ reason: z.string().min(8).max(1000) })
 export const POST = defineRoute({
   permission: 'orders.fulfill',
   feature: 'returnAuthorizations',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   body: bodySchema,
   handler: async ({ authz, params: { id }, body }) => {
     const current = await findReturnAuthorization(authz.user.orgId, id, authz.allowedSubsidiaryIds)

@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/database'
 import { refreshLabelTracking } from '@openbooks/engine/sales/shipping-labels'
 import { notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'
 
-const labelParams = z.object({ id: z.string().uuid() })
+const labelParams = z.object({ id: uuidString() })
 
 /** Re-read one label's tracker over the sealed API key and store what moved. */
 export const POST = defineRoute({

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { civilDateInput } from '../api/civil-date'
 
 /**
@@ -7,7 +8,7 @@ import { civilDateInput } from '../api/civil-date'
  * so a well-formed body still meets the same refusals as any other caller.
  */
 
-const uuid = z.string().uuid()
+const uuid = uuidString()
 const optionalUuid = uuid.nullable().optional()
 const text = (max: number) => z.string().max(max)
 const optionalText = (max: number) => z.string().max(max).nullable().optional()

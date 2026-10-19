@@ -1,5 +1,6 @@
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -14,7 +15,7 @@ import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({
-  complianceClassId: z.string().uuid({ error: 'complianceClassId must be a valid compliance class id' }).nullable().optional(),
+  complianceClassId: uuidString({ error: 'complianceClassId must be a valid compliance class id' }).nullable().optional(),
   informationReturnForm: z.string().refine(
     (value) => value === 'none' || FORM_TYPES.includes(value as FormType),
     'informationReturnForm must be an installed information return form or none',

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'
 import { assertCan, guardSubsidiaryScope } from '@/lib/authz'
@@ -7,11 +8,11 @@ import { findReturnAuthorization, inspectReturnAuthorization } from '@/lib/retur
 
 const bodySchema = z.object({
   lines: z.array(z.object({
-    lineId: z.string().uuid(),
+    lineId: uuidString(),
     accepted: z.string().max(40),
     disposition: z.enum(['restock', 'scrap', 'vendor-return']).nullable(),
-    dispositionLocationId: z.string().uuid().nullable(),
-    vendorId: z.string().uuid().nullable().optional(),
+    dispositionLocationId: uuidString().nullable(),
+    vendorId: uuidString().nullable().optional(),
   })).min(1).max(500),
   waiveFee: z.boolean().optional(),
   waiveReason: z.string().max(500).nullable().optional(),
@@ -20,7 +21,7 @@ const bodySchema = z.object({
 export const POST = defineRoute({
   permission: 'ar.create',
   feature: 'returnAuthorizations',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   body: bodySchema,
   handler: async ({ authz, params: { id }, body }) => {
     assertCan(authz, 'items.post')

@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { setPostingPolicy } from "@openbooks/engine/commerce";
 import { CommerceError } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
@@ -12,7 +13,7 @@ export const runtime = "nodejs";
 const policyBodySchema = z.strictObject({
   mode: z.enum(["per_order", "daily_summary"]),
   unpaidCreatesSalesOrder: z.boolean().optional(),
-  guestCustomerPartyId: z.string().uuid().nullable().optional(),
+  guestCustomerPartyId: uuidString().nullable().optional(),
   createPromotionOnMatchMiss: z.boolean().optional(),
   cutoffTz: z.string().max(60).optional(),
   excludedTags: z.array(z.string().max(120)).optional(),

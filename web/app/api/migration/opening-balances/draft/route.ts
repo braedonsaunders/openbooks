@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { draftOpeningBalances, OpeningBalanceRefusal } from '@/lib/migration/opening-balances'
 
@@ -14,14 +15,14 @@ const columns = z.object({
 })
 
 const body = z.object({
-  transferId: z.uuid(),
+  transferId: uuidString(),
   columns,
   excludeRows: z.array(z.number().int().positive()).max(200).optional(),
   documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   memo: z.string().max(500).nullable().optional(),
-  subsidiaryId: z.uuid().nullable().optional(),
-  balancingAccountId: z.uuid().nullable().optional(),
-  accountRemap: z.array(z.object({ from: z.string().min(1).max(200), toAccountId: z.uuid() })).max(50).optional(),
+  subsidiaryId: uuidString().nullable().optional(),
+  balancingAccountId: uuidString().nullable().optional(),
+  accountRemap: z.array(z.object({ from: z.string().min(1).max(200), toAccountId: uuidString() })).max(50).optional(),
   idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,200}$/),
 }).strict()
 

@@ -1,5 +1,6 @@
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { crmActivityScope, crmSubjectVisible, lockCrmLinkSubject } from '../../../../../lib/crm-scope'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
@@ -18,8 +19,8 @@ const STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'] as const
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
 const activityTimestamp = z.string().refine((value) => value === '' || isIsoTimestamp(value), 'expected an ISO date or date-time').nullable().optional()
 const activityParticipant = z.strictObject({
-  userId: z.string().uuid().optional(),
-  contactId: z.string().uuid().optional(),
+  userId: uuidString().optional(),
+  contactId: uuidString().optional(),
   email: z.string().trim().email().optional(),
   response: z.enum(['none', 'accepted', 'declined', 'tentative']).optional(),
 }).refine((person) => [person.userId, person.contactId, person.email].filter(Boolean).length === 1, {
@@ -27,7 +28,7 @@ const activityParticipant = z.strictObject({
 })
 const requestBodySchema = z.strictObject({
   expectedUpdatedAt: z.string().optional(),
-  assignedUserId: z.string().uuid().nullable().optional(),
+  assignedUserId: uuidString().nullable().optional(),
   body: z.string().nullable().optional(),
   custom: z.record(z.string(), z.json()).optional(),
   dueAt: activityTimestamp,
@@ -39,8 +40,8 @@ const requestBodySchema = z.strictObject({
   endsAt: activityTimestamp,
   isPrivate: z.boolean().optional(),
   kind: z.enum(KINDS).optional(),
-  links: z.array(z.strictObject({ subjectKind: z.string().trim().min(1), subjectId: z.string().uuid() })).optional(),
-  ownerUserId: z.string().uuid().nullable().optional(),
+  links: z.array(z.strictObject({ subjectKind: z.string().trim().min(1), subjectId: uuidString() })).optional(),
+  ownerUserId: uuidString().nullable().optional(),
   participants: z.array(activityParticipant).optional(),
   priority: z.enum(PRIORITIES).optional(),
   reminderAt: activityTimestamp,

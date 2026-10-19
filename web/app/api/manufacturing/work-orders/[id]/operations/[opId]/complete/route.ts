@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { completeWorkOrderOperation } from "@openbooks/engine/manufacturing/materials";
 import { db } from "@openbooks/engine/platform/db";
 import { can } from "@/lib/authz";
@@ -6,7 +7,7 @@ import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../../../../../_transaction";
 import { loadScopedWorkOrder } from "../../../../_scope";
 
-const Params = z.object({ id: z.string().uuid(), opId: z.string().uuid() });
+const Params = z.object({ id: uuidString(), opId: uuidString() });
 const Body = z.object({
   doneQty: z.string(), measuredQty: z.string().nullable().optional(),
   actualSetupMinutes: z.string().nullable().optional(), actualRunMinutes: z.string().nullable().optional(),

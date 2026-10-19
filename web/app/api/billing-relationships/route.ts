@@ -3,6 +3,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { notFound } from '@/lib/api/responses'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { sql } from 'drizzle-orm'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date'
 import { db, type SqlExecutor } from '@openbooks/engine/platform/database'
@@ -33,22 +34,22 @@ type RelationshipInput = {
 const relationshipDate = z.union([z.string(), z.null()])
 
 const relationshipCreateBody = z.strictObject({
-  childPartyId: z.string().uuid(),
-  billToPartyId: z.string().uuid(),
-  payerPartyId: z.string().uuid(),
+  childPartyId: uuidString(),
+  billToPartyId: uuidString(),
+  payerPartyId: uuidString(),
   effectiveFrom: relationshipDate,
   effectiveTo: relationshipDate,
-  consolidationGroupId: z.string().uuid().nullable().optional(),
+  consolidationGroupId: uuidString().nullable().optional(),
 })
 
 const relationshipPatchBody = z.strictObject({
-  id: z.string().uuid(),
-  childPartyId: z.string().uuid().optional(),
-  billToPartyId: z.string().uuid().optional(),
-  payerPartyId: z.string().uuid().optional(),
+  id: uuidString(),
+  childPartyId: uuidString().optional(),
+  billToPartyId: uuidString().optional(),
+  payerPartyId: uuidString().optional(),
   effectiveFrom: relationshipDate.optional(),
   effectiveTo: relationshipDate.optional(),
-  consolidationGroupId: z.string().uuid().nullable().optional(),
+  consolidationGroupId: uuidString().nullable().optional(),
 })
 
 function dateValue(value: unknown): string | null | undefined {

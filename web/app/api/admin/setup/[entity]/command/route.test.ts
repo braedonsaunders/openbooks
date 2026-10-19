@@ -3,21 +3,26 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 // Refusal paths never reach the database or the commands. Pure featureEnabled is real.
 const stateKey = Symbol.for("openbooks.setup-command-route-test");
-const routeState = { manage: false, setup: false, features: {} as Record<string, boolean> };
+const routeState = { manage: false, setup: false, equity: false, features: {} as Record<string, boolean>, equityCalls: [] as Record<string, unknown>[] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 const realAuthzUrl = import.meta.resolve("@/lib/authz");
 const realFeaturesUrl = import.meta.resolve("@/lib/features");
 const realPlatformDbUrl = import.meta.resolve("@openbooks/engine/platform/db");
-const authzStub = `const s = globalThis[Symbol.for('openbooks.setup-command-route-test')]; const perms = () => new Set([...(s.manage ? ['funds.manage'] : []), ...(s.setup ? ['admin.setup.manage'] : [])]); export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, permissions: perms(), allowedSubsidiaryIds: null }; } export async function guardPermission(p) { const a = await getAuthz(); if (!a.permissions.has(p)) return new Response(null, { status: 403 }); return a; } export { can } from ${JSON.stringify(realAuthzUrl)};`;
+const authzStub = `const s = globalThis[Symbol.for('openbooks.setup-command-route-test')]; const perms = () => new Set([...(s.manage ? ['funds.manage'] : []), ...(s.setup ? ['admin.setup.manage'] : []), ...(s.equity ? ['equity.manage'] : [])]); export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, permissions: perms(), allowedSubsidiaryIds: null }; } export async function guardPermission(p) { const a = await getAuthz(); if (!a.permissions.has(p)) return new Response(null, { status: 403 }); return a; } export { can } from ${JSON.stringify(realAuthzUrl)};`;
 const featuresStub = `export * from ${JSON.stringify(realFeaturesUrl)}; export async function resolvedFeatureState() { return globalThis[Symbol.for('openbooks.setup-command-route-test')].features; }`;
 const dbStub = `export * from ${JSON.stringify(realPlatformDbUrl)}; const fail = () => { throw new Error("no database in this test") }; const bomb = new Proxy({}, { get: fail }); export const db = bomb; export const inDbTransaction = (...a) => fail(); export const withOrgTransaction = (...a) => fail(); export const withOrgContext = (...a) => fail();`;
+// The idempotency ledger and the equity command are the database-backed
+// boundaries; the route's own body schema runs for real.
+const idempotencyStub = `export async function executeIdempotent(input) { return { value: await input.execute(), replayed: false }; }`;
+const realEquityUrl = import.meta.resolve("@openbooks/engine/equity");
+const equityStub = `export * from ${JSON.stringify(realEquityUrl)}; export async function recordEquityAccountPolicy(input) { globalThis[Symbol.for('openbooks.setup-command-route-test')].equityCalls.push(input); return { id: 'policy-version', status: 'applied', requestId: 'request-1' }; }`;
 registerHooks({
   resolve(s, c, n) {
-    const u = s === "@/lib/authz" || s === "../authz" || s === "../../../../../lib/authz" ? "mock:cmd-authz" : s === "@/lib/features" || s === "../features" ? "mock:cmd-features" : s === "@openbooks/engine/platform/db" ? "mock:cmd-db" : null;
+    const u = s === "@/lib/authz" || s === "../authz" || s === "../../../../../lib/authz" ? "mock:cmd-authz" : s === "@/lib/features" || s === "../features" ? "mock:cmd-features" : s === "@openbooks/engine/platform/db" ? "mock:cmd-db" : s === "@/lib/application/idempotency" ? "mock:cmd-idempotency" : s === "@openbooks/engine/equity" ? "mock:cmd-equity" : null;
     return u ? { shortCircuit: true, format: "module", url: u } : n(s, c);
   },
   load(u, c, n) {
-    const s = u === "mock:cmd-authz" ? authzStub : u === "mock:cmd-features" ? featuresStub : u === "mock:cmd-db" ? dbStub : null;
+    const s = u === "mock:cmd-authz" ? authzStub : u === "mock:cmd-features" ? featuresStub : u === "mock:cmd-db" ? dbStub : u === "mock:cmd-idempotency" ? idempotencyStub : u === "mock:cmd-equity" ? equityStub : null;
     return s ? { format: "module", source: s, shortCircuit: true } : n(u, c);
   },
 });
@@ -80,4 +85,36 @@ test("generic writes refuse command-owned entities before parsing", async () => 
     const res = await handler(new Request("http://localhost/api/admin/setup/fund-pairs", init), { params: Promise.resolve({ entity: "fund-pairs" }) });
     assert.deepEqual([res.status, (await res.json() as { error?: string }).error], [405, "This configuration changes only through its setup command (POST /api/admin/setup/fund-pairs/command). Open Nonprofit Setup to make this change."]);
   }
+});
+
+// Sandbox and sample organizations derive ids as md5(seed:source)::uuid, so
+// their version/variant nibbles are arbitrary hex (here "d" and "0").
+const derivedId = (n: number) => `435d3903-de4c-da3a-0183-ee5f8be57b${n.toString(16).padStart(2, "0")}`;
+test("equity account policy command accepts sandbox-derived ids and refuses non-ids", async () => {
+  routeState.manage = false; routeState.setup = false; routeState.equity = true; routeState.features = { equity: true };
+  routeState.equityCalls = [];
+  const body = {
+    id: derivedId(0), subsidiaryId: derivedId(1), effectiveFrom: "2026-01-01",
+    commonStockAccountId: derivedId(2), preferredStockAccountId: derivedId(3), apicAccountId: derivedId(4),
+    apicShareBasedAccountId: derivedId(5), compensationExpenseAccountId: derivedId(6), treasuryStockAccountId: derivedId(7),
+    convertibleInstrumentsAccountId: derivedId(8), interestExpenseAccountId: derivedId(9), accruedInterestAccountId: "",
+    earlyExerciseDepositAccountId: null, reason: "Opening equity mapping",
+  };
+  const accepted = await call("equity-account-policies", JSON.stringify(body));
+  assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()));
+  assert.deepEqual(await accepted.json(), { id: "policy-version", status: "applied", requestId: "request-1" });
+  assert.equal(routeState.equityCalls.length, 1);
+  assert.deepEqual(
+    { ...routeState.equityCalls[0], orgId: undefined, actorId: undefined },
+    {
+      orgId: undefined, actorId: undefined, subsidiaryId: derivedId(1), effectiveFrom: "2026-01-01",
+      commonStockAccountId: derivedId(2), preferredStockAccountId: derivedId(3), apicAccountId: derivedId(4),
+      apicShareBasedAccountId: derivedId(5), compensationExpenseAccountId: derivedId(6), treasuryStockAccountId: derivedId(7),
+      convertibleInstrumentsAccountId: derivedId(8), interestExpenseAccountId: derivedId(9), accruedInterestAccountId: null,
+      earlyExerciseDepositAccountId: null, reason: "Opening equity mapping",
+    },
+  );
+  const refused = await call("equity-account-policies", JSON.stringify({ ...body, apicAccountId: "account-4" }));
+  assert.equal(refused.status, 400);
+  assert.equal(routeState.equityCalls.length, 1);
 });

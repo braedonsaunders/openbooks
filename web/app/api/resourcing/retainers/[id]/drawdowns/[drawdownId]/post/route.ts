@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { postDrawdown } from "@openbooks/engine/resourcing/retainer-billing";
 import { defineRoute } from "@/lib/api/route";
 
-const Params = z.object({ id: z.string().uuid(), drawdownId: z.string().uuid() });
+const Params = z.object({ id: uuidString(), drawdownId: uuidString() });
 
 export const POST = defineRoute({
   permission: "retainers.manage",

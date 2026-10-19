@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
 import { defineRoute } from '@/lib/api/route'
@@ -14,7 +15,7 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 export const POST = defineRoute({
   authorize: ({ params }) => schedulingBoardRouteAuthority(params, 'publish'),
   feature: { none: 'The addressed board is gated and authorized by its native family.' },
-  params: z.object({ boardId: z.string().uuid() }),
+  params: z.object({ boardId: uuidString() }),
   body: z.strictObject({ from: date, through: date, reason: z.string().max(2000).nullable().optional() }),
   handler: async ({ authz, params, body }) => {
     const result = await publishScheduleBoard({

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { postInternalBilling } from '@openbooks/engine/internal-billing'
@@ -9,7 +10,7 @@ export const runtime = 'nodejs'
 export const POST = defineRoute({
   permission: 'gl.post',
   feature: 'internalBilling',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   handler: async ({ authz, params }) => {
     const outcome = await postInternalBilling({
       orgId: authz.user.orgId,

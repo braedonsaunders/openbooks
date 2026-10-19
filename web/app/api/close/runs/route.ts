@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
@@ -10,12 +11,12 @@ import { CloseError } from "@openbooks/engine/periods/period-policy";
 import { isUuid } from "../../../../lib/list-params";
 
 const requestBodySchema = z.object({
-  periodId: z.string().uuid(),
-  bookId: z.string().uuid(),
-  blueprintId: z.string().uuid().optional(),
-  reportingPackageId: z.string().uuid().optional(),
+  periodId: uuidString(),
+  bookId: uuidString(),
+  blueprintId: uuidString().optional(),
+  reportingPackageId: uuidString().optional(),
   targetCloseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  subsidiaryIds: z.array(z.string().uuid()).min(1).nullable().optional(),
+  subsidiaryIds: z.array(uuidString()).min(1).nullable().optional(),
 });
 
 

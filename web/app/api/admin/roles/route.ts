@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
@@ -33,14 +34,14 @@ const roleWriteFields = {
 };
 const createRoleBodySchema = z.object({ ...roleWriteFields, name: z.string().trim().min(1).max(200) });
 const updateRoleBodySchema = z.object({
-  id: z.string().uuid(),
+  id: uuidString(),
   ...roleWriteFields,
   // Concurrency token: the role version the editor opened. A stale editor
   // must refuse rather than overwrite a newer permission set with its
   // older snapshot.
   expectedUpdatedAt: z.string().min(1).max(64).optional(),
 });
-const deleteRoleBodySchema = z.object({ id: z.string().uuid(), replacementRoleId: z.string().uuid().optional() });
+const deleteRoleBodySchema = z.object({ id: uuidString(), replacementRoleId: uuidString().optional() });
 
 
 export const runtime = "nodejs";

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/database'
 import { validateShipmentAddress } from '@openbooks/engine/sales/shipping-labels'
 import { notFound } from '@/lib/api/responses'
@@ -8,8 +9,8 @@ import { fulfillmentDocumentScope } from '@openbooks/engine/sales/fulfillment'
 import { guardSubsidiaryScope } from '@/lib/authz'
 
 const validateBody = z.object({
-  shipmentId: z.string().uuid(),
-  accountId: z.string().uuid().nullable().optional(),
+  shipmentId: uuidString(),
+  accountId: uuidString().nullable().optional(),
 })
 
 /**

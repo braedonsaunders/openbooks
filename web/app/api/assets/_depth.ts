@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { exactMoney, isoDate, nullableExactMoney, uuidId } from "../../../lib/api/json";
 
 /**
@@ -12,7 +13,7 @@ export const money = (label: string) => exactMoney(`${label} must be a decimal s
 export const optionalMoney = (label: string) => nullableExactMoney(`${label} must be a decimal string; JSON numbers are refused`).optional();
 export const calendarDate = (label: string) => isoDate(`${label} must be a valid calendar date`);
 export const id = uuidId;
-export const idempotencyKey = z.string().uuid("idempotencyKey must be a uuid");
+export const idempotencyKey = uuidString("idempotencyKey must be a uuid");
 
 /** The caller's legal-entity scope in the shape the engine services take. */
 export function scopeOf(gate: { allowedSubsidiaryIds: Set<string> | null }): string[] | null {

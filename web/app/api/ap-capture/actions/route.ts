@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
@@ -11,7 +12,7 @@ import '../../../../lib/authz';
 import { parseBulkActionIds } from '../../../../lib/api/bulk-ids'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 
-const captureIds = z.array(z.string().uuid()).min(1).max(50)
+const captureIds = z.array(uuidString()).min(1).max(50)
 const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('reject'), ids: captureIds }),
   z.strictObject({ action: z.literal('materialize'), ids: captureIds }),

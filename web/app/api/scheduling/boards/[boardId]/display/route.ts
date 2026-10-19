@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
@@ -10,7 +11,7 @@ export const PATCH = defineRoute({
   feature: {
     none: 'The addressed board owns its native feature and legal-entity guards.',
   },
-  params: z.object({ boardId: z.string().uuid() }),
+  params: z.object({ boardId: uuidString() }),
   body: z.strictObject({ showHoursColumn: z.boolean() }),
   handler: async ({ authz, params, body }) => {
     const result = await withOrgTransaction(authz.user.orgId, () =>

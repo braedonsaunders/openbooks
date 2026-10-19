@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -11,7 +12,7 @@ const putBodySchema0 = z.strictObject({
     (value) => Object.hasOwn(RECORD_TYPE_BY_KEY, value),
     "recordType must name a supported record type",
   ),
-  viewId: z.string().uuid("viewId must be a valid id").nullable().optional(),
+  viewId: uuidString("viewId must be a valid id").nullable().optional(),
 });
 
 export const runtime = "nodejs";

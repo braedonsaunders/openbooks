@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { calendarDaysBetween, isIsoCalendarDate } from '@openbooks/engine/platform/civil-date'
 import { scheduledWork } from '@openbooks/engine/schedule-boards/prefill'
@@ -10,7 +11,7 @@ import { notFound } from '@/lib/api/responses'
 export const runtime = 'nodejs'
 
 const querySchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: uuidString(),
   from: z.string().refine(isIsoCalendarDate),
   through: z.string().refine(isIsoCalendarDate),
 }).refine(({ from, through }) => isIsoCalendarDate(from) && isIsoCalendarDate(through)
@@ -20,7 +21,7 @@ const querySchema = z.object({
 export const GET = defineRoute({
   permission: 'time.manage',
   feature: 'fieldTickets',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   handler: async ({ request, authz, params }) => {
     const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams))
     if (!parsed.success) return NextResponse.json({ error: 'Choose a project and a ticket period of at most fourteen days.' }, { status: 422 })

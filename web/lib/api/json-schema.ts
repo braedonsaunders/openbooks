@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { normalizeMoney } from "@openbooks/engine/money";
 import { canonicalDecimal } from "../exact-decimal";
-import { isUuid } from "../list-params";
+import { UUID_MESSAGE, isUuid, uuidString } from "@openbooks/engine/platform/identifiers";
 
 /**
  * Object-only transition schema for routes that retain narrower field and
@@ -56,10 +56,10 @@ function toExactMoney(v: unknown): string | null {
   }
 }
 
-const UUID_MESSAGE = "must be a valid id";
-
-/** A tenant-entity uuid reference. */
-export const uuidId = z.string().refine(isUuid, UUID_MESSAGE);
+/** A tenant-entity uuid reference: the house 8-4-4-4-12 shape, so sandbox
+ *  and sample organizations' derived ids are accepted like any other id. */
+export const uuidId = uuidString();
+export { uuidString };
 
 /** Assign a warehouse to one approved order line. */
 export const assignWarehouseBody = z.object({

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
@@ -16,7 +17,7 @@ import { guardProjectsFeature } from "../../../lib/projects-gate";
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: uuidString(),
   invoiceType: z.enum(["progress", "final"]).optional(),
   basis: z.enum(["date_range", "draw_amount", "time_selection", "milestone", "field_ticket"]).optional(),
   drawAmount: z.string().nullable().optional(),

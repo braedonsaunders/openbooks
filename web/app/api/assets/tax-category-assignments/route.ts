@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -7,7 +8,7 @@ import { lockAssetCategoryTaxLifecycle } from "@openbooks/engine/organization/as
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 const patchBodySchema0 = z.strictObject({
-  categoryId: z.string().uuid("categoryId must be a valid id"),
+  categoryId: uuidString("categoryId must be a valid id"),
   regime: z.string().trim().min(1, "regime is required"),
   classCode: z.string().trim().min(1).nullable().optional(),
 });

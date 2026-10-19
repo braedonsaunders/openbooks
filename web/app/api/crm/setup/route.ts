@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from "next/server";
@@ -17,18 +18,18 @@ import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { notFound } from "@/lib/api/responses";
 
 const baseSaveFields = {
-  id: z.string().uuid().optional(),
+  id: uuidString().optional(),
   key: z.string().optional(),
   name: z.string().trim().min(1),
   description: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
 }
 const baseQuotaFields = {
-  id: z.string().uuid().optional(),
+  id: uuidString().optional(),
   description: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
 }
-const optionalUserId = z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable()).optional()
+const optionalUserId = z.preprocess((value) => value === '' ? null : value, uuidString().nullable()).optional()
 const territoryRuleSchema = z.object({
   field: z.enum(['country', 'region', 'industry', 'lifecycleStage', 'leadSourceId', 'annualRevenue', 'employeeCount']),
   operator: z.enum(['equals', 'in', 'contains', 'gte', 'lte']),
@@ -56,7 +57,7 @@ const quotaSchema = z.object({
   ...baseQuotaFields,
   action: z.literal('save-quota'),
   ownerUserId: optionalUserId,
-  salesTeamId: z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable()).optional(),
+  salesTeamId: z.preprocess((value) => value === '' ? null : value, uuidString().nullable()).optional(),
   periodStart: z.string().refine(isIsoCalendarDate, 'periodStart must be a valid calendar date'),
   periodEnd: z.string().refine(isIsoCalendarDate, 'periodEnd must be a valid calendar date'),
   amount: z.string(),
@@ -83,7 +84,7 @@ const requestBodySchema = z.discriminatedUnion('action', [
   z.object({ ...baseSaveFields, action: z.literal('save-opportunity-status'), probability: z.union([z.number(), z.string()]), defaultForecastCategory: z.enum(['omitted', 'worst_case', 'most_likely', 'upside']), sequence: z.union([z.number(), z.string()]).optional(), isClosed: z.boolean().optional(), isWon: z.boolean().optional(), isDefault: z.boolean().optional(), requiresLines: z.boolean().optional(), requiresPrimaryContact: z.boolean().optional(), requiresPositiveAmount: z.boolean().optional(), requiresWinLossReason: z.boolean().optional() }),
   z.object({ ...baseSaveFields, action: z.literal('save-lead-source') }),
   z.object({ ...baseSaveFields, action: z.literal('save-territory'), rules: z.array(territoryRuleSchema), matchMode: z.enum(['all', 'any']).default('all'), priority: z.union([z.number(), z.string()]).optional(), managerUserId: optionalUserId, defaultOwnerUserId: optionalUserId }),
-  z.object({ ...baseSaveFields, action: z.literal('save-team'), members: z.array(z.object({ userId: z.string().uuid(), role: z.enum(['manager', 'member']).optional() })), managerUserId: optionalUserId }),
+  z.object({ ...baseSaveFields, action: z.literal('save-team'), members: z.array(z.object({ userId: uuidString(), role: z.enum(['manager', 'member']).optional() })), managerUserId: optionalUserId }),
   quotaSchema,
 ])
 

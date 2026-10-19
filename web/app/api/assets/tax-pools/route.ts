@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
@@ -24,7 +25,7 @@ const postBodySchema0 = z.strictObject({
   taxYear: z.number().int().min(1000).max(9999),
   yearStart: isoDate("yearStart must be a valid calendar date").optional(),
   yearEnd: isoDate("yearEnd must be a valid calendar date").optional(),
-  bookId: z.string().uuid("bookId must be a valid id").optional(),
+  bookId: uuidString("bookId must be a valid id").optional(),
   // A supplied subsidiary remains an ownership lookup: malformed and hidden
   // identifiers share the same not-found response in the handler.
   subsidiaryId: z.string().optional(),

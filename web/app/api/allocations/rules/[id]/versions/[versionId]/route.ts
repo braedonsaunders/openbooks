@@ -1,6 +1,7 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { parseJsonBody } from '@/lib/api/json';
 import { NextResponse } from 'next/server'
 import { getRuleVersion, updateDraftVersion } from '@openbooks/engine/allocations/runtime'
@@ -15,24 +16,24 @@ const bodyObjectSchema = z.object({
   effectiveFrom: z.string().optional(),
   effectiveTo: z.string().nullable().optional(),
   bookScope: z.enum(['primary', 'all_posting', 'books']).optional(),
-  bookIds: z.array(z.string().uuid()).optional(),
+  bookIds: z.array(uuidString()).optional(),
   documentKinds: z.array(z.string()).nullable().optional(),
   accountScope: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('any') }).strict(),
-    z.object({ kind: z.literal('accounts'), accountIds: z.array(z.string().uuid()) }).strict(),
+    z.object({ kind: z.literal('accounts'), accountIds: z.array(uuidString()) }).strict(),
     z.object({ kind: z.literal('account_group'), dimension: z.string().min(1), groupKey: z.string().min(1) }).strict(),
   ]).optional(),
   dimensionFilters: z.object({
-    departmentIds: z.array(z.string().uuid()).optional(),
-    locationIds: z.array(z.string().uuid()).optional(),
-    classIds: z.array(z.string().uuid()).optional(),
-    projectIds: z.array(z.string().uuid()).optional(),
-    subsidiaryIds: z.array(z.string().uuid()).optional(),
-    partyIds: z.array(z.string().uuid()).optional(),
-    itemIds: z.array(z.string().uuid()).optional(),
-    payComponentIds: z.array(z.string().uuid()).optional(),
-    payrollEmployeeIds: z.array(z.string().uuid()).optional(),
-    timeTypeIds: z.array(z.string().uuid()).optional(),
+    departmentIds: z.array(uuidString()).optional(),
+    locationIds: z.array(uuidString()).optional(),
+    classIds: z.array(uuidString()).optional(),
+    projectIds: z.array(uuidString()).optional(),
+    subsidiaryIds: z.array(uuidString()).optional(),
+    partyIds: z.array(uuidString()).optional(),
+    itemIds: z.array(uuidString()).optional(),
+    payComponentIds: z.array(uuidString()).optional(),
+    payrollEmployeeIds: z.array(uuidString()).optional(),
+    timeTypeIds: z.array(uuidString()).optional(),
     payrollExpensesOnly: z.boolean().optional(),
     extraDims: z.record(z.string(), z.array(z.string())).optional(),
     requireUntagged: z.array(z.enum(['department', 'location', 'class', 'project'])).optional(),
@@ -40,7 +41,7 @@ const bodyObjectSchema = z.object({
   applyPolicy: z.enum(['automatic', 'suggest', 'manual']).optional(),
   sourceMeasure: z.enum(['period_activity', 'period_end_balance', 'ytd_activity']).optional(),
   basisKind: z.enum(['fixed_percent', 'driver', 'stepped']).optional(),
-  driverId: z.string().uuid().nullable().optional(),
+  driverId: uuidString().nullable().optional(),
   driverAsOf: z.enum(['period', 'document_date', 'prior_period']).optional(),
   // Basis configuration is an opaque JSON column whose shape depends on basisKind.
   basisConfig: z.record(z.string(), z.json()).optional(),
@@ -50,16 +51,16 @@ const bodyObjectSchema = z.object({
     include: z.array(z.string()).optional(),
     exclude: z.array(z.string()).optional(),
     minWeight: z.string().optional(),
-    targetAccountId: z.string().uuid().nullable().optional(),
+    targetAccountId: uuidString().nullable().optional(),
   }).strict().optional(),
   impact: z.enum(['reclass', 'net_zero_pair', 'report_only']).optional(),
-  offsetAccountId: z.string().uuid().nullable().optional(),
+  offsetAccountId: uuidString().nullable().optional(),
   residualPolicy: z.enum(['largest_share', 'first_target', 'last_target', 'explicit_target']).optional(),
-  residualTargetId: z.string().uuid().nullable().optional(),
+  residualTargetId: uuidString().nullable().optional(),
   solveMethod: z.enum(['sequential', 'simultaneous']).optional(),
   runPolicy: z.enum(['manual', 'auto_preview', 'auto_post']).optional(),
   runOffsetDays: z.number().int().optional(),
-  approvalFlowId: z.string().uuid().nullable().optional(),
+  approvalFlowId: uuidString().nullable().optional(),
   memoTemplate: z.string().nullable().optional(),
   lineDescriptionTemplate: z.string().nullable().optional(),
 }).strict();

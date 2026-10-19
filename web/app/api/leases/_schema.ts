@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { exactMoney } from "@/lib/api/json";
 import { compareDecimal } from "@/lib/exact-decimal";
@@ -22,7 +23,7 @@ export const leaseClassificationSchema = z.object({
   specializedAsset: z.boolean().optional(),
 });
 export const leaseSchema = z.object({
-  subsidiaryId: z.uuid(),
+  subsidiaryId: uuidString(),
   leaseNumber: z.string().trim().min(1).max(100),
   description: z.string().max(1000).optional(),
   commencementOn: date,
@@ -36,22 +37,22 @@ export const leaseSchema = z.object({
   initialDirectCosts: exactMoney().optional(),
   prepayments: exactMoney().optional(),
   incentives: exactMoney().optional(),
-  costClearingAccountId: z.uuid().nullable().optional(),
+  costClearingAccountId: uuidString().nullable().optional(),
   openingBalances: z
     .object({ liability: exactMoney(), rouCarrying: exactMoney(), asOf: date })
     .nullable()
     .optional(),
   accounts: z.object({
-    rouAsset: z.uuid(),
-    leaseLiability: z.uuid(),
-    interestExpense: z.uuid(),
-    amortizationExpense: z.uuid(),
-    leaseExpense: z.uuid(),
-    payment: z.uuid(),
+    rouAsset: uuidString(),
+    leaseLiability: uuidString(),
+    interestExpense: uuidString(),
+    amortizationExpense: uuidString(),
+    leaseExpense: uuidString(),
+    payment: uuidString(),
   }),
-  departmentId: z.uuid().nullable().optional(),
-  projectId: z.uuid().nullable().optional(),
-  locationId: z.uuid().nullable().optional(),
+  departmentId: uuidString().nullable().optional(),
+  projectId: uuidString().nullable().optional(),
+  locationId: uuidString().nullable().optional(),
 });
 export const leaseChangeSchema = z.object({
   operation: z.enum([
@@ -65,7 +66,7 @@ export const leaseChangeSchema = z.object({
   idempotencyKey: z.string().min(1).max(120),
   scopeReductionPercent: exactMoney(),
   settlementPayment: exactMoney(),
-  gainLossAccountId: z.uuid(),
+  gainLossAccountId: uuidString(),
   assessment: z.string().trim().min(8).max(4000),
   remainingTerms: z
     .object({

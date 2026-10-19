@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { documentLineSchema } from '@/lib/api/document-edit-schema';
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -19,19 +20,19 @@ const jsonObjectSchema = z.record(z.string(), z.json());
 const POSTBodySchema1 = z.object({
   kind: z.enum(['customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund', 'vendor_bill', 'vendor_credit', 'card_charge', 'card_refund', 'check', 'deposit', 'transfer'], { error: 'unknown document kind' }),
   expectedUpdatedAt: z.string().optional(),
-  partyId: z.string().uuid().nullable().optional(), paymentCardId: z.string().uuid().nullable().optional(),
+  partyId: uuidString().nullable().optional(), paymentCardId: uuidString().nullable().optional(),
   documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   referenceNumber: z.string().nullable().optional(), memo: z.string().nullable().optional(),
   postingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  departmentId: z.string().uuid().nullable().optional(), projectId: z.string().uuid().nullable().optional(),
-  locationId: z.string().uuid().nullable().optional(), classId: z.string().uuid().nullable().optional(),
-  extraDims: z.record(z.string(), z.string().nullable()).optional(), subsidiaryId: z.string().uuid().nullable().optional(),
+  departmentId: uuidString().nullable().optional(), projectId: uuidString().nullable().optional(),
+  locationId: uuidString().nullable().optional(), classId: uuidString().nullable().optional(),
+  extraDims: z.record(z.string(), z.string().nullable()).optional(), subsidiaryId: uuidString().nullable().optional(),
   expectedPayDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   workCompletedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   paymentHoldReason: z.string().nullable().optional(), internalNotes: z.string().nullable().optional(),
   billingMethod: z.string().nullable().optional(), isFinalInvoice: z.boolean().optional(), currency: z.string().optional(),
   custom: jsonObjectSchema.optional(), lines: z.array(documentLineSchema).optional(),
-  unsplitDistributionGroups: z.array(z.string().uuid()).optional(),
+  unsplitDistributionGroups: z.array(uuidString()).optional(),
 });
 
 

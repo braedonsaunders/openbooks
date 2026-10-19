@@ -1,5 +1,6 @@
 import { lockManufacturingCenterAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { addWorkCenterRate, getWorkCenter, getWorkCenterRate } from "@openbooks/engine/manufacturing/work-centers";
 import { guardSubsidiaryScope } from "@/lib/authz";
@@ -8,7 +9,7 @@ import { created, notFound } from "@/lib/api/responses";
 import { idempotentManufacturingCreate } from "../../../_idempotent";
 import { manufacturingTransaction } from "../../../_transaction";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({ machineRatePerHour: z.string(), effectiveFrom: z.string(), effectiveTo: z.string().nullable().optional() });
 
 export const POST = defineRoute({

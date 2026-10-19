@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
@@ -58,7 +59,7 @@ const amount = (field: string) =>
   exactMoney(`${field} must be a decimal string; JSON numbers are refused`);
 const nullableDate = (field: string) =>
   z.union([isoDate(`${field} must be a valid calendar date`), z.literal(""), z.null()]);
-const nullableId = z.string().uuid("must be a valid id").nullable();
+const nullableId = uuidString("must be a valid id").nullable();
 const patchBodySchema0 = z
   .strictObject({
     // Omitted or malformed tokens reach the named reload refusal below; the

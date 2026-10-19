@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/db'
 import {
   fulfillmentDocumentScope,
@@ -13,7 +14,7 @@ import { defineRoute } from '@/lib/api/route'
 import { guardSubsidiaryScope } from '@/lib/authz'
 import { saveFulfillmentCustom } from '@/lib/shipments'
 
-const params = z.object({ id: z.string().uuid() })
+const params = z.object({ id: uuidString() })
 
 /** One shipment with its lines, carrier and tracking link. */
 export const GET = defineRoute({

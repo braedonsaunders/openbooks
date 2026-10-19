@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
@@ -26,14 +27,14 @@ const requestBodySchema = z.object({
     z.literal(''),
     z.null(),
   ]).optional(),
-  billDocumentId: z.string().uuid({ error: 'billDocumentId must be a valid bill id' }).nullable().optional(),
+  billDocumentId: uuidString({ error: 'billDocumentId must be a valid bill id' }).nullable().optional(),
   currency: z.string().optional(),
   direction: z.enum(['received', 'issued']).optional(),
   jurisdiction: z.string().trim().max(20).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
-  partyId: z.string().uuid({ error: 'partyId must be a valid vendor id' }),
-  payApplicationId: z.string().uuid({ error: 'payApplicationId must be a valid application id' }).nullable().optional(),
-  projectId: z.string().uuid({ error: 'projectId must be a valid project id' }),
+  partyId: uuidString({ error: 'partyId must be a valid vendor id' }),
+  payApplicationId: uuidString({ error: 'payApplicationId must be a valid application id' }).nullable().optional(),
+  projectId: uuidString({ error: 'projectId must be a valid project id' }),
   throughDate: z.string().refine(isIsoCalendarDate, 'throughDate must be a real calendar date (YYYY-MM-DD)'),
   waiverType: z.enum(['conditional_progress', 'unconditional_progress', 'conditional_final', 'unconditional_final']).optional(),
 })

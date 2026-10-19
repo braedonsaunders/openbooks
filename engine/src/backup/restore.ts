@@ -24,6 +24,7 @@ import {
   type BackupHeaderV3,
 } from "./format.ts";
 import { unsealSecret } from "../platform/secrets.ts";
+import { UUID_RE } from "../platform/uuid.ts";
 import {
   unsealLegacyEmailSecret,
   validateStoredEmailConfig,
@@ -31,7 +32,6 @@ import {
 } from "@openbooks/emails";
 
 const TABLE_NAME_RE = /^[a-z0-9_]+$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const ROW_LINE_RE = /^\{"t":"([a-z0-9_]+)","r":(.+)\}$/;
 

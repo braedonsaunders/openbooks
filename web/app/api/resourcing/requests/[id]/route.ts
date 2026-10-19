@@ -1,24 +1,25 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { projects, resRequests } from "@openbooks/schema";
 import { updateResourceRequestDraft } from "@openbooks/engine/resourcing/requests";
 import { db } from "@openbooks/engine/platform/db";
 import { defineRoute } from "@/lib/api/route";
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
 
-const Params = z.object({ id: z.string().uuid() }).strict();
+const Params = z.object({ id: uuidString() }).strict();
 const Common = {
-  projectId: z.string().uuid(),
+  projectId: uuidString(),
   firstWeek: z.string(),
   lastWeek: z.string(),
   hoursPerWeek: z.string(),
   isBillable: z.boolean().optional(),
-  billItemId: z.string().uuid().nullable().optional(),
+  billItemId: uuidString().nullable().optional(),
   reason: z.string().nullable().optional(),
   custom: z.record(z.string(), z.unknown()).optional(),
 };
 const Body = z.union([
-  z.object({ ...Common, employeePartyId: z.string().uuid() }).strict(),
+  z.object({ ...Common, employeePartyId: uuidString() }).strict(),
   z.object({ ...Common, jobTitle: z.string().trim().min(1) }).strict(),
 ]);
 

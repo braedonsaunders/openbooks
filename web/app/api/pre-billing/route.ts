@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { isUuid } from '../../../lib/list-params'
 import { createPrebill, listPrebills } from '../../../lib/pre-billing'
 const POSTBodySchema1 = z.object({
-  projectId: z.string().uuid(), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  projectId: uuidString(), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), notes: z.string().nullable().optional(),
 });
 

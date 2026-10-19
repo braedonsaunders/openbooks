@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { createBookCurrencyVersion, listBookCurrencies } from '@openbooks/engine/multibook'
@@ -6,8 +7,8 @@ import { createBookCurrencyVersion, listBookCurrencies } from '@openbooks/engine
 export const runtime = 'nodejs'
 
 const createBody = z.object({
-  bookId: z.string().uuid(),
-  subsidiaryId: z.string().uuid(),
+  bookId: uuidString(),
+  subsidiaryId: uuidString(),
   currency: z.string(),
   rateType: z.enum(['spot', 'month_average']),
   effectiveFrom: z.string(),

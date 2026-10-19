@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -16,7 +17,7 @@ export const runtime = 'nodejs'
 export const POST = defineRoute({
   permission: 'hrm.employment.manage',
   feature: 'hrm',
-  params: z.object({ id: z.string().uuid() }),
+  params: z.object({ id: uuidString() }),
   body: z.object({
     correctedStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     reason: z.string().trim().min(10).max(500),

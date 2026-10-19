@@ -1,5 +1,6 @@
 import { lockManufacturingCenterAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { createWorkCenter, getWorkCenter, type WorkCenterInput } from "@openbooks/engine/manufacturing/work-centers";
 import { guardSubsidiaryScope } from "@/lib/authz";
@@ -10,9 +11,9 @@ import { manufacturingTransaction } from "../_transaction";
 
 const Body = z.object({
   code: z.string().trim().min(1), name: z.string().trim().min(1),
-  subsidiaryId: z.string().uuid().nullable().optional(), kind: z.enum(["machine", "labor", "cell"]),
-  capacityHoursPerDay: z.string(), efficiencyPct: z.string(), departmentId: z.string().uuid().nullable().optional(),
-  absorbsOverhead: z.boolean(), calendarId: z.string().uuid().nullable().optional(),
+  subsidiaryId: uuidString().nullable().optional(), kind: z.enum(["machine", "labor", "cell"]),
+  capacityHoursPerDay: z.string(), efficiencyPct: z.string(), departmentId: uuidString().nullable().optional(),
+  absorbsOverhead: z.boolean(), calendarId: uuidString().nullable().optional(),
 });
 const Params = z.object({}).strict();
 

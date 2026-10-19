@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/database'
 import { rotateShippingRelaySecret } from '@openbooks/engine/sales/shipping-labels'
 import { notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'
 
-const accountParams = z.object({ id: z.string().uuid() })
+const accountParams = z.object({ id: uuidString() })
 
 /**
  * Issue or rotate the relay secret tracker deliveries must be signed with.

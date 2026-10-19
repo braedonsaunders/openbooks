@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -28,26 +29,26 @@ export const runtime = 'nodejs'
 const sessionToken = z.string().min(16).max(256)
 
 const bodySchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('previewSubscription'), sessionToken, subscriptionId: z.string().uuid(), quantity: z.unknown().optional(), unitPrice: z.unknown().optional(), componentKey: z.string().max(120).optional(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
-  z.object({ action: z.literal('changeSubscription'), sessionToken, subscriptionId: z.string().uuid(), quantity: z.unknown().optional(), unitPrice: z.unknown().optional(), componentKey: z.string().max(120).optional(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
-  z.object({ action: z.literal('pauseSubscription'), sessionToken, subscriptionId: z.string().uuid() }),
-  z.object({ action: z.literal('resumeSubscription'), sessionToken, subscriptionId: z.string().uuid() }),
-  z.object({ action: z.literal('cancelSubscription'), sessionToken, subscriptionId: z.string().uuid(), reason: z.string().max(200) }),
-  z.object({ action: z.literal('acceptSaveOffer'), sessionToken, subscriptionId: z.string().uuid(), offerId: z.string().max(80) }),
-  z.object({ action: z.literal('payInvoice'), sessionToken, documentId: z.string().uuid(), provider: z.enum(['stripe', 'adyen', 'gocardless']) }),
-  z.object({ action: z.literal('setDefaultMethod'), sessionToken, methodId: z.string().uuid() }),
-  z.object({ action: z.literal('removeMethod'), sessionToken, methodId: z.string().uuid() }),
+  z.object({ action: z.literal('previewSubscription'), sessionToken, subscriptionId: uuidString(), quantity: z.unknown().optional(), unitPrice: z.unknown().optional(), componentKey: z.string().max(120).optional(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
+  z.object({ action: z.literal('changeSubscription'), sessionToken, subscriptionId: uuidString(), quantity: z.unknown().optional(), unitPrice: z.unknown().optional(), componentKey: z.string().max(120).optional(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
+  z.object({ action: z.literal('pauseSubscription'), sessionToken, subscriptionId: uuidString() }),
+  z.object({ action: z.literal('resumeSubscription'), sessionToken, subscriptionId: uuidString() }),
+  z.object({ action: z.literal('cancelSubscription'), sessionToken, subscriptionId: uuidString(), reason: z.string().max(200) }),
+  z.object({ action: z.literal('acceptSaveOffer'), sessionToken, subscriptionId: uuidString(), offerId: z.string().max(80) }),
+  z.object({ action: z.literal('payInvoice'), sessionToken, documentId: uuidString(), provider: z.enum(['stripe', 'adyen', 'gocardless']) }),
+  z.object({ action: z.literal('setDefaultMethod'), sessionToken, methodId: uuidString() }),
+  z.object({ action: z.literal('removeMethod'), sessionToken, methodId: uuidString() }),
   z.object({ action: z.literal('startMethodSetup'), sessionToken, provider: z.enum(['stripe', 'adyen', 'gocardless']) }),
   z.object({ action: z.literal('lookupGiftCard'), sessionToken, code: z.string().min(4).max(64) }),
   z.object({
-    action: z.literal('acceptBillingReview'), sessionToken, prebillId: z.string().uuid(),
+    action: z.literal('acceptBillingReview'), sessionToken, prebillId: uuidString(),
     digest: z.string().regex(/^[0-9a-f]{64}$/), signerName: z.string().max(200),
     purchaseOrderNumber: z.string().max(100).nullable().optional(), note: z.string().max(2000).nullable().optional(),
   }),
   z.object({
-    action: z.literal('disputeBillingReview'), sessionToken, prebillId: z.string().uuid(),
+    action: z.literal('disputeBillingReview'), sessionToken, prebillId: uuidString(),
     digest: z.string().regex(/^[0-9a-f]{64}$/), note: z.string().max(2000).nullable().optional(),
-    lines: z.array(z.object({ lineId: z.string().uuid(), note: z.string().max(1000) })).max(500),
+    lines: z.array(z.object({ lineId: uuidString(), note: z.string().max(1000) })).max(500),
   }),
 ])
 

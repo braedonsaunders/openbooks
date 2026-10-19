@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { isoDate } from "@/lib/api/json";
 import { correctWorkOrderCompletionDate, executeManufacturingCompletionDateCorrection } from "@openbooks/engine/manufacturing/execution";
 import { db } from "@openbooks/engine/platform/db";
@@ -7,7 +8,7 @@ import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../../../_transaction";
 import { loadScopedWorkOrder } from "../../_scope";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({
   correctedOn: isoDate(),
   reason: z.string().trim().min(5).max(500),

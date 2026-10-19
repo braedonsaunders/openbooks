@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
@@ -10,7 +11,7 @@ import { internalBillingBody } from '../_schema'
 
 export const runtime = 'nodejs'
 
-const params = z.object({ id: z.string().uuid() })
+const params = z.object({ id: uuidString() })
 
 export const GET = defineRoute({
   permission: 'gl.read',

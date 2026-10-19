@@ -1,22 +1,23 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { upsertAssignment } from "@openbooks/engine/resourcing/assignments";
 import { defineRoute } from "@/lib/api/route";
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
 
 const Common = {
-  projectId: z.string().uuid(),
+  projectId: uuidString(),
   weekStart: z.string(),
   plannedHours: z.string(),
   isBillable: z.boolean().optional(),
-  billItemId: z.string().uuid().nullable().optional(),
-  projectTaskId: z.string().uuid().nullable().optional(),
+  billItemId: uuidString().nullable().optional(),
+  projectTaskId: uuidString().nullable().optional(),
   booking: z.enum(["soft", "hard"]).optional(),
   source: z.enum(["manual", "request", "pipeline"]).optional(),
-  requestId: z.string().uuid().nullable().optional(),
+  requestId: uuidString().nullable().optional(),
   custom: z.record(z.string(), z.unknown()).optional(),
 };
 const Body = z.union([
-  z.object({ ...Common, employeePartyId: z.string().uuid() }).strict(),
+  z.object({ ...Common, employeePartyId: uuidString() }).strict(),
   z.object({ ...Common, jobTitle: z.string().trim().min(1) }).strict(),
 ]);
 

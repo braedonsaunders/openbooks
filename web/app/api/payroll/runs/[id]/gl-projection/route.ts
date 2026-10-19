@@ -1,5 +1,6 @@
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -17,8 +18,8 @@ const bodySchema = z.strictObject({
   entitlementRelief: z.strictObject({
     expectedProjectionHash: z.string().regex(/^[0-9a-f]{64}$/),
     bindings: z.array(z.strictObject({
-      planId: z.string().uuid(),
-      liabilityAccountId: z.string().uuid(),
+      planId: uuidString(),
+      liabilityAccountId: uuidString(),
     })).min(1).max(50),
   }).optional(),
 })

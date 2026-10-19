@@ -1,6 +1,7 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "../../../../lib/api/route";
 import { can, type Authz } from "../../../../lib/authz";
 import { draftWithEvidence, DRAFT_KINDS } from "@openbooks/engine/hrm/ai/drafting";
@@ -14,11 +15,11 @@ export const runtime = "nodejs";
 
 const draftBody = z.object({
   kind: z.enum(DRAFT_KINDS),
-  subjectId: z.string().uuid(),
+  subjectId: uuidString(),
 });
 
 const outcomeBody = z.object({
-  decisionId: z.string().uuid(),
+  decisionId: uuidString(),
   outcome: z.enum(["accepted", "edited", "rejected"]),
   note: z.string().max(500).optional(),
 });

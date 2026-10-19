@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { EXTERNAL_LINK_OBJECT_TYPES } from "@openbooks/schema";
 import {
   CommerceError,
@@ -22,7 +23,7 @@ const linkBodySchema = z.discriminatedUnion("action", [
     externalId: z.string().trim().min(1).max(200),
     externalParentId: z.string().trim().min(1).max(200).nullish(),
     nativeTable: z.string().trim().min(1),
-    nativeId: z.string().uuid(),
+    nativeId: uuidString(),
   }),
   z.strictObject({
     action: z.literal("unlink"),

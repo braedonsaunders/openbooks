@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/database'
 import {
   getShipmentRates,
@@ -20,9 +21,9 @@ export const GET = defineRoute({
 })
 
 const bulkBody = z.object({
-  items:z.array(z.object({shipmentId:z.string().uuid(),handlingUnitId:z.string().uuid()})).min(1).max(100),
-  presetId:z.string().uuid().nullable().optional(),
-  accountId: z.string().uuid().nullable().optional(),
+  items:z.array(z.object({shipmentId:uuidString(),handlingUnitId:uuidString()})).min(1).max(100),
+  presetId:uuidString().nullable().optional(),
+  accountId: uuidString().nullable().optional(),
   rule: z.enum(['cheapest', 'fastest', 'cheapest_by_date']).default('cheapest'),
   promisedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 })

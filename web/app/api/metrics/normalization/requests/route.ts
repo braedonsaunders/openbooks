@@ -1,12 +1,13 @@
 import { createNormalizationRequest } from "@openbooks/engine/billing/metrics/metrics-normalization-service";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 const Body = z
   .object({
     month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/),
     reason: z.string().min(1),
-    idempotencyKey: z.string().uuid(),
+    idempotencyKey: uuidString(),
   })
   .strict();
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
@@ -39,15 +40,13 @@ import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { isoDate } from "../../../lib/api/json";
 import { notFound } from "@/lib/api/responses";
 
-const projectId = z.string().uuid("projectId must be a valid UUID");
+const projectId = uuidString("projectId must be a valid UUID");
 // Child row ids resolve through actionProjectScope, where a malformed id and
 // an unknown one answer the same not-found record.
 const rowId = z.string();
-const payApplicationId = z
-  .string()
-  .uuid("payApplicationId must be a valid UUID");
+const payApplicationId = uuidString("payApplicationId must be a valid UUID");
 const optionalAccountId = z
-  .union([z.string().uuid("Income account must be a valid identifier"), z.null()])
+  .union([uuidString("Income account must be a valid identifier"), z.null()])
   .optional();
 
 function moneyField(field: string) {
@@ -82,7 +81,7 @@ const sortOrder = z
   )
   .optional();
 const payApplicationLine = z.strictObject({
-  sovLineId: z.string().uuid("sovLineId must be a valid UUID"),
+  sovLineId: uuidString("sovLineId must be a valid UUID"),
   thisPeriodCompleted: z
     .union([z.literal(""), moneyField("Completed this period")])
     .nullable()
@@ -112,9 +111,7 @@ const postBodySchema0 = z.union([
     number: z.string().trim().min(1, "number is required").max(80),
     description: z.string().trim().max(2000).nullable().optional(),
     amount: moneyField("Change-order amount"),
-    targetSovLineId: z
-      .string()
-      .uuid("The target schedule line must be a valid identifier")
+    targetSovLineId: uuidString("The target schedule line must be a valid identifier")
       .nullable()
       .optional(),
     incomeAccountId: optionalAccountId,
@@ -158,7 +155,7 @@ const postBodySchema0 = z.union([
       id: rowId,
       incomeAccountId: z
         .union([
-          z.string().uuid("Income account must be a valid identifier"),
+          uuidString("Income account must be a valid identifier"),
           z.null(),
         ]),
     }),

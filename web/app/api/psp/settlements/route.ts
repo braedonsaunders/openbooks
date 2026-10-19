@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
@@ -66,9 +67,9 @@ const configProvider = z.enum([
   "paypal",
   "square",
 ]);
-const accountReference = z.uuid().nullable().optional();
+const accountReference = uuidString().nullable().optional();
 const refundPolicy = z.enum(["automatic", "review"]);
-const subsidiaryReference = z.uuid().nullable().optional();
+const subsidiaryReference = uuidString().nullable().optional();
 const calendarDateShape = isoDate("must be a valid calendar date");
 const providerCurrency = z.string().trim().regex(/^[A-Za-z]{3}$/, "must be a three-letter currency code");
 const recurlyAmount = (field: string) =>

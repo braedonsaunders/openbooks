@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server';
 import { correctReceiptQuantity, correctReceiptRemainder } from '@openbooks/engine/inventory/receipt-void-dependents';
@@ -19,7 +20,7 @@ const POSTBodySchema = z.object({
   // vendor actually delivered. Omitted entirely for the legacy
   // whole-remainder correction of a phantom over-receipt.
   lines: z.array(z.object({
-    receiptLineId: z.string().uuid(),
+    receiptLineId: uuidString(),
     correctedQuantity: z.string().min(1).max(50),
   }).strict()).min(1).max(500).optional(),
 });

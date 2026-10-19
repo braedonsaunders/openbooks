@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
 import {
@@ -11,7 +12,7 @@ const Query = z
   .object({
     kind: z.enum(["items", "locations", "vendors", "centers"]).optional(),
     q: z.string().max(200).optional(),
-    selected: z.string().uuid().optional(),
+    selected: uuidString().optional(),
   })
   .strict();
 export const GET = defineRoute({

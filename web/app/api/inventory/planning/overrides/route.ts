@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { listForecastOverrides, saveForecastOverride } from "@openbooks/engine/inventory";
 import { db } from "@openbooks/engine/platform/database";
 import { guardSubsidiaryScope } from "@/lib/authz";
@@ -7,9 +8,9 @@ import { planningTransaction } from "../_transaction";
 
 const Params = z.object({}).strict();
 const Body = z.object({
-  itemId: z.string().uuid(),
-  stockLocationId: z.string().uuid(),
-  subsidiaryId: z.string().uuid(),
+  itemId: uuidString(),
+  stockLocationId: uuidString(),
+  subsidiaryId: uuidString(),
   periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   quantity: z.string(),
   reason: z.string().min(5).max(500),
@@ -19,8 +20,8 @@ export const GET = defineRoute({
   permission: "inventory.plan", feature: "demandPlanning", params: Params,
   handler: async ({ request, authz }) => planningTransaction(authz.user.orgId, async () => {
     const url = new URL(request.url);
-    const subsidiary = z.string().uuid().safeParse(url.searchParams.get("subsidiaryId"));
-    const runId = z.string().uuid().safeParse(url.searchParams.get("runId"));
+    const subsidiary = uuidString().safeParse(url.searchParams.get("subsidiaryId"));
+    const runId = uuidString().safeParse(url.searchParams.get("runId"));
     if (!subsidiary.success || !runId.success) {
       return Response.json({ error: "subsidiaryId and runId must be UUIDs" }, { status: 400 });
     }

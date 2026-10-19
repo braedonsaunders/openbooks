@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
@@ -13,10 +14,10 @@ import { requireFlowsSession } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
 
 const createDelegationBodySchema = z.object({
-  toUserId: z.string().uuid(), startsAt: z.string().datetime({ offset: true }), endsAt: z.string().datetime({ offset: true }),
+  toUserId: uuidString(), startsAt: z.string().datetime({ offset: true }), endsAt: z.string().datetime({ offset: true }),
   reason: z.string().trim().max(500).optional(),
 });
-const revokeDelegationBodySchema = z.object({ id: z.string().uuid(), revoke: z.literal(true) });
+const revokeDelegationBodySchema = z.object({ id: uuidString(), revoke: z.literal(true) });
 
 
 export const runtime = 'nodejs'

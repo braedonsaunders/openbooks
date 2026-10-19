@@ -15,7 +15,7 @@ import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";
-import { isUuid } from '@openbooks/engine/platform/identifiers'
+import { isUuid, uuidString } from '@openbooks/engine/platform/identifiers'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 
 const normalizedText = (max: number) => z.preprocess(
@@ -35,9 +35,9 @@ const normalizedLineSchema = z.strictObject({
   unitPrice: captureMoney,
   amount: captureMoney,
   taxAmount: captureMoney,
-  accountId: z.string().uuid().nullable().optional(),
-  itemId: z.string().uuid().nullable().optional(),
-  purchaseOrderLineId: z.string().uuid().nullable().optional(),
+  accountId: uuidString().nullable().optional(),
+  itemId: uuidString().nullable().optional(),
+  purchaseOrderLineId: uuidString().nullable().optional(),
   confidence: captureMoney.nullable(),
 })
 const normalizedCaptureSchema = z.strictObject({
@@ -61,8 +61,8 @@ const requestBodySchema = z.strictObject({
   documentKind: z.enum(['vendor_bill', 'vendor_credit']).optional(),
   expectedUpdatedAt: z.string().optional(),
   normalized: normalizedCaptureSchema,
-  purchaseOrderId: z.string().uuid().nullable().optional(),
-  vendorId: z.string().uuid().nullable().optional(),
+  purchaseOrderId: uuidString().nullable().optional(),
+  vendorId: uuidString().nullable().optional(),
 })
 
 

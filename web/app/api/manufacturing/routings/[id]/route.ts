@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { getRouting, updateRouting, type RoutingInput } from "@openbooks/engine/manufacturing/routings";
 import { guardRoutingSubsidiaryScope } from "../../_scope";
@@ -6,11 +7,11 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { manufacturingTransaction } from "../../_transaction";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Patch = z.object({
   code: z.string().trim().min(1).optional(), name: z.string().trim().min(1).optional(),
   effectiveFrom: z.string().optional(), effectiveTo: z.string().nullable().optional(),
-  defaultIssueLocationId: z.string().uuid().nullable().optional(), defaultReceiptLocationId: z.string().uuid().nullable().optional(),
+  defaultIssueLocationId: uuidString().nullable().optional(), defaultReceiptLocationId: uuidString().nullable().optional(),
   overheadBasis: z.enum(["labor_hours", "machine_hours", "units"]).optional(),
 }).refine((value) => Object.keys(value).length > 0);
 

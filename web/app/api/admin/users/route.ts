@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
@@ -27,12 +28,12 @@ import { isUuid } from "../../../../lib/list-params";
 import { countOtherActiveUserAdministrators } from "../../../../lib/sole-administrator";
 
 const requestBodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("assign"), userId: z.string().uuid(), roleId: z.string().uuid() }),
-  z.object({ action: z.literal("unassign"), userId: z.string().uuid(), roleId: z.string().uuid() }),
-  z.object({ action: z.literal("set-active"), userId: z.string().uuid(), isActive: z.boolean() }),
-  z.object({ action: z.literal("set-party"), userId: z.string().uuid(), partyId: z.string().uuid().nullable(), expectedPartyId: z.string().uuid().nullable(), reason: z.json().optional(), attestation: z.json().optional() }),
-  z.object({ action: z.literal("invite"), email: z.string().trim().email().max(320), roleId: z.string().uuid() }),
-  z.object({ action: z.literal("resend-invite"), userId: z.string().uuid() }),
+  z.object({ action: z.literal("assign"), userId: uuidString(), roleId: uuidString() }),
+  z.object({ action: z.literal("unassign"), userId: uuidString(), roleId: uuidString() }),
+  z.object({ action: z.literal("set-active"), userId: uuidString(), isActive: z.boolean() }),
+  z.object({ action: z.literal("set-party"), userId: uuidString(), partyId: uuidString().nullable(), expectedPartyId: uuidString().nullable(), reason: z.json().optional(), attestation: z.json().optional() }),
+  z.object({ action: z.literal("invite"), email: z.string().trim().email().max(320), roleId: uuidString() }),
+  z.object({ action: z.literal("resend-invite"), userId: uuidString() }),
 ]);
 
 

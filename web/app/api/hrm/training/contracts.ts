@@ -1,8 +1,9 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/civil-date'
 import { unprocessable } from '@/lib/api/responses'
 
-const id = z.string().uuid()
+const id = uuidString()
 const text = (max: number) => z.string().trim().min(1).max(max)
 const reason = text(2000)
 const whole = (label: string, minimum: number, maximum: number) => {

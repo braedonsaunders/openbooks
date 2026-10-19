@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import {
@@ -14,14 +15,14 @@ import {
 import { inDbTransaction } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
 import { fileViewer } from "../lib";
-const itemIds = z.array(z.string().uuid("selection ids must be valid UUIDs")).max(500).default([]);
+const itemIds = z.array(uuidString("selection ids must be valid UUIDs")).max(500).default([]);
 const postBodySchema0 = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("delete"), fileIds: itemIds, folderIds: itemIds }),
   z.strictObject({
     action: z.literal("move"),
     fileIds: itemIds,
     folderIds: itemIds,
-    targetFolderId: z.string().uuid("targetFolderId must be a valid id"),
+    targetFolderId: uuidString("targetFolderId must be a valid id"),
   }),
 ]).refine(
   (body) => body.fileIds.length > 0 || body.folderIds.length > 0,

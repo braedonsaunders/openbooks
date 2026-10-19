@@ -1,5 +1,6 @@
 import { commandOperationName, commandRefusalResponse, normalizeChannelLocationBody } from "./contracts";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
@@ -58,18 +59,18 @@ const functionalMappingBody = z.strictObject({
 });
 
 const channelAccountMapBody = z.strictObject({
-  channelId: z.string().uuid(),
+  channelId: uuidString(),
   role: z.enum(CHANNEL_ACCOUNT_ROLES),
   key: z.string().max(120).nullish(),
-  accountId: z.string().uuid(),
+  accountId: uuidString(),
   effectiveFrom: z.string(),
 });
 
 const channelLocationBody = z.strictObject({
-  channelId: z.string().uuid(),
+  channelId: uuidString(),
   externalLocationId: z.string().min(1).max(120),
   externalName: z.string().min(1).max(200),
-  stockLocationId: z.string().uuid().nullish(),
+  stockLocationId: uuidString().nullish(),
   syncInventory: z.boolean().nullish(),
   fulfilsOrders: z.boolean().nullish(),
   bufferQuantity: z.string().trim().min(1).max(30).nullish(),
@@ -107,19 +108,19 @@ const portalSettingsBody = z.strictObject({
 // The drawer also POSTs the row id on edits; the spend upserts by its
 // natural key (channel, day, source), so the id is accepted and ignored.
 const channelAdSpendBody = z.strictObject({
-  id: z.string().uuid().nullish(),
-  channelId: z.string().uuid(),
+  id: uuidString().nullish(),
+  channelId: uuidString(),
   spendDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   amountMinor: z.number().int().min(0),
   currency: z.string().trim().min(3).max(3),
   source: z.string().trim().max(120).nullish(),
 });
 
-const uuidText = z.string().uuid();
+const uuidText = uuidString();
 const equityAccountPolicyBody = z.strictObject({
   // The drawer posts the id of the version it was opened from; a version is
   // always a new row, so the id is accepted and ignored.
-  id: z.string().uuid().nullish(),
+  id: uuidString().nullish(),
   subsidiaryId: uuidText,
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   commonStockAccountId: uuidText,

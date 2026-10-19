@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -11,7 +12,7 @@ import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 const POSTBodySchema1 = z.object({
-  accountId: z.string().uuid(), throughDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), statementBalance: z.string(),
+  accountId: uuidString(), throughDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), statementBalance: z.string(),
 });
 
 

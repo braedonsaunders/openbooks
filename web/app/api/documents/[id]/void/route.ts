@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -23,7 +24,7 @@ import { notFound } from "@/lib/api/responses";
 const POSTBodySchema1 = z.object({
   reason: z.string().optional(),
   reversalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  reversalPeriodId: z.string().uuid().nullable().optional(), expectedUpdatedAt: z.string().min(1),
+  reversalPeriodId: uuidString().nullable().optional(), expectedUpdatedAt: z.string().min(1),
   withDependents: z.boolean().optional(),
 });
 

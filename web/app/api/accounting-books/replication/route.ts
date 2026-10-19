@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
@@ -7,11 +8,11 @@ import { bookReplicationStatus, changeBookReplication, listBookReplicationRuns }
 export const runtime = 'nodejs'
 
 const changeBody = z.object({
-  bookId: z.string().uuid(),
+  bookId: uuidString(),
   kind: z.enum(['activation', 'catch_up', 'deactivation', 'settings']),
   replicationFrom: z.string().nullable().optional(),
   openingStrategy: z.enum(['full_history', 'opening_balances']).nullable().optional(),
-  currencyDifferenceAccountId: z.string().uuid().nullable().optional(),
+  currencyDifferenceAccountId: uuidString().nullable().optional(),
   reason: z.string(),
 }).strict()
 

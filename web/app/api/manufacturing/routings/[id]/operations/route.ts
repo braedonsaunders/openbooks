@@ -1,5 +1,6 @@
 import { lockManufacturingRoutingAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { createRoutingOperation, getRouting, type RoutingOperationInput } from "@openbooks/engine/manufacturing/routings";
 import { getWorkCenter } from "@openbooks/engine/manufacturing/work-centers";
@@ -10,9 +11,9 @@ import { created, notFound } from "@/lib/api/responses";
 import { idempotentManufacturingCreate } from "../../../_idempotent";
 import { manufacturingTransaction } from "../../../_transaction";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({
-  sequence: z.number().int().positive(), name: z.string().trim().min(1), workCenterId: z.string().uuid(),
+  sequence: z.number().int().positive(), name: z.string().trim().min(1), workCenterId: uuidString(),
   setupMinutes: z.string(), runMinutesPerUnit: z.string(), laborTimeSource: z.enum(["operation", "approved_time"]).optional(), laborMinutesPerUnit: z.string().nullable().optional(),
   backflushAt: z.enum(["none", "start", "finish"]).optional(), qualityGate: z.enum(["none", "measure"]).optional(),
 });

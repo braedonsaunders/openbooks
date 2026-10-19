@@ -54,7 +54,7 @@ import {
   recentMessages,
 } from "../../../../lib/ai-conversations";
 import { loadFindingContext } from "../../../../lib/agents/finding-context";
-import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { isUuid, uuidString } from "@openbooks/engine/platform/identifiers";
 import { CONVERSATION_SCOPES, conversationScope } from "../../../../lib/assistant/conversation-scopes";
 import { migrationModeSection } from "../../../../lib/assistant/migration-prompt";
 import { loadMigrationJourney } from "../../../../lib/migration/journey";
@@ -77,9 +77,9 @@ const MIGRATION_STEP_BUDGET = 16;
 const MIGRATION_WORKSPACE_MODULES = ["migration", "setup", "ledger", "close"];
 const TURN_FAILURE_MESSAGE = "The assistant could not complete this response. Please try again.";
 const chatRequestBody = z.object({
-  conversationId: z.string().uuid().nullable().optional(),
+  conversationId: uuidString().nullable().optional(),
   prompt: z.string().max(MAX_PROMPT_CHARS),
-  findingId: z.string().uuid().nullable().optional(),
+  findingId: uuidString().nullable().optional(),
   mode: z.enum(CONVERSATION_SCOPES).optional(),
 }).strict();
 

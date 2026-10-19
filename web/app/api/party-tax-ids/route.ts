@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { sql } from 'drizzle-orm';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -10,7 +11,7 @@ import { isUuid } from '../../../lib/list-params'
 export const runtime = 'nodejs'
 
 const POSTBodySchema = z.object({
-  partyId: z.string().uuid(),
+  partyId: uuidString(),
   scheme: z.enum(['vies', 'hmrc', 'abn', 'gst']),
   value: z.string().min(1).max(40),
 });

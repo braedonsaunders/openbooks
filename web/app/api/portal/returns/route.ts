@@ -1,11 +1,12 @@
 import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { portalReturnableSources, requestPortalReturn } from '@/lib/portal/returns'
 
 export const runtime = 'nodejs'
 
-const lineSchema = z.object({ sourceIssueMovementId: z.string().uuid(), quantity: z.unknown() })
+const lineSchema = z.object({ sourceIssueMovementId: uuidString(), quantity: z.unknown() })
 
 /** Public: returnable shipments for one customer source document. */
 export const GET = defineRoute({
@@ -19,7 +20,7 @@ export const GET = defineRoute({
 
 const postSchema = z.object({
   sessionToken: z.string().min(16).max(256),
-  sourceDocumentId: z.string().uuid(),
+  sourceDocumentId: uuidString(),
   reasonCode: z.string().min(1).max(40),
   resolution: z.enum(['refund', 'exchange', 'store_credit']),
   lines: z.array(lineSchema).min(1).max(50),

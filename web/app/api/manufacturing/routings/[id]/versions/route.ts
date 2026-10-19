@@ -1,5 +1,6 @@
 import { lockManufacturingRoutingAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { createNextRoutingVersion, getRouting } from "@openbooks/engine/manufacturing/routings";
 import { guardRoutingSubsidiaryScope } from "../../../_scope";
@@ -8,7 +9,7 @@ import { created, notFound } from "@/lib/api/responses";
 import { idempotentManufacturingCreate } from "../../../_idempotent";
 import { manufacturingTransaction } from "../../../_transaction";
 
-const Params = z.object({ id: z.string().uuid() });
+const Params = z.object({ id: uuidString() });
 const Body = z.object({}).strict();
 
 export const POST = defineRoute({

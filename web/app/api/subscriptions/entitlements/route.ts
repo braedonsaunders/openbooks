@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
@@ -25,13 +26,13 @@ const entitlementRowSchema = z.object({
 const POSTBodySchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('saveVersionEntitlements'),
-    planVersionId: z.string().uuid(),
+    planVersionId: uuidString(),
     effectiveFrom: DATE.nullable().optional(),
     rows: z.array(entitlementRowSchema).min(1),
   }),
   z.object({
     action: z.literal('saveOverride'),
-    subscriptionId: z.string().uuid(),
+    subscriptionId: uuidString(),
     featureKey: z.string().min(1),
     enabled: z.boolean().nullable().optional(),
     limit: z.unknown().nullable().optional(),
@@ -43,7 +44,7 @@ const POSTBodySchema = z.discriminatedUnion('action', [
   }),
   z.object({
     action: z.literal('expireOverride'),
-    subscriptionId: z.string().uuid(),
+    subscriptionId: uuidString(),
     featureKey: z.string().min(1),
     effectiveTo: DATE.nullable().optional(),
   }),

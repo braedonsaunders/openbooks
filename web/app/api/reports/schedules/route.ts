@@ -1,5 +1,6 @@
 import { notFound } from '@/lib/api/responses';
 import { z } from 'zod';
+import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -14,7 +15,7 @@ import { can } from '../../../../lib/authz'
 import { canAccessReportArtifact, canAccessReportDefinition, snapshotReportAuthorization } from '../../../../lib/report-execution-context'
 import { loadReportDefinition } from '../../../../lib/custom-reports'
 const POSTBodySchema1 = z.object({
-  definitionId: z.string().uuid(), cadence: z.enum(['daily', 'weekly', 'monthly']),
+  definitionId: uuidString(), cadence: z.enum(['daily', 'weekly', 'monthly']),
   dayOfWeek: z.number().int().min(0).max(6).nullable().optional(), dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
   hour: z.number().int().min(0).max(23).optional(), minute: z.number().int().min(0).max(59).optional(),
   timezone: z.string().min(1), recipientEmails: z.array(z.string().email()), active: z.boolean().optional(),
