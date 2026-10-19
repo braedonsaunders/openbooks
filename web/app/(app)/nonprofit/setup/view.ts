@@ -14,6 +14,7 @@ import { getAuthz, assertCan } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
+import { setupSectionParams } from '../../../../lib/list-params'
 import { nonprofitGroupTabs } from '../../../../components/module-home/group-tabs'
 
 /**
@@ -37,9 +38,10 @@ export interface NonprofitSetupData {
   frameworkHint: string
   pairsHint: string
   mappingsHint: string
+  sectionParams: Record<string, string>
 }
 
-export async function loadNonprofitSetup(): Promise<NonprofitSetupData> {
+export async function loadNonprofitSetup(sp: Record<string, string | string[] | undefined>): Promise<NonprofitSetupData> {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const orgId = authz.user.orgId
@@ -74,6 +76,7 @@ export async function loadNonprofitSetup(): Promise<NonprofitSetupData> {
     frameworkHint: t('setup.frameworkHint'),
     pairsHint: t('setup.pairsHint'),
     mappingsHint: t('setup.mappingsHint'),
+    sectionParams: setupSectionParams(sp, ['frow', 'prow', 'mrow']),
   }
 }
 
@@ -96,7 +99,7 @@ export function nonprofitSetupSpec(data: NonprofitSetupData): PageSpec {
         ...widgetBlock('setup-section', {
           entityKey: 'nonprofit-frameworks',
           basePath: '/nonprofit/setup',
-          sp: { section: 'framework' },
+          sp: { ...data.sectionParams, section: 'framework' },
           rowParam: 'frow',
         }),
         when: f('showFramework'),
@@ -105,7 +108,7 @@ export function nonprofitSetupSpec(data: NonprofitSetupData): PageSpec {
         ...widgetBlock('setup-section', {
           entityKey: 'fund-pairs',
           basePath: '/nonprofit/setup',
-          sp: { section: 'pairs' },
+          sp: { ...data.sectionParams, section: 'pairs' },
           rowParam: 'prow',
         }),
         when: f('showPairs'),
@@ -114,7 +117,7 @@ export function nonprofitSetupSpec(data: NonprofitSetupData): PageSpec {
         ...widgetBlock('setup-section', {
           entityKey: 'functional-mappings',
           basePath: '/nonprofit/setup',
-          sp: { section: 'mappings' },
+          sp: { ...data.sectionParams, section: 'mappings' },
           rowParam: 'mrow',
         }),
         when: f('showMappings'),
