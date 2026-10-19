@@ -37,16 +37,16 @@ export async function loadAccountingChanges(
 ): Promise<AccountingChangesData> {
   const auth = await getAuthz()
   if (!auth) redirect('/login')
-  const candidates: AccountingChangeDomain[] = [...(can(auth, 'gl.read')
-    ? ['lease', 'asset', 'revenue', 'consolidation', 'provision', 'sales']
-    : [
-        ...(can(auth, 'assets.read') ? ['lease', 'asset'] : []),
-        ...(can(auth, 'ar.read') ? ['revenue', 'sales'] : []),
-        ...(can(auth, 'close.read') ? ['consolidation'] : []),
-      ]),
-    ...(can(auth, 'payroll.read') ? ['payroll'] : []),
-    ...(can(auth, 'manufacturing.read') ? ['manufacturing'] : []),
-  ]
+  const candidates: AccountingChangeDomain[] = []
+  if (can(auth, 'gl.read')) {
+    candidates.push('lease', 'asset', 'revenue', 'consolidation', 'provision', 'sales')
+  } else {
+    if (can(auth, 'assets.read')) candidates.push('lease', 'asset')
+    if (can(auth, 'ar.read')) candidates.push('revenue', 'sales')
+    if (can(auth, 'close.read')) candidates.push('consolidation')
+  }
+  if (can(auth, 'payroll.read')) candidates.push('payroll')
+  if (can(auth, 'manufacturing.read')) candidates.push('manufacturing')
   const features: AccountingChangeFeatureState = {}
   const requiredFeatures = [...new Set(candidates
     .map((domain) => changeAuthority[domain].feature)
