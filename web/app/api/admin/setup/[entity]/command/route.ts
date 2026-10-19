@@ -33,13 +33,13 @@ const paramsSchema = z.object({ entity: z.string() });
 
 
 const frameworkBody = z.strictObject({
-  id: z.string().uuid().nullish(),
+  id: uuidString().nullish(),
   framework: z.enum(["us_asc958", "ew_sorp_frs102"]),
   reason: z.string(),
 });
 
 const fundPairBody = z.strictObject({
-  id: z.string().uuid().nullish(),
+  id: uuidString().nullish(),
   fromFundId: z.string(),
   toFundId: z.string(),
   dueFromAccountId: z.string(),
@@ -57,7 +57,7 @@ const optionalSetupText = z.preprocess((value) =>
 
 const functionalCategory = z.enum(["program", "management_general", "fundraising"]);
 const functionalMappingBody = z.strictObject({
-  id: z.string().uuid().nullish(),
+  id: uuidString().nullish(),
   departmentId: optionalSetupText,
   projectId: optionalSetupText,
   function: functionalCategory.optional(),
