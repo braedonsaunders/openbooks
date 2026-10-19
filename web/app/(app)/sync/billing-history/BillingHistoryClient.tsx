@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Play, Plus, RefreshCw } from "lucide-react";
@@ -94,6 +94,7 @@ async function postJson(url: string, body: unknown, fallback: string): Promise<u
 
 export function BillingHistoryClient() {
   const t = useTranslations("billingImport");
+  const router = useRouter();
   const searchParams = useSearchParams();
   const drawerOpen = shouldOpenImportWizard(searchParams);
   const translatedEnum = (
@@ -145,11 +146,11 @@ export function BillingHistoryClient() {
     setResult(null);
   }, []);
 
-  useEffect(() => {
-    if (drawerOpen) resetWizard();
-  }, [drawerOpen, resetWizard]);
-
   const openWizardHref = "/sync/billing-history?import=new";
+  const openWizard = useCallback(() => {
+    resetWizard();
+    router.push(openWizardHref);
+  }, [resetWizard, router]);
 
   async function startPreflight() {
     setBusy(true);
@@ -258,11 +259,9 @@ export function BillingHistoryClient() {
           description={t("subtitle")}
           back={{ href: "/sync", label: t("backToSync") }}
           actions={
-            <Button asChild>
-              <Link href={openWizardHref}>
-                <Plus className="mr-1 h-4 w-4" />
-                {t("newImport")}
-              </Link>
+            <Button onClick={openWizard}>
+              <Plus className="mr-1 h-4 w-4" />
+              {t("newImport")}
             </Button>
           }
         />
@@ -274,7 +273,7 @@ export function BillingHistoryClient() {
         <EmptyState
           title={t("emptyTitle")}
           description={t("emptyBody")}
-          action={<Button asChild><Link href={openWizardHref}><Plus className="mr-1 h-4 w-4" />{t("newImport")}</Link></Button>}
+          action={<Button onClick={openWizard}><Plus className="mr-1 h-4 w-4" />{t("newImport")}</Button>}
         />
       ) : (
         <PagedTable
