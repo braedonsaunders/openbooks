@@ -33,7 +33,7 @@ registerHooks({
   },
 });
 
-const { POST } = await import("./route.ts");
+const { GET, POST } = await import("./route.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const PAST_DATE = "2026-07-10";
@@ -49,6 +49,7 @@ async function seedApprovedPo(
   stockLocationId: string,
   number: string,
   unit = "ea",
+  cancelled = "0",
 ): Promise<{ orderId: string; lineId: string }> {
   const orderId = randomUUID();
   const lineId = randomUUID();
@@ -65,11 +66,11 @@ async function seedApprovedPo(
   await db.execute(sql`
     insert into document_lines
       (id, org_id, document_id, line_number, item_id, account_id, description,
-       quantity, unit, unit_price, amount, tax_amount,
+       quantity, quantity_cancelled, unit, unit_price, amount, tax_amount,
        quantity_fulfilled, quantity_billed, stock_location_id, custom)
     values (
       ${lineId}, ${orgId}, ${orderId}, 1, ${itemId}, ${assetAccountId}, 'Widget',
-      '10', ${unit}, '2', '20', '0', '0', '0', ${stockLocationId}, '{}'::jsonb
+      '10', ${cancelled}, ${unit}, '2', '20', '0', '0', '0', ${stockLocationId}, '{}'::jsonb
     )`);
   // Approved lines are storage-immutable: issue the order only after its
   // lines exist.
@@ -136,6 +137,13 @@ function postReceive(orderId: string, key: string | null, body: unknown): Promis
   ) as unknown as Promise<Response>;
 }
 
+function getReceive(orderId: string): Promise<Response> {
+  return GET(
+    new Request(`http://openbooks.test/api/purchase-orders/${orderId}/receive`),
+    { params: Promise.resolve({ id: orderId }) } as never,
+  ) as unknown as Promise<Response>;
+}
+
 async function receiptFacts(orgId: string, lineId: string) {
   return (
     await db.execute<{
@@ -154,6 +162,26 @@ async function receiptFacts(orgId: string, lineId: string) {
     `)
   ).rows[0]!;
 }
+
+test("receive prefill excludes cancelled purchase-order quantity", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
+    state.user = { orgId: org.orgId, id: actorId };
+    const { orderId } = await seedApprovedPo(
+      org.orgId, actorId, org.vendorId, org.subsidiaryId, org.date,
+      org.items.fifo, org.accounts.invAsset, org.stockLocationId, "PO-RCV-CANCELLED", "ea", "6",
+    );
+    const response = await getReceive(orderId);
+    assert.equal(response.status, 200, await response.clone().text());
+    const body = (await response.json()) as { lines: Array<{ remaining: string; maxReceivable: string }> };
+    assert.equal(body.lines.length, 1);
+    assert.equal(toUnits(body.lines[0]!.remaining), toUnits("4"));
+    assert.equal(toUnits(body.lines[0]!.maxReceivable), toUnits("4"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 /**
  * The explicit receive endpoint posts a partial receipt dated in the past

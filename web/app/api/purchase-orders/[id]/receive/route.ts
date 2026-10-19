@@ -14,6 +14,7 @@ import { unexpectedServerError } from '../../../../../lib/api/unexpected'
 import { ConversionError, receivePurchaseOrder } from '../../../../../lib/order-cycle'
 import { fromQuantityUnits, toQuantityUnits } from '../../../../../lib/order-cycle-math'
 import { formatMaxReceivable, resolveOverReceiptTolerance } from '../../../../../lib/purchase-over-receipt'
+import { linkedBillReceivedCover } from '@openbooks/engine/inventory/bill-matchable-lines'
 import { readDocumentScope, readPurchaseOrderLinesForReceipt } from '../../../../../lib/record-scope-reads'
 
 export const runtime = 'nodejs'
@@ -74,9 +75,17 @@ export const GET = defineRoute({
       // effective on the entered receipt date and owns the final check.
       const lines = (await Promise.all(rows.map(async (line) => {
         if (line.item_id == null || !lineRequiresReceipt(line.item_kind)) return null
-        const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled))
+        const netOrdered = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_cancelled))
+        const billCover = await linkedBillReceivedCover(db, authz.user.orgId, {
+          purchaseOrderLineId: line.id,
+          itemId: line.item_id,
+          unit: line.unit,
+        })
+        const received = toQuantityUnits(String(line.quantity_fulfilled)) + toQuantityUnits(billCover.quantity)
+        const remaining = netOrdered - received
         if (remaining <= 0n) return null
         const tolerance = await resolveOverReceiptTolerance(db, authz.user.orgId, line.item_category, receiptDate)
+        const netOrderedQuantity = fromQuantityUnits(netOrdered)
         return {
           sourceLineId: line.id,
           lineNumber: line.line_number,
@@ -84,7 +93,7 @@ export const GET = defineRoute({
           unit: line.unit,
           unitPrice: String(line.unit_price),
           remaining: fromQuantityUnits(remaining),
-          maxReceivable: formatMaxReceivable(String(line.quantity), String(line.quantity_fulfilled), tolerance),
+          maxReceivable: formatMaxReceivable(netOrderedQuantity, fromQuantityUnits(received), tolerance),
           stockLocationId: line.stock_location_id ?? defaultWarehouse,
         }
       }))).filter((line): line is NonNullable<typeof line> => line !== null)

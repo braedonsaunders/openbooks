@@ -59,12 +59,14 @@ export async function readPurchaseOrderLinesForReceipt(orgId: string, purchaseOr
     unit_price: string
     quantity: string
     quantity_fulfilled: string
+    quantity_cancelled: string
     stock_location_id: string | null
     item_kind: string | null
     item_category: string | null
   }>(sql`
     select line.id, line.line_number, line.item_id, line.description, line.unit, line.unit_price,
-           line.quantity, line.quantity_fulfilled, line.stock_location_id, i.kind as item_kind,
+           line.quantity, line.quantity_fulfilled, line.quantity_cancelled,
+           line.stock_location_id, i.kind as item_kind,
            i.category as item_category
       from document_lines line
       left join items i on i.id = line.item_id and i.org_id = line.org_id

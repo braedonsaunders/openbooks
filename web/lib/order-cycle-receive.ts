@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/platform/db'
 import { nextDocumentNumber } from './bills.ts'
 import { PURCHASE_RECEIPT_KIND } from './order-kinds'
 import { lineRequiresReceipt } from '@openbooks/engine/records/stock-receipt'
+import { openQuantitySql, orderedNetOfCancelledSql } from '@openbooks/engine/records/order-line-remainders'
 import { fromQuantityUnits, orderLineAmount, toQuantityUnits } from './order-cycle-math'
 import { overReceiptAllowanceUnits, resolveOverReceiptTolerance } from './purchase-over-receipt'
 import { isFeatureEnabled } from './features'
@@ -42,6 +43,8 @@ type PurchaseReceiptSourceLineRow = Record<string, unknown> & {
   extra_dims: Record<string, unknown> | null
   stock_location_id: string | null
   quantity_fulfilled: string
+  quantity_cancelled: string
+  open_quantity: string
   custom: Record<string, unknown> | null
   item_kind: string | null
   item_name: string | null
@@ -195,6 +198,7 @@ export async function receivePurchaseOrderInTx(
       select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description,
              dl.quantity, dl.unit, dl.unit_price, dl.department_id, dl.project_id, dl.location_id,
              dl.class_id, dl.extra_dims, dl.stock_location_id, dl.quantity_fulfilled,
+             dl.quantity_cancelled, ${openQuantitySql('dl')} as open_quantity,
              dl.custom, i.kind as item_kind, i.name as item_name, i.category as item_category,
              profile.item_id is not null as has_inventory_profile,
              profile.received_not_billed_account_id
@@ -222,6 +226,7 @@ export async function receivePurchaseOrderInTx(
       allowanceUnits: bigint
       overReceipt: { excess: string; tolerancePercent: string; toleranceQuantity: string } | null
     }[] = []
+    const receivingByLine = new Map<string, bigint>()
     for (const request of requested) {
       const line = sourceById.get(request.sourceLineId)
       if (!line) throw new ConversionError(`Purchase-order line ${request.sourceLineId} was not found`)
@@ -280,29 +285,35 @@ export async function receivePurchaseOrderInTx(
                 : `Void ${billLabel} to unwind its receipt, then receive again`,
           },
         )
-      const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled)) - billReceived
+      const remaining = toQuantityUnits(String(line.open_quantity)) - billReceived
       const receiving = toQuantityUnits(request.quantity)
+      const priorReceiving = receivingByLine.get(line.id) ?? 0n
+      const cumulativeReceiving = priorReceiving + receiving
+      receivingByLine.set(line.id, cumulativeReceiving)
       if (remaining <= 0n) {
         if (billNumbers.length > 0) throw billRefusal(remaining)
         throw new ConversionError(`Purchase-order line ${line.line_number} is already fully received`)
       }
       let allowanceUnits = 0n
       let overReceipt: { excess: string; tolerancePercent: string; toleranceQuantity: string } | null = null
-      if (receiving > remaining) {
+      if (cumulativeReceiving > remaining) {
         // Over-receipt tolerance: the Setup policy effective on the receipt
         // date for the item's exact stored category (else the org-wide
         // default) lets a receipt exceed the remainder within tolerance.
         // Both tolerances default to zero, keeping the exact refusal below.
         const tolerance = await resolveOverReceiptTolerance(tx, orgId, line.item_category, input.receiptDate)
-        allowanceUnits = overReceiptAllowanceUnits(toQuantityUnits(String(line.quantity)), tolerance)
-        if (receiving - remaining > allowanceUnits) {
+        const netOrdered = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_cancelled))
+        allowanceUnits = overReceiptAllowanceUnits(netOrdered, tolerance)
+        const cumulativeExcess = cumulativeReceiving - remaining
+        if (cumulativeExcess > allowanceUnits) {
           if (billNumbers.length > 0) throw billRefusal(remaining)
           throw new ConversionError(
             `Purchase-order line ${line.line_number} has only ${fromQuantityUnits(remaining)} remaining to receive`,
           )
         }
+        const priorExcess = priorReceiving > remaining ? priorReceiving - remaining : 0n
         overReceipt = {
-          excess: fromQuantityUnits(receiving - remaining),
+          excess: fromQuantityUnits(cumulativeExcess - priorExcess),
           tolerancePercent: tolerance?.percent ?? '0',
           toleranceQuantity: tolerance?.quantity ?? '0',
         }
@@ -431,7 +442,8 @@ export async function receivePurchaseOrderInTx(
          where id = ${line.id} and org_id = ${orgId}
            -- The received quantity may land above ordered within the
            -- validated tolerance (zero by default: the exact ceiling stands).
-           and quantity_fulfilled + ${request.quantity} <= quantity + ${fromQuantityUnits(allowanceUnits)}
+           and quantity_fulfilled + ${request.quantity} <= ${orderedNetOfCancelledSql('document_lines')}
+             - ${fromQuantityUnits(billReceived)} + ${fromQuantityUnits(allowanceUnits)}
         returning id
       `)).rows[0]
       if (!advanced) {
@@ -471,8 +483,9 @@ export async function receivePurchaseOrderRemainder(
   sourceId: string,
 ): Promise<ConvertResult> {
   const receiptDate = await businessToday(orgId)
-  const rows = (await db.execute<{ id: string; quantity: string; quantity_fulfilled: string; item_id: string | null; item_kind: string | null }>(sql`
-    select line.id, line.quantity, line.quantity_fulfilled, line.item_id, i.kind as item_kind
+  const rows = (await db.execute<{ id: string; open_quantity: string; item_id: string | null; unit: string | null; item_kind: string | null }>(sql`
+    select line.id, ${openQuantitySql('line')}::text as open_quantity,
+           line.item_id, line.unit, i.kind as item_kind
       from document_lines line
       join documents source on source.id = line.document_id and source.org_id = line.org_id
       left join items i on i.id = line.item_id and i.org_id = line.org_id
@@ -480,11 +493,17 @@ export async function receivePurchaseOrderRemainder(
        and source.kind = 'purchase_order'
      order by line.id
   `)).rows
-  const lines = rows.flatMap((line) => {
-    if (line.item_id == null || !lineRequiresReceipt(line.item_kind)) return []
-    const remaining = toQuantityUnits(line.quantity) - toQuantityUnits(line.quantity_fulfilled)
-    return remaining > 0n ? [{ sourceLineId: line.id, quantity: fromQuantityUnits(remaining) }] : []
-  })
+  const lines: PurchaseReceiptLineInput[] = []
+  for (const line of rows) {
+    if (line.item_id == null || !lineRequiresReceipt(line.item_kind)) continue
+    const billCover = await linkedBillReceivedCover(db, orgId, {
+      purchaseOrderLineId: line.id,
+      itemId: line.item_id,
+      unit: line.unit,
+    })
+    const remaining = toQuantityUnits(line.open_quantity) - toQuantityUnits(billCover.quantity)
+    if (remaining > 0n) lines.push({ sourceLineId: line.id, quantity: fromQuantityUnits(remaining) })
+  }
   if (lines.length === 0) {
     const latest = (await db.execute<{ id: string; document_number: string }>(sql`
       select target.id, target.document_number
