@@ -189,7 +189,7 @@ test("paid order posts one balanced cash sale with gateway tenders, tax and COGS
         from parties p where p.org_id = ${org.orgId} and p.id = ${stored.customerPartyId}`)).rows[0];
     assert.deepEqual(customer, { kind: "company", hasActiveRole: true });
     const emailMatch = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId,
-      paidOrder("1001-email-match", { customerExternalId: "cust-2" })));
+      paidOrder("1001-email-match", { customerExternalId: null })));
     assert.equal(emailMatch.customerPartyId, stored.customerPartyId);
     const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(outcome.status, "posted");
