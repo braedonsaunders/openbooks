@@ -42,6 +42,7 @@ export {
   type UpdateFamilyInput,
   type BulkBarcodeInput,
   type BulkEditVariantsInput,
+  type BulkEditVariantsResult,
   type ConvertItemInput,
   type CreateFamilyWithVariantsInput,
   type CreateVariantChoice,
