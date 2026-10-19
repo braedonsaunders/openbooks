@@ -101,6 +101,7 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
   ["revenue_contracts", "project_id"],
   ["res_assignments", "project_id"],
   ["schedule_boards", "project_id"],
+  ["schedule_patterns", "project_id"],
   ["schedule_entries", "project_id"],
   ["res_requests", "project_id"],
   ["res_retainers", "project_id"],
@@ -116,6 +117,7 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
   ["hrm_per_diem_entries", "project_id"],
   ["hrm_travel_pay_entries", "project_id"],
   ["hrm_compliance_findings", "project_id"],
+  ["hrm_benefit_program_scopes", "project_id"],
   ["expense_amortization_schedules", "project_id"],
 ];
 
@@ -132,6 +134,7 @@ const APPEND_ONLY_PROJECT_REFERENCES = [
   ["project_forecasts", "project_id"],
   ["project_progress_entries", "project_id"],
   ["project_revenue_accruals", "project_id"],
+  ["provision_obligations", "project_id"],
   ["field_ticket_source_certifications", "native_project_id"],
 ] as const;
 const APPEND_ONLY_PROJECT_REF_TABLES: ReadonlySet<string> = new Set(
@@ -145,6 +148,10 @@ const APPEND_ONLY_PROJECT_REF_TABLES: ReadonlySet<string> = new Set(
  * a remedy, never a quiet omission.
  */
 export const PROJECT_MERGE_EXCLUSIONS: readonly (readonly [table: string, reason: string])[] = [
+  [
+    "provision_obligations",
+    "A provision obligation is an immutable accounting identity bound to its original project and legal entity; keep it with that project and release it through an approved assessment before creating a corrected obligation.",
+  ],
   [
     "hrm_certified_payroll_runs",
     "filed compliance evidence stays on its original project: generated and submitted runs snapshot the week's project data into a payload whose rendered report file is housed in that project's file folder, amendment chains link runs across weeks, and draft members of a chain stay with the filed runs they amend. Re-pointing any of them would rewrite filed history — amend or regenerate under the survivor instead.",
@@ -513,6 +520,20 @@ async function planMerge(
   if (baselineCollisions.length > 0) {
     throw new ProjectMergeError(
       `cannot merge: budget baseline sequence ${baselineCollisions.map((row) => row.sequence).join(", ")} exists on both projects; retain each recorded baseline with its original project`,
+    );
+  }
+  const benefitScopeCollisions = (await runner.execute<{ program_id: string }>(sql`
+    select d.program_id::text as program_id
+      from hrm_benefit_program_scopes d
+      join hrm_benefit_program_scopes s
+        on s.org_id = d.org_id and s.program_id = d.program_id
+       and s.project_id = ${survivorId}
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+     order by d.program_id
+     limit 5`)).rows;
+  if (benefitScopeCollisions.length > 0) {
+    throw new ProjectMergeError(
+      "cannot merge: a benefit program has project scopes on both projects; reconcile the program's project scope so one effective inclusion or exclusion remains for the surviving project, then retry the merge",
     );
   }
   const appendOnlyEvidence: string[] = [];

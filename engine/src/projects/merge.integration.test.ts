@@ -190,6 +190,21 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
       nsId: "100",
     });
     await seedReferences(org.orgId, org.subsidiaryId, duplicate, "DUP", actor, org.accounts.ap);
+    const programId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_benefit_programs
+        (id, org_id, code, name, family, currency, effective_from, created_by, updated_by)
+      values (${programId}, ${org.orgId}, 'MERGE-SCOPE', 'Merge scope', 'custom', 'CAD', '2026-01-01', ${actor}, ${actor})`);
+    await db.execute(sql`
+      insert into hrm_benefit_program_scopes
+        (org_id, program_id, project_id, created_by, updated_by)
+      values (${org.orgId}, ${programId}, ${duplicate}, ${actor}, ${actor})`);
+    await db.execute(sql`
+      insert into schedule_patterns
+        (org_id, subsidiary_id, code, name, time_zone, cycle_days, cycle_anchor, slots,
+         target_kind, project_id, reason, created_by, updated_by)
+      values (${org.orgId}, ${org.subsidiaryId}, 'MERGE-PATTERN', 'Merge pattern', 'America/Toronto', 7,
+              '2026-01-05', '[]'::jsonb, 'project', ${duplicate}, 'Pattern follows its project through a merge', ${actor}, ${actor})`);
     // A project custom reference pointing at the duplicate follows the merge.
     await db.execute(sql`
       insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
@@ -212,12 +227,14 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
     assert.equal(moved.get("sov_lines"), 1);
     assert.equal(moved.get("encumbrances"), 1);
     assert.equal(moved.get("functional_mappings"), 1);
+    assert.equal(moved.get("hrm_benefit_program_scopes"), 1);
+    assert.equal(moved.get("schedule_patterns"), 1);
     assert.equal(preview.customRefs.length, 1);
 
     const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
     assert.equal(result.alreadyMerged, false);
     assert.ok(result.auditId);
-    for (const table of ["documents", "document_lines", "time_entries", "change_orders", "sov_lines", "encumbrances", "functional_mappings"]) {
+    for (const table of ["documents", "document_lines", "time_entries", "change_orders", "sov_lines", "encumbrances", "functional_mappings", "hrm_benefit_program_scopes", "schedule_patterns"]) {
       const left = await db.execute<{ n: string }>(sql`
         select count(*)::text as n from ${sql.identifier(table)}
          where org_id = ${org.orgId} and project_id = ${duplicate}`);
@@ -247,6 +264,53 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
     assert.equal(again.auditId, null);
     const after = await findDuplicateProjects(org.orgId);
     assert.ok(!after.some((group) => group.projects.some((p) => p.id === duplicate)));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("project merge reconciles overlapping benefit scopes and preserves provision identity", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-BEN-A", "Benefit Alpha");
+    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-BEN-B", "Benefit Beta");
+    const programId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_benefit_programs
+        (id, org_id, code, name, family, currency, effective_from, created_by, updated_by)
+      values (${programId}, ${org.orgId}, 'MERGE-COLLISION', 'Merge collision', 'custom', 'CAD', '2026-01-01', ${actor}, ${actor})`);
+    await db.execute(sql`
+      insert into hrm_benefit_program_scopes
+        (org_id, program_id, project_id, created_by, updated_by)
+      values (${org.orgId}, ${programId}, ${a}, ${actor}, ${actor}),
+             (${org.orgId}, ${programId}, ${b}, ${actor}, ${actor})`);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
+      /benefit program has project scopes on both projects/,
+    );
+    const scopeCount = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from hrm_benefit_program_scopes
+       where org_id = ${org.orgId} and program_id = ${programId}`)).rows[0]?.n;
+    assert.equal(scopeCount, "2");
+
+    const provisionProject = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PROV", "Provision owner");
+    const provisionId = randomUUID();
+    await db.execute(sql`
+      insert into provision_obligations
+        (id, org_id, subsidiary_id, book_id, name, currency, expense_account_id,
+         liability_account_id, created_by, project_id)
+      values (${provisionId}, ${org.orgId}, ${org.subsidiaryId}, ${org.bookId}, 'Project obligation', 'CAD',
+              ${org.accounts.cogs}, ${org.accounts.ap}, ${actor}, ${provisionProject})`);
+    const other = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PROV-S", "Provision survivor");
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: other, duplicateId: provisionProject, actorId: actor }),
+      /append-only history .*provision_obligations\.project_id/,
+    );
+    const retained = (await db.execute<{ project_id: string }>(sql`
+      select project_id::text as project_id from provision_obligations
+       where org_id = ${org.orgId} and id = ${provisionId}`)).rows[0]?.project_id;
+    assert.equal(retained, provisionProject);
   } finally {
     await dropScratchOrg(org.orgId);
   }
