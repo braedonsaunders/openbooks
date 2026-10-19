@@ -45,6 +45,12 @@ export function safeWorkspaceReturnTo(returnTo: string): string {
   return returnTo.startsWith("/") && !returnTo.startsWith("//") && !/[\\\r\n]/.test(returnTo) ? returnTo : "/";
 }
 
+/** A workspace boundary discards the entire document and its previous tenant's client state. */
+export function reloadWorkspaceDocument(returnTo?: string): void {
+  if (returnTo === undefined) window.location.reload();
+  else window.location.assign(safeWorkspaceReturnTo(returnTo));
+}
+
 export async function switchWorkspace(orgId: string, returnTo = "/"): Promise<void> {
   const response = await fetch("/api/me/workspace", {
     method: "POST",
@@ -61,7 +67,7 @@ export async function switchWorkspace(orgId: string, returnTo = "/"): Promise<vo
   const switched = (await response.json()) as { orgId: string };
   switching = true;
   announceWorkspace(switched.orgId);
-  window.location.assign(safeWorkspaceReturnTo(returnTo));
+  reloadWorkspaceDocument(returnTo);
 }
 
 function announceWorkspace(orgId: string): void {

@@ -169,6 +169,9 @@ for (const unit of ['hours', 'money'] as const) {
         where stub.org_id=${fx.orgId} and stub.pay_run_document_id=${run.documentId}
           and line.component_id=${payout}`)).rows;
       assert.deepEqual(paid, [{ amount: '1150.6400', hours: '8.00' }], 'the keyed rate prices the bank cash line, independently of the current wage');
+      assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), unit === 'hours' ? '16.0000' : '1200.0000',
+        'a calculated withdrawal does not spend the settled bank');
+      await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), unit === 'hours' ? '8.0000' : '49.3600');
     } finally { await dropScratchOrgReporting(fx.orgId); }
   });
@@ -293,12 +296,15 @@ test('banked wages retain their declared vacation eligibility without replenishi
       assert.equal(stub.gross, '480.0000');
       assert.equal(stub.vacation_accrued, eligible ? '19.2000' : '9.6000',
         'vacation accrues on deferred wages precisely when their earning component declares eligibility');
-      assert.equal(await balanceOf(fx, partyId, bankId, '2026-07-21'), '269.6000',
-        'the wage bank accrues only on new regular wages, never on its own withdrawal');
+      assert.equal(await balanceOf(fx, partyId, bankId, '2026-07-21'), '500.0000',
+        'recalculation leaves the settled bank unchanged');
       const payouts = (await db.execute(sql`select amount::text from entitlement_ledger
         where org_id=${fx.orgId} and plan_id=${bankId} and pay_run_document_id=${run.documentId} and kind='payout'`)).rows;
       assert.deepEqual(payouts, [{ amount: '-240.0000' }], 'recalculation preserves one exact withdrawal');
     }
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(await balanceOf(fx, partyId, bankId, '2026-07-21'), '269.6000',
+      'the committed wage bank accrues only on new wages, never on its own withdrawal');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
@@ -328,16 +334,16 @@ test('a vacation payout on a regular run withdraws from the bank without accruin
     const stub = (await db.execute<{ vacation_accrued: string }>(sql`select vacation_accrued::text from pay_stubs
       where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0]!;
     assert.equal(stub.vacation_accrued, '48.0000');
-    assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-21'), '448.0000');
-    // Recalculating a settled run reproduces the ledger instead of tripping
-    // the append-only guard: the run's movements go before its stubs.
+    assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-21'), '1000.0000');
+    // Recalculation replaces preview bank movements before their stub lines.
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
     const repayout = (await db.execute<{ amount: string }>(sql`select amount::text as amount
       from entitlement_ledger where org_id=${fx.orgId} and plan_id=${plan.id} and kind='payout'`)).rows;
     assert.equal(repayout.length, 1);
     assert.equal(repayout[0]!.amount, '-600.0000');
-    assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-21'), '448.0000');
+    assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-21'), '1000.0000');
     await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-21'), '448.0000');
     const bankDebit = (await db.execute<{ amount: string; custom: { payrollExpense: boolean } }>(sql`
       select amount::text, custom from document_lines where org_id=${fx.orgId}
         and document_id=${run.documentId} and account_id=${fx.accounts.vacationPayable}
@@ -361,6 +367,7 @@ test('an overdraw refuses naming the balance unless the plan allows negatives', 
     await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount)
       values(${fx.orgId},${first.documentId},${partyId},'line',${plan.payout_component_id},'600')`);
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId })).errors, []);
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId });
     await hours(fx, partyId, ['2026-07-20', '2026-07-21', '2026-07-22', '2026-07-23', '2026-07-24']);
     const second = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-19', periodEnd: '2026-07-25' });
     await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount)
@@ -371,6 +378,8 @@ test('an overdraw refuses naming the balance unless the plan allows negatives', 
     // The plan opts into negatives: the same run now calculates, landing below zero.
     await db.execute(sql`update entitlement_plans set allow_negative_balance=true where org_id=${fx.orgId} and id=${plan.id}`);
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: second.documentId })).errors, []);
+    assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-28'), '448.0000');
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: second.documentId });
     assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-28'), '-4.0000');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
@@ -464,18 +473,22 @@ test('an hours bank funds from negative deposit lines and pays from positive one
     assert.equal(deposit.length, 1);
     assert.equal(deposit[0]!.amount, '8.0000');
     assert.equal(cmp(deposit[0]!.hours ?? '0', '8'), 0);
-    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '8.0000');
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '0.0000',
+      'the calculated deposit becomes available only when its run commits');
     const cashDeposit = (await db.execute<{ amount: string; hours: string | null }>(sql`select amount::text, hours::text
       from entitlement_ledger where org_id=${fx.orgId} and plan_id=${cashPlan} and kind='bank_in'`)).rows;
     assert.equal(cashDeposit.length, 1);
     assert.equal(cashDeposit[0]!.amount, '60.0000');
     assert.equal(cashDeposit[0]!.hours, null);
     // Week two: 5 hours taken as cash; a further 5 would overdraw the 3 left.
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId });
     await hours(fx, partyId, ['2026-07-20', '2026-07-21', '2026-07-22', '2026-07-23', '2026-07-24']);
     const second = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-19', periodEnd: '2026-07-25' });
     await mutatePayRunAdjustment({ ...input, documentId: second.documentId, mutation: { action: 'add', employeePartyId: partyId,
       componentId: take, amount: '150', hours: '5' } });
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: second.documentId })).errors, []);
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-28'), '8.0000');
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: second.documentId });
     assert.equal(await balanceOf(fx, partyId, planId, '2026-07-28'), '3.0000');
     await hours(fx, partyId, ['2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30', '2026-07-31']);
     const third = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-26', periodEnd: '2026-08-01' });
@@ -575,8 +588,8 @@ test('an audited split payout draws only its bank-funded portion at the pay-date
       const stub = (await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
         where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0];
       assert.deepEqual(stub, { gross: '1150.6400', vacation_accrued: '80.5400' });
-      assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '184.0000',
-        'recalculation neither draws, deposits nor accrues the bank again');
+      assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '552.0000',
+        'recalculation leaves the settled bank unchanged');
       const payouts = (await db.execute(sql`select amount::text from entitlement_ledger
         where org_id=${fx.orgId} and plan_id=${planId} and pay_run_document_id=${run.documentId} and kind='payout'`)).rows;
       assert.deepEqual(payouts, [{ amount: '-368.0000' }]);
@@ -589,6 +602,8 @@ test('an audited split payout draws only its bank-funded portion at the pay-date
     const excluded = (await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
       where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0];
     assert.deepEqual(excluded, { gross: '1150.6400', vacation_accrued: '0.0000' });
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '552.0000');
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '184.0000');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
@@ -615,7 +630,9 @@ test('an audited split payout draws its bank-funded hours from an hours bank', {
         reason: 'Approved withdrawal with independently paid cash',
         sourceReference: 'Payroll source document 7', idempotencyKey: randomUUID() } });
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
-    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '8.0000', 'only the eight bank-funded hours leave the bank');
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '16.0000');
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '8.0000', 'only the eight bank-funded hours leave the committed bank');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
@@ -724,7 +741,7 @@ test('a pay-date-only wage version change stales a calculated split before commi
       () => commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId }),
       /inputs changed after it was last calculated/,
     );
-    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '184.0000', 'the refused commit moves no bank money');
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '552.0000', 'the refused commit moves no bank money');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
@@ -823,7 +840,9 @@ test('a split valued from a foreign-currency wage refuses until the wage matches
     await db.execute(sql`update labor_cost_rates set currency='CAD'
       where org_id=${fx.orgId} and employee_party_id=${partyId}`);
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
-    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '184.0000', 'the same split succeeds once the native wage is denominated in the run currency');
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '552.0000');
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '184.0000', 'the same split commits once the native wage is denominated in the run currency');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 

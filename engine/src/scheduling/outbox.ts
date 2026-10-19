@@ -262,11 +262,11 @@ async function insertTerminalFailureEvidence(
   row: SchedulerOutboxEnvelope,
   fields: { statusBefore: string; reason: string; markedBy: string; at: Date },
 ): Promise<void> {
-  await tx.execute(sql`
+  const recorded = await tx.execute(sql`
     insert into scheduler_outbox_terminal_audit
       (outbox_row_id, event, org_id, kind, subject_id, occurrence_key,
-       attempt_count, reason, marked_by, at, detail)
-    values (${row.id}, ${event}, ${row.org_id}, ${row.kind}, ${row.subject_id},
+       attempt_count, reason, marked_by, at, detail, failure_generation)
+    select ${row.id}, ${event}, ${row.org_id}, ${row.kind}, ${row.subject_id},
             ${row.occurrence_key}, ${row.attempt_count}, ${fields.reason},
             ${fields.markedBy}, ${fields.at},
             ${JSON.stringify({
@@ -282,8 +282,12 @@ async function insertTerminalFailureEvidence(
               },
               kind: row.kind,
               occurrenceKey: row.occurrence_key,
-            })}::jsonb)
+            })}::jsonb,
+            coalesce((select max(prior.failure_generation)+1 from scheduler_outbox_terminal_audit prior
+              where prior.outbox_row_id=${row.id} and prior.event='replay_authorized'),0)
+    returning id
   `);
+  if (recorded.rows.length !== 1) throw new Error("scheduler terminal failure evidence was not stored; retry after restoring audit storage");
 }
 
 /** Insert the singleton scan rows once; later ticks claim and reuse them. */
@@ -951,6 +955,7 @@ export async function processDueSchedulerOutbox(
   const due = (await db.execute<{ id: string }>(sql`
     select id from scheduler_outbox
      where status in ('pending','failed')
+       and terminal_failed_at is null
        and attempt_count < ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
        and next_attempt_at <= ${now}
      order by next_attempt_at
@@ -973,6 +978,7 @@ export async function processDueSchedulerOutbox(
              updated_at=now()
        where id=${candidate.id}
           and status in ('pending','failed')
+          and terminal_failed_at is null
           and attempt_count < ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
         returning id, org_id, kind, subject_id, occurrence_key, attempt_count, lease_token, payload
      `));
@@ -1121,19 +1127,21 @@ export async function replayTerminalSchedulerOutbox(input: {
         throw new SchedulerOutboxReplayError("scheduler replay requires admin.setup.manage");
       }
     }
-    const evidence = await tx.execute<{ exists: boolean }>(sql`
-      select exists (
-        select 1 from scheduler_outbox_terminal_audit
-         where outbox_row_id=${input.id} and event <> 'replay_authorized'
-      ) as exists
-    `);
-    if (!evidence.rows[0]?.exists) {
+    const evidence = (await tx.execute<{ failure_generation: number }>(sql`
+      select failure.failure_generation from scheduler_outbox_terminal_audit failure
+        join scheduler_outbox outbox_row on outbox_row.id=failure.outbox_row_id
+       where failure.outbox_row_id=${input.id} and failure.event <> 'replay_authorized'
+         and failure.at=outbox_row.terminal_failed_at and failure.marked_by=outbox_row.terminal_failed_by
+       order by failure.failure_generation desc limit 1
+    `)).rows[0];
+    if (!evidence) {
       throw new SchedulerOutboxReplayError("terminal failure has no durable evidence to replay");
     }
     // Evidence first, authorization pin second, reset last — the storage
     // guard enforces this ordering by refusing the stamp-clearing UPDATE
     // unless both precede it inside this transaction.
-    await insertSchedulerOutboxReplayAudit(tx, before, { reason, actorId: input.actorId, at: now });
+    await insertSchedulerOutboxReplayAudit(tx, before, { reason, actorId: input.actorId, at: now,
+      failureGeneration: evidence.failure_generation });
     if (before.org_id === null) {
       // The native predicate requires both the privileged login and its explicit scope.
       await tx.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
@@ -1167,17 +1175,18 @@ async function insertSchedulerOutboxReplayAudit(
     terminal_failed_at: Date | null;
     terminal_failed_by: string | null;
   },
-  fields: { reason: string; actorId: string; at: Date },
+  fields: { reason: string; actorId: string; at: Date; failureGeneration: number },
 ): Promise<void> {
-  await tx.execute(sql`
+  const recorded = await tx.execute(sql`
     insert into scheduler_outbox_terminal_audit
       (outbox_row_id, event, org_id, kind, subject_id, occurrence_key,
-       attempt_count, reason, marked_by, at, detail)
+       attempt_count, reason, marked_by, at, detail, failure_generation)
     values (${before.id}, 'replay_authorized', ${before.org_id}, ${before.kind},
             ${before.subject_id}, ${before.occurrence_key}, ${before.attempt_count},
             ${fields.reason}, ${fields.actorId}, ${fields.at},
             ${JSON.stringify({
               event: "scheduler_outbox_replay_authorized",
+              failureGeneration: fields.failureGeneration,
               reason: fields.reason,
               before: {
                 status: "failed",
@@ -1189,6 +1198,8 @@ async function insertSchedulerOutboxReplayAudit(
               after: { status: "pending", attemptCount: 0, nextAttemptAt: fields.at },
               kind: before.kind,
               occurrenceKey: before.occurrence_key,
-            })}::jsonb)
+            })}::jsonb, ${fields.failureGeneration})
+    returning id
   `);
+  if (recorded.rows.length !== 1) throw new SchedulerOutboxReplayError("scheduler replay authorization evidence was not stored");
 }

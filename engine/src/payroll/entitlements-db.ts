@@ -240,11 +240,9 @@ export interface EntitlementBalance {
  * at $32 are $1,600 of liability, and they buy 42.1 hours once the wage
  * reaches $38. The number that stays true is the money.
  *
- * `executor` and `excludeRunDocumentId` exist so a PAY RUN can read balances
- * the same way `planBalanceExcludingRun` does — inside its own transaction,
- * and net of its own movements. Reading without either is what made a
- * recalculated termination run pay nothing: the first Calculate's `−balance`
- * payout was still in the sum.
+ * Balances include independent movements and committed pay runs. Calculated
+ * movements remain previews until commit. A caller's executor keeps the read
+ * in its transaction; an excluded run is omitted from the committed basis.
  */
 export async function entitlementBalances(
   orgId: string,
@@ -319,18 +317,9 @@ export async function entitlementBalances(
 }
 
 /**
- * Balance for one plan before a given run's own movements are counted.
- *
- * This — not `entitlementBalances` — is what a pay run must read, for two
- * reasons, both of which silently lost money when a caller used the other one:
- *
- *  - it takes an EXECUTOR, so the read happens inside the calculation's
- *    transaction and sees the stubs and movements that transaction has
- *    written; `entitlementBalances` runs on the pooled connection and cannot.
- *  - it EXCLUDES the run's own movements, so recalculating converges. A
- *    termination run writes a `−balance` payout; read back without the
- *    exclusion, the second Calculate nets to zero and silently drops the
- *    departing employee's entire accrued balance from their final cheque.
+ * Committed balance for a calculation, using its transaction-bound executor
+ * and omitting the specified run. Editable calculations never consume another
+ * run's preview movements as available funds or settled withdrawals.
  */
 export async function planBalanceExcludingRun(
   executor: Executor,

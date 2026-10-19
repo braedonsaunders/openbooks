@@ -911,7 +911,8 @@ test("crash recovery at the ceiling leaves identical exactly-once evidence", { s
   }
 });
 
-test("terminalization cannot commit when the evidence write fails", { skip: !DB }, async () => {
+for (const refusal of ["exception", "no_row"] as const) test(`terminalization cannot commit when evidence storage returns ${refusal}`, { skip: !DB }, async () => {
+  await assertDedicatedFixtureDatabase();
   const org = await createScratchOrg();
   const gateId = randomUUID();
   const sabotageTrigger = "sabotage_scheduler_terminal_audit";
@@ -928,7 +929,7 @@ test("terminalization cannot commit when the evidence write fails", { skip: !DB 
     // Org-scoped sabotage: only THIS scratch org's evidence inserts fail.
     await db.execute(sql`
       create or replace function fail_terminal_evidence() returns trigger language plpgsql as $fn$
-      begin raise exception 'terminal-audit unavailable'; end $fn$
+      begin ${refusal === "exception" ? sql`raise exception 'terminal-audit unavailable';` : sql`return null;`} end $fn$
     `);
     await db.execute(sql`
       create trigger ${sql.raw(sabotageTrigger)} before insert on scheduler_outbox_terminal_audit
@@ -937,7 +938,7 @@ test("terminalization cannot commit when the evidence write fails", { skip: !DB 
     try {
       await assertRejectsWithCause(
         exhaustToTerminal({ runnerShouldThrow: (row) => row.id === rowId }),
-        /terminal-audit unavailable/,
+        refusal === "exception" ? /terminal-audit unavailable/ : /terminal failure evidence was not stored/,
       );
 
       // Nothing committed: the stamp did not stick and no partial evidence
@@ -1007,6 +1008,24 @@ test("an authorized replay audits before/after and the failure evidence survives
       /replay actor is not an active user/,
     );
     assert.equal((await readTerminalEvidence(rowId)).length, 1);
+
+    await assertDedicatedFixtureDatabase();
+    const terminalBefore = (await db.execute(sql`select to_jsonb(o) as envelope from scheduler_outbox o where id=${rowId}`)).rows;
+    await db.execute(sql`create function refuse_replay_evidence() returns trigger language plpgsql as $fn$
+      begin return null; end $fn$`);
+    try {
+      await db.execute(sql`create trigger refuse_replay_evidence before insert on scheduler_outbox_terminal_audit
+        for each row when (new.org_id=${sql.raw("'" + org.orgId + "'::uuid")} and new.event='replay_authorized')
+        execute function refuse_replay_evidence()`);
+      await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId,
+        reason:"The outage is resolved and monitored delivery may resume"}), /authorization evidence was not stored/);
+      assert.deepEqual((await db.execute(sql`select to_jsonb(o) as envelope from scheduler_outbox o where id=${rowId}`)).rows,
+        terminalBefore, "a missing authorization write leaves every terminal envelope field intact");
+      assert.equal((await readTerminalEvidence(rowId)).length,1);
+    } finally {
+      await db.execute(sql`drop trigger if exists refuse_replay_evidence on scheduler_outbox_terminal_audit`);
+      await db.execute(sql`drop function refuse_replay_evidence()`);
+    }
 
     const authorized = await replayTerminalSchedulerOutbox({
       orgId: org.orgId,
@@ -1833,6 +1852,38 @@ test("tenant scan failures remain retryable and system recovery requires live pl
     const replayed = (await db.execute<{status:string;attempt_count:number;terminal_failed_at:Date|null}>(sql`
       select status,attempt_count,terminal_failed_at from scheduler_outbox where id=${rowId}`)).rows[0]!;
     assert.deepEqual(replayed, {status:"pending",attempt_count:0,terminal_failed_at:null});
+    const originalAudit = (await db.execute(sql`select to_jsonb(a) as evidence from scheduler_outbox_terminal_audit a
+      where outbox_row_id=${rowId} and failure_generation=0 order by id`)).rows;
+    for (const generation of [1,2]) {
+      await db.execute(sql`update scheduler_outbox set next_attempt_at='2000-01-01',attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS-1} where id=${rowId}`);
+      await processDueSchedulerOutbox(new Date(), 200, async row => {
+        if (row.id === rowId) throw new Error("A later infrastructure outage requires another controlled recovery");
+      });
+      assert.equal((await readTerminalEvidence(rowId)).length, generation*2+1);
+      await assertRejectsWithCause(db.execute(sql`update scheduler_outbox set status='pending',attempt_count=0
+        where id=${rowId}`), /terminal scheduler delivery requires an authorized replay/);
+      await assertRejectsWithCause(db.transaction(async tx => {
+        await tx.execute(sql`select set_config('app.bypass_rls','on',true),set_config('openbooks.scheduler_outbox_replay_org','__system__',true)`);
+        await tx.execute(sql`update scheduler_outbox set status='pending',attempt_count=0,
+          terminal_failed_at=null,terminal_failed_by=null where id=${rowId}`);
+      }), /replay_authorized audit evidence first/);
+      const replay = () => replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId!,actorId:platformAdmin,
+        reason:"The infrastructure outage is resolved and monitored delivery may resume"});
+      const attempts = await Promise.allSettled([replay(),replay()]);
+      assert.equal(attempts.filter(result => result.status === "fulfilled").length, 1,
+        "concurrent recovery operators authorize only one replay for this failure");
+      const refused = attempts.find(result => result.status === "rejected");
+      assert.ok(refused && refused.status === "rejected");
+      assert.match(refused.reason.message, /only terminal-failed/);
+      assert.equal((await readTerminalEvidence(rowId)).length, (generation+1)*2);
+    }
+    assert.deepEqual((await db.execute(sql`select to_jsonb(a) as evidence from scheduler_outbox_terminal_audit a
+      where outbox_row_id=${rowId} and failure_generation=0 order by id`)).rows, originalAudit,
+      "later failures and replays preserve every original audit field");
+    const generations = (await db.execute<{failure_generation:number;events:number}>(sql`
+      select failure_generation,count(*)::int as events from scheduler_outbox_terminal_audit
+       where outbox_row_id=${rowId} group by failure_generation order by failure_generation`)).rows;
+    assert.deepEqual(generations,[{failure_generation:0,events:2},{failure_generation:1,events:2},{failure_generation:2,events:2}]);
     await db.execute(sql`update users set is_active=false where org_id=${org.orgId} and id=${platformAdmin}`);
     await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:platformAdmin,reason:"Infrastructure has recovered and delivery can resume"}), /not an active user/);
   } finally {

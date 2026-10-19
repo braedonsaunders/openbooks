@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { confirmDialog } from '../lib/confirm'
-import { isSwitchingWorkspace, WORKSPACE_CHANNEL } from '../lib/workspace-switch'
+import { isSwitchingWorkspace, reloadWorkspaceDocument, WORKSPACE_CHANNEL } from '../lib/workspace-switch'
 
 /**
  * Keeps an open tab honest about which workspace it acts in. The active
@@ -31,8 +31,7 @@ export function WorkspaceSync({ orgId, name }: { orgId: string; name: string }) 
         confirmLabel: t('workspaceSync.reload'),
         cancelLabel: t('routeState.backToDashboard'),
       }).then((reload) => {
-        if (reload) window.location.reload()
-        else window.location.assign('/dashboard')
+        reloadWorkspaceDocument(reload ? undefined : '/dashboard')
       })
     }
     const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(WORKSPACE_CHANNEL)
@@ -57,7 +56,7 @@ export function WorkspaceSync({ orgId, name }: { orgId: string; name: string }) 
     const reloadIfOtherWorkspace = async () => {
       try {
         const current = await activeOrgId()
-        if (!disposed && typeof current === 'string' && current !== orgId) window.location.reload()
+        if (!disposed && typeof current === 'string' && current !== orgId) reloadWorkspaceDocument()
       } catch {
         // Offline: the visibility check covers the next return to this tab.
       }
