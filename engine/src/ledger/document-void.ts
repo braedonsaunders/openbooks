@@ -242,7 +242,7 @@ export async function resolveVoidCalendarSubsidiaryId(
     select coalesce(
       ${subsidiaryId}::uuid,
       (select e.subsidiary_id from journal_entries e
-        where e.org_id = ${orgId} and e.source_document_id = ${documentId} and e.status = 'posted'
+        where e.org_id = ${orgId} and e.source_document_id = ${documentId} and e.status in ('posted', 'reversed')
         order by e.book_id, e.id limit 1),
       (select s.id from subsidiaries s
         where s.org_id = ${orgId} and s.parent_id is null and s.is_active
