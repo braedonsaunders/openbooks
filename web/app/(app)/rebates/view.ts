@@ -217,7 +217,7 @@ export async function loadRebates(sp: SearchParams): Promise<RebatesData> {
   const rows = await Promise.all(loaded.rows.map(async (row) => {
     const formatter = await getMoneyFormatter(orgId, row.currency)
     const knownStatuses = view === 'claims' ? CLAIM_STATUSES : AGREEMENT_STATUSES
-    const status = knownStatuses.includes(row.status) ? row.status : 'unknown'
+    const status = knownStatuses.find((candidate) => candidate === row.status) ?? 'unknown'
     return {
       ...row,
       href: hrefFor(sp, view, row.id),
