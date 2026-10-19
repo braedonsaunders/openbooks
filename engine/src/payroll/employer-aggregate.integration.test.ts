@@ -1,3 +1,4 @@
+import { seedCanadianFilingAccountForTest, qualifyCanadianOpeningForTest } from "./filing-test-fixtures.ts";
 import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -15,7 +16,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, seedVacationTerms } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions, seedVacationTerms } from "../testing/fixtures.ts";
 
 /** Integration wiring for synthetic CA-pack employer-aggregate declarations. */
 
@@ -352,6 +353,24 @@ test(
         await saveOpeningBalances({
           orgId: org.orgId, actorId, taxYear: 2026,
           rows: [{ employeePartyId: empA, amounts: { wcbAssessableYtd: "1500" } }],
+        });
+        await grantScratchPermissions(org.orgId, actorId, ['payroll.run', 'payroll.read']);
+        const filingAccountId = await seedCanadianFilingAccountForTest(org.orgId, actorId, {
+          subsidiaryId: org.subsidiaryId, accountNumber: '123456789RP0001', name: 'CRA payroll registration',
+          effectiveFrom: '2026-01-01', eiEmployerMultiplier: '1.4',
+        });
+        await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+          where org_id=${org.orgId} and employee_party_id=${empA}`);
+        await qualifyCanadianOpeningForTest({ orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId,
+          employeePartyId: empA, taxYear: 2026, filingAccountId, province: 'ON',
+          coverageStart: '2026-01-01', coverageEnd: '2026-06-30', amounts: { wcbAssessableYtd: '1500' },
+          reportableBases: { cpp: '0', ei: '0', qpip: '0' },
+          levyAllocations: [
+            ...['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'].map(region =>
+              ({ programKey: 'ca_wcb', region, federalAccountId: null, amount: region === 'ON' ? '1500' : '0' })),
+            ...['BC','MB','NL','ON'].map(region => ({ programKey: 'ca_eht', region, federalAccountId: null, amount: '0' })),
+            { programKey: 'ca_cnt', region: 'QC', federalAccountId: null, amount: '0' },
+          ],
         });
         const run = await createPayRun({
           orgId: org.orgId, actorId, payScheduleId: scheduleId,

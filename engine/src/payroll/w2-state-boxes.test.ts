@@ -169,3 +169,12 @@ test("an opening carry-in lands in the federal boxes and never invents state lin
   assert.equal(after.box1Wages, "60000.5000");
   assert.deepEqual(after.stateLines, before.stateLines);
 });
+
+
+test("W-2 locality wages use canonical exact money while preserving zero and correcting amounts", () => {
+  for (const amount of ['1000', '1000.0', '1000.0000']) {
+    assert.equal(requireW2LocalWages(amount, 'Worker', 'NJ', 'City'), '1000.0000');
+  }
+  assert.equal(requireW2LocalWages('0', 'Worker', 'NJ', 'City'), '0.0000');
+  assert.equal(requireW2LocalWages('-125.125', 'Worker', 'NJ', 'City'), '-125.1250');
+});

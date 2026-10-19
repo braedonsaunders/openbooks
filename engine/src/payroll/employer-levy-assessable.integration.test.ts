@@ -1,3 +1,5 @@
+import { recordHistoricalEmployerAssignment } from "./employer-assignment-history.ts";
+import { seedEmployment } from "../testing/hrm-harness.ts";
 import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -11,7 +13,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture, seedVacationTerms } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, grantScratchPermissions } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -31,6 +33,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await grantScratchPermissions(org.orgId, actorId, ["payroll.manage"]);
     try {
       const account = async (number: string, name: string, type: string) => {
         const id = randomUUID();
@@ -111,8 +114,8 @@ test(
       ) => {
         const employeeId = randomUUID();
         await db.execute(sql`
-          insert into parties (id, org_id, kind, display_name, is_active, custom)
-          values (${employeeId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+          insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+          values (${employeeId}, ${org.orgId}, 'person', ${name}, ${org.subsidiaryId}, true, '{}'::jsonb)`);
         await db.execute(sql`
           insert into employee_roles (id, org_id, party_id, worker_comp_group_id)
           values (${randomUUID()}, ${org.orgId}, ${employeeId}, ${groupId})`);
@@ -121,7 +124,7 @@ test(
                                         is_active, created_by, updated_by)
           values (${org.orgId}, ${employeeId}, 'CAD', ${annualSalary}, 'year', '2026-01-01', true,
                   ${actorId}, ${actorId})`);
-        const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+        const { employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: employeeId, from: "2026-01-01" });
         await db.execute(sql`
           insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                                  country, province, pay_basis, federal_claim_code,
@@ -135,6 +138,12 @@ test(
             values (${org.orgId}, ${employeeId}, ${employmentId}, ${assignment.componentId},
                     ${assignment.value}, '2026-01-01', true, ${actorId}, ${actorId})`);
         }
+        await recordHistoricalEmployerAssignment({ orgId: org.orgId, actorId, employeePartyId: employeeId,
+          kind: 'worker_comp', assignmentId: groupId, expectedCurrentId: groupId,
+          effectiveFrom: '2026-01-01', effectiveTo: '2026-07-31',
+          sourceReference: 'Worker compensation classification for the paid period',
+          reason: 'Retain the evidenced classification independently of current employee-role activity',
+          allowedSubsidiaryIds: null, dryRun: false });
         await seedVacationTerms(org.orgId, employmentId, actorId, "0", "accrue");
         return employeeId;
       };

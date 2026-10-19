@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { db, inDbTransaction } from "../platform/db.ts";
+import { db, inDbTransaction, withOrgTransaction } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { lockScopeRows } from "../organization/subsidiary-scope.ts";
@@ -97,7 +97,7 @@ export async function correctPriorStubEmployee(input: {
   if (!reason || !sourceReference || reason.length > 2000 || sourceReference.length > 2000 || !input.expectedEmployeeLabel.trim()) {
     throw new ParallelRunStoreError("Provide the source employee label, identity evidence and correction reason (1–2000 characters).");
   }
-  return inDbTransaction(async tx => {
+  return withOrgTransaction(input.orgId, () => inDbTransaction(async tx => {
     const authority = await lockActorCommandAuthority(tx, input.orgId, input.actorId, null, "payroll.manage");
     if (!(await lockAndCheckOrgFeature(tx, input.orgId, "payroll"))) throw new ParallelRunStoreError("Payroll feature is disabled");
     await lockParallelRunInputs(tx, input.orgId);
@@ -117,7 +117,7 @@ export async function correctPriorStubEmployee(input: {
     if (!previous || previous.subsidiary_id !== input.expectedSourceEmployerId) {
       throw new ParallelRunStoreError("The reviewed source employer changed — export and review the imported identity before correcting it.");
     }
-    // An unassigned legacy identity can be resolved explicitly; an existing employer cannot be transferred.
+    // An unassigned imported identity can be resolved explicitly; an existing employer cannot be transferred.
     if (!target?.employee || !target.subsidiary_id || previous.subsidiary_id !== null && previous.subsidiary_id !== target.subsidiary_id) {
       throw new ParallelRunStoreError("Select a verified employee of the same legal employer — this correction cannot transfer payroll between employers.");
     }
@@ -134,11 +134,12 @@ export async function correctPriorStubEmployee(input: {
     const header = (await tx.execute(sql`update payroll_prior_registers set updated_at=now(),updated_by=${input.actorId}
       where org_id=${input.orgId} and id=${before.register_id as string} returning id`)).rows[0];
     if (!header) throw new ParallelRunStoreError("The source register is unavailable — the identity correction was not saved.");
-    await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    const audit = await tx.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values(${input.orgId},'payroll_prior_stubs',${input.stubId},'update',
-      ${JSON.stringify({ before, after, reason, sourceReference, source: "prior payroll identity correction" })}::jsonb,${input.actorId})`);
+      ${JSON.stringify({ before, after, reason, sourceReference, source: "prior payroll identity correction" })}::jsonb,${input.actorId}) returning id`);
+    if (audit.rows.length !== 1) throw new ParallelRunStoreError("The payroll identity correction audit was not recorded — reload the source register and retry.");
     return { changed: true };
-  });
+  }));
 }
 
 /* ------------------------------------------------------------------ */

@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, withBypassContext } from "../platform/db.ts";
 import { add, neg, sum } from "../money/money.ts";
 import { grantPermissions } from "../testing/hrm-harness.ts";
-import { dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { seedPayrollStatutoryTreatment, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { calculatedRun, seedAdoption } from "../payroll/filing-test-fixtures.ts";
 import { calculatePayRun } from "../payroll/run-calculation.ts";
 import { commitPayRun } from "../payroll/run-commit.ts";
@@ -41,14 +41,14 @@ async function fixture(value = "100.0000", clearingType = "asset_current_other")
   try {
     installEngineSeams();
     await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"hrm":true}'::jsonb) where id = ${fx.orgId}`);
-    await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, recorded_at)
-      values (${fx.orgId}, ${fx.employmentId}, 1, 'active', '2026-01-01', now())`);
     await grantPermissions(fx.orgId, fx.actorId, ["hrm.benefits.read", "hrm.benefits.manage", "gl.read"]);
     const clearing = (await db.execute<{ id: string }>(sql`insert into accounts (org_id, number, name, type, is_active, is_summary)
       values (${fx.orgId}, '1450', 'Provider benefit clearing', ${clearingType}, true, false) returning id`)).rows[0]!.id;
     const component = (await db.execute<{ id: string }>(sql`insert into pay_components
       (org_id, code, name, kind, country, basis, taxable, pensionable, insurable, vacationable, payment_kind, non_cash_account_id)
       values (${fx.orgId}, 'GIFT_VALUE', 'Gift-card value', 'earning', 'CA', 'fixed_amount', true, true, false, false, 'non_cash', ${clearing}) returning id`)).rows[0]!.id;
+    await seedPayrollStatutoryTreatment(fx.orgId, component, { effectiveFrom: '2026-01-01', programExclusions: [],
+      vacationable: false, createdBy: fx.actorId, updatedBy: fx.actorId });
     const draft = await createBenefitProgram({ orgId: fx.orgId, actorId: fx.actorId, code: "PROVIDER_GIFTS", name: "Provider gifts", family: "reward",
       currency: "CAD", legalEntityId: fx.subsidiaryId, effectiveFrom: "2026-01-01", payComponentId: component,
       deliveryMethod: "external", valuation: "fixed", fixedAmount: value, frequency: "manual" });

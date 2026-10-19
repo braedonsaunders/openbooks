@@ -120,6 +120,39 @@ async function tableCount(orgId: string, table: string, extraWhere = ""): Promis
   return rows.rows[0]!.n;
 }
 
+test("a suppressed identity-correction audit rolls back its employee binding and source header", { skip: !DB }, async () => {
+  const f = await importFixture();
+  const name = `payroll_prior_audit_${randomUUID().replaceAll('-', '')}`;
+  let installed = false;
+  try {
+    const target = await seedEmployee(f.orgId, 'Verified payroll employee');
+    await db.execute(sql`update parties set subsidiary_id=${f.org.subsidiaryId} where org_id=${f.orgId}
+      and id in (${target},${f.employeePartyId})`);
+    await db.execute(sql`insert into employee_roles(org_id,party_id,is_active) values(${f.orgId},${target},true)`);
+    await savePriorStub({ orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
+      row: { employeePartyId: f.employeePartyId, employeeLabel: 'SOURCE-AUDIT', gross: '100', netPay: '80', employerCost: null, amounts: [] } }, f.slots);
+    const stubId = (await db.execute<{id:string}>(sql`select id from payroll_prior_stubs where org_id=${f.orgId} and register_id=${f.registerId}`)).rows[0]!.id;
+    const snapshot = async () => (await db.execute<{state:unknown}>(sql`select jsonb_build_object(
+      'register',(select to_jsonb(r) from payroll_prior_registers r where r.org_id=${f.orgId} and r.id=${f.registerId}),
+      'stub',(select to_jsonb(s) from payroll_prior_stubs s where s.org_id=${f.orgId} and s.id=${stubId}),
+      'auditCount',(select count(*) from audit_log where org_id=${f.orgId} and table_name='payroll_prior_stubs')) as state`)).rows[0]!.state;
+    const before = await snapshot();
+    await db.execute(sql.raw(`create function ${name}() returns trigger language plpgsql as $$ begin return null; end $$`));
+    await db.execute(sql.raw(`create trigger ${name} before insert on audit_log for each row
+      when (new.org_id='${f.orgId}'::uuid and new.table_name='payroll_prior_stubs' and new.action='update') execute function ${name}()`));
+    installed = true;
+    await assert.rejects(correctPriorStubEmployee({ orgId: f.orgId, actorId: f.actorId, stubId,
+      expectedEmployeePartyId: f.employeePartyId, expectedSourceEmployerId: f.org.subsidiaryId,
+      employeePartyId: target, expectedEmployeeLabel: 'SOURCE-AUDIT', reason: 'Correct the reviewed employee identity',
+      sourceReference: 'Verified employee crosswalk', allowedSubsidiaryIds: null, dryRun: false }), /audit was not recorded/);
+    assert.deepEqual(await snapshot(), before);
+  } finally {
+    if (installed) await db.execute(sql.raw(`drop trigger ${name} on audit_log`));
+    await db.execute(sql.raw(`drop function if exists ${name}()`));
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
 test("reviewed prior-payroll identity corrections preserve money, serialize competing bindings and audit once", { skip: !DB }, async () => {
   const f = await importFixture();
   try {
@@ -538,20 +571,20 @@ test("a first tolerance save audits create with a null before-image; a second au
 async function cleanComparisonFixture() {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const account = async (number: string, name: string) => {
+  const account = async (number: string, name: string, type = "expense") => {
     const id = randomUUID();
     await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
                             reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${id}, ${org.orgId}, ${number}, ${name}, 'expense', false, true, false, false,
+      values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
               '[]'::jsonb, '{}'::jsonb, true)`);
     return id;
   };
   const wageExpense = await account("6000", "Wages expense");
   const burdenExpense = await account("6010", "Payroll burden");
-  const netPayable = await account("2300", "Wages payable");
-  const craPayable = await account("2310", "CRA remittances payable");
-  const vacationPayable = await account("2320", "Vacation payable");
+  const netPayable = await account("2300", "Wages payable", "liability_current");
+  const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+  const vacationPayable = await account("2320", "Vacation payable", "liability_current");
   await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
@@ -577,6 +610,7 @@ async function cleanComparisonFixture() {
     province: "ON", payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
     rateEffectiveFrom: "2025-06-01", federalClaimCode: 1, provincialClaimCode: 1,
     vacationPercent: "4", vacationMethod: "accrue",
+    wcbExempt: true, wcbExemptReason: "Declared exemption for the payroll-comparison scenario",
     timeEntries: ["2026-07-06", "2026-07-13"]
       .map((workedOn) => ({ workedOn, hours: "40", projectId })),
   });

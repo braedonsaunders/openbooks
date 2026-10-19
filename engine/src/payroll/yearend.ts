@@ -1407,7 +1407,7 @@ export function requireW2LocalWages(
   state: string,
   locality: string,
 ): string {
-  if (amount !== null) return amount;
+  if (amount !== null) return normalizeMoney(amount);
   // IRS W-2 box 18 reports wages for the locality named in box 20.
   // https://www.irs.gov/instructions/iw2w3
   throw new PayrollError(

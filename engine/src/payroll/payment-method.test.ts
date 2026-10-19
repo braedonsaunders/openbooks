@@ -203,6 +203,12 @@ async function payrollOrg(): Promise<Fixture> {
   await seedPayrollComponents(org.orgId, actorId, "CA");
   // The ON hires calculate, so the EHT leg resolves (never asserted here).
   await seedOntarioEhtFixture(org.orgId, actorId);
+  const chequeBankId = await account(org.orgId, '1095', 'Payroll cheque stock bank', 'asset_bank', org.subsidiaryId);
+  const chequeFormatId = randomUUID(), chequeProfileId = randomUUID();
+  await db.execute(sql`insert into payment_formats(id,org_id,code,name,rail,direction,created_by,updated_by)
+    values(${chequeFormatId},${org.orgId},'PAYROLL_CHEQUE','Payroll cheque register','cheque','credit',${actorId},${actorId})`);
+  await db.execute(sql`insert into payment_bank_profiles(id,org_id,name,bank_account_id,payment_format_id,subsidiary_id,currency,created_by,updated_by)
+    values(${chequeProfileId},${org.orgId},'Preprinted payroll cheque stock',${chequeBankId},${chequeFormatId},${org.subsidiaryId},'CAD',${actorId},${actorId})`);
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
     name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',

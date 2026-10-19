@@ -26,12 +26,6 @@ for (const transaction of [false,true]) test(transaction ? "transaction incentiv
   const fx = await seedAdoption();
   try {
     await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"hrm":true,"orders":true}'::jsonb) where id = ${fx.orgId}`);
-    // The native payroll fixture creates employment identity; benefits also
-    // requires current-known active service covering the entitlement period.
-    await db.execute(sql`
-      insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, recorded_at)
-      values (${fx.orgId}, ${fx.employmentId}, 1, 'active', '2026-01-01'::date, now())
-    `);
     installEngineSeams();
     const approverId = await createScratchUser(fx.orgId, "Benefits Approver", "admin");
     await grantPermissions(fx.orgId, fx.actorId, ["hrm.benefits.read", "hrm.benefits.manage", "gl.read", "ar.read"]);

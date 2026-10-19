@@ -22,8 +22,6 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
   try {
     const actors = await seedFlowActors(fx.orgId);
     await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{features,payroll}','true'),'{payroll,statutoryHolidayPay}','true') where id=${fx.orgId}`);
-    await db.execute(sql`insert into worker_employment_versions(org_id,employment_id,version_no,status,effective_from)
-      values(${fx.orgId},${fx.employmentId},1,'active','2020-01-06')`);
     for (const actor of [fx.actorId, actors.approver1Id]) {
       await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
         values(${fx.orgId},${actor},'payroll.run','grant') on conflict(user_id,permission) do update set effect='grant'`);

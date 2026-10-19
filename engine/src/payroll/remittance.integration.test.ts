@@ -1,3 +1,4 @@
+import { payrollSettings } from "./run-setup.ts";
 import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
 import { seedPayrollLine, seedPayrollParty, seedPayrollVendorRole } from '../testing/fixtures.ts';
 import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
@@ -1706,7 +1707,7 @@ test(
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
         returning party_id`);
       assert.equal(vendorRole.rows.length, 1, "historical-liability fixture must establish its payee role");
-      const setup = await seedPayrollAccountingConfiguration(org.orgId, {
+      await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: wageExpense,
         netPayAccountId: netPayable,
@@ -1714,7 +1715,7 @@ test(
         craRemittancePartyId: org.vendorId,
         slotAccounts: { CA: { cpp: liabilityA, ei: liabilityA, qpip: liabilityA, income_tax: liabilityA, vacation: vacationPayable } }
       });
-      assert.equal(setup.rows.length, 1, "historical-liability fixture must configure its CRA destination");
+      assert.equal((await payrollSettings(org.orgId)).craRemittancePartyId, org.vendorId, "the native settings reader resolves the retained CRA destination");
       // Scratch orgs open July only; the second run pays in August.
       const calendar = (await db.execute<{ id: string }>(sql`
         select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
