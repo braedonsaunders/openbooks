@@ -982,7 +982,7 @@
     },
     "classSeniorityInvalid": {
       "message": "La prioridad debe ser un entero entre {min} y {max}.",
-      "remedy": "Introduzca este entero en “{field}”; las prioridades más altas se pagan primero."
+      "remedy": "Introduzca un entero entre {min} y {max} en «{field}»; una prioridad mayor se paga primero."
     },
     "preferredPricesNotPositive": {
       "message": "Las acciones preferentes necesitan un precio de emisión original y un precio de conversión positivos.",

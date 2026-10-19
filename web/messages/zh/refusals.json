@@ -982,7 +982,7 @@
     },
     "classSeniorityInvalid": {
       "message": "优先级必须是{min}至{max}之间的整数。",
-      "remedy": "请在“{field}”中输入该整数；数值越大，受偿顺序越优先。"
+      "remedy": "请在“{field}”中输入 {min} 到 {max} 之间的整数；数值越高，支付优先级越高。"
     },
     "preferredPricesNotPositive": {
       "message": "优先股需要正的原始发行价和转换价。",

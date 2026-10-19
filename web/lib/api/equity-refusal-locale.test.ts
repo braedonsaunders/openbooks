@@ -43,10 +43,10 @@ test('a remedy names a field with the label the form shows in the reader languag
     field: 'preMoneyBasisReason',
     values: { field: { kind: 'term', key: 'equity.fields.preMoneyBasisReason', text: 'Pre-money basis' }, min: { kind: 'count', value: 5 }, max: { kind: 'count', value: 2000 } },
   }))
-  const body = await response.json() as { remedy: string }
+  const body = await response.json() as { error: string; remedy: string }
   assert.equal(de.equity.fields.preMoneyBasisReason, 'Grundlage der Pre-Money-Bewertung')
   assert.ok(body.remedy.includes('Grundlage der Pre-Money-Bewertung'), body.remedy)
-  assert.ok(body.remedy.includes('2.000'), 'the bound reads with German grouping')
+  assert.ok(body.error.includes('2.000'), 'the bound reads with German grouping')
 })
 
 test('a refusal whose catalog entry is missing keeps its own English text rather than a raw key', async () => {

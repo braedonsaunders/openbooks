@@ -7,7 +7,7 @@ registerHooks({
     if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") {
       return {
         shortCircuit: true,
-        url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(import.meta.resolve('@/lib/authz'))}; export async function guardPermission(){return {user:{id:'user',orgId:'org'},allowedSubsidiaryIds:null}}`)}`,
+        url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(new URL('../../../../../lib/authz.ts', import.meta.url).href)}; export async function guardPermission(){return {user:{id:'user',orgId:'org'},allowedSubsidiaryIds:null}}`)}`,
       };
     }
     return nextResolve(specifier, context);

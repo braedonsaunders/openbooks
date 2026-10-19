@@ -982,7 +982,7 @@
     },
     "classSeniorityInvalid": {
       "message": "Der Vorrang muss eine ganze Zahl von {min} bis {max} sein.",
-      "remedy": "Geben Sie diese Zahl unter „{field}“ ein; ein höherer Vorrang wird zuerst bedient."
+      "remedy": "Geben Sie unter „{field}“ eine ganze Zahl von {min} bis {max} ein; ein höherer Vorrang wird zuerst bedient."
     },
     "preferredPricesNotPositive": {
       "message": "Vorzugsaktien benötigen einen positiven ursprünglichen Ausgabepreis und Wandlungspreis.",

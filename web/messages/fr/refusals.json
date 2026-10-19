@@ -426,7 +426,7 @@
     },
     "mfnSourceNotYetIssued": {
       "message": "{source} n’est pas encore émis au {date}.",
-      "remedy": "Choisissez le {issuedOn} ou une date ultérieure dans « {field} »."
+      "remedy": "Choisissez le {issuedOn} ou une date ultérieure dans « {field} » pour respecter la date d’émission de {source}."
     },
     "mfnSourceCurrency": {
       "message": "{source} est libellé en {sourceCurrency}, et non en {currency}.",
@@ -982,7 +982,7 @@
     },
     "classSeniorityInvalid": {
       "message": "Le rang de priorité doit être un entier compris entre {min} et {max}.",
-      "remedy": "Saisissez cet entier dans « {field} » ; un rang plus élevé est payé en premier."
+      "remedy": "Saisissez un entier compris entre {min} et {max} dans « {field} » ; un rang plus élevé est payé en premier."
     },
     "preferredPricesNotPositive": {
       "message": "Les actions privilégiées nécessitent un prix d’émission initial et un prix de conversion positifs.",

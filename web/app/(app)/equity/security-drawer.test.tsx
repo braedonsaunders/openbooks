@@ -333,7 +333,7 @@ test('a round opens in its drawer with its pre-money basis, refuses a void while
       rounds: [{
         id: ROUND, name: 'Series A', shareClassId: 'sa', closedOn: '2025-09-30', pricePerShare: '3.2000000000', preMoneyValuation: '53200000.0000', currency: 'USD',
         raised: '14000000.0000', sharesIssued: '4375000', preMoneyBasisReason: null, fullyDilutedBefore: '16625000', impliedPreMoney: '53200000.0000',
-        liveSecurities: [{ id: 's-a1', securityNumber: 'SERIESA-0001' }], amendments: [],
+        liveSecurities: [{ id: 's-a1', securityNumber: 'SERIESA-0001' }], amendments: [], conversionDrift: [], preMoneyDrift: null,
       }],
       voidedRounds: [{ id: VOID, name: 'QA Series A-2', closedOn: '2026-10-01', pricePerShare: '3.5000000000', preMoneyValuation: '1000.0000', currency: 'USD', voidedOn: '2026-10-19', reason: 'Recorded in error' }],
     },

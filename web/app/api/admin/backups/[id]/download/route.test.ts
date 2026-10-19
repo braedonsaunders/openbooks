@@ -30,8 +30,9 @@ const stateKey = Symbol.for("openbooks.stored-backup-download-route-test");
 (globalThis as Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
-  ["mock:authz", `export { guardUnrestrictedScope } from ${JSON.stringify(import.meta.resolve("@/lib/authz"))}; export async function guardPermission() { return { user: { id: '${USER_ID}', orgId: '${ORG_ID}' }, allowedSubsidiaryIds: null } }`],
+  ["mock:authz", `export { guardUnrestrictedScope } from ${JSON.stringify(new URL("../../../../../../lib/authz.ts", import.meta.url).href)}; export async function guardPermission() { return { user: { id: '${USER_ID}', orgId: '${ORG_ID}' }, allowedSubsidiaryIds: null } }`],
   ["mock:db", `
+    export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
     const state = globalThis[Symbol.for('openbooks.stored-backup-download-route-test')]
     export const db = { execute: async () => { state.queries += 1; return { rows: state.run ? [state.run] : [] } } }
   `],

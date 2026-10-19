@@ -36,7 +36,7 @@ registerHooks({
         format: "module",
         source: `
           const state = globalThis[Symbol.for('openbooks.backup-delete-route-test')]
-          export { guardUnrestrictedScope } from ${JSON.stringify(import.meta.resolve("@/lib/authz"))}
+          export { guardUnrestrictedScope } from ${JSON.stringify(new URL("../../../../../lib/authz.ts", import.meta.url).href)}
           export async function guardPermission() { return { user: state.actor, allowedSubsidiaryIds: null } }
         `,
         shortCircuit: true,

@@ -982,7 +982,7 @@
     },
     "classSeniorityInvalid": {
       "message": "優先順位は{min}～{max}の整数で指定してください。",
-      "remedy": "「{field}」に整数を入力してください。数値が大きいほど先に支払われます。"
+      "remedy": "「{field}」に {min} から {max} までの整数を入力してください。数値が大きいほど支払いの優先順位が高くなります。"
     },
     "preferredPricesNotPositive": {
       "message": "優先株にはプラスの発行価格と転換価格が必要です。",
