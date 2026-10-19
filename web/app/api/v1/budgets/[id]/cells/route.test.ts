@@ -80,6 +80,7 @@ test("POST /api/v1/budgets/:id/cells takes the scenario id from the path", async
       accountId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       periodId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
       amount: "100.00",
+      extraDims: { fund: "dddddddd-dddd-dddd-dddd-dddddddddddd" },
     },
   ];
   const response = await post(scenarioId, { expectedRevision: 1, cells }, "budget-key-1");

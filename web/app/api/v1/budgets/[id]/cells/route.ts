@@ -17,6 +17,7 @@ const budgetCellBody = z.looseObject({
   projectId: z.string().nullable().optional(),
   locationId: z.string().nullable().optional(),
   classId: z.string().nullable().optional(),
+  extraDims: z.record(z.string(), z.string()).nullable().optional(),
   amount: z.string(),
   note: z.string().nullable().optional(),
 });

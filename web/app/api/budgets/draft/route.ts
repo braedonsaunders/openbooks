@@ -8,6 +8,8 @@ import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { db } from '@openbooks/engine/platform/db'
 import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../lib/budget-scope'
+import { BudgetMutationError } from '../../../../lib/budget-mutations'
 import { BUDGET_KINDS } from '../../../../lib/budgets'
 const POSTBodySchema1 = z.object({
   bookId: uuidString({ error: 'invalid_book_id' }).optional(), description: z.string({ error: 'invalid_description' }).max(2000, { error: 'invalid_description' }).optional(),
@@ -61,6 +63,10 @@ export const POST = defineRoute({
         return NextResponse.json({ error: 'invalid_source_scenario_id' }, { status: 422 })
       }
     const sourceScenarioId = typeof body.sourceScenarioId === 'string' ? body.sourceScenarioId : null
+    if (sourceScenarioId) {
+      const outOfScope = await scenarioOutOfScopeSubsidiaryNames(sourceScenarioId, user.orgId, gate.allowedSubsidiaryIds)
+      if (outOfScope.length > 0) return apiErrorResponse(outOfScopeScenarioError(outOfScope))
+    }
     if (body.description !== undefined && typeof body.description !== 'string') {
         return NextResponse.json({ error: 'invalid_description' }, { status: 422 })
       }
@@ -122,6 +128,25 @@ export const POST = defineRoute({
               select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
             `))
             if (!source.rows[0]) throw new Error('source_not_found')
+            const unmapped = (await tx.execute<{ period_name: string }>(sql`
+              select distinct source_period.name as period_name
+                from budget_lines bl
+                join accounting_periods source_period
+                  on source_period.id = bl.period_id and source_period.org_id = bl.org_id
+                left join accounting_periods destination
+                  on destination.org_id = ${user.orgId}
+                 and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
+                 and destination.fiscal_year = ${fiscalYear}
+                 and destination.period_number = source_period.period_number
+                 and not destination.is_adjustment
+               where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
+                 and destination.id is null
+               order by 1
+            `))
+            if (unmapped.rows.length > 0) {
+              const names = unmapped.rows.map((row) => row.period_name).join(', ')
+              throw new BudgetMutationError(`unmapped_periods: no ${fiscalYear} period matches source period(s) ${names}`)
+            }
             await tx.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
@@ -135,6 +160,7 @@ export const POST = defineRoute({
                   on destination.org_id = ${user.orgId}
                  and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
                  and destination.fiscal_year = ${fiscalYear}
+                 and not destination.is_adjustment
                  and destination.period_number = source_period.period_number
                where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
@@ -153,6 +179,7 @@ export const POST = defineRoute({
         if (error instanceof Error && error.message === 'source_not_found') {
           return apiErrorResponse(new SourceNotFoundRefusal())
         }
+        if (error instanceof BudgetMutationError) return apiErrorResponse(error)
         throw error
       }
   },

@@ -117,13 +117,9 @@ export const POST = defineRoute({
           if (!scenario) throw new BudgetMutationError('not_found', 404)
           if (Number(scenario.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
 
-          // Scenario-level authority for the status transitions below (submit,
-          // approve, reject, archive): the status governs EVERY line in the
-          // scenario, so the caller must hold authority over every subsidiary
-          // its lines touch — refused by name otherwise. The line-copy actions
-          // (copy, copy_prior_actuals, apply_source) stay on their existing
-          // visible-scope design: they only ever read and write lines the
-          // caller can already see.
+          // Scenario-level transitions and source application govern the
+          // whole scenario. A restricted caller may copy visible lines into
+          // a new scenario, but may only apply a source they can fully access.
           if (action === 'submit' || action === 'approve' || action === 'reject' || action === 'archive') {
             const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)
             if (outOfScope.length > 0) throw outOfScopeScenarioError(outOfScope)
@@ -421,6 +417,12 @@ export const POST = defineRoute({
               select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
             `))
             if (!source.rows[0]) throw new BudgetMutationError('invalid_source_scenario')
+            const sourceOutOfScope = await scenarioOutOfScopeSubsidiaryNames(
+              sourceScenarioId,
+              user.orgId,
+              gate.allowedSubsidiaryIds,
+            )
+            if (sourceOutOfScope.length > 0) throw outOfScopeScenarioError(sourceOutOfScope)
             // Verify before the delete below: it clears the target first, so an
             // unmapped source period would destroy lines it can never replace.
             await assertFullPeriodMapping(null, sourceScenarioId, Number(scenario.fiscal_year))

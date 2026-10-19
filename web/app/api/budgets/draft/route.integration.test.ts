@@ -117,6 +117,45 @@ test('draft from source copies only caller-visible entities', async () => {
   }
 })
 
+test('draft from source refuses a scenario that includes an out-of-scope subsidiary', async () => {
+  const { org, fy, sourceId } = await fixture()
+  try {
+    state.allowed = new Set([org.subsidiaryId])
+    const before = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+    const response = await post({ bookId: org.bookId, fiscalYear: fy, sourceScenarioId: sourceId })
+    assert.equal(response.status, 403)
+    assert.match(String((await response.json()).error), /Draft Copy Sub B/)
+    const after = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+    assert.equal(after, before, 'a restricted caller cannot create from a partially visible scenario')
+  } finally {
+    state.allowed = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('draft from source refuses unmapped periods and ignores adjustment periods', async () => {
+  const { org, fy, sourceId } = await fixture()
+  try {
+    const calendarId = (await db.execute<{ id: string }>(sql`
+      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${randomUUID()}, ${org.orgId}, ${fy + 1}, 1, 'Target regular period', '2027-01-01', '2027-01-31', false, ${calendarId}),
+             (${randomUUID()}, ${org.orgId}, ${fy + 1}, 7, 'Target adjustment period', '2027-12-01', '2027-12-31', true, ${calendarId})`)
+    const response = await post({ bookId: org.bookId, fiscalYear: fy + 1, sourceScenarioId: sourceId })
+    assert.equal(response.status, 422)
+    const body = await response.json() as { error?: string }
+    assert.match(body.error ?? '', /unmapped_periods/)
+    assert.match(body.error ?? '', /2026-07/)
+  } finally {
+    state.allowed = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
 test('draft creation rejects a malformed explicit book id instead of defaulting', async () => {
   const { org, fy } = await fixture()
   try {
