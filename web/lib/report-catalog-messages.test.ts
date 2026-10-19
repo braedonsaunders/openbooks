@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
-import { allReportEntities } from '@openbooks/reports'
+import { allReportEntities, BUILT_IN_REPORT_DEFINITIONS } from '@openbooks/reports'
+import { NONPROFIT_REPORTS } from '@openbooks/engine/testing/reports/catalog-reports'
 import './resourcing/report-facts.ts'
 import { reportEnumLabel } from './report-enum-label.ts'
 
@@ -53,6 +54,24 @@ test('every report entity has a catalog label', () => {
     }
   }
   assert.deepEqual(missing, [], `entities with no label:\n${missing.join('\n')}`)
+})
+
+test('every built-in report definition has a localized title and description, or its runs, PDFs and exports print the key path', () => {
+  // The runner titles a built-in run with a bare t(`builtIns.<slug>.name`)
+  // (web/lib/report-run.ts), so the seeded catalog (package built-ins and
+  // the nonprofit board reports) must be named in every locale.
+  const definitions = [...BUILT_IN_REPORT_DEFINITIONS, ...NONPROFIT_REPORTS]
+  assert.ok(definitions.length > 100, 'the built-in registry loaded')
+  const missing: string[] = []
+  for (const locale of LOCALES) {
+    for (const definition of definitions) {
+      const entry = catalogs[locale].builtIns[definition.slug]
+      for (const field of ['name', 'description'] as const) {
+        if (typeof entry?.[field] !== 'string' || !entry[field]!.trim()) missing.push(`${locale}:builtIns.${definition.slug}.${field}`)
+      }
+    }
+  }
+  assert.deepEqual(missing, [], `built-in reports with no localized title or description:\n${missing.join('\n')}`)
 })
 
 test('every report column has a heading, or the report renders its key path', () => {

@@ -3668,6 +3668,358 @@
     "service-revenue-per-job": {
       "name": "Serviceumsatz je Auftrag",
       "description": "Fakturierter Umsatz und Durchschnittsumsatz je abgeschlossenem abrechenbarem Auftrag, nach Monat und Währung."
+    },
+    "fixed-asset-register": {
+      "name": "Anlagenregister je Buch",
+      "description": "Anlagen nach Status, Buch und Kategorie, einschließlich Anlagen im Bau."
+    },
+    "fixed-asset-roll-forward": {
+      "name": "Anlagenspiegel",
+      "description": "Anfangsbestand, Zugänge, Umbuchungen, Abgänge und Endbestand der Anschaffungskosten je Buch."
+    },
+    "depreciation-roll-forward": {
+      "name": "Abschreibungsspiegel",
+      "description": "Anfangsbestand, Abschreibungsaufwand, Neubewertung, Abgänge und Endbestand der kumulierten Abschreibung je Buch."
+    },
+    "depreciation-forecast": {
+      "name": "Abschreibungsvorschau",
+      "description": "Geplante, noch nicht gebuchte Abschreibung je Buch und Monat."
+    },
+    "asset-proposals-pending": {
+      "name": "Offene Anlagenvorschläge",
+      "description": "Einkaufszeilen, die auf eine Aktivierungsentscheidung warten."
+    },
+    "asset-maintenance-due": {
+      "name": "Fällige Anlagenwartungen",
+      "description": "Zum Berichtsdatum fällige oder überfällige Wartungspläne."
+    },
+    "insured-value-vs-net-book-value": {
+      "name": "Versicherungssumme vs. Nettobuchwert",
+      "description": "Versicherte Anlagen mit Versicherungssumme, Nettobuchwert und der Differenz zwischen beiden."
+    },
+    "construction-in-progress-costs": {
+      "name": "Kosten für Anlagen im Bau",
+      "description": "Mit Anlagen im Bau verknüpfte Hauptbuchzeilen nach Datensatz und Konto."
+    },
+    "sales-evidence": {
+      "name": "Vertriebsnachweise",
+      "description": "Unveränderliche zugeordnete Umsatzgutschriften und Stornos, einschließlich historischer Zuordnungslücken."
+    },
+    "sales-quota-attainment": {
+      "name": "Quotenzielerreichung",
+      "description": "Quotenversionen und Ist-Werte aus unveränderlichen Vertriebsnachweisen in der Zielwährung."
+    },
+    "promotion-performance": {
+      "name": "Aktionserfolg",
+      "description": "Aktionsrabatte mit Brutto- und Nettoumsatz, nach Periode und Aktion."
+    },
+    "cash-tenders": {
+      "name": "Zahlungsmittel (Barverkauf)",
+      "description": "Wie Barverkäufe beglichen wurden: eine Zeile je Zahlungsmittel, nach Periode, Methode und Konto."
+    },
+    "channel-sales": {
+      "name": "Kanalverkäufe",
+      "description": "Storefront-Bestellpositionen nach Kanal, Tag, Artikel, Standort und Zahlungsmittel, mit Buchungsstatus."
+    },
+    "order-economics": {
+      "name": "Auftragsmarge",
+      "description": "Gespeicherte Deckungsbeitragsfakten je Kanalbestellposition, mit der Marge als Formelkennzahlen."
+    },
+    "payout-reconciliation": {
+      "name": "Auszahlungsabstimmung",
+      "description": "Provider-Auszahlungen als Abrechnungszeilen, abgeglichen mit Belegen und Bankeinzahlungen, einschließlich Differenzen."
+    },
+    "customer-rebate-accruals": {
+      "name": "Abgegrenzte Kundenboni",
+      "description": "Nur fortschreibbare verdiente Boni, rückwirkende Staffelanpassungen und Herkunft der Journalbuchungen."
+    },
+    "customer-rebate-claims": {
+      "name": "Kundenbonusansprüche",
+      "description": "Verdiente Ansprüche, unabhängige Genehmigungen und systemeigene Abrechnungsbelege."
+    },
+    "vendor-rebate-accruals": {
+      "name": "Abgegrenzte Lieferantenboni",
+      "description": "Nur fortschreibbare verdiente Boni, rückwirkende Staffelanpassungen und Herkunft der Journalbuchungen."
+    },
+    "vendor-rebate-claims": {
+      "name": "Lieferantenbonusansprüche",
+      "description": "Verdiente Ansprüche, unabhängige Genehmigungen und systemeigene Abrechnungsbelege."
+    },
+    "contract-cost-rollforward": {
+      "name": "Vertragskosten-Rollforward",
+      "description": "Aktivierte Vertragskosten je Anlage: abgeschrieben, wertgemindert und Endbuchwert."
+    },
+    "contract-cost-postings": {
+      "name": "Vertragskostenbuchungen",
+      "description": "Aktivierungs-, Abschreibungs- und Wertminderungszeilen je Periode aus markierten Hauptbuchpositionen."
+    },
+    "prepaid-amortization-plan": {
+      "name": "Auflösungsplan der Rechnungsabgrenzung",
+      "description": "Geplante und aufgelöste Perioden aktiver Rechnungsabgrenzungen je Monat, Konto und Plan."
+    },
+    "prepaid-amortization-reconciliation": {
+      "name": "Abstimmung der aktiven Rechnungsabgrenzung",
+      "description": "Hauptbuchbewegungen der Abgrenzungskonten neben ihren Plänen, mit der Differenz zu einem Stichtag."
+    },
+    "equity-compensation-run-lines": {
+      "name": "Positionen der Läufe für aktienbasierte Vergütung",
+      "description": "Gebuchte Zeilen der aktienbasierten Vergütung: bisher erfasste Kosten und die Änderung je Lauf."
+    },
+    "equity-cap-table-positions": {
+      "name": "Bewegungen der Cap-Table-Positionen",
+      "description": "Jede Änderung einer Zertifikats-, Zuteilungs- oder Poolposition, split-bereinigt und umgerechnet."
+    },
+    "equity-securities-register": {
+      "name": "Wertpapierregister Eigenkapital",
+      "description": "Jedes bis zum Stichtag ausgegebene Wertpapier mit Konditionen, Status und Menge zu diesem Datum."
+    },
+    "billing-import-reconciliation": {
+      "name": "Abrechnungsimport-Abstimmung",
+      "description": "Importläufe: MRR je Monat im Vergleich zu OpenBooks, offene Forderungen je Kunde und Blocker für die Umstellung."
+    },
+    "collection-recovery": {
+      "name": "Rückgewinnung aus Inkasso",
+      "description": "Eine Zeile je automatisch belasteter Rechnung: Versuche, erste Ablehnung und Rückgewinnungsweg."
+    },
+    "collection-recovery-rate": {
+      "name": "Rückgewinnungsquote im Inkasso",
+      "description": "Zurückgewonnene Rechnungen und Umsätze sowie Rückgewinnungsquote nach Ablehnungsklasse, Anbieter und Monat."
+    },
+    "stored-value-liability-roll-forward": {
+      "name": "Rollforward der Guthabenverbindlichkeiten",
+      "description": "Ausgegebene, eingelöste, verfallene und korrigierte Geschenk- und Guthabenkarten mit Endbestand der Verbindlichkeit."
+    },
+    "stored-value-unclaimed-property": {
+      "name": "Nicht eingelöste Guthaben",
+      "description": "Offene Geschenkkarten- und Guthabensalden nach Kundenregion zur Prüfung auf Verfall an den Staat (Escheat)."
+    },
+    "order-margin-by-channel": {
+      "name": "Auftragsmarge nach Kanal",
+      "description": "Deckungsbeitrag nach Kanal und Monat: DB1, DB2 und DB3 mit der Margenquote."
+    },
+    "order-margin-by-sku": {
+      "name": "Auftragsmarge nach Artikel",
+      "description": "Deckungsbeitrag nach Artikel und Kanal, mit derselben Stufung DB1, DB2 und DB3."
+    },
+    "demand-forecast-accuracy": {
+      "name": "Prognosegenauigkeit",
+      "description": "Prognosefehler nach Artikelklasse: bewertete Wochen, MAPE und Verzerrung (positiv bedeutet Überprognose)."
+    },
+    "payroll-register": {
+      "name": "Lohnregister",
+      "description": "Lohnabrechnungen dieses Geschäftsjahres — Brutto, Abzüge, Netto, Arbeitgeberkosten."
+    },
+    "payroll-cost-by-month": {
+      "name": "Lohnkosten nach Monat",
+      "description": "Monatliche Lohnsummen — Brutto, Netto, Steuern und Arbeitgeberkosten."
+    },
+    "entitlement-balances": {
+      "name": "Anspruchssalden",
+      "description": "Urlaubs- und Leistungssalden je Mitarbeiter, mit Planlimits."
+    },
+    "allocation-summary": {
+      "name": "Umlageübersicht",
+      "description": "Gepoolte Quelle, umgelegte Summe und Rest, je Regel und Periode."
+    },
+    "allocation-lineage": {
+      "name": "Umlageherkunft",
+      "description": "Umgelegte Zeilen, rückverfolgt auf Regel, Quelle, Konto und Anteil."
+    },
+    "entitlement-service-milestones": {
+      "name": "Erreichte Dienstjubiläen",
+      "description": "Dienstjubiläen in diesem Geschäftsjahr, die Ansprüche verändern."
+    },
+    "workforce-employment-history": {
+      "name": "Beschäftigungshistorie",
+      "description": "Beschäftigungsversionen — Person, Status, Daten und Gründe."
+    },
+    "workforce-change-requests": {
+      "name": "Änderungsanträge",
+      "description": "Änderungsanträge — Status, Art, Antragsteller und Entscheidung."
+    },
+    "workforce-positions": {
+      "name": "Positionen",
+      "description": "Eingerichtete Positionen — Code, Titel, Status und VZÄ."
+    },
+    "workforce-processes": {
+      "name": "Prozess-Checklisten",
+      "description": "Schritte der Prozess-Checklisten — Verantwortlicher, Fälligkeitsdatum und Nachweis."
+    },
+    "workforce-leave-absences": {
+      "name": "Fehltage",
+      "description": "Abwesenheitstage — Person, Abwesenheitsart und Stunden."
+    },
+    "workforce-requisitions": {
+      "name": "Stellenanforderungen",
+      "description": "Offene Stellen — Titel, Status und Anzahl der Besetzungen."
+    },
+    "workforce-applications": {
+      "name": "Bewerbungen",
+      "description": "Bewerbungen mit Funnel-Stufe und Zeit bis zur Besetzung."
+    },
+    "workforce-reviews": {
+      "name": "Beurteilungen",
+      "description": "Leistungsbeurteilungen — Bewertungen neben der Kalibrierung."
+    },
+    "workforce-goals": {
+      "name": "Ziele",
+      "description": "Leistungsziele — Status, Fortschritt und Fälligkeitsdatum."
+    },
+    "workforce-turnover": {
+      "name": "Fluktuation",
+      "description": "Abgänge — Betriebszugehörigkeit, Austrittsgrund und Kennzeichen."
+    },
+    "workforce-benefit-enrollments": {
+      "name": "Leistungsanmeldungen",
+      "description": "Leistungswahlen — Plan, Stufe und Beträge."
+    },
+    "workforce-pay-bands": {
+      "name": "Gehaltsbänder",
+      "description": "Gültige Gehaltsbänder — Stufe, Geltungsbereich und Minimum, Ziel und Maximum."
+    },
+    "workforce-comp-cycle-lines": {
+      "name": "Zeilen des Merit-Zyklus",
+      "description": "Merit-Entscheidungen — Vorschlag, Richtwert und Status."
+    },
+    "workforce-headcount-plan-lines": {
+      "name": "Zeilen der Stellenplanung",
+      "description": "Geplante Bewegungen — VZÄ, Kosten und Status."
+    },
+    "workforce-pay-gap-snapshots": {
+      "name": "Momentaufnahmen Entgeltlücke",
+      "description": "Eingefrorene Momentaufnahmen der Entgeltlücke nach Kategorie — nur aggregierte Werte."
+    },
+    "workforce-automations": {
+      "name": "Automatisierungen",
+      "description": "Automatisierungsrezepte — Auslöser, Status und letzte Ausführung."
+    },
+    "workforce-automation-runs": {
+      "name": "Automatisierungsläufe",
+      "description": "Auslösungen von Automatisierungen — Gegenstand, Status und Fehler."
+    },
+    "workforce-action-reasons": {
+      "name": "Aktionsgründe",
+      "description": "Grundcodes, unter denen jede HR-Aktion erfasst wird."
+    },
+    "workforce-rate-schedule-lines": {
+      "name": "Zeilen der Lohntafeln",
+      "description": "Lohntafelzeilen — Basis, Nebenleistungen und Multiplikatoren."
+    },
+    "workforce-per-diem-entries": {
+      "name": "Tagegelder",
+      "description": "Tagegeld- und Reisebeträge je Tag, mit Status."
+    },
+    "workforce-comp-class-split": {
+      "name": "Aufteilung nach Gefahrenklassen",
+      "description": "Projektstunden, je Gefahrenklasse bewertet, nach Tag."
+    },
+    "workforce-certified-runs": {
+      "name": "Zertifizierte Läufe",
+      "description": "Zertifizierte Lohnabrechnungsläufe nach Projekt und Woche."
+    },
+    "workforce-compliance-findings": {
+      "name": "Compliance-Feststellungen",
+      "description": "Hinweise vor dem Lauf nach Art, mit Lebenszyklusstatus."
+    },
+    "workforce-qualifications": {
+      "name": "Qualifikationen",
+      "description": "Vorhandene Zertifizierungen — Inhaber, Typ und Ablauf."
+    },
+    "workforce-qualification-alerts": {
+      "name": "Qualifikationswarnungen",
+      "description": "Warnungen zur Zertifizierungserneuerung — versendet oder ausstehend."
+    },
+    "workforce-documents": {
+      "name": "HR-Dokumente",
+      "description": "HR-Dokumente — Kategorie, Status und Legal Hold."
+    },
+    "workforce-document-signers": {
+      "name": "Dokumentunterzeichner",
+      "description": "Unterzeichner von Dokumenten in Reihenfolge, mit Status je Unterzeichner."
+    },
+    "workforce-retention-actions": {
+      "name": "Aufbewahrungsaktionen",
+      "description": "Aufbewahrungsaktionen — Fälligkeitsdatum, Ausführung und Sperren."
+    },
+    "workforce-survey-results": {
+      "name": "Befragungsergebnisse",
+      "description": "Befragungen — Antworten, Status und Enddatum."
+    },
+    "workforce-org-chart": {
+      "name": "Organigramm",
+      "description": "Aktive Beschäftigungsverhältnisse — Name, Titel und Führungskraft."
+    },
+    "workforce-one-on-ones": {
+      "name": "Einzelgespräche",
+      "description": "Einzelgespräche — geplante und abgehaltene Termine, Status."
+    },
+    "workforce-feedback": {
+      "name": "Mitarbeiterfeedback",
+      "description": "Lob, Feedback und Anfragen, mit Sichtbarkeit."
+    },
+    "workforce-calibration-entries": {
+      "name": "Kalibrierungseinträge",
+      "description": "Kalibrierte Beurteilungen — vorgeschlagene neben der endgültigen Bewertung."
+    },
+    "workforce-talent-reviews": {
+      "name": "Talentbeurteilungen",
+      "description": "Talentbeurteilungen — Leistung, Potenzial und Risiko."
+    },
+    "workforce-scorecards": {
+      "name": "Bewertungsbögen",
+      "description": "Interviews mit aggregierten Urteilen des Gremiums."
+    },
+    "workforce-interview-slots": {
+      "name": "Gesprächstermine",
+      "description": "Gesprächstermine — Zeitfenster, Art und Status."
+    },
+    "workforce-offers": {
+      "name": "Angebote",
+      "description": "Angebote — kaufmännischer Stand und Signaturstand."
+    },
+    "workforce-postings": {
+      "name": "Stellenanzeigen",
+      "description": "Einträge in Stellenbörsen — Bewerbungen und Bearbeitungsergebnisse."
+    },
+    "workforce-retention-runs": {
+      "name": "Aufbewahrungsläufe",
+      "description": "Auswertungen von Aufbewahrungsregeln mit Ergebniszahlen."
+    },
+    "workforce-pool-members": {
+      "name": "Poolmitglieder",
+      "description": "Mitglieder von Talentpools — Pool und Beitrittsdatum."
+    },
+    "workforce-payroll-anomaly-flags": {
+      "name": "Lohnanomalie-Hinweise",
+      "description": "Hinweise aus den Prüfungen von Lohn und Zeiterfassung vor dem Lauf."
+    },
+    "workforce-ai-decisions": {
+      "name": "KI-Entscheidungen",
+      "description": "KI-gestützte Antworten — Gegenstand, Quellen und Ergebnis."
+    },
+    "workforce-ai-capabilities": {
+      "name": "KI-Fähigkeiten",
+      "description": "KI-Fähigkeiten — Autonomiegrenze und Prüfstatus."
+    },
+    "workforce-benefit-payroll-inputs": {
+      "name": "Leistungsbeiträge in der Lohnabrechnung",
+      "description": "Berechnete Leistungsbeiträge, Abzüge und Sachbezüge je Lohnlauf."
+    },
+    "workforce-benefit-awards": {
+      "name": "Leistungsprämien und Auszahlungen",
+      "description": "Prämien des Mitarbeiterprogramms mit Genehmigungsnachweis, Zustellungsreferenzen und Herkunft im Lohnlauf."
+    },
+    "shipment-labels": {
+      "name": "Versandetiketten",
+      "description": "Gekaufte Frachtführeretiketten mit Kosten, Trackingstand und Journal; stornierte bleiben aufgeführt."
+    },
+    "shipping-adjustments": {
+      "name": "Frachtkorrekturen",
+      "description": "Nachträgliche Gewichts-, Maß- und Adresskorrekturen des Frachtführers, mit Grund und Status."
+    },
+    "shipping-cost-by-carrier": {
+      "name": "Versandkosten nach Frachtführer",
+      "description": "Kosten gekaufter Etiketten nach Frachtführer und Service je Kaufmonat, mit Etikettenanzahl."
     }
   },
   "generalLedger": {

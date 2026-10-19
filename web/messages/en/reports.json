@@ -3668,6 +3668,358 @@
     "service-revenue-per-job": {
       "name": "Service revenue per job",
       "description": "Invoiced revenue and average revenue per completed billable job, by month and currency."
+    },
+    "fixed-asset-register": {
+      "name": "Fixed asset register by book",
+      "description": "Assets by status, book and category, including construction in progress."
+    },
+    "fixed-asset-roll-forward": {
+      "name": "Fixed asset roll-forward",
+      "description": "Opening, additions, transfers, disposals and closing asset cost by book."
+    },
+    "depreciation-roll-forward": {
+      "name": "Depreciation roll-forward",
+      "description": "Opening, charge, remeasurement, disposals and closing accumulated depreciation by book."
+    },
+    "depreciation-forecast": {
+      "name": "Depreciation forecast",
+      "description": "Planned depreciation not yet posted, by book and month."
+    },
+    "asset-proposals-pending": {
+      "name": "Asset proposals pending",
+      "description": "Purchase lines awaiting a capitalization decision."
+    },
+    "asset-maintenance-due": {
+      "name": "Asset maintenance due",
+      "description": "Maintenance schedules due or overdue on the report date."
+    },
+    "insured-value-vs-net-book-value": {
+      "name": "Insured value vs net book value",
+      "description": "Covered assets with insured value, net book value and the gap between them."
+    },
+    "construction-in-progress-costs": {
+      "name": "Construction-in-progress costs",
+      "description": "GL lines linked to construction in progress, by record and account."
+    },
+    "sales-evidence": {
+      "name": "Sales evidence",
+      "description": "Immutable attributed sales credits and reversals, including historical attribution gaps."
+    },
+    "sales-quota-attainment": {
+      "name": "Sales quota attainment",
+      "description": "Quota versions and actuals from immutable sales evidence, in the target currency."
+    },
+    "promotion-performance": {
+      "name": "Promotion performance",
+      "description": "Promotion discounts with gross and net revenue, by period and promotion."
+    },
+    "cash-tenders": {
+      "name": "Cash tenders",
+      "description": "How paid-at-sale totals settled: one row per tender, by period, method and account."
+    },
+    "channel-sales": {
+      "name": "Channel sales",
+      "description": "Storefront order lines by channel, day, item, location and tender, with posting status."
+    },
+    "order-economics": {
+      "name": "Order economics",
+      "description": "Stored contribution-margin facts per channel order line, with margin as formula measures."
+    },
+    "payout-reconciliation": {
+      "name": "Payout reconciliation",
+      "description": "Provider payouts as settlement lines, matched to documents and bank deposits, with gaps."
+    },
+    "customer-rebate-accruals": {
+      "name": "Customer rebate accruals",
+      "description": "Append-only earned rebates, retrospective tier adjustments and journal provenance."
+    },
+    "customer-rebate-claims": {
+      "name": "Customer rebate claims",
+      "description": "Earned claims, independent approvals and native settlement instruments."
+    },
+    "vendor-rebate-accruals": {
+      "name": "Vendor rebate accruals",
+      "description": "Append-only earned rebates, retrospective tier adjustments and journal provenance."
+    },
+    "vendor-rebate-claims": {
+      "name": "Vendor rebate claims",
+      "description": "Earned claims, independent approvals and native settlement instruments."
+    },
+    "contract-cost-rollforward": {
+      "name": "Contract cost roll-forward",
+      "description": "Capitalized contract costs per asset: amortized, impaired and closing carrying amount."
+    },
+    "contract-cost-postings": {
+      "name": "Contract cost postings",
+      "description": "Capitalization, amortization and impairment lines by period, from tagged ledger legs."
+    },
+    "prepaid-amortization-plan": {
+      "name": "Prepaid expense amortization plan",
+      "description": "Scheduled and amortized prepaid expense periods by month, account and schedule."
+    },
+    "prepaid-amortization-reconciliation": {
+      "name": "Prepaid expense reconciliation",
+      "description": "Deferral account ledger movements beside their schedules, with the difference to a date."
+    },
+    "equity-compensation-run-lines": {
+      "name": "Stock compensation run lines",
+      "description": "Posted stock compensation run lines: cost recognized to date and each run's change."
+    },
+    "equity-cap-table-positions": {
+      "name": "Cap table position movements",
+      "description": "Each change of a certificate, award or pool position, split-restated and as converted."
+    },
+    "equity-securities-register": {
+      "name": "Equity securities register",
+      "description": "Every security issued by the as-of date, with its terms, status and quantity on that date."
+    },
+    "billing-import-reconciliation": {
+      "name": "Billing import reconciliation",
+      "description": "Import runs: MRR by month against OpenBooks, open AR by customer, and cut-over blockers."
+    },
+    "collection-recovery": {
+      "name": "Collection recovery",
+      "description": "One row per automatically charged invoice: attempts, first decline and recovery path."
+    },
+    "collection-recovery-rate": {
+      "name": "Collection recovery rate",
+      "description": "Recovered invoices and revenue, and recovery rate by decline class, provider and month."
+    },
+    "stored-value-liability-roll-forward": {
+      "name": "Stored-value liability roll-forward",
+      "description": "Gift-card and store-credit issued, redeemed, expired and adjusted, with closing liability."
+    },
+    "stored-value-unclaimed-property": {
+      "name": "Stored-value unclaimed property",
+      "description": "Open gift-card and store-credit balances by customer region, for escheat review."
+    },
+    "order-margin-by-channel": {
+      "name": "Order margin by channel",
+      "description": "Contribution margin by channel and month: CM1, CM2 and CM3, with the margin ratio."
+    },
+    "order-margin-by-sku": {
+      "name": "Order margin by item",
+      "description": "Contribution margin by item and channel, with the same CM1, CM2 and CM3 ladder."
+    },
+    "demand-forecast-accuracy": {
+      "name": "Forecast accuracy",
+      "description": "Forecast error by item class: scored weeks, MAPE and bias (positive means over-forecast)."
+    },
+    "payroll-register": {
+      "name": "Payroll register",
+      "description": "Pay stubs this fiscal year — gross, withholdings, net, employer cost."
+    },
+    "payroll-cost-by-month": {
+      "name": "Payroll cost by month",
+      "description": "Monthly payroll totals — gross, net, tax and employer cost."
+    },
+    "entitlement-balances": {
+      "name": "Entitlement balances",
+      "description": "Time-off and benefit balances per employee, with plan limits."
+    },
+    "allocation-summary": {
+      "name": "Allocation summary",
+      "description": "Pooled source, allocated total and residual, per rule and period."
+    },
+    "allocation-lineage": {
+      "name": "Allocation lineage",
+      "description": "Allocated lines traced to rule, source, account and share."
+    },
+    "entitlement-service-milestones": {
+      "name": "Service milestones reached",
+      "description": "Service anniversaries this fiscal year that change entitlements."
+    },
+    "workforce-employment-history": {
+      "name": "Employment history",
+      "description": "Employment versions — person, status, dates and reasons."
+    },
+    "workforce-change-requests": {
+      "name": "Change requests",
+      "description": "Change requests — status, kind, requester and decision."
+    },
+    "workforce-positions": {
+      "name": "Positions",
+      "description": "Established positions — code, title, status and FTE."
+    },
+    "workforce-processes": {
+      "name": "Process checklists",
+      "description": "Process checklist steps — owner, due date and evidence."
+    },
+    "workforce-leave-absences": {
+      "name": "Leave absences",
+      "description": "Absence days — person, leave type and hours."
+    },
+    "workforce-requisitions": {
+      "name": "Requisitions",
+      "description": "Vacancy openings — title, status and filled count."
+    },
+    "workforce-applications": {
+      "name": "Applications",
+      "description": "Candidacies with funnel stage and time-to-fill."
+    },
+    "workforce-reviews": {
+      "name": "Reviews",
+      "description": "Performance reviews — ratings beside calibration."
+    },
+    "workforce-goals": {
+      "name": "Goals",
+      "description": "Performance goals — status, progress and due date."
+    },
+    "workforce-turnover": {
+      "name": "Turnover",
+      "description": "Leavers — tenure, exit reason and flags."
+    },
+    "workforce-benefit-enrollments": {
+      "name": "Benefit enrolments",
+      "description": "Benefit elections — plan, tier and amounts."
+    },
+    "workforce-pay-bands": {
+      "name": "Pay bands",
+      "description": "Live pay bands — level, scope and min/target/max."
+    },
+    "workforce-comp-cycle-lines": {
+      "name": "Merit cycle lines",
+      "description": "Merit decisions — proposal, guideline and status."
+    },
+    "workforce-headcount-plan-lines": {
+      "name": "Headcount plan lines",
+      "description": "Planned movements — FTE, cost and status."
+    },
+    "workforce-pay-gap-snapshots": {
+      "name": "Pay gap snapshots",
+      "description": "Frozen pay-gap snapshots by category — aggregates only."
+    },
+    "workforce-automations": {
+      "name": "Automations",
+      "description": "Automation recipes — trigger, status and last run."
+    },
+    "workforce-automation-runs": {
+      "name": "Automation runs",
+      "description": "Automation firings — subject, status and errors."
+    },
+    "workforce-action-reasons": {
+      "name": "Action reasons",
+      "description": "Reason codes each HR action files under."
+    },
+    "workforce-rate-schedule-lines": {
+      "name": "Rate schedule lines",
+      "description": "Wage schedule lines — base, fringes and multipliers."
+    },
+    "workforce-per-diem-entries": {
+      "name": "Per-diem entries",
+      "description": "Per-diem and travel amounts per day, with status."
+    },
+    "workforce-comp-class-split": {
+      "name": "Comp class split",
+      "description": "Project hours priced per comp class, by day."
+    },
+    "workforce-certified-runs": {
+      "name": "Certified runs",
+      "description": "Certified payroll runs by project and week."
+    },
+    "workforce-compliance-findings": {
+      "name": "Compliance findings",
+      "description": "Pre-run flags by kind, with lifecycle status."
+    },
+    "workforce-qualifications": {
+      "name": "Qualifications",
+      "description": "Held certifications — holder, type and expiry."
+    },
+    "workforce-qualification-alerts": {
+      "name": "Qualification alerts",
+      "description": "Certification renewal alerts — sent or pending."
+    },
+    "workforce-documents": {
+      "name": "HR documents",
+      "description": "HR documents — category, status and legal hold."
+    },
+    "workforce-document-signers": {
+      "name": "Document signers",
+      "description": "Document signers in order, with per-signer status."
+    },
+    "workforce-retention-actions": {
+      "name": "Retention actions",
+      "description": "Retention actions — due date, execution and blocks."
+    },
+    "workforce-survey-results": {
+      "name": "Survey results",
+      "description": "Surveys — responses, status and close date."
+    },
+    "workforce-org-chart": {
+      "name": "Org chart",
+      "description": "In-service employments — name, title and manager."
+    },
+    "workforce-one-on-ones": {
+      "name": "One-on-ones",
+      "description": "1:1 meetings — scheduled and held dates, status."
+    },
+    "workforce-feedback": {
+      "name": "Feedback",
+      "description": "Praise, feedback and requests, with visibility."
+    },
+    "workforce-calibration-entries": {
+      "name": "Calibration entries",
+      "description": "Calibrated reviews — proposed beside final rating."
+    },
+    "workforce-talent-reviews": {
+      "name": "Talent reviews",
+      "description": "Talent reviews — performance, potential and risk."
+    },
+    "workforce-scorecards": {
+      "name": "Scorecards",
+      "description": "Interviews with panel verdict aggregates."
+    },
+    "workforce-interview-slots": {
+      "name": "Interview slots",
+      "description": "Interview slots — window, kind and status."
+    },
+    "workforce-offers": {
+      "name": "Offers",
+      "description": "Offers — commercial and signature status."
+    },
+    "workforce-postings": {
+      "name": "Postings",
+      "description": "Job-board postings — applies and dispositions."
+    },
+    "workforce-retention-runs": {
+      "name": "Retention runs",
+      "description": "Retention-rule evaluations with outcome counts."
+    },
+    "workforce-pool-members": {
+      "name": "Pool members",
+      "description": "Talent-pool members — pool and join date."
+    },
+    "workforce-payroll-anomaly-flags": {
+      "name": "Payroll anomaly flags",
+      "description": "Pre-run payroll and timesheet check flags."
+    },
+    "workforce-ai-decisions": {
+      "name": "AI decisions",
+      "description": "AI-assisted answers — subject, sources and outcome."
+    },
+    "workforce-ai-capabilities": {
+      "name": "AI capabilities",
+      "description": "AI capabilities — autonomy ceiling and review state."
+    },
+    "workforce-benefit-payroll-inputs": {
+      "name": "Benefit payroll contributions",
+      "description": "Calculated benefit contributions, deductions and non-cash benefits by payroll run."
+    },
+    "workforce-benefit-awards": {
+      "name": "Benefit awards and payouts",
+      "description": "Employee program awards with approval evidence, delivery references and pay-run lineage."
+    },
+    "shipment-labels": {
+      "name": "Shipping labels",
+      "description": "Purchased carrier labels with cost, tracking state and journal; voided ones stay listed."
+    },
+    "shipping-adjustments": {
+      "name": "Carrier adjustments",
+      "description": "Carrier weight, dimension and address corrections after purchase, with reason and state."
+    },
+    "shipping-cost-by-carrier": {
+      "name": "Shipping cost by carrier",
+      "description": "Bought label cost by carrier and service per purchase month, with label counts."
     }
   },
   "generalLedger": {

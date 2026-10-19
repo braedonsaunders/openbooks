@@ -3668,6 +3668,358 @@
     "service-revenue-per-job": {
       "name": "作業指示別サービス収益",
       "description": "完了した請求対象の作業指示について、請求済み収益と作業指示あたりの平均収益を月と通貨別に表示します。"
+    },
+    "fixed-asset-register": {
+      "name": "帳簿別固定資産台帳",
+      "description": "ステータス・帳簿・カテゴリー別の資産（建設仮勘定を含む）。"
+    },
+    "fixed-asset-roll-forward": {
+      "name": "固定資産増減表",
+      "description": "帳簿別の資産取得原価の期首残高、増加、振替、除却・売却、期末残高。"
+    },
+    "depreciation-roll-forward": {
+      "name": "減価償却累計額増減表",
+      "description": "帳簿別の減価償却累計額の期首残高、償却費、再測定、除却・売却、期末残高。"
+    },
+    "depreciation-forecast": {
+      "name": "減価償却予測",
+      "description": "未転記の計画上の減価償却を帳簿別・月別に表示。"
+    },
+    "asset-proposals-pending": {
+      "name": "資産計上待ちの候補",
+      "description": "資産計上の判断を待っている購買明細。"
+    },
+    "asset-maintenance-due": {
+      "name": "資産保守の期日",
+      "description": "レポート日時点で期日が到来または超過している保守スケジュール。"
+    },
+    "insured-value-vs-net-book-value": {
+      "name": "保険価額と正味帳簿価額の比較",
+      "description": "付保資産の保険価額、正味帳簿価額、およびその差額。"
+    },
+    "construction-in-progress-costs": {
+      "name": "建設仮勘定の原価",
+      "description": "建設仮勘定に紐づく総勘定元帳明細を、レコード・勘定別に表示。"
+    },
+    "sales-evidence": {
+      "name": "販売エビデンス",
+      "description": "変更不可の帰属済み売上クレジットと取消（過去の帰属欠落を含む）。"
+    },
+    "sales-quota-attainment": {
+      "name": "販売ノルマ達成度",
+      "description": "変更不可の販売エビデンスに基づくノルマの版と実績（対象通貨）。"
+    },
+    "promotion-performance": {
+      "name": "プロモーション実績",
+      "description": "プロモーション割引と売上総額・純額を、期間別・プロモーション別に表示。"
+    },
+    "cash-tenders": {
+      "name": "現金販売の支払手段",
+      "description": "販売時払いの決済方法を支払手段ごとに1行で、期間・方法・勘定別に表示。"
+    },
+    "channel-sales": {
+      "name": "チャネル売上",
+      "description": "ストアフロントの注文明細を、チャネル・日・品目・拠点・支払手段別に記帳ステータス付きで表示。"
+    },
+    "order-economics": {
+      "name": "受注の採算",
+      "description": "チャネル受注明細ごとに保存された貢献利益データと、数式メジャーによるマージン。"
+    },
+    "payout-reconciliation": {
+      "name": "ペイアウト照合",
+      "description": "決済明細としてのプロバイダーのペイアウトを、書類および銀行入金と突合し、差異を表示。"
+    },
+    "customer-rebate-accruals": {
+      "name": "顧客リベート計上",
+      "description": "追記専用の獲得リベート、遡及的な階層調整、仕訳の出所。"
+    },
+    "customer-rebate-claims": {
+      "name": "顧客リベート請求",
+      "description": "獲得済み請求、独立した承認、標準の決済手段。"
+    },
+    "vendor-rebate-accruals": {
+      "name": "仕入先リベート計上",
+      "description": "追記専用の獲得リベート、遡及的な階層調整、仕訳の出所。"
+    },
+    "vendor-rebate-claims": {
+      "name": "仕入先リベート請求",
+      "description": "獲得済み請求、独立した承認、標準の決済手段。"
+    },
+    "contract-cost-rollforward": {
+      "name": "契約コストロールフォワード",
+      "description": "資産計上した契約コストの資産別の償却額、減損額、期末帳簿価額。"
+    },
+    "contract-cost-postings": {
+      "name": "契約コスト記帳",
+      "description": "タグ付き元帳明細に基づく、期間別の資産計上・償却・減損の明細。"
+    },
+    "prepaid-amortization-plan": {
+      "name": "前払費用の配分計画",
+      "description": "予定および償却済みの前払費用の期間を、月・勘定・スケジュール別に表示。"
+    },
+    "prepaid-amortization-reconciliation": {
+      "name": "前払費用の照合",
+      "description": "繰延勘定の元帳変動とスケジュールを並べ、ある日付時点の差異を表示。"
+    },
+    "equity-compensation-run-lines": {
+      "name": "株式報酬計算明細",
+      "description": "計上済みの株式報酬明細：累計認識額と各計上の変動額。"
+    },
+    "equity-cap-table-positions": {
+      "name": "資本政策表ポジションの異動",
+      "description": "株券、付与、プラン枠の各ポジションの変動（株式分割修正後・普通株式換算）。"
+    },
+    "equity-securities-register": {
+      "name": "株式等証券台帳",
+      "description": "基準日までに発行された各証券と、その条件、基準日時点のステータスと数量。"
+    },
+    "billing-import-reconciliation": {
+      "name": "請求インポート照合",
+      "description": "インポート実行：月別MRRのOpenBooksとの比較、得意先別の未収売掛金、切替の阻害要因。"
+    },
+    "collection-recovery": {
+      "name": "回収実績",
+      "description": "自動課金した請求書ごとに1行：試行回数、初回の拒否、回収経路。"
+    },
+    "collection-recovery-rate": {
+      "name": "回収率",
+      "description": "回収した請求書と売上、および拒否分類・プロバイダー・月別の回収率。"
+    },
+    "stored-value-liability-roll-forward": {
+      "name": "ストアドバリュー負債増減表",
+      "description": "ギフトカードとストアクレジットの発行・利用・失効・調整と期末負債。"
+    },
+    "stored-value-unclaimed-property": {
+      "name": "ストアドバリューの未請求財産",
+      "description": "ギフトカードとストアクレジットの未使用残高を顧客地域別に表示（未請求財産の確認用）。"
+    },
+    "order-margin-by-channel": {
+      "name": "チャネル別受注マージン",
+      "description": "チャネル・月別の貢献利益：CM1、CM2、CM3とマージン率。"
+    },
+    "order-margin-by-sku": {
+      "name": "品目別受注マージン",
+      "description": "品目・チャネル別の貢献利益（CM1、CM2、CM3の同じ段階構成）。"
+    },
+    "demand-forecast-accuracy": {
+      "name": "予測精度",
+      "description": "品目クラス別の予測誤差：評価対象週数、MAPE、バイアス（正の値は過大予測）。"
+    },
+    "payroll-register": {
+      "name": "給与台帳",
+      "description": "今年度の給与明細：総支給、控除、手取り、事業主コスト。"
+    },
+    "payroll-cost-by-month": {
+      "name": "月別給与コスト",
+      "description": "月次の給与合計：総支給、手取り、税、事業主コスト。"
+    },
+    "entitlement-balances": {
+      "name": "付与残高",
+      "description": "従業員別の休暇・福利厚生の残高とプラン上限。"
+    },
+    "allocation-summary": {
+      "name": "配賦サマリー",
+      "description": "ルール・期間別のプール元、配賦合計、残額。"
+    },
+    "allocation-lineage": {
+      "name": "配賦系統",
+      "description": "配賦明細をルール、元、勘定、配賦割合まで遡って表示。"
+    },
+    "entitlement-service-milestones": {
+      "name": "到達した勤続マイルストーン",
+      "description": "今年度に付与内容が変わる勤続記念日。"
+    },
+    "workforce-employment-history": {
+      "name": "雇用履歴",
+      "description": "雇用バージョン：本人、ステータス、日付、理由。"
+    },
+    "workforce-change-requests": {
+      "name": "変更申請",
+      "description": "変更申請：ステータス、種類、申請者、決定。"
+    },
+    "workforce-positions": {
+      "name": "ポジション",
+      "description": "設定済みのポジション：コード、名称、ステータス、FTE。"
+    },
+    "workforce-processes": {
+      "name": "プロセスチェックリスト",
+      "description": "プロセスチェックリストのステップ：担当者、期限、証跡。"
+    },
+    "workforce-leave-absences": {
+      "name": "休暇欠勤",
+      "description": "欠勤日：本人、休暇の種類、時間数。"
+    },
+    "workforce-requisitions": {
+      "name": "求人要求",
+      "description": "欠員募集：名称、ステータス、充足数。"
+    },
+    "workforce-applications": {
+      "name": "応募",
+      "description": "選考段階と充足所要期間付きの応募。"
+    },
+    "workforce-reviews": {
+      "name": "レビュー",
+      "description": "人事評価：評価とキャリブレーションの並列表示。"
+    },
+    "workforce-goals": {
+      "name": "目標",
+      "description": "業績目標：ステータス、進捗、期限。"
+    },
+    "workforce-turnover": {
+      "name": "離職",
+      "description": "退職者：勤続期間、退職理由、フラグ。"
+    },
+    "workforce-benefit-enrollments": {
+      "name": "福利厚生加入",
+      "description": "福利厚生の選択：プラン、区分、金額。"
+    },
+    "workforce-pay-bands": {
+      "name": "給与バンド",
+      "description": "有効な給与バンド：等級、適用範囲、最小・目標・最大。"
+    },
+    "workforce-comp-cycle-lines": {
+      "name": "昇給サイクル明細",
+      "description": "昇給の判断：提案、ガイドライン、ステータス。"
+    },
+    "workforce-headcount-plan-lines": {
+      "name": "要員計画明細",
+      "description": "計画上の増減：FTE、コスト、ステータス。"
+    },
+    "workforce-pay-gap-snapshots": {
+      "name": "賃金格差スナップショット",
+      "description": "カテゴリー別に固定した賃金格差のスナップショット（集計値のみ）。"
+    },
+    "workforce-automations": {
+      "name": "自動化",
+      "description": "自動化レシピ：トリガー、ステータス、最終実行。"
+    },
+    "workforce-automation-runs": {
+      "name": "自動化実行",
+      "description": "自動化の起動：対象、ステータス、エラー。"
+    },
+    "workforce-action-reasons": {
+      "name": "アクション理由",
+      "description": "各人事アクションを記録する理由コード。"
+    },
+    "workforce-rate-schedule-lines": {
+      "name": "賃金表明細",
+      "description": "賃金表の明細：基本給、付加給付、乗数。"
+    },
+    "workforce-per-diem-entries": {
+      "name": "日当エントリ",
+      "description": "日別の日当・出張金額とステータス。"
+    },
+    "workforce-comp-class-split": {
+      "name": "労災クラス別按分",
+      "description": "労災クラスごとに単価付けしたプロジェクト時間（日別）。"
+    },
+    "workforce-certified-runs": {
+      "name": "認証給与実行",
+      "description": "プロジェクト・週別の認証済み給与実行。"
+    },
+    "workforce-compliance-findings": {
+      "name": "コンプライアンス指摘",
+      "description": "実行前フラグの種類別一覧とライフサイクルステータス。"
+    },
+    "workforce-qualifications": {
+      "name": "資格",
+      "description": "保有する認定資格：保有者、種類、有効期限。"
+    },
+    "workforce-qualification-alerts": {
+      "name": "資格アラート",
+      "description": "認定資格の更新アラート：送信済みまたは保留中。"
+    },
+    "workforce-documents": {
+      "name": "HR文書",
+      "description": "HR文書：カテゴリー、ステータス、リーガルホールド。"
+    },
+    "workforce-document-signers": {
+      "name": "文書署名者",
+      "description": "署名順の文書署名者と署名者別のステータス。"
+    },
+    "workforce-retention-actions": {
+      "name": "保持アクション",
+      "description": "保持アクション：期限、実行、停止状況。"
+    },
+    "workforce-survey-results": {
+      "name": "調査結果",
+      "description": "調査：回答数、ステータス、終了日。"
+    },
+    "workforce-org-chart": {
+      "name": "組織図",
+      "description": "在籍中の雇用：氏名、役職、上長。"
+    },
+    "workforce-one-on-ones": {
+      "name": "1on1ミーティング",
+      "description": "1on1ミーティング：予定日と実施日、ステータス。"
+    },
+    "workforce-feedback": {
+      "name": "フィードバック",
+      "description": "称賛、フィードバック、依頼と公開範囲。"
+    },
+    "workforce-calibration-entries": {
+      "name": "キャリブレーション記録",
+      "description": "キャリブレーション済みレビュー：提案評価と最終評価の並列表示。"
+    },
+    "workforce-talent-reviews": {
+      "name": "タレントレビュー",
+      "description": "タレントレビュー：実績、ポテンシャル、リスク。"
+    },
+    "workforce-scorecards": {
+      "name": "評価集計",
+      "description": "面接ごとの選考委員の評価集計。"
+    },
+    "workforce-interview-slots": {
+      "name": "面接枠",
+      "description": "面接枠：時間帯、種類、ステータス。"
+    },
+    "workforce-offers": {
+      "name": "オファー",
+      "description": "オファー：条件面と署名のステータス。"
+    },
+    "workforce-postings": {
+      "name": "求人掲載",
+      "description": "求人媒体への掲載：応募数と処理結果。"
+    },
+    "workforce-retention-runs": {
+      "name": "保持実行",
+      "description": "保持ルールの評価と結果件数。"
+    },
+    "workforce-pool-members": {
+      "name": "プール所属",
+      "description": "タレントプールのメンバー：プールと登録日。"
+    },
+    "workforce-payroll-anomaly-flags": {
+      "name": "給与異常フラグ",
+      "description": "実行前の給与・タイムシートチェックのフラグ。"
+    },
+    "workforce-ai-decisions": {
+      "name": "AIの判断",
+      "description": "AI支援による回答：対象、情報源、結果。"
+    },
+    "workforce-ai-capabilities": {
+      "name": "AI能力",
+      "description": "AI能力：自律性の上限とレビュー状態。"
+    },
+    "workforce-benefit-payroll-inputs": {
+      "name": "福利厚生の給与拠出額",
+      "description": "給与実行別の福利厚生拠出額、控除、現物給付の計算結果。"
+    },
+    "workforce-benefit-awards": {
+      "name": "福利厚生の報奨と支払い",
+      "description": "従業員プログラムの報奨と、承認証跡、交付参照、給与実行までの系統。"
+    },
+    "shipment-labels": {
+      "name": "配送ラベル",
+      "description": "購入した運送会社ラベルのコスト、追跡状況、仕訳（無効化したものも表示）。"
+    },
+    "shipping-adjustments": {
+      "name": "運送会社調整",
+      "description": "購入後に運送会社が行った重量・寸法・住所の訂正（理由と状態付き）。"
+    },
+    "shipping-cost-by-carrier": {
+      "name": "運送会社別配送コスト",
+      "description": "購入月別・運送会社およびサービス別のラベル購入コストとラベル数。"
     }
   },
   "generalLedger": {

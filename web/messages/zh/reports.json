@@ -3668,6 +3668,358 @@
     "service-revenue-per-job": {
       "name": "每个服务工单的收入",
       "description": "按月份和币种统计已开票收入及每个已完成可计费工单的平均收入。"
+    },
+    "fixed-asset-register": {
+      "name": "按账簿列示的固定资产登记簿",
+      "description": "按状态、账簿和类别列示资产，包括在建工程。"
+    },
+    "fixed-asset-roll-forward": {
+      "name": "固定资产变动表",
+      "description": "按账簿列示资产成本的期初、增加、转移、处置和期末余额。"
+    },
+    "depreciation-roll-forward": {
+      "name": "累计折旧变动表",
+      "description": "按账簿列示累计折旧的期初、计提、重新计量、处置和期末余额。"
+    },
+    "depreciation-forecast": {
+      "name": "折旧预测",
+      "description": "按账簿和月份列示已计划但尚未过账的折旧。"
+    },
+    "asset-proposals-pending": {
+      "name": "待处理资产建议",
+      "description": "等待资本化决定的采购行。"
+    },
+    "asset-maintenance-due": {
+      "name": "资产维护到期",
+      "description": "截至报表日期已到期或逾期的维护计划。"
+    },
+    "insured-value-vs-net-book-value": {
+      "name": "保险价值与净账面价值对比",
+      "description": "列示受保资产的保险价值、净账面价值及两者差额。"
+    },
+    "construction-in-progress-costs": {
+      "name": "在建工程成本",
+      "description": "按记录和科目列示与在建工程关联的总账行。"
+    },
+    "sales-evidence": {
+      "name": "销售凭证",
+      "description": "不可变的已归属销售贷项及冲销，包括历史归属缺口。"
+    },
+    "sales-quota-attainment": {
+      "name": "销售配额达成",
+      "description": "基于不可变销售凭证，以目标币种列示配额版本与实际值。"
+    },
+    "promotion-performance": {
+      "name": "促销效果",
+      "description": "按期间和促销列示促销折扣及毛收入与净收入。"
+    },
+    "cash-tenders": {
+      "name": "现销支付手段",
+      "description": "销售时付款的结算方式：每种支付手段一行，按期间、方式和科目列示。"
+    },
+    "channel-sales": {
+      "name": "渠道销售",
+      "description": "按渠道、日期、物料、库位和支付手段列示店面订单行，含过账状态。"
+    },
+    "order-economics": {
+      "name": "订单毛利",
+      "description": "每个渠道订单行存储的边际贡献数据，毛利以公式度量呈现。"
+    },
+    "payout-reconciliation": {
+      "name": "付款核对",
+      "description": "将服务商付款按结算行列示，并与单据和银行存款匹配，显示差异。"
+    },
+    "customer-rebate-accruals": {
+      "name": "客户返利计提",
+      "description": "仅追加的已赚取返利、追溯性阶梯调整及日记账来源。"
+    },
+    "customer-rebate-claims": {
+      "name": "客户返利申领",
+      "description": "已赚取的申领、独立审批及原生结算凭据。"
+    },
+    "vendor-rebate-accruals": {
+      "name": "供应商返利计提",
+      "description": "仅追加的已赚取返利、追溯性阶梯调整及日记账来源。"
+    },
+    "vendor-rebate-claims": {
+      "name": "供应商返利申领",
+      "description": "已赚取的申领、独立审批及原生结算凭据。"
+    },
+    "contract-cost-rollforward": {
+      "name": "合同成本调节表",
+      "description": "按资产列示资本化合同成本：已摊销、已减值及期末账面金额。"
+    },
+    "contract-cost-postings": {
+      "name": "合同成本过账",
+      "description": "基于带标记的账簿分录，按期间列示资本化、摊销和减值行。"
+    },
+    "prepaid-amortization-plan": {
+      "name": "预付费用摊销计划",
+      "description": "按月份、科目和摊销计划列示预付费用的计划期间与已摊销期间。"
+    },
+    "prepaid-amortization-reconciliation": {
+      "name": "预付费用对账",
+      "description": "并列显示递延科目的账簿变动与摊销计划，以及截至某日的差异。"
+    },
+    "equity-compensation-run-lines": {
+      "name": "股权激励计提明细",
+      "description": "已过账的股权激励明细：累计确认成本及每次过账的变动。"
+    },
+    "equity-cap-table-positions": {
+      "name": "股权结构表持仓变动",
+      "description": "股票凭证、授予或计划池持仓的每次变动（拆股重述并折算为普通股）。"
+    },
+    "equity-securities-register": {
+      "name": "权益证券登记簿",
+      "description": "截至基准日发行的每项证券，及其条款、当日状态和数量。"
+    },
+    "billing-import-reconciliation": {
+      "name": "账单导入对账",
+      "description": "导入运行：按月的 MRR 与 OpenBooks 对比、按客户的未清应收款及切换阻碍项。"
+    },
+    "collection-recovery": {
+      "name": "催收回收",
+      "description": "每张自动扣款发票一行：尝试次数、首次拒付及回收路径。"
+    },
+    "collection-recovery-rate": {
+      "name": "催收回收率",
+      "description": "已回收的发票与收入，以及按拒付类别、服务商和月份的回收率。"
+    },
+    "stored-value-liability-roll-forward": {
+      "name": "储值负债变动表",
+      "description": "礼品卡与店铺积分的发行、兑换、过期和调整，以及期末负债。"
+    },
+    "stored-value-unclaimed-property": {
+      "name": "储值无人认领财产",
+      "description": "按客户地区列示礼品卡与店铺积分的未使用余额，用于无主财产审查。"
+    },
+    "order-margin-by-channel": {
+      "name": "按渠道的订单边际",
+      "description": "按渠道和月份列示边际贡献：CM1、CM2、CM3 及边际率。"
+    },
+    "order-margin-by-sku": {
+      "name": "按物料的订单边际",
+      "description": "按物料和渠道列示边际贡献，含相同的 CM1、CM2、CM3 层级。"
+    },
+    "demand-forecast-accuracy": {
+      "name": "预测准确率",
+      "description": "按物料类别列示预测误差：评分周数、MAPE 和偏差（正值表示预测偏高）。"
+    },
+    "payroll-register": {
+      "name": "工资登记簿",
+      "description": "本财年工资条：应发、代扣、实发和雇主成本。"
+    },
+    "payroll-cost-by-month": {
+      "name": "按月工资成本",
+      "description": "每月工资合计：应发、实发、税款和雇主成本。"
+    },
+    "entitlement-balances": {
+      "name": "福利余额",
+      "description": "按员工列示休假和福利余额及计划上限。"
+    },
+    "allocation-summary": {
+      "name": "分摊汇总",
+      "description": "按规则和期间列示汇集来源、已分摊合计及余额。"
+    },
+    "allocation-lineage": {
+      "name": "分摊溯源",
+      "description": "将已分摊行追溯至规则、来源、科目和比例。"
+    },
+    "entitlement-service-milestones": {
+      "name": "已达成服务年限里程碑",
+      "description": "本财年内会改变福利待遇的服务周年。"
+    },
+    "workforce-employment-history": {
+      "name": "雇用历史",
+      "description": "雇用版本：人员、状态、日期和原因。"
+    },
+    "workforce-change-requests": {
+      "name": "变更申请",
+      "description": "变更申请：状态、类型、申请人和决定。"
+    },
+    "workforce-positions": {
+      "name": "职位",
+      "description": "已设立职位：编码、名称、状态和 FTE。"
+    },
+    "workforce-processes": {
+      "name": "流程清单",
+      "description": "流程清单步骤：负责人、到期日和凭证。"
+    },
+    "workforce-leave-absences": {
+      "name": "休假缺勤",
+      "description": "缺勤天数：人员、假期类型和小时数。"
+    },
+    "workforce-requisitions": {
+      "name": "招聘需求",
+      "description": "空缺职位：名称、状态和已填补数量。"
+    },
+    "workforce-applications": {
+      "name": "应聘",
+      "description": "含漏斗阶段和到岗周期的应聘记录。"
+    },
+    "workforce-reviews": {
+      "name": "绩效评审",
+      "description": "绩效评审：评分与校准结果并列。"
+    },
+    "workforce-goals": {
+      "name": "目标",
+      "description": "绩效目标：状态、进度和到期日。"
+    },
+    "workforce-turnover": {
+      "name": "人员流失",
+      "description": "离职人员：任职时长、离职原因和标记。"
+    },
+    "workforce-benefit-enrollments": {
+      "name": "福利参保",
+      "description": "福利选择：计划、档次和金额。"
+    },
+    "workforce-pay-bands": {
+      "name": "薪酬带宽",
+      "description": "生效中的薪酬带宽：职级、适用范围及最小值、目标值、最大值。"
+    },
+    "workforce-comp-cycle-lines": {
+      "name": "调薪周期明细",
+      "description": "调薪决定：提案、指导标准和状态。"
+    },
+    "workforce-headcount-plan-lines": {
+      "name": "编制计划明细",
+      "description": "计划变动：FTE、成本和状态。"
+    },
+    "workforce-pay-gap-snapshots": {
+      "name": "薪酬差距快照",
+      "description": "按类别冻结的薪酬差距快照，仅含汇总数据。"
+    },
+    "workforce-automations": {
+      "name": "自动化",
+      "description": "自动化方案：触发条件、状态和最近运行。"
+    },
+    "workforce-automation-runs": {
+      "name": "自动化运行",
+      "description": "自动化触发记录：对象、状态和错误。"
+    },
+    "workforce-action-reasons": {
+      "name": "操作原因",
+      "description": "每项人事操作所归属的原因代码。"
+    },
+    "workforce-rate-schedule-lines": {
+      "name": "工资表明细",
+      "description": "工资表明细：基本工资、附加福利和倍数。"
+    },
+    "workforce-per-diem-entries": {
+      "name": "每日津贴",
+      "description": "按日列示的每日津贴与差旅金额及状态。"
+    },
+    "workforce-comp-class-split": {
+      "name": "工伤保险类别拆分",
+      "description": "按日列示按工伤保险类别计价的项目工时。"
+    },
+    "workforce-certified-runs": {
+      "name": "认证工资运行",
+      "description": "按项目和周列示的认证工资运行。"
+    },
+    "workforce-compliance-findings": {
+      "name": "合规发现项",
+      "description": "按类型列示的运行前标记及其生命周期状态。"
+    },
+    "workforce-qualifications": {
+      "name": "资质",
+      "description": "持有的认证：持有人、类型和到期日。"
+    },
+    "workforce-qualification-alerts": {
+      "name": "资质提醒",
+      "description": "认证续期提醒：已发送或待发送。"
+    },
+    "workforce-documents": {
+      "name": "人力资源文档",
+      "description": "人力资源文档：类别、状态和法律保留。"
+    },
+    "workforce-document-signers": {
+      "name": "文档签署人",
+      "description": "按顺序列示的文档签署人及各自状态。"
+    },
+    "workforce-retention-actions": {
+      "name": "保留操作",
+      "description": "保留操作：到期日、执行情况和阻止项。"
+    },
+    "workforce-survey-results": {
+      "name": "调查结果",
+      "description": "调查：回复数、状态和截止日期。"
+    },
+    "workforce-org-chart": {
+      "name": "组织架构图",
+      "description": "在职雇用关系：姓名、职位名称和上级。"
+    },
+    "workforce-one-on-ones": {
+      "name": "一对一会议",
+      "description": "一对一会议：计划与实际日期及状态。"
+    },
+    "workforce-feedback": {
+      "name": "反馈",
+      "description": "表扬、反馈和请求，含可见范围。"
+    },
+    "workforce-calibration-entries": {
+      "name": "校准记录",
+      "description": "已校准的评审：建议评分与最终评分并列。"
+    },
+    "workforce-talent-reviews": {
+      "name": "人才盘点",
+      "description": "人才盘点：绩效、潜力和风险。"
+    },
+    "workforce-scorecards": {
+      "name": "评价汇总",
+      "description": "含面试小组评价汇总的面试记录。"
+    },
+    "workforce-interview-slots": {
+      "name": "面试时段",
+      "description": "面试时段：时间窗口、类型和状态。"
+    },
+    "workforce-offers": {
+      "name": "录用函",
+      "description": "录用函：商务条款与签署状态。"
+    },
+    "workforce-postings": {
+      "name": "招聘渠道发布",
+      "description": "招聘网站发布：申请数与处理结果。"
+    },
+    "workforce-retention-runs": {
+      "name": "保留执行",
+      "description": "保留规则评估及结果计数。"
+    },
+    "workforce-pool-members": {
+      "name": "人才库成员",
+      "description": "人才库成员：所属人才库与加入日期。"
+    },
+    "workforce-payroll-anomaly-flags": {
+      "name": "薪资异常标记",
+      "description": "运行前工资与工时表检查的标记。"
+    },
+    "workforce-ai-decisions": {
+      "name": "AI 决策",
+      "description": "AI 辅助回答：对象、来源和结果。"
+    },
+    "workforce-ai-capabilities": {
+      "name": "AI 能力",
+      "description": "AI 能力：自主权上限和审核状态。"
+    },
+    "workforce-benefit-payroll-inputs": {
+      "name": "福利工资缴款",
+      "description": "按工资运行列示已计算的福利缴款、扣款和非现金福利。"
+    },
+    "workforce-benefit-awards": {
+      "name": "福利奖励与支付",
+      "description": "员工计划奖励，含审批凭证、发放引用及工资运行溯源。"
+    },
+    "shipment-labels": {
+      "name": "配送面单",
+      "description": "已购承运商面单的成本、物流跟踪状态和日记账；已作废的仍保留在列表中。"
+    },
+    "shipping-adjustments": {
+      "name": "承运商调账",
+      "description": "购买后承运商对重量、尺寸和地址的更正，含原因和状态。"
+    },
+    "shipping-cost-by-carrier": {
+      "name": "按承运商的运费成本",
+      "description": "按购买月份、承运商和服务列示已购面单成本及面单数量。"
     }
   },
   "generalLedger": {

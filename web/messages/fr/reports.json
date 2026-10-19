@@ -3648,6 +3648,358 @@
     "service-revenue-per-job": {
       "name": "Revenu par bon de travail",
       "description": "Revenu facturé et revenu moyen par bon de travail facturable terminé, par mois et par devise."
+    },
+    "fixed-asset-register": {
+      "name": "Registre des immobilisations par livre",
+      "description": "Immobilisations par statut, livre et catégorie, y compris les immobilisations en cours."
+    },
+    "fixed-asset-roll-forward": {
+      "name": "Tableau de variation des immobilisations",
+      "description": "Coût d’ouverture, acquisitions, transferts, cessions et coût de clôture des immobilisations par livre."
+    },
+    "depreciation-roll-forward": {
+      "name": "Tableau de variation des amortissements",
+      "description": "Amortissements cumulés d’ouverture, dotation, réévaluation, cessions et solde de clôture par livre."
+    },
+    "depreciation-forecast": {
+      "name": "Prévision d’amortissement",
+      "description": "Amortissement planifié non encore comptabilisé, par livre et par mois."
+    },
+    "asset-proposals-pending": {
+      "name": "Propositions d’immobilisation en attente",
+      "description": "Lignes d’achat en attente d’une décision d’immobilisation."
+    },
+    "asset-maintenance-due": {
+      "name": "Entretiens d’immobilisations à échéance",
+      "description": "Plans d’entretien échus ou en retard à la date du rapport."
+    },
+    "insured-value-vs-net-book-value": {
+      "name": "Valeur assurée et valeur nette comptable",
+      "description": "Immobilisations couvertes avec valeur assurée, valeur nette comptable et écart entre les deux."
+    },
+    "construction-in-progress-costs": {
+      "name": "Coûts des immobilisations en cours",
+      "description": "Lignes du grand livre liées aux immobilisations en cours, par enregistrement et par compte."
+    },
+    "sales-evidence": {
+      "name": "Preuves de vente",
+      "description": "Crédits de vente attribués immuables et leurs contrepassations, y compris les lacunes d’attribution historiques."
+    },
+    "sales-quota-attainment": {
+      "name": "Atteinte des quotas de vente",
+      "description": "Versions de quota et réalisations issues des preuves de vente immuables, dans la devise cible."
+    },
+    "promotion-performance": {
+      "name": "Performance des promotions",
+      "description": "Remises promotionnelles avec chiffre d’affaires brut et net, par période et par promotion."
+    },
+    "cash-tenders": {
+      "name": "Moyens de paiement (ventes au comptant)",
+      "description": "Mode de règlement des ventes payées à la vente : une ligne par moyen de paiement, par période, méthode et compte."
+    },
+    "channel-sales": {
+      "name": "Ventes par canal",
+      "description": "Lignes de commande de la boutique par canal, jour, article, emplacement et moyen de paiement, avec statut de comptabilisation."
+    },
+    "order-economics": {
+      "name": "Marge de la commande",
+      "description": "Données de marge sur coûts variables enregistrées par ligne de commande de canal, avec la marge en mesures calculées."
+    },
+    "payout-reconciliation": {
+      "name": "Rapprochement des versements",
+      "description": "Versements du prestataire en lignes de règlement, rapprochés des pièces et des dépôts bancaires, avec les écarts."
+    },
+    "customer-rebate-accruals": {
+      "name": "Ristournes clients acquises",
+      "description": "Ristournes acquises en ajout seul, ajustements rétroactifs de paliers et provenance des écritures."
+    },
+    "customer-rebate-claims": {
+      "name": "Demandes de ristournes clients",
+      "description": "Demandes acquises, approbations indépendantes et instruments de règlement natifs."
+    },
+    "vendor-rebate-accruals": {
+      "name": "Ristournes fournisseurs acquises",
+      "description": "Ristournes acquises en ajout seul, ajustements rétroactifs de paliers et provenance des écritures."
+    },
+    "vendor-rebate-claims": {
+      "name": "Demandes de ristournes fournisseurs",
+      "description": "Demandes acquises, approbations indépendantes et instruments de règlement natifs."
+    },
+    "contract-cost-rollforward": {
+      "name": "Variation des coûts de contrat",
+      "description": "Coûts de contrat immobilisés par actif : amorti, déprécié et valeur comptable de clôture."
+    },
+    "contract-cost-postings": {
+      "name": "Écritures de coûts de contrat",
+      "description": "Lignes d’immobilisation, d’amortissement et de dépréciation par période, issues des mouvements comptables étiquetés."
+    },
+    "prepaid-amortization-plan": {
+      "name": "Plan d’étalement des charges constatées d’avance",
+      "description": "Périodes de charges constatées d’avance planifiées et étalées, par mois, compte et échéancier."
+    },
+    "prepaid-amortization-reconciliation": {
+      "name": "Rapprochement des charges constatées d’avance",
+      "description": "Mouvements du compte de report au grand livre à côté de leurs échéanciers, avec l’écart à une date."
+    },
+    "equity-compensation-run-lines": {
+      "name": "Lignes des calculs de rémunération en actions",
+      "description": "Lignes de rémunération en actions comptabilisées : coût constaté à ce jour et variation par calcul."
+    },
+    "equity-cap-table-positions": {
+      "name": "Mouvements des positions de la table de capitalisation",
+      "description": "Chaque variation d’une position de certificat, d’attribution ou de réserve, retraitée et convertie."
+    },
+    "equity-securities-register": {
+      "name": "Registre des titres de capital",
+      "description": "Chaque titre émis à la date de référence, avec ses conditions, son statut et sa quantité à cette date."
+    },
+    "billing-import-reconciliation": {
+      "name": "Rapprochement d’import de facturation",
+      "description": "Exécutions d’import : MRR par mois face à OpenBooks, créances clients ouvertes par client et blocages de la bascule."
+    },
+    "collection-recovery": {
+      "name": "Recouvrement des encaissements",
+      "description": "Une ligne par facture prélevée automatiquement : tentatives, premier rejet et voie de recouvrement."
+    },
+    "collection-recovery-rate": {
+      "name": "Taux de recouvrement des encaissements",
+      "description": "Factures et chiffre d’affaires recouvrés, et taux de recouvrement par classe de rejet, prestataire et mois."
+    },
+    "stored-value-liability-roll-forward": {
+      "name": "Variation du passif des valeurs prépayées",
+      "description": "Cartes cadeaux et avoirs magasin émis, utilisés, expirés et ajustés, avec le passif de clôture."
+    },
+    "stored-value-unclaimed-property": {
+      "name": "Valeurs prépayées non réclamées",
+      "description": "Soldes ouverts de cartes cadeaux et d’avoirs magasin par région du client, pour l’examen des biens en déshérence."
+    },
+    "order-margin-by-channel": {
+      "name": "Marge des commandes par canal",
+      "description": "Marge sur coûts variables par canal et par mois : MCV1, MCV2 et MCV3, avec le taux de marge."
+    },
+    "order-margin-by-sku": {
+      "name": "Marge des commandes par article",
+      "description": "Marge sur coûts variables par article et par canal, avec la même échelle MCV1, MCV2 et MCV3."
+    },
+    "demand-forecast-accuracy": {
+      "name": "Précision des prévisions",
+      "description": "Erreur de prévision par classe d’article : semaines évaluées, MAPE et biais (positif : surestimation)."
+    },
+    "payroll-register": {
+      "name": "Registre de paie",
+      "description": "Bulletins de paie de l’exercice : brut, retenues, net et coût patronal."
+    },
+    "payroll-cost-by-month": {
+      "name": "Coût de la paie par mois",
+      "description": "Totaux mensuels de paie : brut, net, impôts et coût patronal."
+    },
+    "entitlement-balances": {
+      "name": "Soldes de droits",
+      "description": "Soldes de congés et d’avantages par employé, avec les plafonds du plan."
+    },
+    "allocation-summary": {
+      "name": "Synthèse des répartitions",
+      "description": "Source regroupée, total réparti et reliquat, par règle et par période."
+    },
+    "allocation-lineage": {
+      "name": "Traçabilité des répartitions",
+      "description": "Lignes réparties retracées jusqu’à la règle, la source, le compte et la part."
+    },
+    "entitlement-service-milestones": {
+      "name": "Jalons d’ancienneté atteints",
+      "description": "Anniversaires d’ancienneté de l’exercice qui modifient les droits."
+    },
+    "workforce-employment-history": {
+      "name": "Historique d’emploi",
+      "description": "Versions d’emploi : personne, statut, dates et motifs."
+    },
+    "workforce-change-requests": {
+      "name": "Demandes de changement",
+      "description": "Demandes de changement : statut, nature, demandeur et décision."
+    },
+    "workforce-positions": {
+      "name": "Postes",
+      "description": "Postes établis : code, intitulé, statut et ETP."
+    },
+    "workforce-processes": {
+      "name": "Listes de contrôle de processus",
+      "description": "Étapes des listes de contrôle de processus : responsable, échéance et preuve."
+    },
+    "workforce-leave-absences": {
+      "name": "Absences",
+      "description": "Jours d’absence : personne, type de congé et heures."
+    },
+    "workforce-requisitions": {
+      "name": "Demandes de recrutement",
+      "description": "Postes à pourvoir : intitulé, statut et nombre de postes pourvus."
+    },
+    "workforce-applications": {
+      "name": "Candidatures",
+      "description": "Candidatures avec étape de l’entonnoir et délai de recrutement."
+    },
+    "workforce-reviews": {
+      "name": "Évaluations",
+      "description": "Évaluations de performance : notes à côté du calibrage."
+    },
+    "workforce-goals": {
+      "name": "Objectifs",
+      "description": "Objectifs de performance : statut, avancement et échéance."
+    },
+    "workforce-turnover": {
+      "name": "Rotation du personnel",
+      "description": "Départs : ancienneté, motif de départ et indicateurs."
+    },
+    "workforce-benefit-enrollments": {
+      "name": "Adhésions aux avantages",
+      "description": "Choix d’avantages : plan, niveau et montants."
+    },
+    "workforce-pay-bands": {
+      "name": "Fourchettes salariales",
+      "description": "Fourchettes salariales en vigueur : niveau, périmètre et minimum, cible et maximum."
+    },
+    "workforce-comp-cycle-lines": {
+      "name": "Lignes du cycle de mérite",
+      "description": "Décisions de mérite : proposition, barème indicatif et statut."
+    },
+    "workforce-headcount-plan-lines": {
+      "name": "Lignes du plan d’effectifs",
+      "description": "Mouvements planifiés : ETP, coût et statut."
+    },
+    "workforce-pay-gap-snapshots": {
+      "name": "Instantanés d’écart de rémunération",
+      "description": "Instantanés figés d’écart de rémunération par catégorie : agrégats uniquement."
+    },
+    "workforce-automations": {
+      "name": "Automatisations",
+      "description": "Recettes d’automatisation : déclencheur, statut et dernière exécution."
+    },
+    "workforce-automation-runs": {
+      "name": "Exécutions d’automatisation",
+      "description": "Déclenchements d’automatisations : objet, statut et erreurs."
+    },
+    "workforce-action-reasons": {
+      "name": "Motifs d’action",
+      "description": "Codes de motif sous lesquels chaque action RH est enregistrée."
+    },
+    "workforce-rate-schedule-lines": {
+      "name": "Lignes des grilles salariales",
+      "description": "Lignes de grille salariale : base, avantages annexes et coefficients."
+    },
+    "workforce-per-diem-entries": {
+      "name": "Indemnités journalières",
+      "description": "Montants d’indemnités et de déplacement par jour, avec statut."
+    },
+    "workforce-comp-class-split": {
+      "name": "Répartition par classe de risque",
+      "description": "Heures de projet valorisées par classe de risque, par jour."
+    },
+    "workforce-certified-runs": {
+      "name": "Paies certifiées",
+      "description": "Paies certifiées par projet et par semaine."
+    },
+    "workforce-compliance-findings": {
+      "name": "Constats de conformité",
+      "description": "Alertes préalables à l’exécution par nature, avec statut du cycle de vie."
+    },
+    "workforce-qualifications": {
+      "name": "Qualifications du personnel",
+      "description": "Certifications détenues : titulaire, type et expiration."
+    },
+    "workforce-qualification-alerts": {
+      "name": "Alertes de qualification",
+      "description": "Alertes de renouvellement de certification : envoyées ou en attente."
+    },
+    "workforce-documents": {
+      "name": "Documents RH",
+      "description": "Documents RH : catégorie, statut et conservation légale."
+    },
+    "workforce-document-signers": {
+      "name": "Signataires de documents",
+      "description": "Signataires de documents dans l’ordre, avec le statut de chacun."
+    },
+    "workforce-retention-actions": {
+      "name": "Actions de conservation",
+      "description": "Actions de conservation : échéance, exécution et blocages."
+    },
+    "workforce-survey-results": {
+      "name": "Résultats d’enquêtes",
+      "description": "Enquêtes : réponses, statut et date de clôture."
+    },
+    "workforce-org-chart": {
+      "name": "Organigramme",
+      "description": "Emplois en cours : nom, intitulé et manager."
+    },
+    "workforce-one-on-ones": {
+      "name": "Entretiens individuels",
+      "description": "Réunions individuelles : dates prévues et tenues, statut."
+    },
+    "workforce-feedback": {
+      "name": "Retours",
+      "description": "Félicitations, retours et demandes, avec visibilité."
+    },
+    "workforce-calibration-entries": {
+      "name": "Entrées de calibrage",
+      "description": "Évaluations calibrées : note proposée à côté de la note finale."
+    },
+    "workforce-talent-reviews": {
+      "name": "Revues de talents",
+      "description": "Revues de talents : performance, potentiel et risque."
+    },
+    "workforce-scorecards": {
+      "name": "Fiches d’évaluation",
+      "description": "Entretiens avec les agrégats des avis du jury."
+    },
+    "workforce-interview-slots": {
+      "name": "Créneaux d’entretien",
+      "description": "Créneaux d’entretien : plage, type et statut."
+    },
+    "workforce-offers": {
+      "name": "Offres",
+      "description": "Offres : statut commercial et statut de signature."
+    },
+    "workforce-postings": {
+      "name": "Annonces d’emploi",
+      "description": "Annonces sur les sites d’emploi : candidatures et décisions."
+    },
+    "workforce-retention-runs": {
+      "name": "Passages de conservation",
+      "description": "Évaluations des règles de conservation avec décompte des résultats."
+    },
+    "workforce-pool-members": {
+      "name": "Membres du vivier",
+      "description": "Membres des viviers de talents : vivier et date d’entrée."
+    },
+    "workforce-payroll-anomaly-flags": {
+      "name": "Alertes d’anomalies de paie",
+      "description": "Alertes issues des contrôles préalables de la paie et des feuilles de temps."
+    },
+    "workforce-ai-decisions": {
+      "name": "Décisions IA",
+      "description": "Réponses assistées par IA : objet, sources et résultat."
+    },
+    "workforce-ai-capabilities": {
+      "name": "Capacités IA",
+      "description": "Capacités IA : plafond d’autonomie et état de revue."
+    },
+    "workforce-benefit-payroll-inputs": {
+      "name": "Cotisations d’avantages en paie",
+      "description": "Cotisations d’avantages calculées, retenues et avantages en nature par exécution de paie."
+    },
+    "workforce-benefit-awards": {
+      "name": "Récompenses et versements d’avantages",
+      "description": "Récompenses des programmes salariés avec preuve d’approbation, références de remise et filiation jusqu’à la paie."
+    },
+    "shipment-labels": {
+      "name": "Étiquettes d’expédition",
+      "description": "Étiquettes transporteur achetées avec coût, état de suivi et écriture ; les étiquettes annulées restent listées."
+    },
+    "shipping-adjustments": {
+      "name": "Ajustements transporteur",
+      "description": "Corrections de poids, de dimensions et d’adresse du transporteur après achat, avec motif et statut."
+    },
+    "shipping-cost-by-carrier": {
+      "name": "Coût d’expédition par transporteur",
+      "description": "Coût des étiquettes achetées par transporteur et service, par mois d’achat, avec le nombre d’étiquettes."
     }
   },
   "generalLedger": {

@@ -3668,6 +3668,358 @@
     "service-revenue-per-job": {
       "name": "Receita por serviço",
       "description": "Receita faturada e receita média por serviço faturável concluído, por mês e moeda."
+    },
+    "fixed-asset-register": {
+      "name": "Registro de ativos imobilizados por livro",
+      "description": "Ativos por status, livro e categoria, incluindo imobilizado em andamento."
+    },
+    "fixed-asset-roll-forward": {
+      "name": "Movimentação do ativo imobilizado",
+      "description": "Custo inicial, adições, transferências, baixas e custo final dos ativos por livro."
+    },
+    "depreciation-roll-forward": {
+      "name": "Movimentação da depreciação",
+      "description": "Depreciação acumulada inicial, encargo, remensuração, baixas e saldo final por livro."
+    },
+    "depreciation-forecast": {
+      "name": "Previsão de depreciação",
+      "description": "Depreciação planejada ainda não lançada, por livro e mês."
+    },
+    "asset-proposals-pending": {
+      "name": "Propostas de ativos pendentes",
+      "description": "Linhas de compra aguardando uma decisão de capitalização."
+    },
+    "asset-maintenance-due": {
+      "name": "Manutenções de ativos a vencer",
+      "description": "Cronogramas de manutenção vencidos ou a vencer na data do relatório."
+    },
+    "insured-value-vs-net-book-value": {
+      "name": "Valor segurado x valor contábil líquido",
+      "description": "Ativos cobertos com valor segurado, valor contábil líquido e a diferença entre eles."
+    },
+    "construction-in-progress-costs": {
+      "name": "Custos de imobilizado em andamento",
+      "description": "Linhas do razão vinculadas a imobilizado em andamento, por registro e conta."
+    },
+    "sales-evidence": {
+      "name": "Evidência de vendas",
+      "description": "Créditos de venda atribuídos imutáveis e seus estornos, incluindo lacunas históricas de atribuição."
+    },
+    "sales-quota-attainment": {
+      "name": "Atingimento de cotas de vendas",
+      "description": "Versões de cota e valores realizados a partir da evidência de vendas imutável, na moeda de destino."
+    },
+    "promotion-performance": {
+      "name": "Desempenho de promoções",
+      "description": "Descontos de promoções com receita bruta e líquida, por período e promoção."
+    },
+    "cash-tenders": {
+      "name": "Meios de pagamento (vendas à vista)",
+      "description": "Como as vendas pagas no ato foram liquidadas: uma linha por meio de pagamento, por período, método e conta."
+    },
+    "channel-sales": {
+      "name": "Vendas do canal",
+      "description": "Linhas de pedidos da loja virtual por canal, dia, item, local e meio de pagamento, com status de lançamento."
+    },
+    "order-economics": {
+      "name": "Margem do pedido",
+      "description": "Dados armazenados de margem de contribuição por linha de pedido do canal, com a margem como medidas de fórmula."
+    },
+    "payout-reconciliation": {
+      "name": "Conciliação de repasses",
+      "description": "Repasses do provedor como linhas de liquidação, conciliados com documentos e depósitos bancários, com as diferenças."
+    },
+    "customer-rebate-accruals": {
+      "name": "Bonificações apropriadas de clientes",
+      "description": "Bonificações ganhas somente de acréscimo, ajustes retroativos de faixas e origem dos lançamentos."
+    },
+    "customer-rebate-claims": {
+      "name": "Solicitações de bonificação de clientes",
+      "description": "Pedidos ganhos, aprovações independentes e instrumentos de liquidação nativos."
+    },
+    "vendor-rebate-accruals": {
+      "name": "Bonificações apropriadas de fornecedores",
+      "description": "Bonificações ganhas somente de acréscimo, ajustes retroativos de faixas e origem dos lançamentos."
+    },
+    "vendor-rebate-claims": {
+      "name": "Solicitações de bonificação de fornecedores",
+      "description": "Pedidos ganhos, aprovações independentes e instrumentos de liquidação nativos."
+    },
+    "contract-cost-rollforward": {
+      "name": "Evolução de custos de contrato",
+      "description": "Custos de contrato capitalizados por ativo: amortizado, ajustado por perda e valor contábil final."
+    },
+    "contract-cost-postings": {
+      "name": "Lançamentos de custos de contrato",
+      "description": "Linhas de capitalização, amortização e perda por redução ao valor recuperável por período, a partir de partidas do razão marcadas."
+    },
+    "prepaid-amortization-plan": {
+      "name": "Plano de apropriação de despesas antecipadas",
+      "description": "Períodos de despesas antecipadas programados e apropriados por mês, conta e cronograma."
+    },
+    "prepaid-amortization-reconciliation": {
+      "name": "Conciliação de despesas antecipadas",
+      "description": "Movimentos do razão da conta de diferimento ao lado de seus cronogramas, com a diferença até uma data."
+    },
+    "equity-compensation-run-lines": {
+      "name": "Linhas das execuções de remuneração em ações",
+      "description": "Linhas de remuneração em ações lançadas: custo reconhecido até a data e a variação de cada execução."
+    },
+    "equity-cap-table-positions": {
+      "name": "Movimentações de posições da tabela de capitalização",
+      "description": "Cada alteração de posição de certificado, outorga ou reserva, reapresentada e convertida."
+    },
+    "equity-securities-register": {
+      "name": "Registro de valores mobiliários de patrimônio",
+      "description": "Cada título emitido até a data de referência, com seus termos, status e quantidade nessa data."
+    },
+    "billing-import-reconciliation": {
+      "name": "Conciliação de importação de cobrança",
+      "description": "Execuções de importação: MRR por mês em relação ao OpenBooks, contas a receber em aberto por cliente e bloqueios da virada."
+    },
+    "collection-recovery": {
+      "name": "Recuperação de cobranças",
+      "description": "Uma linha por fatura cobrada automaticamente: tentativas, primeira recusa e caminho de recuperação."
+    },
+    "collection-recovery-rate": {
+      "name": "Taxa de recuperação de cobranças",
+      "description": "Faturas e receita recuperadas, e taxa de recuperação por classe de recusa, provedor e mês."
+    },
+    "stored-value-liability-roll-forward": {
+      "name": "Evolução do passivo de valor armazenado",
+      "description": "Vales-presente e créditos da loja emitidos, resgatados, expirados e ajustados, com o passivo final."
+    },
+    "stored-value-unclaimed-property": {
+      "name": "Valor armazenado não reclamado",
+      "description": "Saldos em aberto de vales-presente e créditos da loja por região do cliente, para revisão de bens abandonados."
+    },
+    "order-margin-by-channel": {
+      "name": "Margem de pedidos por canal",
+      "description": "Margem de contribuição por canal e mês: MC1, MC2 e MC3, com o índice de margem."
+    },
+    "order-margin-by-sku": {
+      "name": "Margem de pedidos por item",
+      "description": "Margem de contribuição por item e canal, com a mesma escala MC1, MC2 e MC3."
+    },
+    "demand-forecast-accuracy": {
+      "name": "Precisão da previsão",
+      "description": "Erro de previsão por classe de item: semanas avaliadas, MAPE e viés (positivo significa previsão acima do real)."
+    },
+    "payroll-register": {
+      "name": "Registro da folha",
+      "description": "Contracheques deste ano fiscal: bruto, retenções, líquido e custo patronal."
+    },
+    "payroll-cost-by-month": {
+      "name": "Custo da folha por mês",
+      "description": "Totais mensais da folha: bruto, líquido, impostos e custo patronal."
+    },
+    "entitlement-balances": {
+      "name": "Saldos de direitos",
+      "description": "Saldos de licenças e benefícios por funcionário, com os limites do plano."
+    },
+    "allocation-summary": {
+      "name": "Resumo de rateios",
+      "description": "Origem agrupada, total rateado e resíduo, por regra e período."
+    },
+    "allocation-lineage": {
+      "name": "Rastreabilidade de rateios",
+      "description": "Linhas rateadas rastreadas até a regra, a origem, a conta e a participação."
+    },
+    "entitlement-service-milestones": {
+      "name": "Marcos de tempo de serviço atingidos",
+      "description": "Aniversários de tempo de serviço deste ano fiscal que alteram os direitos."
+    },
+    "workforce-employment-history": {
+      "name": "Histórico de emprego",
+      "description": "Versões de vínculo: pessoa, status, datas e motivos."
+    },
+    "workforce-change-requests": {
+      "name": "Solicitações de alteração",
+      "description": "Solicitações de alteração: status, tipo, solicitante e decisão."
+    },
+    "workforce-positions": {
+      "name": "Posições",
+      "description": "Posições estabelecidas: código, título, status e FTE."
+    },
+    "workforce-processes": {
+      "name": "Listas de verificação de processos",
+      "description": "Etapas das listas de verificação de processos: responsável, vencimento e evidência."
+    },
+    "workforce-leave-absences": {
+      "name": "Ausências",
+      "description": "Dias de ausência: pessoa, tipo de licença e horas."
+    },
+    "workforce-requisitions": {
+      "name": "Requisições",
+      "description": "Vagas abertas: título, status e quantidade preenchida."
+    },
+    "workforce-applications": {
+      "name": "Candidaturas",
+      "description": "Candidaturas com etapa do funil e tempo de preenchimento."
+    },
+    "workforce-reviews": {
+      "name": "Avaliações",
+      "description": "Avaliações de desempenho: notas ao lado da calibração."
+    },
+    "workforce-goals": {
+      "name": "Metas",
+      "description": "Metas de desempenho: status, progresso e vencimento."
+    },
+    "workforce-turnover": {
+      "name": "Rotatividade",
+      "description": "Desligamentos: tempo de casa, motivo de saída e indicadores."
+    },
+    "workforce-benefit-enrollments": {
+      "name": "Inscrições de benefícios",
+      "description": "Escolhas de benefícios: plano, nível e valores."
+    },
+    "workforce-pay-bands": {
+      "name": "Faixas salariais",
+      "description": "Faixas salariais vigentes: nível, escopo e mínimo, alvo e máximo."
+    },
+    "workforce-comp-cycle-lines": {
+      "name": "Linhas do ciclo de mérito",
+      "description": "Decisões de mérito: proposta, diretriz e status."
+    },
+    "workforce-headcount-plan-lines": {
+      "name": "Linhas do plano de quadro",
+      "description": "Movimentações planejadas: FTE, custo e status."
+    },
+    "workforce-pay-gap-snapshots": {
+      "name": "Instantâneos de diferença salarial",
+      "description": "Instantâneos congelados de diferença salarial por categoria: somente agregados."
+    },
+    "workforce-automations": {
+      "name": "Automações",
+      "description": "Receitas de automação: gatilho, status e última execução."
+    },
+    "workforce-automation-runs": {
+      "name": "Execuções de automação",
+      "description": "Disparos de automações: assunto, status e erros."
+    },
+    "workforce-action-reasons": {
+      "name": "Motivos de ação",
+      "description": "Códigos de motivo sob os quais cada ação de RH é registrada."
+    },
+    "workforce-rate-schedule-lines": {
+      "name": "Linhas das tabelas salariais",
+      "description": "Linhas de tabela salarial: base, adicionais e multiplicadores."
+    },
+    "workforce-per-diem-entries": {
+      "name": "Diárias",
+      "description": "Valores de diárias e viagens por dia, com status."
+    },
+    "workforce-comp-class-split": {
+      "name": "Divisão por classe de risco",
+      "description": "Horas de projeto precificadas por classe de risco, por dia."
+    },
+    "workforce-certified-runs": {
+      "name": "Folhas certificadas",
+      "description": "Execuções de folha certificada por projeto e semana."
+    },
+    "workforce-compliance-findings": {
+      "name": "Achados de conformidade",
+      "description": "Sinalizações prévias à execução por tipo, com status do ciclo de vida."
+    },
+    "workforce-qualifications": {
+      "name": "Qualificações",
+      "description": "Certificações mantidas: titular, tipo e vencimento."
+    },
+    "workforce-qualification-alerts": {
+      "name": "Alertas de qualificações",
+      "description": "Alertas de renovação de certificações: enviados ou pendentes."
+    },
+    "workforce-documents": {
+      "name": "Documentos de RH",
+      "description": "Documentos de RH: categoria, status e bloqueio legal."
+    },
+    "workforce-document-signers": {
+      "name": "Assinantes de documentos",
+      "description": "Assinantes de documentos em ordem, com o status de cada assinante."
+    },
+    "workforce-retention-actions": {
+      "name": "Ações de retenção",
+      "description": "Ações de retenção: vencimento, execução e bloqueios."
+    },
+    "workforce-survey-results": {
+      "name": "Resultados de pesquisas",
+      "description": "Pesquisas: respostas, status e data de encerramento."
+    },
+    "workforce-org-chart": {
+      "name": "Organograma",
+      "description": "Vínculos ativos: nome, cargo e gestor."
+    },
+    "workforce-one-on-ones": {
+      "name": "Reuniões individuais",
+      "description": "Reuniões 1:1: datas agendadas e realizadas, status."
+    },
+    "workforce-feedback": {
+      "name": "Feedback dos colaboradores",
+      "description": "Elogios, feedback e solicitações, com visibilidade."
+    },
+    "workforce-calibration-entries": {
+      "name": "Entradas de calibração",
+      "description": "Avaliações calibradas: nota proposta ao lado da nota final."
+    },
+    "workforce-talent-reviews": {
+      "name": "Avaliações de talento",
+      "description": "Avaliações de talento: desempenho, potencial e risco."
+    },
+    "workforce-scorecards": {
+      "name": "Fichas de avaliação",
+      "description": "Entrevistas com agregados dos vereditos da banca."
+    },
+    "workforce-interview-slots": {
+      "name": "Horários de entrevista",
+      "description": "Horários de entrevista: janela, tipo e status."
+    },
+    "workforce-offers": {
+      "name": "Ofertas",
+      "description": "Ofertas: status comercial e de assinatura."
+    },
+    "workforce-postings": {
+      "name": "Anúncios de vagas",
+      "description": "Anúncios em portais de vagas: candidaturas e resultados."
+    },
+    "workforce-retention-runs": {
+      "name": "Execuções de retenção",
+      "description": "Avaliações de regras de retenção com contagem de resultados."
+    },
+    "workforce-pool-members": {
+      "name": "Membros do banco de talentos",
+      "description": "Membros de bancos de talentos: banco e data de entrada."
+    },
+    "workforce-payroll-anomaly-flags": {
+      "name": "Sinalizações de anomalias da folha",
+      "description": "Sinalizações das verificações prévias de folha e apontamento de horas."
+    },
+    "workforce-ai-decisions": {
+      "name": "Decisões de IA",
+      "description": "Respostas assistidas por IA: assunto, fontes e resultado."
+    },
+    "workforce-ai-capabilities": {
+      "name": "Capacidades de IA",
+      "description": "Capacidades de IA: limite de autonomia e estado de revisão."
+    },
+    "workforce-benefit-payroll-inputs": {
+      "name": "Contribuições de benefícios na folha",
+      "description": "Contribuições de benefícios calculadas, descontos e benefícios não monetários por execução da folha."
+    },
+    "workforce-benefit-awards": {
+      "name": "Prêmios e pagamentos de benefícios",
+      "description": "Prêmios de programas para funcionários com evidência de aprovação, referências de entrega e rastreio até a folha."
+    },
+    "shipment-labels": {
+      "name": "Etiquetas de envio",
+      "description": "Etiquetas de transportadora compradas, com custo, estado do rastreamento e lançamento; as anuladas continuam listadas."
+    },
+    "shipping-adjustments": {
+      "name": "Ajustes da transportadora",
+      "description": "Correções de peso, dimensões e endereço feitas pela transportadora após a compra, com motivo e estado."
+    },
+    "shipping-cost-by-carrier": {
+      "name": "Custo de envio por transportadora",
+      "description": "Custo das etiquetas compradas por transportadora e serviço em cada mês de compra, com a contagem de etiquetas."
     }
   },
   "generalLedger": {
