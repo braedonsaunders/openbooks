@@ -4,8 +4,9 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { commenceLease, createLeaseAgreement, LeaseError, postDueLeaseSchedules } from "./leases.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -523,6 +524,63 @@ test("createLeaseAgreement refuses unreadable discount rates before storing anyt
     const rows = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`);
     assert.equal(rows.rows[0]!.n, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("lease creation validates entity references and commencement hides missing or out-of-scope leases", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const accounts = await seedLeaseAccounts(org);
+    const branchId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Lease Branch', 'CAD', 'CA')
+    `);
+    const projectId = randomUUID();
+    await db.execute(sql`insert into projects (id, org_id, name, subsidiary_id, is_active)
+      values (${projectId}, ${org.orgId}, 'Lease Branch Project', ${branchId}, true)`);
+    const base = {
+      subsidiaryId: org.subsidiaryId,
+      leaseNumber: "LEASE-ENTITY-REFS",
+      commencementOn: "2026-07-01",
+      termPeriods: 3,
+      paymentFrequency: "monthly" as const,
+      paymentAmount: "1000",
+      annualDiscountRatePercent: "6",
+      classificationInputs: { transfersOwnership: true },
+      accounts,
+    };
+
+    await db.execute(sql`update accounts set subsidiary_id = ${branchId}, subsidiary_include_children = false
+      where org_id = ${org.orgId} and id = ${accounts.rouAsset}`);
+    await assert.rejects(
+      createLeaseAgreement(org.orgId, null, base),
+      (error: unknown) => error instanceof LeaseError && /restricted to another subsidiary/.test(error.message),
+    );
+    await db.execute(sql`update accounts set subsidiary_id = null, subsidiary_include_children = true
+      where org_id = ${org.orgId} and id = ${accounts.rouAsset}`);
+    await assert.rejects(
+      createLeaseAgreement(org.orgId, null, { ...base, projectId }),
+      (error: unknown) => error instanceof LeaseError && /project is restricted to another legal entity/.test(error.message),
+    );
+    const { leaseId } = await createLeaseAgreement(org.orgId, null, { ...base, subsidiaryId: branchId });
+    await assert.rejects(
+      createLeaseAgreement(org.orgId, null, { ...base, subsidiaryId: branchId }),
+      (error: unknown) => error instanceof LeaseError && /lease number is already used/.test(error.message),
+    );
+
+    const actorId = await createScratchUser(org.orgId, "Lease Controller", "lease_controller");
+    await db.execute(sql`update app_roles set permissions = '["assets.manage"]'::jsonb,
+      subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+      where org_id = ${org.orgId} and key = 'lease_controller'`);
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fixedAssets}', 'true'::jsonb, true)
+      where id = ${org.orgId}`);
+    await assert.rejects(commenceLease(org.orgId, randomUUID(), actorId), ScopeNotFoundError);
+    await assert.rejects(commenceLease(org.orgId, leaseId, actorId), ScopeNotFoundError);
+    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`)).rows[0]!.n;
+    assert.equal(count, 1, "invalid references and duplicate numbers leave no extra lease rows");
   } finally {
     await dropScratchOrg(org.orgId);
   }
