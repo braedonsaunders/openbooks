@@ -182,15 +182,15 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
         // One contract per invoice. The unique storage key is the concurrency
         // authority; contract_number remains business display data, not a mutex.
         const contractKey = revenueContractPostingEffectKey(documentId);
-        // Consideration mirrors the billing rows written in this same commit:
-        // a contract created while scoped writes are off carries none, so a
-        // later replay that records its billing accumulates exactly once.
+        // Invoice price is already fixed by this document. Billed
+        // consideration is accumulated from the billing ledger below, both
+        // on a first post and when a legacy invoice is replayed after enablement.
         const insertedContract = await tx.execute<{ id: string }>(sql`
           insert into revenue_contracts
             (org_id, subsidiary_id, customer_id, contract_number, idempotency_key, status, starts_on,
              currency, total_transaction_price, total_consideration, created_by, updated_by)
           values (${orgId}, ${doc.subsidiary_id}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
-                  ${doc.document_date}, ${doc.currency}, ${contractTotal}, ${scopedEnabled ? contractTotal : "0"}, ${actorId}, ${actorId})
+                  ${doc.document_date}, ${doc.currency}, ${contractTotal}, '0', ${actorId}, ${actorId})
           -- Repeated posting reuses the existing source-document contract selected below.
           on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
           returning id

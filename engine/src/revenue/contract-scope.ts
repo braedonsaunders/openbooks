@@ -295,7 +295,8 @@ export async function recordContractBilling(
   const updated = (await runner.execute<{ id: string }>(sql`
     update revenue_contracts
        set total_consideration = total_consideration + ${amount},
-           total_transaction_price = total_transaction_price + ${amount},
+           total_transaction_price = case when scope = 'invoice'
+             then total_transaction_price else total_transaction_price + ${amount} end,
            modification_seq = modification_seq + 1,
            status = 'active',
            updated_by = ${actorId}, updated_at = now()
