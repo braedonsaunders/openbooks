@@ -107,8 +107,10 @@ export async function reversePayoutAccrual(
       currency: row.currency,
       idempotencyKey: `psp-in-transit|${input.orgId}|${row.batch_id}|${row.accrual_date}|reversal`,
       lines: [
-        { accountId: row.bank_account_id, amount: row.amount, memo: "In-transit payout returned to bank" },
+        // Keep the source line order so the ledger guard can prove that each
+        // posted line mirrors the original by line number and dimensions.
         { accountId: row.transit_account_id, amount: neg(row.amount), memo: "In-transit clearing released" },
+        { accountId: row.bank_account_id, amount: row.amount, memo: "In-transit payout returned to bank" },
       ],
     });
     await markEntryReversed(tx, { orgId: input.orgId, entryId: row.accrual_entry_id, actorId: input.actorId });
