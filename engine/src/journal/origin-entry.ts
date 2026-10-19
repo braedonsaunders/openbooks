@@ -273,6 +273,7 @@ export async function reverseProjectGlEntryWithinTransaction(
   entryId: string,
   reasonInput: string,
   reversalDateInput?: string,
+  reversalPeriodId?: string,
 ): Promise<ReverseProjectGlResult> {
   if (!actorId) throw new Error("an attributable actor is required");
   const reason = reasonInput.trim();
@@ -317,10 +318,20 @@ export async function reverseProjectGlEntryWithinTransaction(
   if (h.status !== "posted") {
     throw new Error(`project GL entry ${entryId} is ${h.status} and cannot be reversed`);
   }
-  // Reversals are ordinary corrections: shared covering-period resolver.
-  const period = await resolveCoveringPeriod(tx, orgId, reversalDate, h.subsidiary_id);
+  // Use a named period for governed adjustment reversals; ordinary corrections
+  // keep the shared covering-period resolver.
+  const period: { id: string; starts_on: string; ends_on: string } | null = reversalPeriodId
+    ? (await tx.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
+        select ${reversalPeriodId}::uuid as id,
+               window_start::text as starts_on,
+               window_end::text as ends_on
+          from accounting_period_posting_window(${orgId}, ${reversalPeriodId})`)).rows[0] ?? null
+    : await resolveCoveringPeriod(tx, orgId, reversalDate, h.subsidiary_id);
   if (!period) {
     throw new Error(`no accounting period covers ${reversalDate}`);
+  }
+  if (reversalDate < period.starts_on || reversalDate > period.ends_on) {
+    throw new Error(`the selected accounting period does not cover ${reversalDate}`);
   }
   // One period gate: the shared GL check replaces the raw
   // period_module_is_closed predicate. A reversal is new activity, not

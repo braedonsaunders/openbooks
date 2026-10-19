@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { resolveAccountGroups } from "../records/account-groups.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
-import { businessToday } from "../platform/business-date.ts";
 import { db, inDbTransaction, withOrgTransaction } from "../platform/db.ts";
 import { add, cmp, isZero, neg, sum } from "../money/money.ts";
 import { AllocationApportionError, apportionTargets, fixedPercentWeights } from "./apportion.ts";
@@ -10,10 +9,10 @@ import { previewPinError, sourceScopeViolation, targetPinViolation } from "../or
 import type { DriverResolveOptions } from "./drivers.ts";
 import { allocationServiceDeps } from "./service.ts";
 import {
-  postProjectGlEntryWithinTransaction,
   reverseProjectGlEntryWithinTransaction,
   type GlLine,
 } from "../journal/origin-entry.ts";
+import { postEntry } from "../journal/post-entry.ts";
 import { assertPeriodModulesOpen, canonicalPeriodLabel, CloseError } from "../periods/period-policy.ts";
 import {
   acquireOrgFeatureGateLock,
@@ -1157,6 +1156,7 @@ async function buildComputation(
       };
       lines.push(creditLine);
       for (const apportioned of split.targets) {
+        if (isZero(apportioned.amount)) continue;
         const target = byKey.get(apportioned.key)!;
         if (opts.version.impact === "net_zero_pair" && target.coordinate.accountId && target.coordinate.accountId !== source.accountId) {
           throw new Error("net_zero_pair targets must use the source account so no account total moves");
@@ -1356,7 +1356,7 @@ async function writeAudit(
 // Journal write + lineage (shared by post and rerun)
 // ---------------------------------------------------------------------------
 
-function computationGlLines(computation: RunComputation): GlLine[] {
+function computationGlLines(computation: RunComputation): Array<GlLine & { lineNumber: number }> {
   return computation.lines.map((line) => ({
     accountId: line.accountId,
     amount: line.amount,
@@ -1370,6 +1370,7 @@ function computationGlLines(computation: RunComputation): GlLine[] {
     extraDims: line.extraDims ?? {},
     contributorKind: "rule" as const,
     contributorRef: line.contributorRef,
+    lineNumber: line.lineNumber,
   }));
 }
 
@@ -1420,18 +1421,48 @@ async function postStoredJournal(
   // Entry memo from the rule key and period (the per-line memos already carry
   // the rendered memo/line-description templates from preview time).
   const memo = `Allocation ${opts.ruleKey} — ${periodLabel(opts.period)}`;
-  const entryId = await postProjectGlEntryWithinTransaction(tx, {
+  const lineSubsidiaries = [...new Set(lineSubs as string[])];
+  const currencies = (await tx.execute<{ subsidiary_id: string; subsidiary_name: string; currency: string | null }>(sql`
+    select subsidiary.id as subsidiary_id,
+           subsidiary.name as subsidiary_name,
+           public.accounting_book_currency(${opts.orgId}, ${opts.run.book_id}, subsidiary.id) as currency
+      from subsidiaries subsidiary
+     where subsidiary.org_id = ${opts.orgId}
+       and subsidiary.id = any(${uuidArray(lineSubsidiaries)}::uuid[])
+     order by subsidiary.id`)).rows;
+  const currencyBySubsidiary = new Map(currencies.map((row) => [row.subsidiary_id, row]));
+  for (const subsidiaryId of lineSubsidiaries) {
+    const currency = currencyBySubsidiary.get(subsidiaryId);
+    if (!currency?.currency) {
+      const subsidiaryName = currency?.subsidiary_name ?? "a subsidiary";
+      throw new AllocationRunError(
+        "INVALID",
+        `allocation journal requires a measurement currency for ${subsidiaryName} in this accounting book — configure that book's currency for the subsidiary and retry`,
+      );
+    }
+  }
+  const posted = await postEntry(tx, {
     orgId: opts.orgId,
-    actorId: opts.actorId,
-    origin: "allocation",
+    bookId: opts.run.book_id,
+    subsidiaryId: headerSubsidiary!,
     entryNumber: `ALLOC-${opts.ruleKey}-${opts.period.name}-${opts.entryNumberSuffix}`,
     postingDate: opts.period.ends_on,
+    periodId: opts.period.id,
     memo,
-    subsidiaryId: headerSubsidiary,
-    bookId: opts.run.book_id,
-    lines: glLines,
+    origin: "allocation",
+    actorId: opts.actorId,
+    amountBasis: "book",
+    accountBasis: "book",
+    replicate: false,
+    auditAction: "insert",
+    requestId: "allocation_period_run",
+    auditChanges: { mode: "allocation_period_run", runId: opts.run.id },
+    lines: glLines.map((line) => {
+      const subsidiaryId = line.subsidiaryId ?? headerSubsidiary!;
+      return { ...line, subsidiaryId, currency: currencyBySubsidiary.get(subsidiaryId)!.currency! };
+    }),
   });
-  if (!entryId) throw new Error("allocation journal posting returned no entry");
+  const entryId = posted.entryId;
   const postedLines = (await tx.execute<{ id: string; line_number: number }>(sql`
     select id, line_number from journal_lines
      where org_id = ${opts.orgId} and entry_id = ${entryId} order by line_number for share`)).rows;
@@ -1555,6 +1586,7 @@ async function reverseStoredJournal(
     run: RunRow;
     reason: string;
     reversalDate: string;
+    reversalPeriodId?: string;
   },
 ): Promise<string | null> {
   if (!opts.run.journal_entry_id) {
@@ -1581,6 +1613,7 @@ async function reverseStoredJournal(
     opts.run.journal_entry_id,
     opts.reason,
     opts.reversalDate,
+    opts.reversalPeriodId,
   );
   if (reversal.status === "missing") {
     throw new Error(`allocation journal ${opts.run.journal_entry_id} is missing`);
@@ -2001,7 +2034,7 @@ async function reverseSupersededForApproval(
     throw new AllocationRunError("NOT_FOUND", `allocation run ${opts.oldRunId} does not belong to this organization`);
   }
   if (old.status !== "posted") return;
-  const reversalDate = await businessToday(opts.orgId);
+  const reversalDate = opts.period.ends_on;
   await assertPeriodOpen(tx, opts.orgId, opts.period, old.book_id, touchedSubsidiaries(old));
   const reversalEntryId = await reverseStoredJournal(tx, {
     orgId: opts.orgId,
@@ -2009,6 +2042,7 @@ async function reverseSupersededForApproval(
     run: old,
     reason: opts.reason,
     reversalDate,
+    reversalPeriodId: reversalDate === opts.period.ends_on ? opts.period.id : undefined,
   });
   await tx.execute(sql`
     update allocation_runs
@@ -2055,7 +2089,7 @@ export async function reverseAllocationRun(
     // disable must refuse it too.
     await assertAllocationsEnabled(tx, orgId, "reverse");
     const period = await loadPeriod(tx, orgId, run.period_id);
-    const reversalDate = opts.reversalDate ?? (await businessToday(orgId));
+    const reversalDate = opts.reversalDate ?? period.ends_on;
     // The reversal lands on the reversal date AND unwinds this run's period:
     // both GL scopes must be open.
     await assertPeriodOpen(tx, orgId, period, run.book_id, touchedSubsidiaries(run));
@@ -2065,6 +2099,7 @@ export async function reverseAllocationRun(
       run,
       reason: cleanReason,
       reversalDate,
+      reversalPeriodId: reversalDate === period.ends_on ? period.id : undefined,
     });
     await tx.execute(sql`
       update allocation_runs
@@ -2232,7 +2267,7 @@ export async function rerunAllocationRun(
         idempotent: false,
       };
     }
-    const reversalDate = opts.reversalDate ?? (await businessToday(orgId));
+    const reversalDate = opts.reversalDate ?? period.ends_on;
     if (run.status === "posted") {
       await assertPeriodOpen(tx, orgId, period, run.book_id, touchedSubsidiaries(run));
       const reversalEntryId = await reverseStoredJournal(tx, {
@@ -2241,6 +2276,7 @@ export async function rerunAllocationRun(
         run,
         reason: cleanReason,
         reversalDate,
+        reversalPeriodId: reversalDate === period.ends_on ? period.id : undefined,
       });
       await tx.execute(sql`
         update allocation_runs
