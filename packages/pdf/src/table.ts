@@ -37,7 +37,7 @@ export class PdfLayoutError extends RangeError {
   readonly remedy = 'Choose a wider page, smaller print density or fewer report columns.'
 
   constructor() {
-    super('The report columns cannot fit legibly on this page. Choose a wider page, smaller print density or fewer report columns.')
+    super('The report columns cannot fit legibly on this page.')
     this.name = 'PdfLayoutError'
   }
 }

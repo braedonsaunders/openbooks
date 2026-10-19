@@ -94,5 +94,7 @@ test('an unreadable PDF layout reaches the operator as a 422 with the supported 
   const body = await response.clone().json()
   assert.equal(body.code, 'pdf_layout_too_narrow')
   assert.match(body.remedy, /wider page/)
-  assert.doesNotMatch(await readApiErrorMessage(response, 'Export failed'), /Export failed/)
+  const displayed = await readApiErrorMessage(response, 'Export failed')
+  assert.doesNotMatch(displayed, /Export failed/)
+  assert.equal(displayed.split('Choose a wider page').length - 1, 1, 'the supported remedy appears once')
 })
