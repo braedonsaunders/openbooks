@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
+import { contractRecurringAmounts } from "./subscription-billing.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import {
   createScratchOrg,
@@ -266,6 +267,61 @@ test("list-price quote sends, signs, and activates exactly once", DB, async () =
   });
 });
 
+test("same-plan quote terms activate only their own billed component", DB, async () => {
+  await withDeal(async (org, actor, seed) => {
+    const secondLineId = randomUUID();
+    await db.execute(sql`
+      insert into document_lines
+        (id, org_id, document_id, line_number, description, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+      values (${secondLineId}, ${org.orgId}, ${seed.quoteId}, 2, 'Additional seats', ${org.accounts.revenue},
+              '1', '3000.0000', '3000.0000', '0', '3000.0000')`);
+    await db.execute(sql`
+      update documents set subtotal = '9000.0000', total = '9000.0000'
+       where org_id = ${org.orgId} and id = ${seed.quoteId}`);
+    const secondTermId = randomUUID();
+    await db.execute(sql`
+      insert into quote_subscription_terms
+        (id, org_id, quote_id, quote_line_id, plan_id, term_months, start_rule, billing_timing, created_by)
+      values (${secondTermId}, ${org.orgId}, ${seed.quoteId}, ${secondLineId}, ${seed.planId}, 12, 'quote_date', 'advance', ${actor})`);
+    await db.execute(sql`
+      insert into quote_ramp_steps
+        (id, org_id, term_id, period_index, starts_after_months, unit_price, quantity, created_by)
+      values (${randomUUID()}, ${org.orgId}, ${secondTermId}, 0, 0, '50.00', '5', ${actor})`);
+
+    const sent = await requestQuoteSignature({
+      orgId: org.orgId,
+      actorId: actor,
+      quoteId: seed.quoteId,
+      signerName: "Ada Customer",
+      signerEmail: "ada@example.com",
+    });
+    await signQuoteSignature({ token: sent.token, name: "Ada Customer" });
+    const activation = await activateQuote(org.orgId, actor, seed.quoteId, {});
+    assert.equal(activation.subscriptionIds.length, 2);
+
+    const components = (await db.execute<{
+      source_term_id: string;
+      component_key: string;
+      quantity: string;
+      unit_price: string;
+    }>(sql`
+      select s.source_term_id, c.component_key, c.quantity::text as quantity, c.unit_price::text as unit_price
+        from subscriptions s
+        join subscription_components c on c.org_id = s.org_id and c.subscription_id = s.id
+       where s.org_id = ${org.orgId} and s.source_quote_id = ${seed.quoteId}
+       order by s.source_term_id, c.component_key`)).rows;
+    assert.equal(components.length, 2);
+    assert.deepEqual(components.map((component) => component.source_term_id).sort(), [seed.termId, secondTermId].sort());
+    assert.deepEqual(components.map((component) => toUnits(component.quantity)).sort((a, b) => a < b ? -1 : a > b ? 1 : 0),
+      [toUnits("5"), toUnits("10")].sort((a, b) => a < b ? -1 : a > b ? 1 : 0));
+    assert.ok(components.every((component) => toUnits(component.unit_price) === toUnits("50.0000")));
+
+    const recurring = await contractRecurringAmounts(org.orgId, org.date);
+    const amount = activation.subscriptionIds.reduce((sum, id) => sum + toUnits(recurring.get(id)!.amount), 0n);
+    assert.equal(amount, toUnits("750.0000"));
+  }, { steps: [{ price: "50.00", qty: "10", startMonth: 0 }], lineAmount: "6000.0000", planAmount: "50.0000" });
+});
+
 test("over-threshold discount refuses sending until the quote is approved", DB, async () => {
   const seedOpts = { steps: [{ price: "40.00", qty: "1", startMonth: 0 }], lineAmount: "480.0000" };
   await withDeal(
@@ -401,6 +457,33 @@ test("the reminder scan expires lapsed links and sends one reminder each", DB, a
       update signature_requests set expires_at = now() - interval '1 hour'
        where id = ${lapsed.requestId}`);
 
+    async function addServiceQuoteSignature(documentNumber: string, expiresAt: Date) {
+      const serviceQuoteDocumentId = randomUUID();
+      const serviceRequestId = randomUUID();
+      const tokenHash = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, party_id, document_date,
+           currency, subtotal, tax_total, total, created_by)
+        values (${serviceQuoteDocumentId}, ${org.orgId}, 'quote', 'approved', ${documentNumber}, ${org.customerId}, ${org.date},
+                'CAD', '100.0000', '0', '100.0000', ${actor})`);
+      await db.execute(sql`
+        insert into signature_requests
+          (id, org_id, subject_table, subject_id, signer_name, signer_email, token_hash, status,
+           expires_at, sent_at, document_hash, created_by, updated_by)
+        values (${serviceRequestId}, ${org.orgId}, 'documents', ${serviceQuoteDocumentId}, 'Cy Customer', 'cy@example.com',
+                ${tokenHash}, 'sent', ${expiresAt}, now() - interval '2 hours', 'service-presentation', ${actor}, ${actor})`);
+      await db.execute(sql`
+        insert into service_quotes
+          (org_id, quote_document_id, deposit_basis, deposit_value, status, signature_request_id,
+           sent_at, created_by, updated_by)
+        values (${org.orgId}, ${serviceQuoteDocumentId}, 'none', 0, 'sent', ${serviceRequestId},
+                now() - interval '2 hours', ${actor}, ${actor})`);
+      return { requestId: serviceRequestId, tokenHash };
+    }
+    const serviceDue = await addServiceQuoteSignature("SQ-DUE", new Date(Date.now() + 60 * 60 * 1000));
+    const serviceExpired = await addServiceQuoteSignature("SQ-EXPIRED", new Date(Date.now() - 60 * 60 * 1000));
+
     const first = await runSignatureReminderScan();
     assert.equal(first.expired, 1);
     assert.equal(first.reminded, 1);
@@ -411,6 +494,18 @@ test("the reminder scan expires lapsed links and sends one reminder each", DB, a
         select status from signature_requests where id = ${lapsed.requestId}`)
     ).rows[0]!;
     assert.equal(lapsedRow.status, "expired");
+
+    const serviceRows = (await db.execute<{ id: string; status: string; token_hash: string }>(sql`
+      select id, status, token_hash from signature_requests
+       where id in (${serviceDue.requestId}, ${serviceExpired.requestId})`)).rows;
+    assert.equal(serviceRows.length, 2);
+    assert.ok(serviceRows.every((row) => row.status === "sent"));
+    assert.equal(serviceRows.find((row) => row.id === serviceDue.requestId)!.token_hash, serviceDue.tokenHash);
+    assert.equal(serviceRows.find((row) => row.id === serviceExpired.requestId)!.token_hash, serviceExpired.tokenHash);
+    const serviceReminders = await db.execute(sql`
+      select 1 from scheduler_outbox where kind = 'flow_email'
+       and occurrence_key in (${`signature-reminder:${serviceDue.requestId}`}, ${`signature-reminder:${serviceExpired.requestId}`})`);
+    assert.equal(serviceReminders.rows.length, 0);
 
     // The reminder rotated the live link and queued exactly one email.
     const rotated = (

@@ -240,3 +240,31 @@ test("only an issued quote with both features on can be awarded", DB, async () =
     assert.equal(none.rows.length, 0);
   });
 });
+
+test("a service quote signature does not block award of the same estimate", DB, async () => {
+  await withOrg(async (org, actor) => {
+    const ctx = { orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null };
+    const quote = await seedQuote(org, actor);
+    const signatureRequestId = randomUUID();
+    await db.execute(sql`
+      insert into signature_requests
+        (id, org_id, subject_table, subject_id, signer_name, signer_email, token_hash, status,
+         expires_at, sent_at, signed_at, document_hash, created_by, updated_by)
+      values (${signatureRequestId}, ${org.orgId}, 'documents', ${quote.quoteId}, 'Ada Customer', 'ada@example.com',
+              ${randomUUID()}, 'signed', now() + interval '7 days', now() - interval '1 day', now(),
+              'service-quote-presentation', ${actor}, ${actor})`);
+    await db.execute(sql`
+      insert into service_quotes
+        (org_id, quote_document_id, deposit_basis, deposit_value, status, signature_request_id,
+         sent_at, decided_at, decided_name, accepted_total, deposit_due, created_by, updated_by)
+      values (${org.orgId}, ${quote.quoteId}, 'none', 0, 'accepted', ${signatureRequestId},
+              now() - interval '1 day', now(), 'Ada Customer', '4230.0000', 0, ${actor}, ${actor})`);
+
+    const preview = await previewQuoteAward(ctx, quote.quoteId);
+    assert.equal(preview.blocked, null);
+    const awarded = await awardQuote(ctx, quote.quoteId, {
+      lineCosts: [{ lineId: quote.mobilizationLineId, cost: "300" }],
+    });
+    assert.ok(awarded.projectId);
+  });
+});

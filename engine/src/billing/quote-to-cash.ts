@@ -495,8 +495,12 @@ export async function latestSignatureRequest(
       consent_text: string | null;
     }>(sql`
       select id, status, signer_name, signer_email, expires_at, document_hash, consent_text
-        from signature_requests
-       where org_id = ${orgId} and subject_table = ${subjectTable} and subject_id = ${subjectId}
+        from signature_requests r
+       where r.org_id = ${orgId} and r.subject_table = ${subjectTable} and r.subject_id = ${subjectId}
+         and not exists (
+           select 1 from service_quotes sq
+            where sq.org_id = r.org_id and sq.signature_request_id = r.id
+         )
        order by sent_at desc, id desc limit 1`)
   ).rows[0];
   if (!row) return null;
@@ -1608,10 +1612,9 @@ async function activateQuoteLocked(
   const systemSource = actorId ? undefined : { origin: "quote-to-cash", detail: { quoteId } };
 
   // Freeze the agreed prices into one version per (plan, timing) group, then
-  // activate each term onto its group's version. The quote is the commercial
-  // agreement; the version is its effective-dated record. Each term's
-  // component key is recorded here so the ramp amends the exact component
-  // the version minted for it.
+  // activate each term onto only its own component in that version. The quote
+  // is the commercial agreement; the version is its effective-dated record.
+  // Each term's component key is also used by its ramp amendments.
   const versionByGroup = new Map<string, { versionId: string; componentKey: string }>();
   if (advanced) {
     const groups = new Map<string, QuoteTerm[]>();
@@ -1703,6 +1706,7 @@ async function activateQuoteLocked(
       await activateLifecycle(orgId, actor, {
         subscriptionId,
         planVersionId: frozen.versionId,
+        componentKeys: [frozen.componentKey],
         termStartsOn: termStart,
         termEndsOn: termEnd,
       }, opts.allowedSubsidiaryIds ?? null);
@@ -1798,8 +1802,12 @@ async function runOneOrgSignatureReminders(
     if (!(await lockAndCheckOrgFeature(db, orgId, "quoteToCash"))) return { scanned: 0, expired: 0, reminded: 0 };
     const expired = (
       await db.execute<{ id: string }>(sql`
-        update signature_requests set status = 'expired', updated_at = now()
-         where org_id = ${orgId} and status in ('sent', 'viewed') and expires_at < now()
+        update signature_requests r set status = 'expired', updated_at = now()
+         where r.org_id = ${orgId} and r.status in ('sent', 'viewed') and r.expires_at < now()
+           and not exists (
+             select 1 from service_quotes sq
+              where sq.org_id = r.org_id and sq.signature_request_id = r.id
+           )
         returning id`)
     ).rows.length;
     const due = (
@@ -1816,6 +1824,10 @@ async function runOneOrgSignatureReminders(
          where r.org_id = ${orgId} and r.status in ('sent', 'viewed')
            and r.expires_at >= now()
            and r.expires_at < now() + (${REMINDER_WINDOW_HOURS} || ' hours')::interval
+           and not exists (
+             select 1 from service_quotes sq
+              where sq.org_id = r.org_id and sq.signature_request_id = r.id
+           )
            and not exists (
              select 1 from scheduler_outbox o
               where o.kind = 'flow_email'
@@ -1863,6 +1875,10 @@ async function remindOneSignatureRequest(
          set token_hash = ${hashPossessionToken(fresh)}, updated_at = now()
        where id = ${request.id} and org_id = ${orgId} and token_hash = ${request.token_hash}
          and status in ('sent', 'viewed')
+         and not exists (
+           select 1 from service_quotes sq
+            where sq.org_id = signature_requests.org_id and sq.signature_request_id = signature_requests.id
+         )
       returning id`)
   ).rows;
   // A twin tick rotated first: its email carries the live link, so this
