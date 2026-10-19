@@ -34,6 +34,18 @@ export type SettlementLineKind =
   | "transfer"
   | "other";
 
+/** Realized FX follows the economic direction of each settlement leg. */
+export function settlementFxRealizedDelta(
+  kind: SettlementLineKind,
+  convertedBase: bigint,
+  bookedBase: bigint,
+): bigint {
+  const difference = convertedBase - bookedBase;
+  return kind === "refund" || kind === "dispute" || kind === "adjustment"
+    ? -difference
+    : difference;
+}
+
 export class PspSettlementError extends Error {}
 
 export class PspSettlementConflictError extends PspSettlementError {

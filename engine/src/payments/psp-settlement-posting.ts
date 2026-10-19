@@ -7,16 +7,25 @@ import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { postEntry } from "../journal/post-entry.ts";
-import { PspSettlementError, requireFxRate } from "./psp-settlement-core.ts";
+import {
+  PspSettlementError,
+  requireFxRate,
+  settlementFxRealizedDelta,
+  type SettlementLineKind,
+} from "./psp-settlement-core.ts";
 import { periodForDate, primaryBookId } from "./psp-settlement-posting-context.ts";
+
+function absoluteUnits(value: bigint): bigint {
+  return value < 0n ? -value : value;
+}
 
 /**
  * Convert one FX batch into base-currency legs. Every foreign line converts
  * at its own exchange_rate (or the batch conversion_rate) into payout
  * currency, then at payout_rate into base — exact decimal math, no floats.
  * Legs with receipt booking (a linked posted receipt in the line currency,
- * or explicit bookedAmount evidence) post at the booked amount; the summed
- * converted-minus-booked difference returns as realized FX gain/loss.
+ * or explicit bookedAmount evidence) post at the booked amount; realized FX
+ * follows each leg's cash-flow direction around that booked amount.
  * Legs without booking post at converted and contribute nothing.
  */
 async function buildFxLegs(
@@ -38,7 +47,7 @@ async function buildFxLegs(
 }> {
   const rows = (await db.execute<{
     line_number: number;
-    kind: string;
+    kind: SettlementLineKind;
     amount: string;
     currency: string | null;
     document_id: string | null;
@@ -100,14 +109,18 @@ async function buildFxLegs(
             `settlement line ${row.line_number} in ${lineCurrency} links receipt ${row.document_id} in ${receipt.currency}; realized FX needs the receipt in the line currency`,
           );
         }
-        if (toUnits(row.amount) !== toUnits(receipt.total)) {
+        if (absoluteUnits(toUnits(row.amount)) !== absoluteUnits(toUnits(receipt.total))) {
           throw new PspSettlementError(
             `settlement line ${row.line_number} amount ${row.amount} does not match linked receipt ${row.document_id} total ${receipt.total}; link one line per receipt or supply bookedAmount evidence`,
           );
         }
         bookedBase = toUnits(mulRate(receipt.total, receipt.fx_rate));
       }
-      realized += convertedBase - bookedBase;
+      realized += settlementFxRealizedDelta(
+        row.kind,
+        convertedBase,
+        bookedBase,
+      );
     }
     if (row.kind === "refund") refund += bookedBase < 0n ? -bookedBase : bookedBase;
     else if (row.kind === "dispute") dispute += bookedBase < 0n ? -bookedBase : bookedBase;

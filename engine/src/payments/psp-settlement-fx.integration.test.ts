@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
   importSettlementBatch,
@@ -137,6 +138,52 @@ test("a EUR payout of USD charges posts balanced with realized FX", { skip: !DB 
     assert.equal(byName.get("Cash"), "135.2400");
     assert.equal(byName.get("Realized FX Gain or Loss"), "-0.2400");
     assert.equal(byName.get("Received Not Billed"), "-135.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("equal foreign charges and refunds offset realized FX in the settlement currency", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "FX Tester", "admin");
+    await db.execute(sql`
+      update orgs set settings = settings || '{"features":{"banking":true}}'::jsonb where id = ${org.orgId}`);
+    await ensureOpenPeriod(org.orgId, org.periodId);
+    const accounts = {
+      bankAccountId: org.accounts.bank,
+      feeAccountId: org.accounts.adjustment,
+      disputeAccountId: org.accounts.adjustment,
+      fxAccountId: org.accounts.fxGainLoss,
+      clearingAccountId: org.accounts.clearing,
+    };
+    const { batchId } = await importSettlementBatch(org.orgId, userId, {
+      provider: "stripe",
+      externalRef: `po_fx_pair_${randomUUID().slice(0, 8)}`,
+      settlementDate: org.date,
+      currency: "EUR",
+      lines: [
+        { kind: "charge", amount: "100", currency: "EUR", meta: { bookedAmount: "120" } },
+        { kind: "refund", amount: "100", currency: "EUR", meta: { bookedAmount: "120" } },
+      ],
+      fx: {
+        sourceCurrency: "USD",
+        rate: "0.9200000000",
+        rateSource: "stripe:balance_transaction",
+        payoutRate: "1.3000000000",
+        payoutRateSource: "test:evidenced",
+      },
+    } satisfies ParsedSettlement, accounts, null);
+    const posted = await postSettlementBatch(org.orgId, batchId, userId, null);
+    const lines = (await db.execute<{ accountId: string; amount: string }>(sql`
+      select account_id as "accountId", sum(amount)::text as amount
+        from journal_lines
+       where org_id = ${org.orgId} and entry_id = ${posted.entryId}
+       group by account_id`)).rows;
+    assert.equal(lines.reduce((sum, line) => sum + toUnits(line.amount), 0n), 0n);
+    assert.equal(lines.find((line) => line.accountId === org.accounts.fxGainLoss)?.amount, undefined);
+    const clearing = lines.find((line) => line.accountId === org.accounts.clearing);
+    assert.equal(clearing ? toUnits(clearing.amount) : 0n, 0n);
   } finally {
     await dropScratchOrg(org.orgId);
   }

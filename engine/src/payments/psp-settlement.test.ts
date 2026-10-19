@@ -7,6 +7,7 @@ import {
   PspSettlementError,
   summarizeSettlement,
 } from "./psp-settlement.ts";
+import { settlementFxRealizedDelta } from "./psp-settlement-core.ts";
 
 const stripeRow = {
   id: "txn_1",
@@ -16,6 +17,14 @@ const stripeRow = {
   net: 1_214,
   currency: "usd",
 };
+
+test("realized FX reverses the conversion difference on outflow legs", () => {
+  assert.equal(settlementFxRealizedDelta("charge", 1_300_000n, 1_200_000n), 100_000n);
+  assert.equal(settlementFxRealizedDelta("refund", 1_300_000n, 1_200_000n), -100_000n);
+  assert.equal(settlementFxRealizedDelta("dispute", 1_300_000n, 1_200_000n), -100_000n);
+  assert.equal(settlementFxRealizedDelta("adjustment", 1_300_000n, 1_200_000n), -100_000n);
+  assert.equal(settlementFxRealizedDelta("dispute_reversal", 1_300_000n, 1_200_000n), 100_000n);
+});
 
 test("Stripe minor-unit amounts convert exactly without changing fee magnitude", () => {
   const parsed = parseStripeBalanceTransactions(
