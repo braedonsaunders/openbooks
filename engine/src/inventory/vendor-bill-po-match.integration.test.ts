@@ -149,7 +149,7 @@ test("a hand-coded bill for received stock auto-matches on post and refuses dupl
       assert.equal(links, 0, "the drawer bill carries no purchase-order links");
 
       // ---- The Match dialog offers each received line its order line ----
-      const { matchVendorBillLines, billMatchCandidates } = await import("./engine/src/payables/vendor-bill-matching.ts");
+      const { billMatchCandidates } = await import("./engine/src/payables/vendor-bill-matching.ts");
       const suggestions = await withOrg(org.orgId, () => billMatchCandidates(org.orgId, billId));
       assert.equal(suggestions.lines.length, 3);
       assert.equal(suggestions.lines[0].candidates.length, 1, "the received line offers its purchase-order line");
