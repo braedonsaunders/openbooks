@@ -120,8 +120,8 @@ async function postedFixture(opts: { stopBeforePosting?: boolean; nonRootSubsidi
     values (${randomUUID()}, ${org.orgId}, 2026, 9, '2026-09', '2026-09-01', '2026-09-30', false, ${calendar})`)
   const employeeId = randomUUID()
   await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${employeeId}, ${org.orgId}, 'employee', 'Sammy Sloppy', true, '{}'::jsonb)`)
+    insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+    values (${employeeId}, ${org.orgId}, 'employee', 'Sammy Sloppy', ${reportSubsidiaryId}, true, '{}'::jsonb)`)
   await db.execute(sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employeeId})`)
   const id = randomUUID()
   await db.execute(sql`
