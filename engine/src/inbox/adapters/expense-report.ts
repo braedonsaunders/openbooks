@@ -8,7 +8,7 @@
  * uses; posting stays in expenses after approval.
  */
 
-import { decideGate, delegateGate } from "../../flows/gates.ts";
+import { decideGate, delegateGate, gateDecisionCapability } from "../../flows/gates.ts";
 import { worklistApprovals } from "../../flows/approval-worklist.ts";
 import { toWorklistScope } from "../guard.ts";
 import { parseDelegationReason } from "../delegation.ts";
@@ -25,18 +25,19 @@ export const expenseReportAdapter: InboxAdapter = {
       if (item.kind === "flow_gate") {
         if (item.gate.subjectKind !== "expense_report") continue;
         const gate = item.gate;
+        const sodBlocked = (await gateDecisionCapability(gate.id, ctx.actorId)).sodBlocked;
         const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
         out.push({
           id: inboxItemId("expense_report", `gate:${gate.id}`),
           kind: "expense_report",
           title: gate.title,
-          subtitle: `expense approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""}`,
+          subtitle: `${sodBlocked ? "Awaiting another approver — " : ""}expense approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""}`,
           dueAt,
           createdAt: new Date(gate.createdAt).toISOString(),
           waitingSince: new Date(gate.createdAt).toISOString(),
           priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
           subjectHref: gate.href ?? "/expenses/reports",
-          actions: [
+          actions: sodBlocked ? [] : [
             { key: "approve", label: "Approve", style: "primary", needsReason: false },
             { key: "reject", label: "Reject", style: "danger", needsReason: true },
             { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },

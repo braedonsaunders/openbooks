@@ -23,10 +23,13 @@ import { TIMESHEET_WEEK_SUBJECT_KIND } from "../../flows/timesheet-weeks-adapter
 import { CREW_TIME_BATCH_SUBJECT_KIND } from "../../flows/crew-batches-adapter.ts";
 import {
   decideDocumentApproval,
+  worklistApprovalById,
+  worklistDocumentKindCounts,
   worklistApprovalsPage,
   type UnifiedApproval,
 } from "../../flows/approval-worklist.ts";
-import { decideGate, delegateGate, gateDecisionCapability } from "../../flows/gates.ts";
+import { decideGate, delegateGate, gateDecisionCapability, worklistGateKindCounts } from "../../flows/gates.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import { toWorklistScope } from "../guard.ts";
 import { parseDelegationReason } from "../delegation.ts";
 import type { InboxAdapter, InboxPage } from "../registry.ts";
@@ -134,6 +137,33 @@ export const flowsApprovalAdapter: InboxAdapter = {
       // The budget leg is intentionally unmapped (see header).
     }
     return out;
+  },
+  async lookup(ctx: InboxListContext, sourceId: string): Promise<InboxItem | null> {
+    const separator = sourceId.indexOf(":");
+    if (separator < 1) return null;
+    const leg = sourceId.slice(0, separator);
+    const id = sourceId.slice(separator + 1);
+    if (!isUuid(id) || (leg !== "gate" && leg !== "document")) return null;
+    const item = await worklistApprovalById(ctx.orgId, ctx.actorId, toWorklistScope(ctx), leg, id);
+    if (!item) return null;
+    if (item.kind === "flow_gate") return gateItem(item.gate, ctx);
+    if (item.kind === "document") return documentItem(item.document);
+    return null;
+  },
+  async count(ctx: InboxListContext): Promise<number> {
+    const scope = toWorklistScope(ctx);
+    const [gateCounts, documentCounts] = await Promise.all([
+      worklistGateKindCounts(ctx.orgId, ctx.actorId, scope.roles, scope.allowedSubsidiaryIds),
+      worklistDocumentKindCounts(ctx.orgId, ctx.actorId, scope.allowedSubsidiaryIds),
+    ]);
+    let count = 0;
+    for (const [kind, amount] of gateCounts) {
+      if (!INBOX_OWNED_GATE_SUBJECTS.has(kind)) count += amount;
+    }
+    for (const [kind, amount] of documentCounts) {
+      if (kind !== "expense_report") count += amount;
+    }
+    return count;
   },
   async act(ctx, sourceId, actionKey, reason): Promise<void> {
     // The session's subsidiary boundary rides into the write authority:

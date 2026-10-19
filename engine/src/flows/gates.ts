@@ -1129,6 +1129,7 @@ async function resolveWorklistSubsidiaries(
  */
 export interface WorklistGatePage {
   prefix: number;
+  gateId?: string;
   kind?: string;
   query?: string;
   overdue?: boolean;
@@ -1240,6 +1241,7 @@ function worklistDirectWhere(
   kind: string | undefined,
   query: string | undefined,
   overdue: boolean | undefined,
+  gateId?: string,
 ): SQL {
   return sql`g.org_id = ${orgId} and g.status = 'pending'
     ${worklistLiveGateSql()}
@@ -1247,6 +1249,7 @@ function worklistDirectWhere(
          or (g.assignee_role is not null and g.assignee_role in
               (select jsonb_array_elements_text(${JSON.stringify(roleList)}::jsonb))))
     ${worklistGateScopeSql(allowedSubsidiaryIds)}
+    ${gateId ? sql`and g.id = ${gateId}::uuid` : sql``}
     ${worklistGateKindSql(kind)}
     ${worklistGateSearchSql(query)}
     ${worklistGateOverdueSql(overdue)}`;
@@ -1312,7 +1315,7 @@ export async function worklistGates(
   // across pages (same rule as the document list order clause).
   const r = (await db.execute<Record<string, unknown>>(sql`
     ${WORKLIST_SELECT}
-     where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind, query, overdue)}
+     where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind, query, overdue, page?.gateId)}
      order by g.created_at, g.id
      ${page ? sql`limit ${page.prefix}` : sql``}
   `));
@@ -1334,6 +1337,7 @@ export async function worklistGates(
       ${WORKLIST_SELECT}
        where g.org_id = ${orgId} and g.status = 'pending'
          ${worklistLiveGateSql()}
+         ${page?.gateId ? sql`and g.id = ${page.gateId}::uuid` : sql``}
          and g.assignee_user_id in
               (select jsonb_array_elements_text(${JSON.stringify(principals.map((p) => p.id))}::jsonb)::uuid)
          ${worklistGateScopeSql(allowedSubsidiaryIds)}
