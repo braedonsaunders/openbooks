@@ -301,7 +301,7 @@ test(
 
 async function seedCommittedStub(run: PayRunFixture, gross: string): Promise<string> {
   const stubId = randomUUID();
-  await seedPayrollStub(run.orgId, run.documentId, run.employeeId, run.employmentId, {
+  await seedPayrollStub(run.orgId, run.documentId, run.employeeId, run.employmentId, { country: 'CA', countrySource: 'calculation',
     id: stubId, province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD',
     gross: gross, netPay: gross, pensionableEarnings: gross, insurableEarnings: gross,
     factors: { C: "0", C2: "0", EI: "0" }, createdBy: run.actorId, updatedBy: run.actorId,
@@ -608,7 +608,7 @@ test(
                               pay_date, tax_year, run_type, run_status, created_by, updated_by)
         values (${otherId}, ${run.orgId}, ${run.scheduleId}, '2026-07-19', '2026-07-19',
                 '2026-07-22', 2026, 'bonus', 'committed', ${run.actorId}, ${run.actorId})`);
-      await seedPayrollStub(run.orgId, otherId, run.employeeId, run.employmentId, {
+      await seedPayrollStub(run.orgId, otherId, run.employeeId, run.employmentId, { country: 'CA', countrySource: 'calculation',
         province: 'ON', periodsPerYear: 26, payDate: '2026-07-22', taxYear: 2026, currency: 'CAD', gross: '5000',
         createdBy: run.actorId, updatedBy: run.actorId,
       });

@@ -528,11 +528,11 @@ test("a merge re-points a frozen remittance snapshot through the paired authorit
       const stubId = randomUUID();
       await db.execute(sql`
         insert into pay_stubs
-          (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
+          (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
            periods_per_year, pay_date, tax_year, currency_code, gross,
            pensionable_earnings, insurable_earnings, net_pay, employer_cost,
            vacation_accrued, factors, created_by, updated_by)
-        values (${stubId}, ${org.orgId}, ${runId}, ${employeeId}, ${employmentId}, 'ON', 12,
+        values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${runId}, ${employeeId}, ${employmentId}, 'ON', 12,
                 '2026-07-21', 2026, 'USD', '200.00', '200.00', '200.00', '200.00',
                 '200.00', '0', '{}'::jsonb, null, null)`);
       const frozenLine = randomUUID();

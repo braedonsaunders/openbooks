@@ -163,11 +163,11 @@ async function addEntityAccrual(
   const employmentId = await seedWorkerEmployment(fx.org.orgId, employeeId, input.subsidiaryId);
   await db.execute(sql`
     insert into pay_stubs
-      (id, org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year,
+      (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year,
        pay_date, tax_year, currency_code, gross, pensionable_earnings, insurable_earnings,
        net_pay, employer_cost, vacation_accrued, factors, filing_account_id,
        filing_account_source, created_by, updated_by)
-    values (${stubId}, ${fx.org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON', 12,
+    values ('CA', 'calculation', ${stubId}, ${fx.org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON', 12,
             ${payDate}, 2026, ${input.currency}, ${input.amount}, ${input.amount},
             ${input.amount}, ${input.amount}, ${input.amount}, '0', '{}'::jsonb,
             ${filingAccountId}, ${filingAccountId ? "calculation" : "unknown"},

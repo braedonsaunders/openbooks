@@ -799,7 +799,7 @@ async function seedT4Year(): Promise<T4Fixture> {
             2026, 'calculated', now(), ${actorId}, ${actorId})`);
 
   const stubId = randomUUID();
-  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, {
+  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, { country: 'CA', countrySource: 'calculation',
     id: stubId, province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD',
     gross: '52000.0000', netPay: '42000.0000', pensionableEarnings: '52000.0000', insurableEarnings: '52000.0000',
     factors: { C: "3200.50", C2: "188.00", EI: "834.20" }, createdBy: actorId, updatedBy: actorId,

@@ -44,8 +44,8 @@ for (const recordType of ['pay_stub', 'payroll_cheque'] as const) {
           await db.execute(sql`insert into worker_employment_versions(org_id,employment_id,version_no,status,effective_from,effective_to,recorded_at)
             values(${org.orgId},${employment},1,'active','2020-01-01'::date,null::date,now())`)
           const run=await createPayRun({orgId:org.orgId,actorId:adminId,payScheduleId:schedule,periodStart:'2026-07-05',periodEnd:'2026-07-18'})
-          await db.execute(sql`insert into pay_stubs(id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,net_pay,payment_method,cheque_number,created_at)
-            values(${stub},${org.orgId},${run.documentId},${employee},${employment},'ON',26,'2026-07-21',2026,'CAD',240,200,'cheque',${name},${date}::timestamptz)`)
+          await db.execute(sql`insert into pay_stubs(country, country_source, id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,net_pay,payment_method,cheque_number,created_at)
+            values('CA', 'calculation', ${stub},${org.orgId},${run.documentId},${employee},${employment},'ON',26,'2026-07-21',2026,'CAD',240,200,'cheque',${name},${date}::timestamptz)`)
           stubs.push(stub);employees.push(employee)
         }
       })
@@ -102,8 +102,8 @@ test('pay-stub YTD keeps employer and currency isolation at each same-day paymen
         await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id)
           values(${schedule},${org.orgId},${schedule},'biweekly',26,'2026-07-18',3,${sub})`)
         const run = await createPayRun({ orgId: org.orgId, actorId: adminId, payScheduleId: schedule, periodStart: '2026-07-05', periodEnd: '2026-07-18' })
-        await db.execute(sql`insert into pay_stubs(id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,net_pay,created_at)
-          values(${stub},${org.orgId},${run.documentId},${employee},${employment},'ON',26,'2026-07-21',2026,${currency},${gross},${net},${timestamp}::timestamptz)`)
+        await db.execute(sql`insert into pay_stubs(country, country_source, id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,net_pay,created_at)
+          values('CA', 'calculation', ${stub},${org.orgId},${run.documentId},${employee},${employment},'ON',26,'2026-07-21',2026,${currency},${gross},${net},${timestamp}::timestamptz)`)
         await db.execute(sql`insert into pay_stub_lines(org_id,stub_id,component_id,kind,description,amount,sequence)
           values(${org.orgId},${stub},${taxComponent},'deduction','Income tax',${tax},110),
                 (${org.orgId},${stub},${earningComponent},'earning','Regular pay',${gross},10)`)

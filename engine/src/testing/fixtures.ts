@@ -60,7 +60,9 @@ export async function seedPayrollDocument(orgId: string, id: string,
 
 /** Stub evidence is tied to the declared native employment, with no live-policy inference. */
 export async function seedPayrollStub(orgId: string, payRunDocumentId: string, employeePartyId: string,
-  employmentId: string, fields: Omit<typeof payStubs.$inferInsert, "orgId" | "payRunDocumentId" | "employeePartyId" | "employmentId">): Promise<void> {
+  employmentId: string, fields: Omit<typeof payStubs.$inferInsert, "orgId" | "payRunDocumentId" | "employeePartyId" | "employmentId"> & {
+    country: string; countrySource: "calculation";
+  }): Promise<void> {
   await insertDeclaredFixture(payStubs, { orgId, payRunDocumentId, employeePartyId, employmentId, ...fields });
 }
 

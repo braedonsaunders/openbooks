@@ -256,9 +256,9 @@ const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle")
         // Wage PII on each run, so a pre-fix 200 would disclose real stub rows.
         for (const [run, emp, employment, province] of [[runA, empA, employmentA, "ON"], [runB, empB, employmentB, "ON"]] as const) {
           await db.execute(sql`
-            insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province,
+            insert into pay_stubs (country, country_source, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                                    periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
-            select ${orgId}, ${run.documentId}, ${emp}, ${employment}, ${province}, 26, r.pay_date, r.tax_year, d.currency,
+            select 'CA', 'calculation', ${orgId}, ${run.documentId}, ${emp}, ${employment}, ${province}, 26, r.pay_date, r.tax_year, d.currency,
                    '2500.00', '1900.00'
               from pay_runs r join documents d on d.id = r.document_id and d.org_id = r.org_id
              where r.org_id = ${orgId} and r.document_id = ${run.documentId}`);

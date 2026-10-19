@@ -135,7 +135,7 @@ async function addCommittedRemittanceAccrual(
   // pay_stubs.employment_id is NOT NULL: the stub carries the employee's own
   // HRM employment.
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, {
+  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, { country: 'CA', countrySource: 'calculation',
     id: stubId, province: 'ON', periodsPerYear: 12, payDate: input.payDate, taxYear: 2026, currency: 'CAD',
     gross: input.amount, pensionableEarnings: input.amount, insurableEarnings: input.amount, netPay: input.amount,
     employerCost: input.amount, vacationAccrued: '0', factors: {}, filingAccountId: filingAccountId,

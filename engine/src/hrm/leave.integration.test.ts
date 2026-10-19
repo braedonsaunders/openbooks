@@ -407,9 +407,9 @@ async function seedRun(
   // (0186): the stub carries the run party's own employment, seeded by the
   // caller for the same worker.
   await db.execute(sql`
-    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year,
+    insert into pay_stubs (country, country_source, org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year,
                            pay_date, tax_year, currency_code, gross, created_by, updated_by)
-    values (${orgId}, ${runId}, ${partyId}, ${opts.employmentId}, 'BC', 26, ${opts.periodEnd}, 2026, 'CAD', '2000.00', ${actorId}, ${actorId})`);
+    values ('CA', 'calculation', ${orgId}, ${runId}, ${partyId}, ${opts.employmentId}, 'BC', 26, ${opts.periodEnd}, 2026, 'CAD', '2000.00', ${actorId}, ${actorId})`);
   return runId;
 }
 

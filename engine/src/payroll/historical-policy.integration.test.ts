@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 import { db, env, withBypassContext, withOrgContext } from "../platform/db.ts";
 import pg from "pg";
 import { rl1Slips } from "./canada/quebec/rl1.ts";
-import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
+import { setPackSlotAccount } from "./packs.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
@@ -306,23 +306,12 @@ test("country snapshots capture calculation provenance and cannot be overwritten
     } finally {await dropScratchOrgReporting(fx.orgId);}
   });
 
-test("legacy province/state snapshots identify supported countries without consulting live profiles",
-  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const seen=new Set<string>();
-    for (const country of ['CA','US']) {
-      // Registry packs pin 14 provinces / 51 states-and-DC: the
-      // disjointness check below cannot pass over an empty region set.
-      assert.ok(PAYROLL_COUNTRY_PACKS[country]!.regions.known.length > 0, `${country} pack must publish regions`);
-      for (const region of PAYROLL_COUNTRY_PACKS[country]!.regions.known) {
-        assert.ok(!seen.has(region),'legacy region sets must remain disjoint');seen.add(region);
-        assert.equal((await db.execute(sql`select payroll_legacy_region_country(${region}) as country`)).rows[0]?.country,country);
-      }
-    }
-    assert.equal((await db.execute(sql`select payroll_legacy_region_country('UNKNOWN') as country`)).rows[0]?.country,null);
-  });
+test("payroll country has no region-inference function", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  assert.equal((await db.execute(sql`select to_regprocedure('public.payroll_legacy_region_country(text)')::text as signature`)).rows[0]?.signature, null);
+});
 
 for (const province of ['ON','UNKNOWN']) {
-  test(`legacy stub insertion preserves ${province==='ON'?'known':'unknown'} attribution explicitly`,
+  test(`a ${province} region cannot supply missing payroll country evidence`,
     {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
       const fx=await seedAdoption();
       try {
@@ -333,12 +322,10 @@ for (const province of ['ON','UNKNOWN']) {
         const replacement={...saved,province,country:null,country_source:'unknown'};
         await db.execute(sql`insert into pay_stubs select (jsonb_populate_record(null::pay_stubs,${JSON.stringify(replacement)}::jsonb)).*`);
         const row=(await db.execute(sql`select country,country_source from pay_stubs where org_id=${fx.orgId} and id=${saved.id}`)).rows[0]!;
-        assert.deepEqual(row,province==='ON'?{country:'CA',country_source:'legacy_region'}:{country:null,country_source:'unknown'});
-        if (province==='UNKNOWN') {
-          await db.execute(sql`update pay_runs set run_status='committed' where org_id=${fx.orgId} and document_id=${input.documentId}`);
-          for (const read of [t4Slips,w2Slips,form941Worksheet,rl1Slips]) {
-            await assert.rejects(read(fx.orgId,2026),/unknown historical country/);
-          }
+        assert.deepEqual(row,{country:null,country_source:'unknown'});
+        await db.execute(sql`update pay_runs set run_status='committed' where org_id=${fx.orgId} and document_id=${input.documentId}`);
+        for (const read of [t4Slips,w2Slips,form941Worksheet,rl1Slips]) {
+          await assert.rejects(read(fx.orgId,2026),/unknown historical country/);
         }
       } finally {await dropScratchOrgReporting(fx.orgId);}
     });

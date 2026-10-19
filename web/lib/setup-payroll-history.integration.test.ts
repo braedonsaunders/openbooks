@@ -41,8 +41,8 @@ for (const channel of ['PATCH', 'DELETE', 'import', 'preview'] as const) {
           values(${documentId},${org.orgId},'pay_run','HISTORICAL',${org.subsidiaryId},'2026-07-21','CAD')`);
         await db.execute(sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status)
           values(${documentId},${org.orgId},${scheduleId},'2026-07-05','2026-07-18','2026-07-21',2026,'committed')`);
-        await db.execute(sql`insert into pay_stubs(id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code)
-          values(${stubId},${org.orgId},${documentId},${employeeId},${historyEmploymentId},'ON',26,'2026-07-21',2026,'CAD')`);
+        await db.execute(sql`insert into pay_stubs(country, country_source, id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code)
+          values('CA', 'calculation', ${stubId},${org.orgId},${documentId},${employeeId},${historyEmploymentId},'ON',26,'2026-07-21',2026,'CAD')`);
         await db.execute(sql`insert into pay_components(id,org_id,code,name,kind)
           values(${componentId},${org.orgId},'HISTORY','Historical earning','earning')`);
         await db.execute(sql`insert into pay_stub_lines(org_id,stub_id,component_id,kind,description,amount)

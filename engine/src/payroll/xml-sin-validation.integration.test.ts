@@ -82,10 +82,10 @@ async function seedSinYear(sin: string, province: "ON" | "QC"): Promise<{ orgId:
     values (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-05', '2026-07-18', '2026-07-21',
             2026, 'committed', now(), ${actorId}, ${actorId})`);
   const stubId = randomUUID();
-  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, {
+  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, { country: 'CA', countrySource: 'calculation',
     id: stubId, province: province, periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD',
     gross: '52000.0000', netPay: '42000.0000', pensionableEarnings: '52000.0000', insurableEarnings: '52000.0000',
-    factors: { C: "3200.50", EI: "834.20" }, createdBy: actorId, updatedBy: actorId,
+    factors: { C: "3200.50", EI: "834.20", IE_QPIP: province === 'QC' ? '52000.0000' : '0.0000' }, createdBy: actorId, updatedBy: actorId,
   });
   await seedPayrollLine(org.orgId, stubId, earningId, {
     kind: 'earning', description: 'Salary', amount: '52000.0000', createdBy: actorId, updatedBy: actorId,

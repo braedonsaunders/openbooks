@@ -91,7 +91,7 @@ async function seedVendorlessOctober() {
       subsidiaryId: org.subsidiaryId, createdBy: actorId, updatedBy: actorId,
     });
     const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-    await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, {
+    await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, { country: 'CA', countrySource: 'calculation',
       id: stubId, province: "ON", periodsPerYear: 12, payDate: "2026-10-31", taxYear: 2026,
       currency: "CAD", gross: amount, pensionableEarnings: amount, insurableEarnings: amount,
       netPay: amount, employerCost: amount, vacationAccrued: "0", factors: {},

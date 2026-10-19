@@ -124,8 +124,8 @@ async function committedFixture(orgId: string, subsidiaryId: string, actorId: st
     values (${runId},${orgId},'pay_run','PAY-HISTORY',${subsidiaryId},'2020-01-03','USD','approved',${actorId},${actorId})`);
   await db.execute(sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status,created_by,updated_by)
     values (${runId},${orgId},${scheduleId},'2020-01-01','2020-01-03','2020-01-03',2020,'committed',${actorId},${actorId})`);
-  await db.execute(sql`insert into pay_stubs(org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,created_by,updated_by)
-    values (${orgId},${runId},${workerPartyId},${employmentId},'BC',52,'2020-01-03',2020,'USD','100',${actorId},${actorId})`);
+  await db.execute(sql`insert into pay_stubs(country, country_source, org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,created_by,updated_by)
+    values ('CA', 'calculation', ${orgId},${runId},${workerPartyId},${employmentId},'BC',52,'2020-01-03',2020,'USD','100',${actorId},${actorId})`);
   return runId;
 }
 

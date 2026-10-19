@@ -756,10 +756,10 @@ test("a comparison whose findings cannot be stored files nothing at all", { skip
     ] as const) {
       const stubId = randomUUID();
       await db.execute(sql`
-        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+        insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id,
                                province, periods_per_year, pay_date, tax_year, currency_code,
                                gross, net_pay, employer_cost)
-        values (${stubId}, ${f.orgId}, ${documentId}, ${employeePartyId},
+        values ('CA', 'calculation', ${stubId}, ${f.orgId}, ${documentId}, ${employeePartyId},
                 ${employments.get(employeePartyId)}, 'ON', 26,
                 '2026-07-21', 2026, 'CAD', ${sign + huge}, '0', '0')`);
       await db.execute(sql`

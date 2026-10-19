@@ -789,14 +789,14 @@ const payrollReportingCases = [
               values (${docId}, ${orgId}, ${scheduleId}, '2026-07-01', '2026-07-31', '2026-07-31', 2026, 'committed')`)
 
             const stub = async (
-              name: string, province: string, currency: string, gross: string, net: string,
+              name: string, country: string, province: string, currency: string, gross: string, net: string,
               factors: Record<string, string>, lines: { componentId: string; kind: string; description: string; amount: string }[],
             ) => {
               const stubId = randomUUID()
               const emp = await employee(name)
-              await db.execute(sql`insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
+              await db.execute(sql`insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                                    periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost, factors)
-                values (${stubId}, ${orgId}, ${docId}, ${emp.id}, ${emp.employmentId}, ${province},
+                values (${country}, 'calculation', ${stubId}, ${orgId}, ${docId}, ${emp.id}, ${emp.employmentId}, ${province},
                         12, '2026-07-31', 2026, ${currency}, ${gross}, ${net}, ${gross}, ${JSON.stringify(factors)}::jsonb)`)
               let sequence = 100
               for (const line of lines) {
@@ -831,33 +831,33 @@ const payrollReportingCases = [
 
             // Poland: ZUS contributions beside a net that reflects them, no CA/US
             // factor anywhere — the old buckets printed 0.00 and 0.00.
-            await stub('Jan Kowalski', 'MZ', 'PLN', '10000.0000', '7000.0000', {},
+            await stub('Jan Kowalski', 'PL', 'MZ', 'PLN', '10000.0000', '7000.0000', {},
               [L(pl.pit, 'Zaliczka na podatek dochodowy (PIT)', '498.0000'),
                L(pl.emeryt, 'Skladka emerytalna (pracownik)', '1500.0000')])
             // Ontario, periodic only: the old buckets were already complete here.
-            await stub('Alice Ontario', 'ON', 'CAD', '5000.0000', '3500.0000',
+            await stub('Alice Ontario', 'CA', 'ON', 'CAD', '5000.0000', '3500.0000',
               { C: '250.0000', EI: '80.0000', T: '1234.5600' },
               [L(ca.tax, 'Income tax', '1234.5600'), L(ca.cpp, 'CPP', '250.0000'), L(ca.ei, 'EI', '80.0000')])
             // Ontario with a bonus.
-            await stub('Bob Bonus', 'ON', 'CAD', '8000.0000', '5000.0000',
+            await stub('Bob Bonus', 'CA', 'ON', 'CAD', '8000.0000', '5000.0000',
               { C: '300.0000', EI: '90.0000', T: '1500.0000', TB: '400.0000' },
               [L(ca.tax, 'Income tax', '1900.0000'), L(ca.cpp, 'CPP', '300.0000'), L(ca.ei, 'EI', '90.0000')])
             // US federal only: the old buckets were already complete here.
-            await stub('Carol Federal', 'CA', 'USD', '6000.0000', '4500.0000',
+            await stub('Carol Federal', 'US', 'CA', 'USD', '6000.0000', '4500.0000',
               { SS: '372.0000', MED: '87.0000', FIT: '800.0000' },
               [L(us.fit, 'Federal income tax', '800.0000'), L(us.ss, 'Social Security', '372.0000'),
                L(us.med, 'Medicare', '87.0000')])
             // Quebec: QPIP was in NO register column at all (250 + 65 = 315 shown of
             // 345 withheld). The employer-share lines ride the same system keys as
             // production pushStatutory posts them and must stay out of both totals.
-            await stub('Danielle Quebec', 'QC', 'CAD', '5000.0000', '3200.0000',
+            await stub('Danielle Quebec', 'CA', 'QC', 'CAD', '5000.0000', '3200.0000',
               { C: '250.0000', EI: '65.0000', T: '900.0000', QC_A: '4800.0000' },
               [L(ca.tax, 'Income tax', '900.0000'), L(ca.qctax, 'Quebec income tax', '600.0000'),
                L(ca.cpp, 'CPP', '250.0000'), L(ca.cppEr, 'CPP (employer)', '111.1100', 'employer_contribution'),
                L(ca.ei, 'EI', '65.0000'), L(ca.eiEr, 'EI (employer)', '22.2200', 'employer_contribution'),
                L(ca.qpip, 'QPIP', '30.0000')])
             // US with state tax.
-            await stub('Eddie State', 'CA', 'USD', '6000.0000', '4200.0000',
+            await stub('Eddie State', 'US', 'CA', 'USD', '6000.0000', '4200.0000',
               { SS: '372.0000', MED: '87.0000', FIT: '800.0000', SIT_CA: '300.0000' },
               [L(us.fit, 'Federal income tax', '800.0000'), L(us.sit, 'California PIT', '300.0000'),
                L(us.ss, 'Social Security', '372.0000'), L(us.med, 'Medicare', '87.0000')])
@@ -1048,9 +1048,9 @@ const payrollReportingCases = [
                 values (${partyId}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`)
               const employmentId = await seedWorkerEmployment(orgId, partyId, org.subsidiaryId)
               const stubId = randomUUID()
-              await db.execute(sql`insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
+              await db.execute(sql`insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                                    periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost, factors)
-                values (${stubId}, ${orgId}, ${docId}, ${partyId}, ${employmentId}, ${country},
+                values (${country}, 'calculation', ${stubId}, ${orgId}, ${docId}, ${partyId}, ${employmentId}, ${country},
                         12, '2026-07-31', 2026, ${COVERAGE_CURRENCY[country]}, '100000.0000', '60000.0000', '100000.0000', '{}'::jsonb)`)
               let sequence = 100
               for (const component of packStatutoryComponents(country)) {

@@ -292,6 +292,24 @@ describe("quebec", () => {
         // T4 box 56 reads the stub's program factor end to end (C-12/C-13):
         // the full gross, with no pre-adoption carry-in and under the maximum.
         assert.equal(slips[0]!.box56QpipInsurable, "2400.0000");
+
+        // A distinct program base remains distinct from EI-insurable wages.
+        await db.execute(sql`update pay_stubs set factors=jsonb_set(factors, '{IE_QPIP}', '"1200.0000"'::jsonb)
+          where org_id=${org.orgId} and id=${stub.id}`);
+        assert.equal((await t4Slips(org.orgId, 2026))[0]!.box56QpipInsurable, '1200.0000');
+        assert.equal((await rl1Population(org.orgId, 2026)).rows[0]!.boxI, '1200.0000');
+        // Malformed retained evidence cannot disappear from a SQL aggregate
+        // or acquire another program's wages through a reporting substitute.
+        for (const value of [undefined, null, '', 'unknown', [], 1200]) {
+          const corrupted = { ...factors };
+          if (value === undefined) delete corrupted.IE_QPIP;
+          else (corrupted as Record<string, unknown>).IE_QPIP = value;
+          await db.execute(sql`update pay_stubs set factors=${JSON.stringify(corrupted)}::jsonb
+            where org_id=${org.orgId} and id=${stub.id}`);
+          await assert.rejects(t4Slips(org.orgId, 2026), /program-specific QPIP wage evidence/);
+          await assert.rejects(rl1Population(org.orgId, 2026), /program-specific QPIP wage evidence/);
+        }
+
       } finally {
         await dropScratchOrgReporting(org.orgId);
       }

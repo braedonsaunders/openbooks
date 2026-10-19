@@ -202,11 +202,8 @@ test(
                                periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
         values (${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'UNKNOWN', 26, '2026-07-21', 2026,
                 'CAD', '1000', '800')`);
-      // The legacy trigger stamps a country from the province; an UNKNOWN
-      // province is precisely the unattributable row. Make it explicit.
-      await db.execute(sql`
-        update pay_stubs set country = null, country_source = 'unknown'
-         where org_id = ${org.orgId} and pay_run_document_id = ${documentId}`);
+      // The retained snapshot has no country; no reader may infer it from
+      // today's profile, a work region or the configured currency.
 
       const sections = await orgYearEndFilings(org.orgId, 2026);
       const refused = sections.filter((section) => section.populationRefusal != null);

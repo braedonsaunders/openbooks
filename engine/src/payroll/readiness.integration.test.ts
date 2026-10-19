@@ -429,7 +429,7 @@ describe("readiness-rq-schedule", () => {
       values (${documentId}, ${fx.orgId}, ${fx.scheduleId}, ${payDate}, ${payDate}, ${payDate},
               ${taxYear}, 'committed', 'regular', ${fx.actorId}, ${fx.actorId})`);
     const stubId = randomUUID();
-    await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+    await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
       id: stubId, province: 'QC', periodsPerYear: 52, payDate: payDate, taxYear: taxYear, currency: 'CAD',
       gross: amount, pensionableEarnings: amount, insurableEarnings: amount, netPay: amount, employerCost: amount,
       vacationAccrued: '0', factors: {}, filingAccountId: fx.accountId, filingAccountSource: 'calculation',

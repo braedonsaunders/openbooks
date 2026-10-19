@@ -29,7 +29,7 @@ const cents = (n: number): number => Math.round(n * 100)
 async function seedStub(
   orgId: string,
   subId: string,
-  opts: { currency: string; gross: string; net: string; province: string; lines: [string, string][] },
+  opts: { country: string; currency: string; gross: string; net: string; province: string; lines: [string, string][] },
 ): Promise<string> {
   return withBypassContext(async () => {
     const employee = randomUUID()
@@ -63,10 +63,10 @@ async function seedStub(
       values (${docId}, ${orgId}, ${scheduleId}, '2026-07-01', '2026-07-31',
               '2026-07-31', 2026, 'committed')`)
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+      insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id,
                              province, periods_per_year, pay_date, tax_year, currency_code, gross,
                              net_pay)
-      values (${stubId}, ${orgId}, ${docId}, ${employee}, ${employment}, ${opts.province},
+      values (${opts.country}, 'calculation', ${stubId}, ${orgId}, ${docId}, ${employee}, ${employment}, ${opts.province},
               12, '2026-07-31', 2026, ${opts.currency}, ${opts.gross}, ${opts.net})`)
     for (const [systemKey, amount] of opts.lines) {
       await db.execute(sql`
@@ -98,7 +98,7 @@ test('a non-CA/US payslip prints YTD tax equal to the income tax actually withhe
   try {
     // The persona's AU observation: gross 4615.38, PAYG 1114.00, net 3501.38 —
     // the old CA/US key list printed YTD tax 0.00 here.
-    const au = await seedStub(org.orgId, org.subsidiaryId, {
+    const au = await seedStub(org.orgId, org.subsidiaryId, { country: 'AU',
       currency: 'AUD', gross: '4615.38', net: '3501.38', province: 'NSW',
       lines: [['payg_withholding', '1114.00']],
     })
@@ -109,7 +109,7 @@ test('a non-CA/US payslip prints YTD tax equal to the income tax actually withhe
 
     // Italy was UNDERSTATED rather than zero: IRPEF counted, both addizionali
     // did not. All three are income taxes on the same base and all count.
-    const it = await seedStub(org.orgId, org.subsidiaryId, {
+    const it = await seedStub(org.orgId, org.subsidiaryId, { country: 'IT',
       currency: 'EUR', gross: '5000.00', net: '3500.00', province: 'MI',
       lines: [['income_tax', '800.00'], ['regional_surtax', '100.00'], ['municipal_surtax', '40.00']],
     })
@@ -124,7 +124,7 @@ test('employee social contributions stay out of printed YTD tax', { skip: !DB },
   try {
     // GB: PAYE counts; employee NIC is a deduction remitted to an authority
     // but it is not income tax, so it must not inflate the figure.
-    const gb = await seedStub(org.orgId, org.subsidiaryId, {
+    const gb = await seedStub(org.orgId, org.subsidiaryId, { country: 'GB',
       currency: 'GBP', gross: '4600.00', net: '3300.00', province: 'ENG',
       lines: [['paye', '952.00'], ['nic', '348.00']],
     })
@@ -137,7 +137,7 @@ test('employee social contributions stay out of printed YTD tax', { skip: !DB },
 test('the already-correct CA pack prints a byte-identical YTD figure', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
-    const ca = await seedStub(org.orgId, org.subsidiaryId, {
+    const ca = await seedStub(org.orgId, org.subsidiaryId, { country: 'CA',
       currency: 'CAD', gross: '4000.00', net: '3500.00', province: 'ON',
       lines: [['income_tax', '500.00']],
     })

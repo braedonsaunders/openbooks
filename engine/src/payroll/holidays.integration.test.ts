@@ -79,10 +79,10 @@ async function seedPaidVacationBeforeCanadaDay(options: {
               2026, 'committed', now(), ${actorId}, ${actorId})`);
     const stubId = randomUUID();
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
+      insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                              periods_per_year, pay_date, tax_year, currency_code, gross,
                              created_by, updated_by)
-      values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'BC', 26, ${payDate}, 2026,
+      values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'BC', 26, ${payDate}, 2026,
               'CAD', ${periodStart === "2026-05-25" ? "1000.00" : "2000.00"}, ${actorId}, ${actorId})`);
     const insertLine = (amount: string, from: string | null, to: string | null) => db.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, amount,
@@ -370,10 +370,10 @@ async function straddlingStubCase(datedSpan: boolean): Promise<void> {
                 2025, 'committed', now(), ${actorId}, ${actorId})`);
       const stubId = randomUUID();
       await db.execute(sql`
-        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
+        insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                                periods_per_year, pay_date, tax_year, currency_code, gross,
                                created_by, updated_by)
-        values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'AB', 26, ${periodEnd}, 2025,
+        values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'AB', 26, ${periodEnd}, 2025,
                 'CAD', '0.00', ${actorId}, ${actorId})`);
       let sequence = 10;
       for (const line of lines) {

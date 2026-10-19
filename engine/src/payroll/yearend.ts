@@ -1,3 +1,4 @@
+import { assertQpipReportingBasis, qpipReportingBasisColumns } from "./canada/qpip-reporting-basis.ts";
 import { requireUsW2OpeningSource } from './us/opening-ytd-source.ts';
 import { readCanadianOpeningYearEndSlices } from './canada/opening-reporting-yearend.ts';
 import { withOpeningReportingSnapshot } from './opening-reporting-snapshot.ts';
@@ -531,13 +532,7 @@ async function t4SlipsInTransaction(orgId: string, taxYear: number): Promise<T4S
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'employer_contribution'
                   and pc.system_key = 'ei' and (pc.country is null or pc.country = 'CA'))) as employer_ei,
-           -- The QPIP program's own insurable base, accumulated per stub
-           -- under the pack's declared factor key. Stubs computed before
-           -- the program-base model carry no such factor; for those the
-           -- single accumulated base IS the QPIP base by construction (the
-           -- premium was priced off it), so the fallback reads it exactly —
-           -- it is the legacy record, not an approximation.
-           sum(coalesce((c.factors->>'IE_QPIP')::numeric, c.insurable_earnings)) as qpip_insurable,
+           ${qpipReportingBasisColumns(sql`c.factors`)},
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'earning'
@@ -559,6 +554,7 @@ async function t4SlipsInTransaction(orgId: string, taxYear: number): Promise<T4S
   const stubSlips = rows.rows.map((row) => {
       const province = String(row.province ?? "");
       const isQuebec = province === QPIP_PROVINCE;
+      if (isQuebec) assertQpipReportingBasis(String(row.display_name), Number(row.invalid_qpip_bases));
       return {
         employeePartyId: String(row.employee_party_id),
         employeeName: String(row.display_name),

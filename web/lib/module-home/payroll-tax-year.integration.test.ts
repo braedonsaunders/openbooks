@@ -74,10 +74,10 @@ test('YTD totals translate per-currency stubs instead of raw-adding them', { ski
         values (${documentId}, ${scratch.orgId}, ${scheduleId}, ${today}, ${today}, ${today}, ${year}, 'committed', now(), ${actorId}, ${actorId})`)
       for (const [party, currency, gross] of [[cadParty, 'CAD', '1000'], [usdParty, 'USD', '100']] as const) {
         await db.execute(sql`
-          insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+          insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id,
                                  province, periods_per_year, pay_date, tax_year, currency_code,
                                  gross, net_pay, employer_cost, created_by, updated_by)
-          values (${randomUUID()}, ${scratch.orgId}, ${documentId}, ${party}, ${party},
+          values ('CA', 'calculation', ${randomUUID()}, ${scratch.orgId}, ${documentId}, ${party}, ${party},
                   'ON', 26, ${today}, ${year}, ${currency},
                   ${gross}, ${gross}, '0', ${actorId}, ${actorId})`)
       }

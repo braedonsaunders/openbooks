@@ -648,7 +648,7 @@ test(
         runStatus: "committed",
       });
       const stubId = randomUUID();
-      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
         id: stubId, province: 'ON', periodsPerYear: 26, payDate: '2026-08-18', taxYear: 2026, currency: 'CAD',
         gross: '2400', netPay: '1900', factors: {}, createdBy: fx.actorId, updatedBy: fx.actorId,
       });
@@ -835,7 +835,7 @@ test(
       });
 
       const documentId = await seedRun(fx, { runStatus: "committed" });
-      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
         province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD', gross: '2400',
         netPay: '1900', factors: {}, createdBy: fx.actorId, updatedBy: fx.actorId,
       });
@@ -960,7 +960,7 @@ test(
 
       // A committed run consumes the carry-in.
       const documentId = await seedRun(fx, { runStatus: "committed" });
-      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
         province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD', gross: '2400',
         netPay: '1900', pensionableEarnings: '2400', insurableEarnings: '2400', factors: {}, createdBy: fx.actorId,
         updatedBy: fx.actorId,
@@ -1023,7 +1023,7 @@ test(
 
       // A committed run consumes only the first employee's carry-in.
       const documentId = await seedRun(fx, { runStatus: "committed" });
-      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
         province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD', gross: '2400',
         netPay: '1900', pensionableEarnings: '2400', insurableEarnings: '2400', factors: {}, createdBy: fx.actorId,
         updatedBy: fx.actorId,

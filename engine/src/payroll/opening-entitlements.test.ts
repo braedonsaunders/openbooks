@@ -185,7 +185,7 @@ async function seedCommittedStub(fx: BankFixture, payDate: string): Promise<stri
   const documentId = await seedRun(fx, {
     periodStart: payDate, periodEnd: payDate, payDate, runStatus: "committed",
   });
-  await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+  await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
     province: 'ON', periodsPerYear: 26, payDate: payDate, taxYear: 2026, currency: 'CAD', gross: '2400',
     netPay: '1900', factors: {}, createdBy: fx.actorId, updatedBy: fx.actorId,
   });

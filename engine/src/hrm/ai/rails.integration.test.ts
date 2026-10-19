@@ -259,9 +259,9 @@ async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promis
   });
   await db.execute(sql`
     insert into pay_stubs
-      (org_id, pay_run_document_id, employee_party_id, employment_id, province,
+      (country, country_source, org_id, pay_run_document_id, employee_party_id, employment_id, province,
        periods_per_year, pay_date, tax_year, currency_code, created_by, updated_by)
-    values (${orgId}, ${run.documentId}, ${workerPartyId}, ${employmentId}, 'ON',
+    values ('CA', 'calculation', ${orgId}, ${run.documentId}, ${workerPartyId}, ${employmentId}, 'ON',
        12, '2026-10-05', 2026, 'CAD', ${decidedBy}, ${decidedBy})`);
   return { employmentId, documentId: run.documentId, employeePartyId: workerPartyId, subsidiaryId: subsidiary };
 }
@@ -323,9 +323,9 @@ test("scan flags terminated-with-pay as block; rescan is idempotent; finalize re
     });
     await db.execute(sql`
       insert into pay_stubs
-        (org_id, pay_run_document_id, employee_party_id, employment_id, province,
+        (country, country_source, org_id, pay_run_document_id, employee_party_id, employment_id, province,
          periods_per_year, pay_date, tax_year, currency_code, created_by, updated_by)
-      values (${org.orgId}, ${otherRun.documentId}, ${employeePartyId}, ${employmentId}, 'ON',
+      values ('CA', 'calculation', ${org.orgId}, ${otherRun.documentId}, ${employeePartyId}, ${employmentId}, 'ON',
          12, '2026-10-05', 2026, 'CAD', ${adminId}, ${adminId})`);
     await assert.rejects(checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId: otherRun.documentId }), /blocking payroll check/);
     await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${otherScheduleId}
@@ -435,10 +435,10 @@ test("hours baseline compares each pay period once across a worker rehire", { sk
     });
     await db.execute(sql`
       insert into pay_stubs
-        (org_id, pay_run_document_id, employee_party_id, employment_id, province,
+        (country, country_source, org_id, pay_run_document_id, employee_party_id, employment_id, province,
          periods_per_year, pay_date, tax_year, currency_code, created_by, updated_by)
-      values (${org.orgId}, ${oldRun.documentId}, ${partyId}, ${oldEmploymentId}, 'ON', 52, '2026-01-14', 2026, 'CAD', ${adminId}, ${adminId}),
-             (${org.orgId}, ${newRun.documentId}, ${partyId}, ${newEmploymentId}, 'ON', 52, '2026-01-21', 2026, 'CAD', ${adminId}, ${adminId})`);
+      values ('CA', 'calculation', ${org.orgId}, ${oldRun.documentId}, ${partyId}, ${oldEmploymentId}, 'ON', 52, '2026-01-14', 2026, 'CAD', ${adminId}, ${adminId}),
+             ('CA', 'calculation', ${org.orgId}, ${newRun.documentId}, ${partyId}, ${newEmploymentId}, 'ON', 52, '2026-01-21', 2026, 'CAD', ${adminId}, ${adminId})`);
     await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status)
       values (${org.orgId}, ${partyId}, '2026-01-07', '8.0000', 'approved'),
@@ -554,9 +554,9 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
         values (${runId}, ${org.orgId}, ${scheduleId}, ${periodStart}, ${payDate},
                 ${payDate}, 2026, 'committed')`);
       await db.execute(sql`
-        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+        insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id,
           province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost)
-        values (${stubId}, ${org.orgId}, ${runId}, ${party}, ${employmentId},
+        values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${runId}, ${party}, ${employmentId},
           'ON', 26, ${payDate}, 2026, 'CAD', ${gross}, ${net}, 800)`);
     }
     await db.execute(sql`
@@ -908,9 +908,9 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
       values (${runId}, ${org.orgId}, ${scheduleId}, '2026-09-01', '2026-09-30', '2026-09-30', 2026, 'committed')`);
     const stubId = randomUUID();
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+      insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id,
         province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost)
-      values (${stubId}, ${org.orgId}, ${runId}, ${partyA}, ${empA},
+      values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${runId}, ${partyA}, ${empA},
         'ON', 26, '2026-09-30', 2026, 'CAD', 7123.45, 5401.67, 800)`);
     assert.equal((await db.execute<{ nullable: string }>(sql`
       select is_nullable as nullable from information_schema.columns

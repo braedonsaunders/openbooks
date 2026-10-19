@@ -136,9 +136,9 @@ async function seedPersonRow(
       break;
     case "pay_stubs":
       await db.execute(sql`
-        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year,
+        insert into pay_stubs (country, country_source, org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year,
                                pay_date, tax_year, currency_code, gross, created_by, updated_by)
-        values (${ctx.orgId}, ${ctx.runId}, ${personId}, ${employmentId}, 'BC', 26, '2026-07-01', 2026, 'CAD', '2000.00',
+        values ('CA', 'calculation', ${ctx.orgId}, ${ctx.runId}, ${personId}, ${employmentId}, 'BC', 26, '2026-07-01', 2026, 'CAD', '2000.00',
                 ${ctx.actorId}, ${ctx.actorId})`);
       break;
     case "payroll_opening_balances":

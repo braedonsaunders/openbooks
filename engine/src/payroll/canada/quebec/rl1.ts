@@ -1,3 +1,4 @@
+import { assertQpipReportingBasis, qpipReportingBasisColumns } from "../qpip-reporting-basis.ts";
 import { withOpeningReportingSnapshot } from '../../opening-reporting-snapshot.ts';
 import { readCanadianOpeningYearEndSlices } from '../opening-reporting-yearend.ts';
 import { assertPayrollCountryKnown } from "../../country.ts";
@@ -183,10 +184,7 @@ async function rl1SlipsInSnapshot(
            sum(coalesce((c.factors->>'C2')::numeric, 0)) as qpp2,
            sum((c.factors->>'EI')::numeric) as ei,
            sum(coalesce((c.factors->>'QPIP')::numeric, 0)) as qpip,
-           -- The QPIP program's own insurable base (see the T4 reader for
-           -- the legacy fallback rationale: pre-program-model stubs read
-           -- their single accumulated base exactly).
-           sum(coalesce((c.factors->>'IE_QPIP')::numeric, c.insurable_earnings)) as qpip_insurable,
+           ${qpipReportingBasisColumns(sql`c.factors`)},
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'earning'
@@ -205,6 +203,7 @@ async function rl1SlipsInSnapshot(
      order by p.display_name
   `));
 
+  for (const row of rows.rows) assertQpipReportingBasis(String(row.display_name), Number(row.invalid_qpip_bases));
   const stubAggregates: Rl1SlipAggregates[] = rows.rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),

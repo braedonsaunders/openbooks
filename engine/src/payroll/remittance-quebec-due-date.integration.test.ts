@@ -88,12 +88,12 @@ async function seedQuebecAccelerated2(): Promise<{ orgId: string; actorId: strin
   const stubId = randomUUID();
   await db.execute(sql`
     insert into pay_stubs
-      (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
+      (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
        periods_per_year, pay_date, tax_year, currency_code, gross,
        pensionable_earnings, insurable_earnings, net_pay, employer_cost,
        vacation_accrued, factors, filing_account_id, filing_account_source,
        created_by, updated_by)
-    values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'QC', 52,
+    values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'QC', 52,
             '2026-07-31', 2026, 'CAD', '2000.0000', '2000.0000', '2000.0000', '1600.0000',
             '2000.0000', '0', '{}'::jsonb, ${accountId}, 'calculation', ${actorId}, ${actorId})`);
   await db.execute(sql`

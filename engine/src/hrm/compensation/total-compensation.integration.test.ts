@@ -41,9 +41,9 @@ test("annual variable compensation includes all committed lines while history st
           ${date}::date, extract(year from ${date}::date)::integer,
           ${status === "draft" ? "draft" : "committed"}, 'bonus')`);
       await db.execute(sql`
-        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+        insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id,
           province, periods_per_year, pay_date, tax_year, currency_code)
-        values (${stubId}, ${org.orgId}, ${documentId}, ${employment.workerPartyId}, ${employment.employmentId},
+        values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${documentId}, ${employment.workerPartyId}, ${employment.employmentId},
           'ON', 52, ${date}::date, extract(year from ${date}::date)::integer, 'CAD')`);
       await db.execute(sql`
         insert into pay_stub_lines (org_id, stub_id, kind, description, amount, sequence)

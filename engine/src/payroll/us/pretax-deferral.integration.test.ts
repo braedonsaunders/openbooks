@@ -9,7 +9,7 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions } from "../../testing/fixtures.ts";
 import { seedUsSuiAccount, seedUsEinAccount } from "../filing-test-fixtures.ts";
 import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
 import { saveOpeningBalances } from "../opening-balances.ts";
@@ -59,6 +59,7 @@ interface Fixture {
 async function usPayrollOrg(): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
+  await grantScratchPermissions(org.orgId, actorId, ['payroll.read', 'payroll.run']);
   const account = async (number: string, name: string, type: string) => {
     const id = randomUUID();
     await db.execute(sql`
@@ -594,6 +595,10 @@ test(
       await saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
         employeePartyId: employee, amounts: {}, accountBases: ficaWages("199000"),
       }] });
+      await qualifyUsOpeningLevySource(fx, employee, [
+        { programKey: 'us_futa', region: 'US', filingAccountId: einId, federalAccountId: einId, amount: '0' },
+        { programKey: 'us_sui', region: 'TX', filingAccountId: fx.suiAccountId, federalAccountId: einId, amount: '0' },
+      ]);
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
         periodStart: PERIOD_START, periodEnd: PERIOD_END,
