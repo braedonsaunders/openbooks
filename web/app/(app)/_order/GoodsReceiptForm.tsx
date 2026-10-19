@@ -94,7 +94,7 @@ export function GoodsReceiptForm({ orderId, apiBase, warehouses, onSubmit, onClo
     return () => {
       cancelled = true
     }
-  }, [apiBase, orderId, reloadNonce])
+  }, [apiBase, orderId, reloadNonce, t])
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
