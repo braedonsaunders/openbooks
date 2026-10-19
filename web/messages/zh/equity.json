@@ -251,7 +251,7 @@
     "authorized": "授权股数",
     "conversionPrice": "转换价格",
     "split": "拆股",
-    "currentAuthorized": "当前 {value} 股",
+    "currentAuthorized": "当前 {value} {valueCount, plural, other {股}}",
     "currentConversionPrice": "当前 {value}",
     "splitHelp": "拆股将自其日期起重述该类别的所有持股、奖励、期权池和价格，并调整转换为该类别的优先股类别的转换价格。拆股日期必须晚于该类别及这些优先股类别最近一次记录的活动。",
     "saved": "已保存",
@@ -368,7 +368,9 @@
     "driftBadge": "投前估值不一致",
     "preMoneyDrift": "投前估值 {preMoney} 与本轮价格乘以本轮之前 {shares} 股完全稀释股份的结果（{implied}）不再一致：日期早于本轮的股份在本轮之后才登记。",
     "preMoneyDriftRemedy": "请在下方将投前估值修正为 {implied}，或在“投前估值依据”中记录其所依据的基础。",
-    "preMoneyDriftReadOnly": "股权管理员可以修正估值或记录其依据。"
+    "preMoneyDriftReadOnly": "股权管理员可以修正估值或记录其依据。",
+    "conversionDrift": "<link>{number}</link> 以 {recorded} 转换；该轮现按 {standing} 为其条件计价。",
+    "conversionDriftHint": "日期早于该轮的交易在这些转换之后登记。每项转换按登记保持有效；如果交易确属该轮之前，请打开其 SAFE 或票据重新转换。"
   },
   "model": {
     "description": "以截至日期的股权结构表为基础，按投前法为融资轮次定价：流通中的 SAFE 和票据转换，受保护类别获得反稀释股份，期权池在投前估值内补足至目标比例。不会记录任何内容。",
@@ -407,7 +409,7 @@
     },
     "prompt": "输入投前估值和新增资金，即可按截止日的股权结构表为该轮次定价。",
     "sharesOfFullyDiluted": "{shares} · 完全稀释后的 {percent}",
-    "newShares": "新增 {shares} 股",
+    "newShares": "新增 {shares} {sharesCount, plural, other {股}}",
     "poolAfter": "本轮后的期权池",
     "percentOfFullyDiluted": "完全稀释后的 {percent}"
   },
@@ -593,7 +595,11 @@
     "outstandingPrincipal": "未结余额",
     "convertedInto": "已转换为",
     "invalidConversionTitle": "此次转换使用了从{source}采用的条款，而{source}已于{date}作废。",
-    "invalidConversionRemedy": "以本轮交割日{date}为日期作废证书{certificate}以撤销转换；以不晚于{date}的日期撤销 MFN 选择；然后按该工具自身条款重新转换。"
+    "invalidConversionRemedy": "以本轮交割日{date}为日期作废证书{certificate}以撤销转换；以不晚于{date}的日期撤销 MFN 选择；然后按该工具自身条款重新转换。",
+    "undone": "已撤销",
+    "undoneByVoid": "已撤销：{certificate} 已于 {date} 作废",
+    "conversionDriftTitle": "此转换按 {recorded} 登记为 {recordedShares} {recordedSharesCount, plural, other {股}}；该轮现按 {standing} 将相同条件计为 {standingShares} {standingSharesCount, plural, other {股}}。",
+    "conversionDriftRemedy": "日期早于该轮的交易在转换之后登记，改变了价格所除的股数。转换按登记保持有效。如果这些交易确属该轮之前，请以 {date} 为日期作废 {certificate}，并按当前价格重新转换；否则，请作废并重新登记该交易以更正其日期。"
   },
   "events": {
     "saved": "已记录{kind}",
@@ -690,7 +696,7 @@
     "open": "83(b) 待提交",
     "missed": "83(b) 已逾期",
     "filedOn": "{date} 提交",
-    "due": "{date} 到期 · 剩余 {days} 天",
+    "due": "{date} 到期 · 剩余 {days, plural, other {# 天}}",
     "missedOn": "期限已于 {date} 截止",
     "deadline": "83(b) 截止日期 {date}"
   },
@@ -828,11 +834,11 @@
     "attention": {
       "title": "待处理",
       "allClear": "暂无待处理事项。",
-      "cliff": "{holder} · {number} 将于 {date} 到达等待期，{quantity} 个单位归属",
+      "cliff": "{holder} · {number} 将于 {date} 到达等待期，{quantity} {quantityCount, plural, other {个单位}}归属",
       "election83b": "{holder} · {number} 的 83(b)选择须于 {date} 前提交（剩余 {days} 天）",
-      "restrictedDeposit": "{holder} · {number} 中 {shares} 股提前行权股份尚未归属；保证金保留至归属",
-      "departed": "{holder} 已于 {date} 离职，仍持有 {units} 个期权和 RSU 单位；请登记没收和到期",
-      "expiring": "{holder} · {number} 将于 {date} 到期，尚有 {quantity} 个单位未行权",
+      "restrictedDeposit": "{holder} · {number} 中 {shares} {sharesCount, plural, other {股}}提前行权股份尚未归属；保证金保留至归属",
+      "departed": "{holder} 已于 {date} 离职，仍持有 {units} {unitsCount, plural, other {个}}期权和 RSU 单位；请登记没收和到期",
+      "expiring": "{holder} · {number} 将于 {date} 到期，尚有 {quantity} {quantityCount, plural, other {个单位}}未行权",
       "compensationDue": "截至 {date} 的股权激励尚未过账：待过账 {amount}",
       "compensationRefused": "无法计量截至 {date} 的股权激励：{message}",
       "interestDue": "截至 {date} 的票据利息尚未计提：待过账 {amount}",
@@ -847,14 +853,15 @@
       "interestCatchUp": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账；该期间结束后，将随截至 {through} 的运行过账",
       "interestCatchUpNow": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账；请过账截至 {through} 的运行以补记",
       "interestCatchUpNoPeriod": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账；请打开或生成下一个会计期间以过账",
-      "roundPreMoneyDrift": "{name} 轮的投前估值为 {preMoney}，但其价格乘以该轮之前的 {shares} 股完全稀释股份现为 {implied}；请修正估值或记录其依据"
+      "roundPreMoneyDrift": "{name} 轮的投前估值为 {preMoney}，但其价格乘以该轮之前的 {shares} 股完全稀释股份现为 {implied}；请修正估值或记录其依据",
+      "conversionPriceDrift": "{number} 在 {round} 中以 {recorded} 转换；日期早于该轮、但在其后登记的交易使该转换现按 {standing} 计价"
     },
     "activity": {
       "title": "最近活动",
       "empty": "尚无股权活动记录。",
       "issue": "向 {holder} 发行 {kind} {number}",
       "round": "{name} 以每股 {price} 完成",
-      "shares": "{quantity} 股"
+      "shares": "{quantity} {quantityCount, plural, other {股}}"
     },
     "directory": {
       "title": "快捷入口",
@@ -909,7 +916,15 @@
       "compensationNoPeriod": "截至 {date} 确认的股权激励 {amount} 在该次运行后才登记，尚未过账。请打开或生成下一个会计期间以过账。",
       "interest": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账。该期间结束后，将随截至 {through} 的运行过账。",
       "interestNow": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账。截至 {through} 的运行将予以补记。",
-      "interestNoPeriod": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账。请打开或生成下一个会计期间以过账。"
+      "interestNoPeriod": "截至 {date} 计提的票据利息 {amount} 在该次运行后才登记，尚未过账。请打开或生成下一个会计期间以过账。",
+      "compensationNoPeriodTitle": "截至 {date} 确认的股权激励费用 {amount} 是在截至该日的运行之后登记的，尚未过账，且该运行之后没有可供过账的开放会计期间。",
+      "interestNoPeriodTitle": "截至 {date} 计提的可转换票据利息 {amount} 是在截至该日的运行之后登记的，尚未过账，且该运行之后没有可供过账的开放会计期间。",
+      "generateRemedy": "请生成 {year} 财年的会计期间；其第一个期间结束后，下一次运行将过账补记金额。",
+      "generateRemedyReadOnly": "请让负责会计期间的人员生成 {year} 财年（设置 → 期间结账）；其第一个期间结束后，下一次运行将过账补记金额。",
+      "reopenRemedy": "上次运行之后的期间已结账。请通过期间结账申请受控重新打开下一个期间，以便运行过账补记金额。",
+      "reopenRemedyReadOnly": "上次运行之后的期间已结账。请让负责会计期间的人员通过期间结账申请受控重新打开下一个期间。",
+      "generatePeriods": "生成 FY{year} 期间",
+      "openPeriods": "打开会计期间"
     }
   },
   "preferenceBasis": {

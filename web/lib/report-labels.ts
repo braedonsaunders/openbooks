@@ -1,7 +1,8 @@
 import "server-only";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import type { ReportRunLabels, ReportEntity } from "@openbooks/reports";
 import { reportEnumLabel } from "./report-enum-label";
+import { reportTemporalBucketLabel } from "./report-temporal-label";
 
 /**
  * Bridge between the request locale and the custom-report executor's
@@ -20,7 +21,7 @@ export type PagedExportLabels = ReportRunLabels & {
 }
 
 export async function reportRunLabels(): Promise<PagedExportLabels> {
-  const t = await getTranslations("reports");
+  const [t, locale] = await Promise.all([getTranslations("reports"), getLocale()]);
   const column = (entity: ReportEntity, key: string) => entity.key.startsWith('custom:') ? entity.columns.find(c => c.key === key)?.label ?? key : t(`catalog.columns.${entity.key}.${key}`);
   return {
     column: (entity, key) => column(entity, key),
@@ -44,6 +45,7 @@ export async function reportRunLabels(): Promise<PagedExportLabels> {
     summaryTotal: (measureHeading) => t("run.summaryTotal", { measure: measureHeading }),
     undefinedFormula: () => t("run.undefinedFormula"),
     notTotalled: () => t("run.notTotalled"),
+    temporalBucket: (bucket) => reportTemporalBucketLabel(bucket, locale),
     none: () => t("run.none"),
     subtotal: (level: string) => t("run.subtotal", { level }),
     grandTotalsTitle: () => t("run.grandTotals"),

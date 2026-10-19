@@ -28,7 +28,7 @@
  */
 import { calendarDaysBetween } from "../platform/civil-date.ts";
 import { eventsOf, vestingTermsOf } from "./cap-table.ts";
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import {
   addRational,
   compareRational,
@@ -143,9 +143,9 @@ function servedFraction(start: string, end: string, through: string): Rational {
 export function cumulativeCompensation(book: Pick<EquityBook, "events" | "splits" | "securities">, security: SecurityRecord, through: string): Rational {
   if (!isCompensatory(security)) return ZERO;
   if (through < security.issueDate) return ZERO;
-  const fairValue = parsePrice(security.fairValuePerUnit, "the fair value per unit");
+  const fairValue = parsePrice(security.fairValuePerUnit, "fairValuePerUnit");
   if (compareRational(fairValue, ZERO) < 0) {
-    throw new EquityError(`Security ${security.securityNumber} carries a negative fair value.`, { code: "equity_valuation_invalid", remedy: "Review the award's valuation." });
+    throw equityError("awardFairValueNegative", { security: fig.text(security.securityNumber) });
   }
   const tranches = compensationTranches(book, security, through);
   if (tranches.length === 0) return ZERO;
@@ -164,6 +164,6 @@ export function cumulativeCompensation(book: Pick<EquityBook, "events" | "splits
 /** Total grant-date cost of the award's live units (what it will have cost once fully vested). */
 export function totalCompensation(book: Pick<EquityBook, "events" | "splits" | "securities">, security: SecurityRecord, through: string): Rational {
   if (!isCompensatory(security)) return ZERO;
-  const fairValue = parsePrice(security.fairValuePerUnit, "the fair value per unit");
+  const fairValue = parsePrice(security.fairValuePerUnit, "fairValuePerUnit");
   return sumRational(compensationTranches(book, security, through).map((tranche) => multiplyRational(tranche.units, fairValue)));
 }

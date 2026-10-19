@@ -184,6 +184,17 @@ export function SecurityDrawer({ context, detail, releases, closeHref, holders, 
             <p>{t('drawer.invalidConversionRemedy', { certificate: detail.convertible.resultingSecurityNumber ?? '', date: date(detail.convertible.convertedOn) })}</p>
           </section>
         )}
+        {detail.convertible?.conversionDrift && (
+          <section role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            <p className="font-semibold">{t('drawer.conversionDriftTitle', {
+              recorded: price(detail.convertible.conversionDrift.recordedPrice, detail.convertible.conversionDrift.currency),
+              recordedShares: shares(detail.convertible.conversionDrift.recordedShares), recordedSharesCount: Number(detail.convertible.conversionDrift.recordedShares),
+              standing: price(detail.convertible.conversionDrift.standingPrice, detail.convertible.conversionDrift.currency),
+              standingShares: shares(detail.convertible.conversionDrift.standingShares), standingSharesCount: Number(detail.convertible.conversionDrift.standingShares),
+            })}</p>
+            <p>{t('drawer.conversionDriftRemedy', { certificate: detail.convertible.conversionDrift.resultingSecurityNumber ?? '', date: date(detail.convertible.conversionDrift.convertedOn) })}</p>
+          </section>
+        )}
         <DrawerTabStrip
           ariaLabel={t('drawer.tabs')}
           activeKey={panel}
@@ -305,11 +316,20 @@ export function SecurityDrawer({ context, detail, releases, closeHref, holders, 
                   {history.map((item) => item.election ? (
                     <MfnHistoryRow key={item.election.id} election={item.election} currency={currency} params={context.params} actionColumn={context.canManage && live} />
                   ) : ((event: SecurityDrawerData['detail']['events'][number]) => (
-                    <TableRow key={String(event.id)} className={str(event.reversed_by_event_id) ? 'text-slate-500 line-through decoration-slate-400' : ''}>
+                    <TableRow key={String(event.id)} className={str(event.reversed_by_event_id) || event.resulting_voided ? 'text-slate-500 line-through decoration-slate-400' : ''}>
                       <TableCell className="whitespace-nowrap tabular-nums">{date(String(event.effective_on))}</TableCell>
                       <TableCell>
                         {t(`eventKind.${String(event.kind)}`)}
                         {str(event.reversed_by_event_id) && <Badge variant="outline" className="ml-2 no-underline">{t('drawer.reversed')}</Badge>}
+                        {/* An event whose resulting security was voided is undone from the void; the void opens on that security. */}
+                        {event.resulting_voided && (
+                          <span className="block text-xs no-underline">
+                            <Badge variant="outline" className="mr-1 no-underline">{t('drawer.undone')}</Badge>
+                            <Link className={`no-underline ${LINK}`} href={withParams('/equity', context.params, { view: 'securities', security: event.resulting_voided.securityId })}>
+                              {t('drawer.undoneByVoid', { certificate: event.resulting_voided.securityNumber, date: date(event.resulting_voided.voidedOn) })}
+                            </Link>
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap tabular-nums">{str(event.quantity) ? shares(String(event.quantity)) : '—'}</TableCell>
                       <TableCell className="text-right whitespace-nowrap tabular-nums">{amount(event.amount)}</TableCell>

@@ -8,7 +8,7 @@
  * shares once (fractional shares are settled in cash, never issued); a
  * per-share price is divided by the same factor.
  */
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import { divideRational, floorShares, multiplyRational, ONE, rational, type Rational } from "./quantities.ts";
 import type { SplitRecord } from "./types.ts";
 
@@ -49,10 +49,6 @@ export function restatePrice(
 /** Refuse a split ratio the schema would refuse, before anything is written. */
 export function validateSplitRatio(numerator: bigint, denominator: bigint): void {
   if (numerator <= 0n || denominator <= 0n || numerator === denominator) {
-    throw new EquityError("A split ratio needs two different positive whole numbers.", {
-      code: "equity_split_ratio_invalid",
-      remedy: "Enter the new and old share counts of the split, such as 2 for 1 or 1 for 10.",
-      field: "ratio",
-    });
+    throw equityError("splitRatioInvalid", { newShares: fig.term("splitNew"), oldShares: fig.term("splitOld") }, { field: "ratio" });
   }
 }

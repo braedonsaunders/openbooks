@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { renderRefusal } from "../platform/catalog-refusal.ts";
+import { EQUITY_REFUSALS } from "./refusals/index.ts";
 import { sql } from "drizzle-orm";
 import { installEngineSeams } from "../composition/install.ts";
 import { EQUITY_ACTION_SUBJECT_KIND } from "../flows/equity-actions-adapter.ts";
@@ -22,6 +24,7 @@ import { instrumentBalance, postEquityEntry, requireConsiderationAccount } from 
 import { listSecurities, loadCapTableView, loadSecurityDetail, loadStructure } from "./read-model.ts";
 import { amendRound, voidRound } from "./rounds.ts";
 import { issueSecurity } from "./securities.ts";
+import { loadEquityBook, loadEquityBookAtEvent } from "./store.ts";
 import { amendShareClass, changePlanReserve, createPlan, createRound, createShareClass, recordSplit } from "./structure.ts";
 
 // Governed actions a Flow holds release through the registered equity handler.
@@ -145,7 +148,7 @@ test("the instrument an MFN election adopted cannot be voided while the election
     const better = await issueSecurity({ ...entity(w), kind: "safe", holderPartyId: w.holderId, issueDate: "2026-07-05", considerationAmount: "100000", considerationAccountId: w.org.accounts.bank, safeType: "post_money", valuationCap: "400000", discountPercent: "20" });
     await assert.rejects(
       electMfnTerms({ ...manage(w), securityId: mfn.id, sourceSecurityId: better.id, effectiveOn: "2026-07-03", reason: "Holder adopts the later SAFE's terms" }),
-      (error: unknown) => error instanceof EquityError && error.code === "equity_mfn_not_better" && error.field === "effectiveOn" && error.remedy.includes("on or after 2026-07-05"),
+      (error: unknown) => error instanceof EquityError && error.code === "equity_mfn_not_better" && error.field === "effectiveOn" && error.remedy.includes("on or after Jul 5, 2026"),
       "an election dated before the later SAFE was issued names the date it can take effect",
     );
     const election = await electMfnTerms({ ...manage(w), securityId: mfn.id, sourceSecurityId: better.id, effectiveOn: "2026-07-10", reason: "Holder adopts the later SAFE's terms" });
@@ -185,7 +188,7 @@ test("the instrument an MFN election adopted cannot be voided while the election
     applied(await recordSecurityEvent({ ...manage(w), securityId: converted.resultingSecurityId!, kind: "void", effectiveOn: "2026-08-31", reason: "Converted on terms that were voided" }));
     await assert.rejects(
       recordSecurityEvent({ ...manage(w), securityId: second.id, kind: "convert", effectiveOn: "2026-08-31", roundId: round.id, reason: "Converted on the SAFE's own terms" }),
-      (error: unknown) => error instanceof EquityError && error.code === "equity_conversion_terms_void" && /Reverse the MFN election on .* dated on or before 2026-08-31/.test(error.remedy),
+      (error: unknown) => error instanceof EquityError && error.code === "equity_conversion_terms_void" && /Reverse the MFN election on .* dated on or before Aug 31, 2026/.test(error.remedy),
       "a SAFE does not convert while its election names a void instrument's terms",
     );
     applied(await reverseMfnElection({ ...manage(w), securityId: second.id, amendmentId: secondElection.amendmentId!, effectiveOn: "2026-08-31", reason: "Adopted terms were entered in error" }));
@@ -202,6 +205,13 @@ test("the instrument an MFN election adopted cannot be voided while the election
     assert.deepEqual([row.status, row.principal, row.outstandingAmount, row.resultingSecurityId], ["converted", "50000.0000", "0.0000", again.resultingSecurityId]);
     const table = await loadCapTableView({ ...entity(w), asOf: "2026-09-03" });
     assert.equal(table.table.convertibles.find((item) => item.securityId === second.id)!.outstandingPrincipal, "0.0000");
+
+    const lateIssue = await commonShares(w, '1000', '2026-07-01');
+    const recorded = await loadEquityBookAtEvent(db, w.org.orgId, again.eventId);
+    assert.ok(recorded?.securities.some((item) => item.id === again.resultingSecurityId), 'the recording transaction is included');
+    assert.ok(!recorded?.securities.some((item) => item.id === lateIssue.id), 'later records stay outside the recorded snapshot even when their issue date is earlier');
+    assert.ok((await loadEquityBook(db, w.org.orgId, w.org.subsidiaryId)).securities.some((item) => item.id === lateIssue.id), 'current readers keep the later record');
+    assert.equal(await loadEquityBookAtEvent(db, randomUUID(), again.eventId), null, 'an event cannot select another organization’s recorded state');
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
   }
@@ -215,9 +225,9 @@ test("a round's pre-money must agree with its price and the shares before it, an
     const base = { ...entity(w), name: "Series A-2", shareClassId: seriesA, closedOn: "2026-08-15", pricePerShare: "3.50" };
     await assert.rejects(createRound({ ...base, preMoneyValuation: "1000" }), (error: unknown) => {
       if (!(error instanceof EquityError) || error.code !== "equity_round_pre_money_inconsistent") return false;
-      assert.match(error.message, /CA\$1,000\.00 .* 3\.5 times the 2,000,000 fully diluted shares .*CA\$7,000,000\.00/);
-      assert.match(error.remedy, /pre-money valuation of CA\$7,000,000\.00, or a price per share of 0\.0005/);
-      assert.match(error.localized("de-DE").message, /2\.000\.000 fully diluted/);
+      assert.match(error.message, /CA\$1,000\.00 .* CA\$3\.5000 times the 2,000,000 fully diluted shares .*CA\$7,000,000\.00/);
+      assert.match(error.remedy, /pre-money valuation of CA\$7,000,000\.00 or a price per share of CA\$0\.0005/);
+      assert.match(renderRefusal(EQUITY_REFUSALS[error.key].message, error.values, "de-DE"), /2\.000\.000 fully diluted/);
       return true;
     });
     const round = await createRound({ ...base, preMoneyValuation: "7000000" });
@@ -266,7 +276,7 @@ test("runs are offered and posted only for open periods with activity due, and a
     await withSimClock("2026-12-20T12:00:00Z", async () => {
       const requests = await equityActionRequestCount(w);
       await assert.rejects(postCompensationRun({ ...entity(w), throughDate: "2026-12-31" }), (error: unknown) => error instanceof EquityError
-        && error.code === "equity_run_period_not_ended" && error.field === "throughDate" && error.message.includes("after today (2026-12-20)"));
+        && error.code === "equity_run_period_not_ended" && error.field === "throughDate" && error.message.includes("after today (Dec 20, 2026)"));
       assert.equal((await previewCompensationRun({ ...entity(w), throughDate: "2026-12-31" })).blocked?.code, "equity_run_period_not_ended", "the preview names why it cannot post yet");
       assert.equal(await equityActionRequestCount(w), requests, "nothing is submitted for a period that has not ended");
     });
@@ -309,8 +319,8 @@ test("refusals name the remedy that fits the action and accept only cash account
     );
     await assert.rejects(
       changePlanReserve({ ...manage(w), planId: plan, effectiveOn: "2026-07-10", shareDelta: "-400000", reason: "Board reduced the reserve" }),
-      (error: unknown) => error instanceof EquityError && error.remedy.startsWith("Remove no more than 300,000 shares from plan EIP's reserve")
-        && error.localized("fr-FR").remedy.includes("300 000"),
+      (error: unknown) => error instanceof EquityError && error.remedy.startsWith("Remove no more than 300,000 shares from the reserve of plan EIP")
+        && renderRefusal(EQUITY_REFUSALS[error.key].remedy, error.values, "fr-FR").includes("300 000"),
     );
     // Activity on another class does not hold back a split of a class with none of its own.
     const quiet = await preferred(w, "QP");

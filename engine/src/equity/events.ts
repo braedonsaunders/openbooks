@@ -61,10 +61,10 @@ import {
   reversedElections,
   vestingTermsOf,
 } from "./cap-table.ts";
-import { EquityError, type RefusalValue } from "./errors.ts";
+import { equityError, fig, type EquityTermName } from "./errors.ts";
 import { functionalUnits, restate, spotRate } from "./fx.ts";
 import { governEquityAction, type EquityAction, type GovernedStatus } from "./governance.ts";
-import { currencyExponent, requireReason, writeEquityAudit } from "./internal.ts";
+import { currencyExponent, requireReason, writeEquityAudit, type ReasonSubject } from "./internal.ts";
 import {
   instrumentBalance,
   postEquityEntry,
@@ -154,7 +154,16 @@ export interface RecordEventResult {
   replayed: boolean;
 }
 
-const REASON_REQUIRED: readonly SecurityEventKind[] = ["forfeit", "expire", "cancel", "repurchase", "void", "reverse"];
+const REASON_REQUIRED = ["forfeit", "expire", "cancel", "repurchase", "void", "reverse"] as const satisfies readonly (SecurityEventKind & ReasonSubject)[];
+
+/** The reason subject of an event that must state why it was recorded, or null when a reason is optional. */
+function reasonSubject(kind: SecurityEventKind): (typeof REASON_REQUIRED)[number] | null {
+  return (REASON_REQUIRED as readonly SecurityEventKind[]).includes(kind) ? kind as (typeof REASON_REQUIRED)[number] : null;
+}
+
+/** The date field the event form shows: an 83(b) election is dated by its filing. */
+const eventDateTerm = (kind: SecurityEventKind): EquityTermName => (kind === "election_83b" ? "filedOn" : "effectiveOn");
+
 const ALLOWED: Record<SecurityEventKind, readonly SecurityRecord["kind"][]> = {
   exercise: ["option", "warrant"],
   settle: ["rsu"],
@@ -179,12 +188,6 @@ export function governedEventAction(kind: SecurityEventKind, securityKind: Secur
   if (kind === "cancel" && (securityKind === "safe" || securityKind === "note")) return "cancel_convertible";
   return null;
 }
-
-function refuse(message: string, remedy: string, options: { field?: string; status?: 404 | 409 | 422; code?: string; values?: Record<string, RefusalValue> } = {}): never {
-  throw new EquityError(message, { code: options.code ?? "equity_event_invalid", status: options.status ?? 422, remedy, field: options.field, values: options.values });
-}
-
-const ceilingValue = (value: bigint): Record<string, RefusalValue> => ({ ceiling: { kind: "shares", value } });
 
 interface EventInsert {
   id: string;
@@ -223,7 +226,7 @@ async function insertEvent(runner: SqlExecutor, orgId: string, subsidiaryId: str
       ${row.reversesEventId}, ${row.interestAmount}::numeric, ${row.interestAccruedAmount}::numeric, ${row.interestAccruedFunctional}::numeric,
       ${row.interestAccrualEntryId}, ${row.depositAmount}::numeric, ${row.fairMarketValue}::numeric, ${row.fxRate}::numeric)
     returning id`)).rows;
-  if (inserted.length !== 1) throw new EquityError("The event was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+  if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("event") });
 }
 
 const asRecord = (row: EventInsert): SecurityEventRecord => ({
@@ -257,7 +260,7 @@ function certificate(source: SecurityRecord, overrides: Partial<SecurityInsert> 
 function grantValueUnits(book: EquityBook, security: SecurityRecord, quantity: bigint, on: string, exponent: number): bigint {
   if (!security.fairValuePerUnit || !security.shareClassId) return 0n;
   const issueUnits = divideRational(rational(quantity), splitFactor(book.splits, security.shareClassId, security.issueDate, on));
-  return ledgerUnits(restate(multiplyRational(issueUnits, parsePrice(security.fairValuePerUnit, "the fair value per unit")), security.fxRate), exponent);
+  return ledgerUnits(restate(multiplyRational(issueUnits, parsePrice(security.fairValuePerUnit, "fairValuePerUnit")), security.fxRate), exponent);
 }
 
 /** Live holding events of a security that a reversal of `target` would leave relying on a state that no longer holds. */
@@ -274,7 +277,7 @@ function dependentEvents(book: EquityBook, security: SecurityRecord, target: Sec
  * gate approves.
  */
 export async function recordSecurityEvent(input: RecordEventInput): Promise<RecordEventResult> {
-  if (!isUuid(input.securityId)) refuse("The security does not exist.", "Choose a security.", { status: 404, code: "equity_security_unknown" });
+  if (!isUuid(input.securityId)) throw equityError("securityUnknown");
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{
     subsidiary_id: string; kind: SecurityRecord["kind"]; security_number: string; holder_name: string | null; class_code: string | null; currency: string;
   }>(sql`
@@ -283,18 +286,24 @@ export async function recordSecurityEvent(input: RecordEventInput): Promise<Reco
       left join parties p on p.org_id = s.org_id and p.id = s.holder_party_id
       left join equity_share_classes c on c.org_id = s.org_id and c.id = s.share_class_id
      where s.org_id = ${input.orgId} and s.id = ${input.securityId}`)).rows[0]);
-  if (!located) refuse("The security does not exist.", "Choose a security.", { status: 404, code: "equity_security_unknown" });
+  if (!located) throw equityError("securityUnknown");
   const action = input.kind in ALLOWED ? governedEventAction(input.kind, located!.kind) : null;
   if (!action) return { status: "applied", requestId: null, ...(await applySecurityEvent(input)) };
+  // A reversal carries the figures of the event it undoes: what it restores is what an approver weighs.
+  const reversed = input.kind === "reverse" && typeof input.reversesEventId === "string" && isUuid(input.reversesEventId)
+    ? await withOrgTransaction(input.orgId, async () => (await db.execute<{ quantity: string | null; amount: string | null }>(sql`
+      select quantity::text as quantity, amount::text as amount from equity_security_events
+       where org_id = ${input.orgId} and security_id = ${input.securityId} and id = ${input.reversesEventId}`)).rows[0])
+    : undefined;
   const { orgId: _org, actorId: _actor, ...payload } = input;
   const outcome = await governEquityAction({
     orgId: input.orgId, actorId: input.actorId, subsidiaryId: located!.subsidiary_id, action,
     subjectId: input.securityId, subjectLabel: located!.security_number,
-    effectiveOn: requireDate(input.effectiveOn, "effectiveOn", "The event date"),
+    effectiveOn: requireDate(input.effectiveOn, "effectiveOn", eventDateTerm(input.kind)),
     reason: typeof input.reason === "string" && input.reason.trim() !== "" ? input.reason.trim().slice(0, 2000) : null,
     summary: {
       securityKind: located!.kind, holderName: located!.holder_name, shareClassCode: located!.class_code,
-      quantity: input.quantity ?? null, amount: input.amount ?? null, currency: located!.currency,
+      quantity: input.quantity ?? reversed?.quantity ?? null, amount: input.amount ?? reversed?.amount ?? null, currency: located!.currency,
     },
     payload, idempotencyKey: typeof input.idempotencyKey === "string" && input.idempotencyKey.trim() !== "" ? `event:${input.idempotencyKey.trim()}` : null,
   }, (actorId) => applySecurityEvent({ ...input, actorId }));
@@ -309,16 +318,17 @@ export async function recordSecurityEvent(input: RecordEventInput): Promise<Reco
 /** Apply one security event: the command a governed event's approval releases. */
 export async function applySecurityEvent(input: RecordEventInput): Promise<AppliedEventResult> {
   const kind = input.kind;
-  if (!(kind in ALLOWED)) refuse("Choose what happened to the security.", "Choose an event kind.", { field: "kind" });
-  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The event date");
-  const reason = REASON_REQUIRED.includes(kind)
-    ? requireReason(input.reason, `the ${kind === "reverse" ? "reversal" : kind}`)
+  if (!(kind in ALLOWED)) throw equityError("eventKindMissing", {}, { field: "kind" });
+  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", eventDateTerm(kind));
+  const subject = reasonSubject(kind);
+  const reason = subject
+    ? requireReason(input.reason, subject)
     : typeof input.reason === "string" && input.reason.trim() !== "" ? input.reason.trim().slice(0, 2000) : null;
   const idempotencyKey = typeof input.idempotencyKey === "string" && input.idempotencyKey.trim() !== "" ? input.idempotencyKey.trim() : null;
-  if (!isUuid(input.securityId)) refuse("The security does not exist.", "Choose a security.", { status: 404, code: "equity_security_unknown" });
+  if (!isUuid(input.securityId)) throw equityError("securityUnknown");
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string; kind: SecurityRecord["kind"] }>(sql`
     select subsidiary_id, kind from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`)).rows[0]);
-  if (!located) refuse("The security does not exist.", "Choose a security.", { status: 404, code: "equity_security_unknown" });
+  if (!located) throw equityError("securityUnknown");
   const subsidiaryId = located!.subsidiary_id;
   return inEquityCommand({ ...input, subsidiaryId }, "equity.manage", async ({ book, currency: functional }) => {
     if (idempotencyKey) {
@@ -327,7 +337,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
          where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
       if (existing) {
         if (existing.security_id !== input.securityId || existing.kind !== kind) {
-          throw new EquityError("This request key was already used for a different event.", { status: 409, code: "equity_idempotency_conflict", remedy: "Retry with a new request key." });
+          throw equityError("idempotencyConflict", { subject: fig.choice("event") });
         }
         return {
           eventId: existing.id, resultingSecurityId: existing.resulting_security_id, journalEntryId: existing.journal_entry_id,
@@ -339,12 +349,12 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
     await db.execute(sql`select id from equity_securities where org_id = ${input.orgId} and id = ${input.securityId} for update`);
     const security = book.securities.find((row) => row.id === input.securityId)!;
     if (!ALLOWED[kind].includes(security.kind)) {
-      refuse(`A ${security.kind} cannot be recorded with a ${kind}.`, "Choose an event that applies to this security.", { field: "kind" });
+      throw equityError("eventNotApplicable", { event: fig.choice(kind), kind: fig.choice(security.kind) }, { field: "kind" });
     }
     if (book.events.some((event) => event.securityId === security.id && event.kind === "void")) {
-      refuse(`Security ${security.securityNumber} is void.`, "Voided securities take no further events.", { status: 409, code: "equity_security_void" });
+      throw equityError("eventSecurityVoid", { security: fig.text(security.securityNumber) });
     }
-    if (effectiveOn < security.issueDate) refuse(`The event cannot precede the issue date (${security.issueDate}).`, `Date the event on or after ${security.issueDate}.`, { field: "effectiveOn" });
+    if (effectiveOn < security.issueDate) throw equityError("eventBeforeIssue", { issueDate: fig.date(security.issueDate) }, { field: "effectiveOn" });
     const securityExponent = await currencyExponent(db, security.currency);
     const functionalExponent = security.currency === functional ? securityExponent : await currencyExponent(db, functional);
     const foreign = security.currency !== functional;
@@ -359,9 +369,10 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
       depositAmount: null, fairMarketValue: null, fxRate: null,
     };
     const shareClass = security.shareClassId ? book.classes.find((row) => row.id === security.shareClassId)! : null;
+    const quantityTerm: EquityTermName = kind === "convert" ? "sharesToConvert" : "quantity";
     const quantity = (): bigint => {
-      const value = parseShares(input.quantity ?? "", "the quantity");
-      if (value <= 0n) refuse("The quantity must be at least one share.", "Enter the quantity.", { field: "quantity" });
+      const value = parseShares(input.quantity ?? "", quantityTerm);
+      if (value <= 0n) throw equityError("eventQuantityNotPositive", { field: fig.term(quantityTerm) }, { field: "quantity" });
       return value;
     };
     const convertible = security.kind === "safe" || security.kind === "note";
@@ -370,7 +381,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
       const lifetime = convertibleState(book, security, "9999-12-31");
       if (now.status !== "outstanding" || lifetime.status !== "outstanding") {
         const state = now.status !== "outstanding" ? now : lifetime;
-        refuse(`Security ${security.securityNumber} is ${state.status} as of ${state.endedOn ?? effectiveOn}.`, "Record a settlement only on an outstanding SAFE or note; reverse the earlier settlement first if it was recorded in error.", { status: 409, code: "equity_convertible_settled" });
+        throw equityError("convertibleNotOutstanding", { security: fig.text(security.securityNumber), status: fig.choice(state.status), date: fig.date(state.endedOn ?? effectiveOn) });
       }
     };
     const recordSettlement = (settlement: Settlement): void => {
@@ -392,7 +403,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
       case "settle": {
         const units = quantity();
         if (kind === "exercise" && security.expirationDate && effectiveOn > security.expirationDate) {
-          refuse(`Security ${security.securityNumber} expired on ${security.expirationDate}.`, "Record the expiry instead.", { status: 409, code: "equity_security_expired" });
+          throw equityError("exerciseAfterExpiry", { security: fig.text(security.securityNumber), date: fig.date(security.expirationDate) });
         }
         const state = holdingState(book, security, effectiveOn);
         const vestedCeiling = eventCeiling(book, security, state.exact.vestedAvailable, effectiveOn);
@@ -403,35 +414,25 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
           const installments = vestingInstallments(vestingTermsOf(security));
           const next = state.exact.outstanding.numerator > 0n ? installments.find((installment) => installment.date > effectiveOn) : undefined;
           const vestedBefore = installments.some((installment) => installment.date <= effectiveOn);
-          const verb = kind === "exercise" ? "exercised" : "settled";
-          const noun = kind === "exercise" ? "exercise" : "settlement";
+          const named = { security: fig.text(security.securityNumber), date: fig.date(effectiveOn) };
           if (next) {
-            refuse(
-              vestedBefore
-                ? `Every unit of ${security.securityNumber} vested by ${effectiveOn} is already ${verb} or no longer outstanding; the next units vest on ${next.date}.`
-                : `Nothing on ${security.securityNumber} is vested yet on ${effectiveOn}; the first units vest on ${next.date}.`,
-              `Date the ${noun} on or after ${next.date}, when the next units vest.`,
-              { field: "effectiveOn", status: 409, code: "equity_event_nothing_vested" },
-            );
+            const figures = { ...named, nextVest: fig.date(next.date), field: fig.term("effectiveOn") };
+            throw vestedBefore
+              ? equityError("nothingVestedUntilNext", { ...figures, event: fig.choice(kind) }, { field: "effectiveOn" })
+              : equityError("nothingVestedYet", figures, { field: "effectiveOn" });
           }
-          refuse(
-            `No units of ${security.securityNumber} are vested and un${verb} on ${effectiveOn}, and no further units vest under its schedule.`,
-            "Review the award's history: every vested unit is already exercised, settled, forfeited or expired.",
-            { field: "quantity", status: 409, code: "equity_event_nothing_vested" },
-          );
+          throw equityError("nothingVestedEver", { ...named, event: fig.choice(kind) }, { field: "quantity" });
         }
         if (units > ceiling) {
-          refuse(
-            early ? `Only {ceiling} units are outstanding on ${effectiveOn}.` : `Only {ceiling} units are vested and unexercised on ${effectiveOn}.`,
-            early ? "Exercise no more than {ceiling} units." : `Record no more than {ceiling} units; unvested units cannot be ${kind === "exercise" ? "exercised" : "settled"}.`,
-            { field: "quantity", status: 409, code: "equity_event_exceeds_vested", values: ceilingValue(ceiling) },
-          );
+          throw early
+            ? equityError("exerciseExceedsOutstanding", { ceiling: fig.shares(ceiling), date: fig.date(effectiveOn) }, { field: "quantity" })
+            : equityError("exerciseExceedsVested", { ceiling: fig.shares(ceiling), event: fig.choice(kind), date: fig.date(effectiveOn) }, { field: "quantity" });
         }
         const schedule = early && units > vestedCeiling ? earlyExerciseSchedule(book, security, units, effectiveOn) : null;
         if (schedule && !security.unvestedRepurchaseBasis) {
-          refuse(`Grant ${security.securityNumber} does not record the price at which the company repurchases unvested shares.`, "Exercise no more than the {ceiling} vested units.", { field: "quantity", status: 409, code: "equity_repurchase_terms_missing", values: ceilingValue(vestedCeiling) });
+          throw equityError("earlyExerciseTermsMissing", { security: fig.text(security.securityNumber), ceiling: fig.shares(vestedCeiling) }, { field: "quantity" });
         }
-        const price = kind === "exercise" ? restatePrice(book.splits, shareClass!.id, parsePrice(security.pricePerShare, "the exercise price"), security.issueDate, effectiveOn) : rational(0n);
+        const price = kind === "exercise" ? restatePrice(book.splits, shareClass!.id, parsePrice(security.pricePerShare, "exercisePrice"), security.issueDate, effectiveOn) : rational(0n);
         const cashTxn = ledgerUnits(multiplyRational(price, rational(units)), securityExponent);
         // The certificate is measured at the exercise or settlement date's rate, whether or not cash changes hands.
         const fxRate = await rateOn(effectiveOn);
@@ -442,7 +443,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         const par = parUnits(book, shareClass!, vestedUnits, effectiveOn, functionalExponent);
         const reclassAll = security.kind === "warrant" ? 0n : grantValueUnits(book, security, units, effectiveOn, functionalExponent);
         if (cash + reclassAll < parUnits(book, shareClass!, units, effectiveOn, functionalExponent)) {
-          refuse("The shares would be issued below par value.", "Review the exercise price and the class's par value.", { status: 409, code: "equity_below_par" });
+          throw equityError("exerciseBelowPar");
         }
         const account = cashTxn > 0n ? await requireConsiderationAccount(db, input.orgId, input.considerationAccountId) : null;
         const certificateId = await newEquityId(db);
@@ -497,8 +498,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         const available = kind === "forfeit" ? state.exact.unvested : kind === "expire" ? state.exact.vestedAvailable : state.exact.outstanding;
         const ceiling = eventCeiling(book, security, available, effectiveOn);
         if (units > ceiling) {
-          const what = kind === "forfeit" ? "unvested" : kind === "expire" ? "vested and unexercised" : "outstanding";
-          refuse(`Only {ceiling} units are ${what} on ${effectiveOn}.`, "Record no more than {ceiling} units.", { field: "quantity", status: 409, code: "equity_event_exceeds_holding", values: ceilingValue(ceiling) });
+          throw equityError("eventExceedsHolding", { ceiling: fig.shares(ceiling), event: fig.choice(kind), date: fig.date(effectiveOn) }, { field: "quantity" });
         }
         event.quantity = units;
         break;
@@ -507,27 +507,27 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         const units = quantity();
         const state = holdingState(book, security, effectiveOn);
         const ceiling = eventCeiling(book, security, state.exact.outstanding, effectiveOn);
-        if (units > ceiling) refuse(`Only {ceiling} shares are outstanding on ${effectiveOn}.`, "Repurchase no more than {ceiling} shares.", { field: "quantity", status: 409, code: "equity_event_exceeds_holding", values: ceilingValue(ceiling) });
+        if (units > ceiling) throw equityError("repurchaseExceedsOutstanding", { ceiling: fig.shares(ceiling), date: fig.date(effectiveOn) }, { field: "quantity" });
         const source = earlyExerciseSource(book, security);
         const unvested = eventCeiling(book, security, state.exact.unvested, effectiveOn);
         event.quantity = units;
         if (source && unvested > 0n) {
           if (units > unvested) {
-            refuse(`{ceiling} of the shares are unvested on ${effectiveOn}; the company repurchases them on the grant's terms.`, "Repurchase the {ceiling} unvested shares first, then record a separate repurchase of vested shares.", { field: "quantity", status: 409, code: "equity_restricted_repurchase_mixed", values: ceilingValue(unvested) });
+            throw equityError("restrictedRepurchaseMixed", { ceiling: fig.shares(unvested), date: fig.date(effectiveOn) }, { field: "quantity" });
           }
           const basis = source.unvestedRepurchaseBasis;
-          if (!basis) refuse(`Grant ${source.securityNumber} does not record the repurchase price of unvested shares.`, "Record the repurchase price basis on the grant's terms before repurchasing unvested shares.", { status: 409, code: "equity_repurchase_terms_missing" });
-          const cost = restatePrice(book.splits, shareClass!.id, parsePrice(security.pricePerShare ?? "0", "the exercise price"), security.issueDate, effectiveOn);
+          if (!basis) throw equityError("restrictedRepurchaseTermsMissing", { grant: fig.text(source.securityNumber), field: fig.term("unvestedRepurchaseBasis") });
+          const cost = restatePrice(book.splits, shareClass!.id, parsePrice(security.pricePerShare ?? "0", "exercisePrice"), security.issueDate, effectiveOn);
           const fmvText = typeof input.fairMarketValuePerShare === "string" && input.fairMarketValuePerShare.trim() !== "" ? input.fairMarketValuePerShare.trim() : null;
           if (basis === "lower_of_cost_or_fmv" && !fmvText) {
-            refuse("Enter the fair market value per share on the repurchase date.", "The grant repurchases unvested shares at the lower of cost and fair market value; enter the fair market value.", { field: "fairMarketValuePerShare" });
+            throw equityError("repurchaseFairValueMissing", { field: fig.term("fairMarketValuePerShare") }, { field: "fairMarketValuePerShare" });
           }
-          const fmv = fmvText ? parsePrice(fmvText, "the fair market value per share") : null;
-          if (fmv && fmv.numerator < 0n) refuse("The fair market value cannot be negative.", "Enter the fair market value per share.", { field: "fairMarketValuePerShare" });
+          const fmv = fmvText ? parsePrice(fmvText, "fairMarketValuePerShare") : null;
+          if (fmv && fmv.numerator < 0n) throw equityError("repurchaseFairValueNegative", { field: fig.term("fairMarketValuePerShare") }, { field: "fairMarketValuePerShare" });
           const price: Rational = basis === "lower_of_cost_or_fmv" ? minRational(cost, fmv!) : cost;
           const paidTxn = ledgerUnits(multiplyRational(price, rational(units)), securityExponent);
-          if (input.amount && ledgerUnits(parseMoney(input.amount, "the amount paid"), securityExponent) !== paidTxn) {
-            refuse(`The grant prices this repurchase at ${formatLedger(paidTxn)} ${security.currency}.`, "Clear the amount; the repurchase price follows the grant's terms.", { field: "amount", status: 409, code: "equity_repurchase_price_fixed" });
+          if (input.amount && ledgerUnits(parseMoney(input.amount, "amountPaid"), securityExponent) !== paidTxn) {
+            throw equityError("repurchasePriceFixed", { amount: fig.money(formatLedger(paidTxn), security.currency), field: fig.term("amountPaid") }, { field: "amount" });
           }
           const fxRate = paidTxn > 0n ? await rateOn(effectiveOn) : "1";
           const paid = functionalUnits(paidTxn, fxRate);
@@ -536,7 +536,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
           const account = paidTxn > 0n ? await requireConsiderationAccount(db, input.orgId, input.considerationAccountId) : null;
           const held = await instrumentBalance(db, input.orgId, subsidiaryId, security.id, "deposit");
           if (deposit > 0n && held.length !== 1) {
-            refuse(`The early-exercise deposit of ${security.securityNumber} is not on the ledger.`, "Review the exercise entry in the journal; the deposit is credited by the exercise and released by the compensation run.", { status: 409, code: "equity_deposit_unreconciled" });
+            throw equityError("earlyExerciseDepositUnreconciled", { security: fig.text(security.securityNumber) });
           }
           const policy = await resolveAccountPolicy(db, input.orgId, subsidiaryId, effectiveOn);
           legs = [
@@ -553,8 +553,8 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
           entryMemo = `Repurchase of ${units} unvested shares of ${security.securityNumber}`;
           break;
         }
-        const paidTxn = input.amount ? ledgerUnits(parseMoney(input.amount, "the amount paid"), securityExponent) : 0n;
-        if (paidTxn < 0n) refuse("The amount paid cannot be negative.", "Enter the cash paid for the shares.", { field: "amount" });
+        const paidTxn = input.amount ? ledgerUnits(parseMoney(input.amount, "amountPaid"), securityExponent) : 0n;
+        if (paidTxn < 0n) throw equityError("repurchaseAmountNegative", { field: fig.term("amountPaid") }, { field: "amount" });
         const fxRate = paidTxn > 0n ? await rateOn(effectiveOn) : "1";
         const paid = functionalUnits(paidTxn, fxRate);
         const account = paidTxn > 0n ? await requireConsiderationAccount(db, input.orgId, input.considerationAccountId) : null;
@@ -573,12 +573,12 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         const units = quantity();
         const transferee = input.transfereePartyId ?? "";
         await requireHolder(db, input.orgId, transferee, "transfereePartyId");
-        if (transferee === security.holderPartyId) refuse("The transferee is already the holder.", "Choose a different holder.", { field: "transfereePartyId" });
+        if (transferee === security.holderPartyId) throw equityError("transfereeIsHolder", { field: fig.term("transferee") }, { field: "transfereePartyId" });
         const state = holdingState(book, security, effectiveOn);
         const ceiling = eventCeiling(book, security, state.exact.vestedAvailable, effectiveOn);
-        if (units > ceiling) refuse(`Only {ceiling} vested units can be transferred on ${effectiveOn}.`, "Transfer no more than {ceiling} units.", { field: "quantity", status: 409, code: "equity_event_exceeds_vested", values: ceilingValue(ceiling) });
+        if (units > ceiling) throw equityError("transferExceedsVested", { ceiling: fig.shares(ceiling), date: fig.date(effectiveOn) }, { field: "quantity" });
         const restatedPrice = security.pricePerShare && shareClass
-          ? formatPrice(restatePrice(book.splits, shareClass.id, parsePrice(security.pricePerShare, "the price"), security.issueDate, effectiveOn))
+          ? formatPrice(restatePrice(book.splits, shareClass.id, parsePrice(security.pricePerShare, "price"), security.issueDate, effectiveOn))
           : null;
         resulting = certificate(security, {
           id: await newEquityId(db),
@@ -595,21 +595,24 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
       }
       case "convert": {
         if (security.kind === "share") {
-          if (!shareClass || shareClass.kind !== "preferred") refuse("Only preferred shares convert into common.", "Choose a preferred share certificate.", { field: "kind" });
+          if (!shareClass || shareClass.kind !== "preferred") throw equityError("conversionNotPreferred", {}, { field: "kind" });
           const named = conversionClassOf(book, shareClass!, effectiveOn);
           const targetId = input.targetShareClassId ?? named;
           const target = book.classes.find((row) => row.id === targetId);
-          if (!target || target.kind !== "common") refuse("Choose the common class the shares convert into.", "Choose a common class of the legal entity.", { field: "targetShareClassId" });
+          if (!target || target.kind !== "common") throw equityError("conversionTargetMissing", {}, { field: "targetShareClassId" });
           if (named && target!.id !== named) {
-            refuse(`Class ${shareClass!.code} converts into ${book.classes.find((row) => row.id === named)?.code ?? "its conversion class"}.`, "Convert into the class's conversion class, or amend the conversion class first.", { field: "targetShareClassId", status: 409 });
+            const conversionClass = book.classes.find((row) => row.id === named);
+            throw conversionClass
+              ? equityError("conversionClassMismatch", { shareClass: fig.text(shareClass!.code), target: fig.text(conversionClass.code) }, { field: "targetShareClassId" })
+              : equityError("conversionClassMismatchUnnamed", { shareClass: fig.text(shareClass!.code) }, { field: "targetShareClassId" });
           }
-          if (effectiveOn < target!.effectiveOn) refuse(`Class ${target!.code} is not effective until ${target!.effectiveOn}.`, `Date the conversion on or after ${target!.effectiveOn}.`, { field: "effectiveOn" });
+          if (effectiveOn < target!.effectiveOn) throw equityError("conversionClassNotEffective", { shareClass: fig.text(target!.code), date: fig.date(target!.effectiveOn) }, { field: "effectiveOn" });
           const units = quantity();
           const state = holdingState(book, security, effectiveOn);
           const ceiling = eventCeiling(book, security, state.exact.vestedAvailable, effectiveOn);
-          if (units > ceiling) refuse(`Only {ceiling} shares can convert on ${effectiveOn}.`, "Convert no more than {ceiling} shares.", { field: "quantity", status: 409, code: "equity_event_exceeds_holding", values: ceilingValue(ceiling) });
+          if (units > ceiling) throw equityError("conversionExceedsHolding", { ceiling: fig.shares(ceiling), date: fig.date(effectiveOn) }, { field: "quantity" });
           const commonShares = floorShares(multiplyRational(rational(units), conversionRatio(book, shareClass!, effectiveOn)));
-          if (commonShares <= 0n) refuse("The shares convert into less than one common share.", "Convert more shares.", { field: "quantity" });
+          if (commonShares <= 0n) throw equityError("conversionBelowOneCommon", {}, { field: "quantity" });
           resulting = certificate(security, {
             id: await newEquityId(db),
             shareClassId: target!.id,
@@ -633,18 +636,18 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
           break;
         }
         const round = book.rounds.find((row) => row.id === input.roundId);
-        if (!round) refuse("Choose the round the instrument converts in.", "Choose a round of the legal entity.", { field: "roundId" });
-        if (effectiveOn !== round!.closedOn) refuse(`The round closed on ${round!.closedOn}.`, `Date the conversion on ${round!.closedOn}.`, { field: "effectiveOn" });
+        if (!round) throw equityError("conversionRoundMissing", {}, { field: "roundId" });
+        if (effectiveOn !== round!.closedOn) throw equityError("conversionOffClosingDate", { round: fig.text(round!.name), date: fig.date(round!.closedOn) }, { field: "effectiveOn" });
         assertConvertibleOutstanding();
         // An election naming a void instrument's terms is reversed on the record before the SAFE converts.
         const relied = electionOnVoidedSource(book, security, effectiveOn);
         if (relied) {
           const source = book.securities.find((row) => row.id === relied.election.sourceSecurityId);
-          refuse(
-            `${security.securityNumber}'s MFN election of ${relied.election.effectiveOn} adopted the terms of ${source?.securityNumber ?? "an instrument"}, which is void as of ${relied.sourceVoidedOn}.`,
-            `Reverse the MFN election on ${security.securityNumber}, dated on or before ${round!.closedOn} (Securities → ${security.securityNumber} → MFN terms), then convert it again on the terms that stand.`,
-            { status: 409, code: "equity_conversion_terms_void" },
-          );
+          throw equityError("conversionTermsVoid", {
+            security: fig.text(security.securityNumber), electedOn: fig.date(relied.election.effectiveOn),
+            source: fig.text(source?.securityNumber ?? relied.election.sourceSecurityId), voidedOn: fig.date(relied.sourceVoidedOn),
+            closedOn: fig.date(round!.closedOn),
+          });
         }
         const roundClass = book.classes.find((row) => row.id === round!.shareClassId)!;
         const rates = new Map<string, string>();
@@ -656,13 +659,13 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
           }
         }
         const conversion = conversionAtRound(book, security, round!.id, { rates, exponents });
-        if (conversion.shares <= 0n) refuse("The instrument converts into less than one share.", "Review the round price and the instrument's terms.", { status: 409 });
+        if (conversion.shares <= 0n) throw equityError("conversionBelowOneShare");
         const settlement = await settleConvertible({ orgId: input.orgId, subsidiaryId, actorId: input.actorId, book, security, on: effectiveOn, functional, eventId });
         if (ledgerUnits(conversion.amount, 4) !== settlement.principalTxnUnits + settlement.interestTxnUnits) {
-          refuse(`The converting amount of ${security.securityNumber} does not match what the ledger carries.`, "Review the instrument's issuance and interest entries in the journal.", { status: 409, code: "equity_interest_unreconciled" });
+          throw equityError("convertingAmountUnreconciled", { security: fig.text(security.securityNumber) });
         }
         const par = parUnits(book, roundClass, conversion.shares, effectiveOn, functionalExponent);
-        if (settlement.settlementUnits < par) refuse("The conversion would issue shares below par value.", "Review the round price and the class's par value.", { status: 409, code: "equity_below_par" });
+        if (settlement.settlementUnits < par) throw equityError("conversionBelowPar");
         const roundExponent = await currencyExponent(db, round!.currency);
         const roundRate = round!.currency === functional ? "1" : await spotRate(db, input.orgId, round!.currency, functional, effectiveOn, functional);
         resulting = certificate(security, {
@@ -692,13 +695,13 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
       }
       case "repay": {
         assertConvertibleOutstanding();
-        const paidTxn = ledgerUnits(parseMoney(input.amount ?? "", "the amount repaid"), securityExponent);
-        if (paidTxn <= 0n) refuse("Enter the amount repaid.", "Enter the cash paid to the holder.", { field: "amount" });
+        const paidTxn = ledgerUnits(parseMoney(input.amount ?? "", "amountRepaid"), securityExponent);
+        if (paidTxn <= 0n) throw equityError("repaymentAmountMissing", { field: fig.term("amountRepaid") }, { field: "amount" });
         const account = await requireConsiderationAccount(db, input.orgId, input.considerationAccountId);
         const settlement = await settleConvertible({ orgId: input.orgId, subsidiaryId, actorId: input.actorId, book, security, on: effectiveOn, functional, eventId });
         const carrying = settlement.principalTxnUnits + settlement.interestTxnUnits;
         if (security.kind === "safe" && paidTxn !== carrying) {
-          refuse(`A SAFE is repaid at its purchase amount (${formatLedger(carrying)} ${security.currency}).`, "Record the repayment at the purchase amount; record any settlement difference as a separate journal entry.", { field: "amount", status: 409, code: "equity_repayment_amount" });
+          throw equityError("safeRepaymentAmount", { amount: fig.money(formatLedger(carrying), security.currency) }, { field: "amount" });
         }
         const paid = functionalUnits(paidTxn, settlement.fxRate);
         legs = [...settlement.legs, { accountId: account, units: -paid, foreign: foreignLeg(-paidTxn, settlement.fxRate) }];
@@ -721,17 +724,14 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
           const safe = book.securities.find((row) => row.id === adopting.securityId)!;
           const settled = convertibleState(book, safe, "9999-12-31");
           const certificate = settled.resultingSecurityId ? book.securities.find((row) => row.id === settled.resultingSecurityId) : null;
-          refuse(
-            `${safe.securityNumber} adopted the terms of ${security.securityNumber} by its MFN election of ${adopting.effectiveOn}; voiding ${security.securityNumber} would leave that election naming terms entered in error.`,
-            certificate
-              ? `Void certificate ${certificate.securityNumber}, which ${safe.securityNumber}'s conversion produced, dated ${settled.endedOn} (the round's closing date); reverse the MFN election on ${safe.securityNumber} (Securities → ${safe.securityNumber} → MFN terms); then void ${security.securityNumber} and convert ${safe.securityNumber} again.`
-              : `Reverse the MFN election on ${safe.securityNumber} first (Securities → ${safe.securityNumber} → MFN terms), then void ${security.securityNumber}.`,
-            { status: 409, code: "equity_void_mfn_source" },
-          );
+          const named = { safe: fig.text(safe.securityNumber), security: fig.text(security.securityNumber), electedOn: fig.date(adopting.effectiveOn) };
+          throw certificate
+            ? equityError("voidMfnSourceConverted", { ...named, certificate: fig.text(certificate.securityNumber), convertedOn: fig.date(settled.endedOn ?? effectiveOn) })
+            : equityError("voidMfnSource", named);
         }
         const live = eventsOf(book, security.id, "9999-12-31");
         if (live.length > 0) {
-          refuse(`Security ${security.securityNumber} has recorded activity and cannot be voided.`, "Void the certificates its events produced first, reverse its other events, or record a cancellation instead.", { status: 409, code: "equity_void_has_activity" });
+          throw equityError("voidHasActivity", { security: fig.text(security.securityNumber) });
         }
         const origin = book.events.find((row) => row.resultingSecurityId === security.id);
         const originRow = origin
@@ -753,29 +753,24 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
       case "reverse": {
         const targetId = input.reversesEventId ?? "";
         const target = isUuid(targetId) ? book.events.find((row) => row.id === targetId && row.securityId === security.id) : undefined;
-        if (!target) refuse("The event to reverse does not exist on this security.", "Choose an event from the security's history.", { status: 404, code: "equity_event_unknown", field: "reversesEventId" });
+        if (!target) throw equityError("reversalTargetUnknown", {}, { field: "reversesEventId" });
         if (!REVERSIBLE_EVENT_KINDS.includes(target!.kind)) {
-          refuse(
-            `A ${target!.kind} cannot be reversed.`,
-            target!.kind === "void" || target!.kind === "reverse"
-              ? "Voids and reversals are final; record the security or event again if it is still needed."
-              : "Void the certificate the event produced instead; that undoes the event.",
-            { status: 409, code: "equity_event_not_reversible" },
-          );
+          throw target!.kind === "void" || target!.kind === "reverse"
+            ? equityError("eventFinal", { event: fig.choice(target!.kind) })
+            : equityError("eventNotReversible", { event: fig.choice(target!.kind) });
         }
         if (book.events.some((row) => row.kind === "reverse" && row.reversesEventId === target!.id)) {
-          refuse("The event is already reversed.", "Reload the security's history.", { status: 409, code: "equity_event_reversed" });
+          throw equityError("eventAlreadyReversed");
         }
-        if (effectiveOn < target!.effectiveOn) refuse(`The reversal cannot precede the event it reverses (${target!.effectiveOn}).`, `Date the reversal on or after ${target!.effectiveOn}.`, { field: "effectiveOn" });
+        if (effectiveOn < target!.effectiveOn) throw equityError("reversalBeforeEvent", { date: fig.date(target!.effectiveOn) }, { field: "effectiveOn" });
         if (target!.kind !== "election_83b") {
           const dependents = dependentEvents(book, security, target!);
           if (dependents.length > 0) {
-            const named = dependents.map((row) => `${row.kind} on ${row.effectiveOn}${row.quantity !== null ? ` (${row.quantity})` : ""}`).join(", ");
-            refuse(
-              `Later activity on ${security.securityNumber} relies on the ${target!.kind} of ${target!.effectiveOn}: ${named}.`,
-              `Reverse the ${named} first, latest first (or void the certificates they produced), then reverse this ${target!.kind}.`,
-              { status: 409, code: "equity_reversal_has_dependents" },
-            );
+            const latest = dependents.at(-1)!;
+            throw equityError("reversalHasDependents", {
+              security: fig.text(security.securityNumber), event: fig.choice(target!.kind), date: fig.date(target!.effectiveOn),
+              count: fig.count(dependents.length), latest: fig.choice(latest.kind), latestOn: fig.date(latest.effectiveOn),
+            });
           }
         }
         const targetRow = (await db.execute<{ journal_entry_id: string | null }>(sql`
@@ -792,13 +787,13 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         break;
       }
       case "election_83b": {
-        if (!needs83b(security)) refuse(`Security ${security.securityNumber} has no vesting schedule, so no 83(b) election applies.`, "Record 83(b) elections on restricted stock only.", { status: 409, code: "equity_83b_not_applicable" });
+        if (!needs83b(security)) throw equityError("election83bNotApplicable", { security: fig.text(security.securityNumber) });
         const deadline = election83bDeadline(security);
         if (effectiveOn > deadline) {
-          refuse(`The 83(b) window for ${security.securityNumber} closed on ${deadline}.`, `An election must be filed within 30 days of ${security.issueDate}; record only an election filed on or before ${deadline}.`, { field: "effectiveOn", status: 409, code: "equity_83b_window_closed" });
+          throw equityError("election83bWindowClosed", { security: fig.text(security.securityNumber), deadline: fig.date(deadline), issueDate: fig.date(security.issueDate) }, { field: "effectiveOn" });
         }
         const existing = liveElection(book, security, "9999-12-31");
-        if (existing) refuse(`An 83(b) election filed on ${existing.effectiveOn} is already recorded.`, "Reverse the recorded election first if its date was entered in error.", { status: 409, code: "equity_83b_recorded" });
+        if (existing) throw equityError("election83bRecorded", { date: fig.date(existing.effectiveOn) });
         break;
       }
     }

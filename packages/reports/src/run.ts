@@ -97,6 +97,24 @@ export type ReportRunLabels = {
   undefinedFormula?: () => string
   /** Localized total-row explanation for non-additive formula inputs. */
   notTotalled?: () => string
+  /**
+   * Display label of one temporal bucket of a binned breakout (a month, a
+   * fiscal period), given its inclusive bounds and, for fiscal bins, its
+   * fiscal year and period or quarter number. Null falls back to the
+   * locale-free label ("2026-02", "P2 FY 2026").
+   */
+  temporalBucket?: (bucket: ReportTemporalBucket) => string | null
+}
+
+/** One temporal bucket of a binned breakout, as the label hook receives it. */
+export type ReportTemporalBucket = {
+  bin: ReportTemporalBin
+  from: string
+  to: string
+  /** Fiscal bins: the fiscal year the bucket belongs to. */
+  fiscalYear?: number
+  /** fiscal_period: the 1-based period number; fiscal_quarter: the 1-based quarter. */
+  number?: number
 }
 
 function formulaNotTotalledKeys(measures: readonly ReportMeasure[], totalable: readonly boolean[]): Set<string> {
@@ -416,6 +434,8 @@ function shapeRowsResult(
   })
   const numberFlags = requestedColumns.map((c) => columnNumberFormat(entity, c))
   const numberFormats = numberFlags.some(Boolean) ? { numberFormats: numberFlags } : {}
+  const dateFlags = requestedColumns.map((c) => entityColumn(entity, c)?.kind === 'date')
+  const dates = dateFlags.some(Boolean) ? { dates: dateFlags } : {}
   const cellLinkByColumn = new Map(
     (entity.cellLinks ?? [])
       .filter((link) => requestedColumns.includes(link.column))
@@ -452,7 +472,7 @@ function shapeRowsResult(
       byKey.set(k, list)
     }
     if (byKey.size === 0) {
-      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true, money, ...moneyCurrencies, align, ...numberFormats })
+      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true, money, ...moneyCurrencies, align, ...numberFormats, ...dates })
     } else {
       for (const [k, list] of [...byKey.entries()].sort()) {
         const cellLinks = linkedCells(list)
@@ -468,6 +488,7 @@ function shapeRowsResult(
           ...moneyCurrencies,
           align,
           ...numberFormats,
+          ...dates,
           groupKey: { field: groupBy, value: k },
           ...(cellLinks ? { cellLinks } : {}),
         })
@@ -486,6 +507,7 @@ function shapeRowsResult(
       ...moneyCurrencies,
       align,
       ...numberFormats,
+      ...dates,
       ...(cellLinks ? { cellLinks } : {}),
     })
   }
@@ -559,7 +581,7 @@ export function shapeSummarizeRows(
   const rows = dataRows.map((row) => [
     ...breakouts.map((b, i) =>
       b.bin
-        ? formatBreakoutValue(row[`d${i}`], b.bin, fiscalStartMonth)
+        ? temporalBucketLabel(row[`d${i}`], b.bin, fiscalStartMonth, labels)
         : formatCellValue(entity, b.column, row[`d${i}`], labels),
     ),
     ...visibleMeasureIndices.map((i, visibleIndex) => undefinedByRow.get(row)?.[breakouts.length + visibleIndex]
@@ -602,6 +624,12 @@ export function shapeSummarizeRows(
     ...visibleMeasures.map(() => 'right' as const),
   ]
   const numberFlags = [...breakouts.map(() => null), ...visibleMeasures.map((m) => measureNumberFormat(entity, m))]
+  // Calendar-date cells (an unbinned date breakout, a date aggregate) hold ISO
+  // dates that viewers and print read in the viewer's locale.
+  const dateFlags = [
+    ...breakouts.map((b) => !b.bin && entityColumn(entity, b.column)?.kind === 'date'),
+    ...visibleMeasures.map((m) => m.fn !== 'formula' && m.fn !== 'count' && m.fn !== 'count_distinct' && !!m.column && entityColumn(entity, m.column)?.kind === 'date'),
+  ]
 
   // A derived footer row (e.g. Net pay = earnings − deductions) over a set of
   // raw aggregate rows: per summable measure, plus-bucket sum minus
@@ -655,6 +683,7 @@ export function shapeSummarizeRows(
     const sectionMoney = drop(moneyFlags) as boolean[]
     const sectionAlign = drop(alignFlags) as ('left' | 'right')[]
     const sectionNumbers = drop(numberFlags) as (ReportNumberFormat | null)[]
+    const sectionDates = drop(dateFlags) as boolean[]
     // Which measure columns can honestly total. Additive aggregates sum, and
     // so do 'latest' running figures: each row carries the END value of a
     // disjoint per-bucket series (one employee's component YTD), so the sum
@@ -768,6 +797,7 @@ export function shapeSummarizeRows(
       money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
       align: sectionAlign,
       ...(sectionNumbers.some(Boolean) ? { numberFormats: sectionNumbers } : {}),
+      ...(sectionDates.some(Boolean) ? { dates: sectionDates } : {}),
       rowKeys: bucket.keys,
       ...(bucket.totalRows.length ? { totalRows: bucket.totalRows } : {}),
     }))
@@ -844,6 +874,7 @@ export function shapeSummarizeRows(
         money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
         align: sectionAlign,
         ...(sectionNumbers.some(Boolean) ? { numberFormats: sectionNumbers } : {}),
+        ...(sectionDates.some(Boolean) ? { dates: sectionDates } : {}),
         rowKeys: grandKeys,
         ...(grandTotalRows.length ? { totalRows: grandTotalRows } : {}),
       })
@@ -865,6 +896,7 @@ export function shapeSummarizeRows(
         money: moneyFlags.some(Boolean) ? moneyFlags : undefined,
         align: alignFlags,
         ...(numberFlags.some(Boolean) ? { numberFormats: numberFlags } : {}),
+        ...(dateFlags.some(Boolean) ? { dates: dateFlags } : {}),
         rowKeys,
       },
     ]
@@ -1253,6 +1285,26 @@ function binRange(v: unknown, bin: ReportTemporalBin): { from: string; to: strin
       return null
   }
   return { from: isoDate(start), to: isoDate(end) }
+}
+
+/**
+ * A temporal bucket's display label: the caller's localized label for its
+ * bounds (and fiscal position) when it supplies one, else the locale-free
+ * label below.
+ */
+function temporalBucketLabel(v: unknown, bin: ReportTemporalBin, fiscalStartMonth: number, labels: ReportRunLabels): string | number | null {
+  const fallback = formatBreakoutValue(v, bin, fiscalStartMonth)
+  if (!labels.temporalBucket || v === null || v === undefined) return fallback
+  const range = binRange(v, bin)
+  if (!range) return fallback
+  const bucket: ReportTemporalBucket = { bin, ...range }
+  if (bin.startsWith('fiscal_')) {
+    bucket.fiscalYear = fiscalYearOf(range.from, fiscalStartMonth)
+    const offset = fiscalMonthOffset(range.from, fiscalStartMonth)
+    if (bin === 'fiscal_period') bucket.number = offset + 1
+    if (bin === 'fiscal_quarter') bucket.number = Math.floor(offset / 3) + 1
+  }
+  return labels.temporalBucket(bucket) ?? fallback
 }
 
 /** Format a temporal-bucketed dimension value for display. */

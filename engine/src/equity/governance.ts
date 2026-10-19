@@ -32,7 +32,7 @@ import { runRecordFlows } from "../flows/run.ts";
 import { db, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import { assertEquityFeature, assertEquityReadable, loadLegalEntity, lockEquityEntity, requireEquityAuthority, requireEquityReader, writeEquityAudit } from "./internal.ts";
 
 export const EQUITY_ACTIONS = [
@@ -94,13 +94,13 @@ export async function governEquityAction<T>(request: GovernedRequest, apply: (ac
       if (existing) {
         if (existing.action !== request.action || existing.subject_id !== request.subjectId || existing.requested_by !== request.actorId
           || canonicalJson(existing.payload) !== canonicalJson(JSON.parse(json(request.payload)))) {
-          throw new EquityError("This request key was already used for a different equity action.", { status: 409, code: "equity_idempotency_conflict", remedy: "Retry with a new request key." });
+          throw equityError("idempotencyConflict", { subject: fig.choice("action") });
         }
         if (existing.status === "rejected") {
-          throw new EquityError("This action was rejected by its approver.", { status: 409, code: "equity_action_rejected", remedy: "Review the approver's reason, then record the action again with a new request key if it still applies." });
+          throw equityError("actionRejected");
         }
         if (existing.status === "withdrawn") {
-          throw new EquityError("This action was withdrawn by its requester.", { status: 409, code: "equity_action_withdrawn", remedy: "Record the action again with a new request key if it still applies." });
+          throw equityError("actionWithdrawn");
         }
         return { status: existing.status as GovernedStatus, requestId: existing.id, result: existing.result, replayed: true };
       }
@@ -116,11 +116,7 @@ export async function governEquityAction<T>(request: GovernedRequest, apply: (ac
              : sql`subject_id is null and subsidiary_id = ${request.subsidiaryId} and effective_on = ${request.effectiveOn}::date`}
          limit 1`)).rows[0];
       if (pending) {
-        throw new EquityError(`A ${request.action.replaceAll("_", " ")} of ${request.subjectLabel} is already awaiting approval.`, {
-          status: 409,
-          code: "equity_action_pending",
-          remedy: "Wait for the approver's decision, or withdraw the pending request from Inbox → Submitted by me, before recording another.",
-        });
+        throw equityError("actionPending", { action: fig.choice(request.action), subject: fig.text(request.subjectLabel) });
       }
     }
     const id = (await db.execute<{ id: string }>(sql`select public.uuid_generate_v7() as id`)).rows[0]!.id;
@@ -131,15 +127,11 @@ export async function governEquityAction<T>(request: GovernedRequest, apply: (ac
         ${request.effectiveOn}::date, ${request.reason}, ${json(request.payload)}::jsonb, ${json(request.summary)}::jsonb,
         'pending_approval', ${request.actorId}, ${request.idempotencyKey})
       returning id`)).rows;
-    if (inserted.length !== 1) throw new EquityError("The equity action was not recorded.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+    if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("request") });
     const dispatch = await runRecordFlows({ kind: "on_submit", source: "ui" }, EQUITY_ACTION_SUBJECT_KIND, id, { orgId: request.orgId, userId: request.actorId });
     if (dispatch.failed) {
       await cancelDispatchRuns(request.orgId, dispatch.runs.map((run) => run.runId), { actorId: request.actorId });
-      throw new EquityError(`The equity action could not be routed for approval: ${dispatchFailureReason(dispatch)}.`, {
-        status: 409,
-        code: "equity_action_routing_failed",
-        remedy: "Correct the Equity action Flow in Flows (or disable it), then record the action again.",
-      });
+      throw equityError("actionRoutingFailed", { reason: fig.text(dispatchFailureReason(dispatch) ?? "") });
     }
     if (dispatch.gatesCreated > 0) {
       try {
@@ -175,7 +167,7 @@ async function completeRequest(orgId: string, id: string, input: { result: unkno
            decided_by = ${input.decidedBy}, decided_at = ${input.decidedBy ? sql`now()` : null}
      where org_id = ${orgId} and id = ${id} and status = 'pending_approval'
     returning id`)).rows;
-  if (updated.length !== 1) throw new EquityError("The equity action changed while it was being applied.", { status: 409, code: "equity_action_changed", remedy: "Reload and try again." });
+  if (updated.length !== 1) throw equityError("actionChangedWhileApplied");
 }
 
 export interface PendingRequest {
@@ -248,12 +240,10 @@ export interface WithdrawnEquityAction {
 export async function withdrawEquityAction(input: { orgId: string; actorId: string; requestId: string; reason: string }): Promise<WithdrawnEquityAction> {
   const reason = input.reason.trim();
   if (reason.length < WITHDRAW_REASON.min || reason.length > WITHDRAW_REASON.max) {
-    throw new EquityError(`Give a reason of ${WITHDRAW_REASON.min} to ${WITHDRAW_REASON.max} characters for withdrawing the action.`, {
-      code: "equity_reason_required", remedy: "Explain why the action no longer applies, then withdraw it again.",
-    });
+    throw equityError("withdrawalReasonRequired", { min: fig.count(WITHDRAW_REASON.min), max: fig.count(WITHDRAW_REASON.max) });
   }
   if (!isUuid(input.requestId)) {
-    throw new EquityError("The equity action does not exist.", { status: 404, code: "equity_action_unknown", remedy: "Reload the Inbox." });
+    throw equityError("actionUnknown");
   }
   return withOrgTransaction(input.orgId, async () => {
     await assertEquityFeature(db, input.orgId);
@@ -266,19 +256,13 @@ export async function withdrawEquityAction(input: { orgId: string; actorId: stri
     const request = (await db.execute<{ id: string; action: EquityAction; status: string; requested_by: string; subject_id: string | null; subsidiary_id: string; effective_on: string }>(sql`
       select id, action, status, requested_by, subject_id, subsidiary_id, effective_on::text as effective_on
         from equity_action_requests where org_id = ${input.orgId} and id = ${input.requestId} for update`)).rows[0];
-    if (!request) throw new EquityError("The equity action does not exist.", { status: 404, code: "equity_action_unknown", remedy: "Reload the Inbox." });
+    if (!request) throw equityError("actionUnknown");
     await requireEquityReader(db, input.orgId, input.actorId, request.subsidiary_id);
     if (request.requested_by !== input.actorId) {
-      throw new EquityError("Only the requester can withdraw an equity action.", {
-        status: 403,
-        code: "equity_withdraw_forbidden",
-        remedy: "Ask the requester to withdraw it, or reject it from the Inbox if you are an approver named on its Flow.",
-      });
+      throw equityError("withdrawForbidden");
     }
     if (request.status !== "pending_approval") {
-      throw new EquityError(`The equity action is ${request.status.replaceAll("_", " ")}, not awaiting approval, so it cannot be withdrawn.`, {
-        status: 409, code: "equity_action_decided", remedy: "Reload the Inbox to see its outcome.",
-      });
+      throw equityError("actionDecidedNoWithdrawal", { status: fig.choice(request.status) });
     }
     const runs = (await db.execute<{ id: string }>(sql`
       select id::text as id from flow_runs
@@ -291,7 +275,7 @@ export async function withdrawEquityAction(input: { orgId: string; actorId: stri
          set status = 'withdrawn', decided_by = ${input.actorId}, decided_at = now(), decision_comment = ${reason}
        where org_id = ${input.orgId} and id = ${request.id} and status = 'pending_approval'
       returning id`)).rows;
-    if (updated.length !== 1) throw new EquityError("The equity action changed while it was being withdrawn.", { status: 409, code: "equity_action_changed", remedy: "Reload the Inbox to see its outcome." });
+    if (updated.length !== 1) throw equityError("actionChangedWhileWithdrawn");
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_action_requests", rowId: request.id, action: "equity.action.withdrawn", actorId: input.actorId,
       changes: {
@@ -316,32 +300,28 @@ export async function releaseEquityAction(
 ): Promise<void> {
   const orgId = args.ctx.orgId;
   const deciderId = args.ctx.userId ?? null;
-  if (!deciderId) throw new EquityError("An equity approval must be decided by a signed-in user.", { status: 403, code: "equity_forbidden", remedy: "Sign in and decide the approval from the Inbox." });
+  if (!deciderId) throw equityError("approvalSignInRequired");
   await withOrgTransaction(orgId, async () => {
     const request = (await db.execute<{ id: string; action: EquityAction; status: string; requested_by: string; payload: Record<string, unknown>; subject_id: string | null; subsidiary_id: string; effective_on: string }>(sql`
       select id, action, status, requested_by, payload, subject_id, subsidiary_id, effective_on::text as effective_on
         from equity_action_requests where org_id = ${orgId} and id = ${args.subjectId} for update`)).rows[0];
-    if (!request) throw new EquityError("The equity action does not exist.", { status: 404, code: "equity_action_unknown", remedy: "Reload the Inbox." });
+    if (!request) throw equityError("actionUnknown");
     if (request.status !== "pending_approval") {
-      throw new EquityError(`The equity action is ${request.status.replaceAll("_", " ")}, not awaiting approval.`, { status: 409, code: "equity_action_decided", remedy: "Reload the Inbox to see its outcome." });
+      throw equityError("actionDecided", { status: fig.choice(request.status) });
     }
     if (deciderId === request.requested_by) {
-      throw new EquityError("The requester of an equity action cannot decide its approval.", {
-        status: 403,
-        code: "equity_self_approval",
-        remedy: "Ask another approver named on the Flow's gate to decide it.",
-      });
+      throw equityError("selfApproval");
     }
     // Deciding an equity action is the equity.approve duty over the request's
     // legal entity, whoever the Flow's gate names.
     await requireEquityAuthority(db, orgId, deciderId, request.subsidiary_id, "equity.approve");
     if (args.outcome === "rejected") {
       const comment = args.comment?.trim() ?? "";
-      if (!comment) throw new EquityError("Record the reason for rejecting the equity action.", { code: "equity_reason_required", remedy: "Add a comment explaining the rejection, then reject again." });
+      if (!comment) throw equityError("rejectionReasonRequired");
       const updated = (await db.execute<{ id: string }>(sql`
         update equity_action_requests set status = 'rejected', decided_by = ${deciderId}, decided_at = now(), decision_comment = ${comment.slice(0, 2000)}
          where org_id = ${orgId} and id = ${request.id} and status = 'pending_approval' returning id`)).rows;
-      if (updated.length !== 1) throw new EquityError("The equity action changed while it was being decided.", { status: 409, code: "equity_action_changed", remedy: "Reload the Inbox and decide it again if it is still pending." });
+      if (updated.length !== 1) throw equityError("actionChangedWhileDecided");
       await writeEquityAudit(db, {
         orgId, table: "equity_action_requests", rowId: request.id, action: "equity.action.rejected", actorId: deciderId,
         changes: { action: request.action, subjectId: request.subject_id, before: { status: "pending_approval" }, after: { status: "rejected" }, reason: comment },

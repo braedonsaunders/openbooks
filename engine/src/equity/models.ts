@@ -17,9 +17,9 @@ import {
   vestingTermsOf,
 } from "./cap-table.ts";
 import { convertingAmount, type ConvertingInstrument } from "./convertibles.ts";
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import { restate } from "./fx.ts";
-import { addRational, compareRational, divideRational, formatMoney, multiplyRational, parseDecimal, parseMoney, parsePrice, PERCENT_SCALE, rational, subtractRational, type Rational } from "./quantities.ts";
+import { addRational, compareRational, divideRational, formatMoney, MONEY_SCALE, multiplyRational, parseDecimal, parseMoney, parsePrice, PERCENT_SCALE, rational, subtractRational, type Rational } from "./quantities.ts";
 import { modelRound, type ProtectedClass, type RoundModelResult } from "./round-model.ts";
 import { restatePrice } from "./splits.ts";
 import type { EquityBook, SecurityRecord, ShareClassRecord } from "./types.ts";
@@ -29,6 +29,8 @@ import { runWaterfall, type WaterfallAward, type WaterfallClass, type WaterfallC
 
 export interface RoundScenario {
   asOf: string;
+  /** The legal entity's functional currency, which the model is stated in. */
+  currency: string;
   preMoneyValuation: string;
   investment: string;
   targetPoolPercent: string | null;
@@ -46,7 +48,7 @@ export function modelCurrencies(book: EquityBook, asOf: string): string[] {
 }
 
 /** Outstanding SAFEs and notes on the model date, with the amounts that would convert, in the functional currency. */
-function outstandingConvertibles(book: EquityBook, asOf: string, rates: ModelRates): { instrument: ConvertingInstrument; holderPartyId: string }[] {
+function outstandingConvertibles(book: EquityBook, asOf: string, currency: string, rates: ModelRates): { instrument: ConvertingInstrument; holderPartyId: string }[] {
   return book.securities
     .filter((security) => (security.kind === "safe" || security.kind === "note") && security.issueDate <= asOf)
     .map((security) => ({ security, state: convertibleState(book, security, asOf) }))
@@ -54,14 +56,14 @@ function outstandingConvertibles(book: EquityBook, asOf: string, rates: ModelRat
     .map(({ security, state }) => {
       const rate = rates.get(security.currency);
       if (rate === undefined) {
-        throw new EquityError(`No ${security.currency} rate was resolved for ${security.securityNumber}.`, { code: "equity_fx_rate_missing", remedy: "Record the exchange rate for the model date (Setup → Exchange Rates)." });
+        throw equityError("fxRateUnresolved", { from: fig.text(security.currency), to: fig.text(currency), date: fig.date(asOf), subject: fig.choice("model") });
       }
       const terms = state.terms;
       return {
         instrument: {
           terms,
           amount: restate(convertingAmount(terms, asOf), rate),
-          cap: terms.valuationCap ? restate(parseMoney(terms.valuationCap, "the valuation cap"), rate) : null,
+          cap: terms.valuationCap ? restate(parseMoney(terms.valuationCap, "valuationCap"), rate) : null,
         },
         holderPartyId: security.holderPartyId,
       };
@@ -72,7 +74,7 @@ function outstandingConvertibles(book: EquityBook, asOf: string, rates: ModelRat
 export function modelRoundFromBook(book: EquityBook, scenario: RoundScenario, rates: ModelRates): RoundModelResult {
   const table = buildCapTable(book, scenario.asOf);
   const counts = capitalizationCounts(table);
-  const convertibles = outstandingConvertibles(book, scenario.asOf, rates);
+  const convertibles = outstandingConvertibles(book, scenario.asOf, scenario.currency, rates);
   const protectedClasses: ProtectedClass[] = book.classes
     .filter((shareClass) => shareClass.kind === "preferred" && shareClass.antiDilution !== "none" && shareClass.effectiveOn <= scenario.asOf)
     .map((shareClass) => ({
@@ -100,6 +102,8 @@ export function modelRoundFromBook(book: EquityBook, scenario: RoundScenario, ra
 
 export interface ExitScenario {
   asOf: string;
+  /** The legal entity's functional currency, which the exit value, fees and payouts are stated in. */
+  currency: string;
   exitValue: string;
   /** Transaction fees and expenses paid from the exit value before any holder (none when absent). */
   transactionFees?: string | null;
@@ -123,9 +127,9 @@ export function preferencePrice(book: Pick<EquityBook, "splits">, shareClass: Sh
   if (shareClass.kind !== "preferred" || shareClass.liquidationPreferenceBasis !== "amount_paid") return null;
   let paid: Rational | null = null;
   if (security.considerationAmount && security.quantity !== null && security.quantity > 0n) {
-    paid = divideRational(parseMoney(security.considerationAmount, "the amount paid"), rational(security.quantity));
+    paid = divideRational(parseMoney(security.considerationAmount, "amountPaid"), rational(security.quantity));
   } else if (security.pricePerShare) {
-    paid = parsePrice(security.pricePerShare, "the price per share");
+    paid = parsePrice(security.pricePerShare, "pricePerShare");
   }
   if (!paid) return null;
   return restate(restatePrice(book.splits, shareClass.id, paid, security.issueDate, asOf), security.fxRate);
@@ -159,12 +163,12 @@ function waterfallParticipants(book: EquityBook, scenario: Omit<ExitScenario, "e
     if (shares === 0n) continue;
     const strike = security.kind === "rsu" || !security.pricePerShare
       ? rational(0n)
-      : restatePrice(book.splits, security.shareClassId, parsePrice(security.pricePerShare, "the exercise price"), security.issueDate, asOf);
+      : restatePrice(book.splits, security.shareClassId, parsePrice(security.pricePerShare, "exercisePrice"), security.issueDate, asOf);
     awards.push({ securityId: security.id, holderPartyId: security.holderPartyId, shareClassId: security.shareClassId, shares, strike });
   }
   for (const shareClass of book.classes) {
     if (shareClass.effectiveOn > asOf) continue;
-    const multiple: Rational = shareClass.liquidationMultiple ? parseDecimal(shareClass.liquidationMultiple, "the liquidation multiple", PERCENT_SCALE) : rational(0n);
+    const multiple: Rational = shareClass.liquidationMultiple ? parseDecimal(shareClass.liquidationMultiple, "liquidationMultiple", PERCENT_SCALE) : rational(0n);
     classes.push({
       shareClassId: shareClass.id,
       code: shareClass.code,
@@ -172,13 +176,13 @@ function waterfallParticipants(book: EquityBook, scenario: Omit<ExitScenario, "e
       seniority: shareClass.seniority,
       liquidationMultiple: multiple,
       participation: shareClass.participation,
-      participationCapMultiple: shareClass.participationCapMultiple ? parseDecimal(shareClass.participationCapMultiple, "the participation cap", PERCENT_SCALE) : null,
+      participationCapMultiple: shareClass.participationCapMultiple ? parseDecimal(shareClass.participationCapMultiple, "participationCapMultiple", PERCENT_SCALE) : null,
       originalIssuePrice: originalIssuePrice(book, shareClass, asOf),
       conversionRatio: conversionRatio(book, shareClass, asOf),
       holdings: holdingsByClass.get(shareClass.id) ?? [],
     });
   }
-  const convertibles: WaterfallConvertible[] = outstandingConvertibles(book, asOf, rates).map(({ instrument, holderPartyId }) => ({
+  const convertibles: WaterfallConvertible[] = outstandingConvertibles(book, asOf, scenario.currency, rates).map(({ instrument, holderPartyId }) => ({
     securityId: instrument.terms.id,
     holderPartyId,
     kind: instrument.terms.kind,
@@ -189,34 +193,34 @@ function waterfallParticipants(book: EquityBook, scenario: Omit<ExitScenario, "e
   return { classes, awards, convertibles };
 }
 
-function scenarioMoney(value: string, field: "exitValue" | "transactionFees"): Rational {
+function scenarioMoney(value: string, field: "exitValue" | "transactionFees", currency: string): Rational {
   try {
-    return parseMoney(value, field === "exitValue" ? "the exit value" : "the transaction fees");
+    return parseMoney(value, field);
   } catch (error) {
-    throw new EquityError(
-      field === "exitValue" ? "The exit value must be a decimal amount with at most four places." : "The transaction fees must be a decimal amount with at most four places.",
-      { code: "equity_waterfall_invalid", remedy: field === "exitValue" ? "Enter the exit value, such as 25000000." : "Enter the fees paid from the exit, such as 750000, or leave them blank.", field, cause: error },
-    );
+    const figures = { field: fig.term(field), places: fig.count(MONEY_SCALE) };
+    throw field === "exitValue"
+      ? equityError("exitValueInvalid", { ...figures, example: fig.money("25000000", currency) }, { field, cause: error })
+      : equityError("transactionFeesInvalid", { ...figures, example: fig.money("750000", currency) }, { field, cause: error });
   }
 }
 
 /** The proceeds an exit leaves for holders: the exit value less the transaction fees, which cannot exceed it. */
-export function netExitProceeds(exitValue: string, transactionFees: string | null | undefined): Rational {
-  const gross = scenarioMoney(exitValue, "exitValue");
+export function netExitProceeds(exitValue: string, transactionFees: string | null | undefined, currency: string): Rational {
+  const gross = scenarioMoney(exitValue, "exitValue", currency);
   if (!transactionFees) return gross;
-  const fees = scenarioMoney(transactionFees, "transactionFees");
+  const fees = scenarioMoney(transactionFees, "transactionFees", currency);
   if (compareRational(fees, rational(0n)) < 0) {
-    throw new EquityError("The transaction fees cannot be negative.", { code: "equity_waterfall_invalid", remedy: "Enter the fees paid from the exit, or leave them blank.", field: "transactionFees" });
+    throw equityError("transactionFeesNegative", {}, { field: "transactionFees" });
   }
   if (compareRational(fees, gross) > 0) {
-    throw new EquityError("The transaction fees exceed the exit value.", { code: "equity_waterfall_invalid", remedy: "Enter fees no greater than the exit value.", field: "transactionFees" });
+    throw equityError("transactionFeesExceedExit", {}, { field: "transactionFees" });
   }
   return subtractRational(gross, fees);
 }
 
 /** Run the exit waterfall against the book as of the scenario date, on the exit value net of transaction fees. */
 export function waterfallFromBook(book: EquityBook, scenario: ExitScenario, rates: ModelRates): WaterfallResult {
-  const exitValue = netExitProceeds(scenario.exitValue, scenario.transactionFees);
+  const exitValue = netExitProceeds(scenario.exitValue, scenario.transactionFees, scenario.currency);
   return runWaterfall({ exitValue, ...waterfallParticipants(book, scenario, rates), minorUnitScale: scenario.minorUnitScale });
 }
 
@@ -230,9 +234,9 @@ export function waterfallFromBook(book: EquityBook, scenario: ExitScenario, rate
  * its points draw every payout exactly.
  */
 export function waterfallCurveFromBook(book: EquityBook, scenario: ExitScenario, rates: ModelRates, points: number, span: Rational): { exitValue: string; result: WaterfallResult }[] {
-  const gross = scenarioMoney(scenario.exitValue, "exitValue");
-  netExitProceeds(scenario.exitValue, scenario.transactionFees);
-  const fees = scenario.transactionFees ? scenarioMoney(scenario.transactionFees, "transactionFees") : rational(0n);
+  const gross = scenarioMoney(scenario.exitValue, "exitValue", scenario.currency);
+  netExitProceeds(scenario.exitValue, scenario.transactionFees, scenario.currency);
+  const fees = scenario.transactionFees ? scenarioMoney(scenario.transactionFees, "transactionFees", scenario.currency) : rational(0n);
   const participants = waterfallParticipants(book, scenario, rates);
   const minorUnit = rational(1n, 10n ** BigInt(Math.max(0, scenario.minorUnitScale)));
   const curve = piecewiseCurve<WaterfallResult>({
@@ -252,7 +256,7 @@ export function waterfallCurveFromBook(book: EquityBook, scenario: ExitScenario,
 /** The payout series a waterfall curve draws: each class, awards, SAFEs, notes and the unallocated remainder. */
 function curveMeasures(result: WaterfallResult): Map<string, Rational> {
   const measures = new Map<string, Rational>();
-  const add = (key: string, amount: string) => measures.set(key, addRational(measures.get(key) ?? rational(0n), parseMoney(amount, "the payout")));
+  const add = (key: string, amount: string) => measures.set(key, addRational(measures.get(key) ?? rational(0n), parseMoney(amount, "payout")));
   for (const row of result.classes) add(`class:${row.shareClassId}`, row.total);
   for (const payout of result.payouts) if (payout.kind !== "share") add(`kind:${payout.kind}`, payout.amount);
   add("unallocated", result.unallocated);

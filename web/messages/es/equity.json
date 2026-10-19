@@ -251,7 +251,7 @@
     "authorized": "Acciones autorizadas",
     "conversionPrice": "Precio de conversión",
     "split": "División",
-    "currentAuthorized": "Actualmente {value} acciones",
+    "currentAuthorized": "Actualmente {value} {valueCount, plural, one {acción} other {acciones}}",
     "currentConversionPrice": "Actualmente {value}",
     "splitHelp": "Una división reexpresa cada tenencia, otorgamiento, reserva y precio de la clase desde su fecha, y ajusta el precio de conversión de las clases preferentes que se convierten en ella. Debe tener una fecha posterior a la última actividad registrada de la clase y de esas clases preferentes.",
     "saved": "Guardado",
@@ -368,7 +368,9 @@
     "driftBadge": "Pre-money distinto",
     "preMoneyDrift": "La valoración pre-money de {preMoney} ya no coincide con el precio de la ronda por las {shares} acciones totalmente diluidas anteriores ({implied}): se registraron después acciones con fecha anterior a la ronda.",
     "preMoneyDriftRemedy": "Corrija abajo la valoración pre-money a {implied}, o registre en «Base de la valoración pre-money» la base sobre la que se expresa.",
-    "preMoneyDriftReadOnly": "Un gestor de capital puede corregir la valoración o registrar su base."
+    "preMoneyDriftReadOnly": "Un gestor de capital puede corregir la valoración o registrar su base.",
+    "conversionDrift": "<link>{number}</link> se convirtió a {recorded}; la ronda valora ahora sus condiciones a {standing}.",
+    "conversionDriftHint": "Operaciones fechadas antes de la ronda se registraron después de estas conversiones. Cada conversión se mantiene tal como se registró; abra su SAFE o nota para volver a convertirla si las operaciones corresponden a antes de la ronda."
   },
   "model": {
     "description": "Fija el precio de una ronda con el método pre-money sobre la tabla de capitalización a la fecha de corte: los SAFE y notas en circulación se convierten, las clases protegidas reciben sus acciones antidilución y la reserva se completa hasta su objetivo dentro de la valoración pre-money. No se registra nada.",
@@ -407,7 +409,7 @@
     },
     "prompt": "Introduzca una valoración pre-money y el capital nuevo para fijar el precio de la ronda frente a la tabla de capitalización en la fecha de corte.",
     "sharesOfFullyDiluted": "{shares} · {percent} del total diluido",
-    "newShares": "{shares} acciones nuevas",
+    "newShares": "{shares} {sharesCount, plural, one {acción nueva} other {acciones nuevas}}",
     "poolAfter": "Reserva tras la ronda",
     "percentOfFullyDiluted": "{percent} del total diluido"
   },
@@ -593,7 +595,11 @@
     "outstandingPrincipal": "Pendiente",
     "convertedInto": "Convertido en",
     "invalidConversionTitle": "Esta conversión usó condiciones adoptadas de {source}, anulado el {date}.",
-    "invalidConversionRemedy": "Anule el certificado {certificate} con fecha {date}, la fecha de cierre de la ronda, para deshacer la conversión; revierta la elección MFN con fecha igual o anterior al {date}; luego vuelva a convertir el instrumento con sus propias condiciones."
+    "invalidConversionRemedy": "Anule el certificado {certificate} con fecha {date}, la fecha de cierre de la ronda, para deshacer la conversión; revierta la elección MFN con fecha igual o anterior al {date}; luego vuelva a convertir el instrumento con sus propias condiciones.",
+    "undone": "Deshecha",
+    "undoneByVoid": "Deshecha: {certificate} se anuló el {date}",
+    "conversionDriftTitle": "Esta conversión se registró a {recorded} por {recordedShares} {recordedSharesCount, plural, one {acción} other {acciones}}; la ronda valora ahora las mismas condiciones a {standing} por {standingShares} {standingSharesCount, plural, one {acción} other {acciones}}.",
+    "conversionDriftRemedy": "Operaciones fechadas antes de la ronda se registraron después de la conversión y cambian las acciones entre las que se divide el precio. La conversión se mantiene tal como se registró. Si esas operaciones corresponden a antes de la ronda, anule {certificate} con fecha {date} y vuelva a convertir al precio actual; de lo contrario, corrija la fecha de la operación anulándola y registrándola de nuevo."
   },
   "events": {
     "saved": "{kind} registrado",
@@ -690,7 +696,7 @@
     "open": "83(b) pendiente",
     "missed": "83(b) no presentada",
     "filedOn": "Presentada el {date}",
-    "due": "Vence el {date} · quedan {days} días",
+    "due": "Vence el {date} · {days, plural, one {queda # día} other {quedan # días}}",
     "missedOn": "Plazo cerrado el {date}",
     "deadline": "Plazo de 83(b): {date}"
   },
@@ -828,11 +834,11 @@
     "attention": {
       "title": "Requiere atención",
       "allClear": "Nada requiere atención.",
-      "cliff": "{holder} · {number} alcanza su cliff el {date}: consolidan {quantity} unidades",
+      "cliff": "{holder} · {number} alcanza su cliff el {date}: {quantityCount, plural, one {consolida} other {consolidan}} {quantity} {quantityCount, plural, one {unidad} other {unidades}}",
       "election83b": "{holder} · la elección 83(b) de {number} vence el {date} ({days, plural, one {queda # día} other {quedan # días}})",
-      "restrictedDeposit": "{holder} · {shares} acciones de ejercicio anticipado de {number} no han consolidado; el depósito se retiene hasta que consoliden",
-      "departed": "{holder} salió el {date} y aún posee {units} unidades de opciones y RSU; registre las caducidades y vencimientos",
-      "expiring": "{holder} · {number} vence el {date} con {quantity} unidades en circulación",
+      "restrictedDeposit": "{holder} · {shares} {sharesCount, plural, one {acción} other {acciones}} de ejercicio anticipado de {number} no {sharesCount, plural, one {ha consolidado} other {han consolidado}}; el depósito se retiene hasta que consoliden",
+      "departed": "{holder} salió el {date} y aún posee {units} {unitsCount, plural, one {unidad} other {unidades}} de opciones y RSU; registre las caducidades y vencimientos",
+      "expiring": "{holder} · {number} vence el {date} con {quantity} {quantityCount, plural, one {unidad} other {unidades}} en circulación",
       "compensationDue": "La compensación en acciones no está contabilizada hasta el {date}: {amount} por contabilizar",
       "compensationRefused": "La compensación en acciones hasta el {date} no se puede medir: {message}",
       "interestDue": "Los intereses de notas no están devengados hasta el {date}: {amount} por contabilizar",
@@ -847,14 +853,15 @@
       "interestCatchUp": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados; se contabilizan con la ejecución hasta el {through}, cuando termine ese período",
       "interestCatchUpNow": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados; contabilice la ejecución hasta el {through} para ponerlos al día",
       "interestCatchUpNoPeriod": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados; abra o genere el siguiente período contable para contabilizarlos",
-      "roundPreMoneyDrift": "La ronda {name} indica una valoración pre-money de {preMoney}, pero su precio por las {shares} acciones totalmente diluidas anteriores ahora da {implied}; corrija la valoración o registre su base"
+      "roundPreMoneyDrift": "La ronda {name} indica una valoración pre-money de {preMoney}, pero su precio por las {shares} acciones totalmente diluidas anteriores ahora da {implied}; corrija la valoración o registre su base",
+      "conversionPriceDrift": "{number} se convirtió en {round} a {recorded}; operaciones fechadas antes de la ronda y registradas después de ella valoran ahora la conversión a {standing}"
     },
     "activity": {
       "title": "Actividad reciente",
       "empty": "Aún no hay actividad de patrimonio registrada.",
       "issue": "{kind} {number} emitido a {holder}",
       "round": "{name} cerrada a {price} por acción",
-      "shares": "{quantity} acciones"
+      "shares": "{quantity} {quantityCount, plural, one {acción} other {acciones}}"
     },
     "directory": {
       "title": "Accesos rápidos",
@@ -909,7 +916,15 @@
       "compensationNoPeriod": "{amount} de compensación en acciones reconocida hasta el {date} se registró después de esa ejecución y no está contabilizada. Abra o genere el siguiente período contable para contabilizarla.",
       "interest": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados. Se contabilizan con la ejecución hasta el {through}, cuando termine ese período.",
       "interestNow": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados. La ejecución hasta el {through} los pone al día.",
-      "interestNoPeriod": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados. Abra o genere el siguiente período contable para contabilizarlos."
+      "interestNoPeriod": "{amount} de intereses de notas devengados hasta el {date} se registraron después de esa ejecución y no están contabilizados. Abra o genere el siguiente período contable para contabilizarlos.",
+      "compensationNoPeriodTitle": "{amount} de compensación en acciones reconocidos hasta el {date} se registraron después de la ejecución hasta esa fecha y no se han contabilizado, y ningún período contable abierto sigue a esa ejecución para contabilizarlos.",
+      "interestNoPeriodTitle": "{amount} de intereses de notas convertibles devengados hasta el {date} se registraron después de la ejecución hasta esa fecha y no se han contabilizado, y ningún período contable abierto sigue a esa ejecución para contabilizarlos.",
+      "generateRemedy": "Genere los períodos contables del ejercicio {year}; la siguiente ejecución contabiliza la regularización en cuanto termine su primer período.",
+      "generateRemedyReadOnly": "Pida a quien gestiona los períodos contables que genere el ejercicio {year} (Configuración → Cierre de período); la siguiente ejecución contabiliza la regularización en cuanto termine su primer período.",
+      "reopenRemedy": "Los períodos posteriores a la última ejecución están cerrados. Solicite una reapertura controlada del siguiente mediante el cierre de período para que la ejecución contabilice la regularización.",
+      "reopenRemedyReadOnly": "Los períodos posteriores a la última ejecución están cerrados. Pida a quien gestiona los períodos contables que solicite una reapertura controlada del siguiente mediante el cierre de período.",
+      "generatePeriods": "Generar los períodos del ejercicio {year}",
+      "openPeriods": "Abrir períodos contables"
     }
   },
   "preferenceBasis": {

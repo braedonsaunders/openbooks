@@ -251,7 +251,7 @@
     "authorized": "Authorized shares",
     "conversionPrice": "Conversion price",
     "split": "Split",
-    "currentAuthorized": "Currently {value} shares",
+    "currentAuthorized": "Currently {value} {valueCount, plural, one {share} other {shares}}",
     "currentConversionPrice": "Currently {value}",
     "splitHelp": "A split restates every holding, award, pool and price of the class from its date, and adjusts the conversion price of preferred classes that convert into it. It must be dated after the latest recorded activity of the class and of those preferred classes.",
     "saved": "Saved",
@@ -368,7 +368,9 @@
     "driftBadge": "Pre-money differs",
     "preMoneyDrift": "The pre-money valuation of {preMoney} no longer agrees with the round's price times the {shares} fully diluted shares before it ({implied}): shares dated before the round were recorded after it.",
     "preMoneyDriftRemedy": "Amend the pre-money valuation to {implied} below, or record the basis it is stated on under Pre-money basis.",
-    "preMoneyDriftReadOnly": "An equity manager can amend the valuation or record its basis."
+    "preMoneyDriftReadOnly": "An equity manager can amend the valuation or record its basis.",
+    "conversionDrift": "<link>{number}</link> converted at {recorded}; the round now prices its terms at {standing}.",
+    "conversionDriftHint": "Activity dated before the round was recorded after these conversions. Each conversion stands as recorded; open its SAFE or note to convert it again if the activity belongs before the round."
   },
   "model": {
     "description": "Prices a round on the pre-money method against the cap table on the as-of date: outstanding SAFEs and notes convert, protected classes take their anti-dilution shares, and the pool is topped up to its target inside the pre-money. Nothing is recorded.",
@@ -407,7 +409,7 @@
     },
     "prompt": "Enter a pre-money valuation and the new money to price the round against the cap table on the as-of date.",
     "sharesOfFullyDiluted": "{shares} · {percent} of fully diluted",
-    "newShares": "{shares} new shares",
+    "newShares": "{shares} new {sharesCount, plural, one {share} other {shares}}",
     "poolAfter": "Pool after the round",
     "percentOfFullyDiluted": "{percent} of fully diluted"
   },
@@ -593,7 +595,11 @@
     "outstandingPrincipal": "Outstanding",
     "convertedInto": "Converted into",
     "invalidConversionTitle": "This conversion used terms adopted from {source}, which was voided on {date}.",
-    "invalidConversionRemedy": "Void certificate {certificate} dated {date}, the round's closing date, to undo the conversion; reverse the MFN election dated on or before {date}; then convert the instrument again on its own terms."
+    "invalidConversionRemedy": "Void certificate {certificate} dated {date}, the round's closing date, to undo the conversion; reverse the MFN election dated on or before {date}; then convert the instrument again on its own terms.",
+    "undone": "Undone",
+    "undoneByVoid": "Undone: {certificate} was voided on {date}",
+    "conversionDriftTitle": "This conversion was recorded at {recorded} for {recordedShares} {recordedSharesCount, plural, one {share} other {shares}}; the round now prices the same terms at {standing} for {standingShares} {standingSharesCount, plural, one {share} other {shares}}.",
+    "conversionDriftRemedy": "Activity dated before the round was recorded after the conversion, changing the shares the price divides by. The conversion stands as recorded. If that activity belongs before the round, void {certificate} dated {date} and convert again at the current price; otherwise correct the activity’s date by voiding and recording it again."
   },
   "events": {
     "saved": "{kind} recorded",
@@ -690,7 +696,7 @@
     "open": "83(b) due",
     "missed": "83(b) missed",
     "filedOn": "Filed {date}",
-    "due": "Due {date} · {days} days left",
+    "due": "Due {date} · {days, plural, one {# day} other {# days}} left",
     "missedOn": "Window closed {date}",
     "deadline": "83(b) deadline {date}"
   },
@@ -828,11 +834,11 @@
     "attention": {
       "title": "Needs attention",
       "allClear": "Nothing needs attention.",
-      "cliff": "{holder} · {number} reaches its cliff on {date}: {quantity} units vest",
+      "cliff": "{holder} · {number} reaches its cliff on {date}: {quantity} {quantityCount, plural, one {unit vests} other {units vest}}",
       "election83b": "{holder} · the 83(b) election for {number} is due by {date} ({days, plural, one {# day} other {# days}} left)",
-      "restrictedDeposit": "{holder} · {shares} early-exercised shares of {number} are unvested; the deposit is held until they vest",
-      "departed": "{holder} left on {date} and still holds {units} option and RSU units; record the forfeitures and expirations",
-      "expiring": "{holder} · {number} expires on {date} with {quantity} units outstanding",
+      "restrictedDeposit": "{holder} · {shares} early-exercised {sharesCount, plural, one {share} other {shares}} of {number} {sharesCount, plural, one {is} other {are}} unvested; the deposit is held until they vest",
+      "departed": "{holder} left on {date} and still holds {units} option and RSU {unitsCount, plural, one {unit} other {units}}; record the forfeitures and expirations",
+      "expiring": "{holder} · {number} expires on {date} with {quantity} {quantityCount, plural, one {unit} other {units}} outstanding",
       "compensationDue": "Stock compensation is not posted through {date}: {amount} to post",
       "compensationRefused": "Stock compensation through {date} cannot be measured: {message}",
       "interestDue": "Note interest is not accrued through {date}: {amount} to post",
@@ -847,14 +853,15 @@
       "interestCatchUp": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted; it posts with the run through {through}, once that period ends",
       "interestCatchUpNow": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted; post the run through {through} to catch it up",
       "interestCatchUpNoPeriod": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted; open or generate the next accounting period to post it",
-      "roundPreMoneyDrift": "Round {name} states a pre-money valuation of {preMoney}, but its price times the {shares} fully diluted shares before it is now {implied}; amend the valuation or record its basis"
+      "roundPreMoneyDrift": "Round {name} states a pre-money valuation of {preMoney}, but its price times the {shares} fully diluted shares before it is now {implied}; amend the valuation or record its basis",
+      "conversionPriceDrift": "{number} converted in {round} at {recorded}; activity dated before the round and recorded after it now prices the conversion at {standing}"
     },
     "activity": {
       "title": "Recent activity",
       "empty": "No equity activity recorded yet.",
       "issue": "{kind} {number} issued to {holder}",
       "round": "{name} closed at {price} per share",
-      "shares": "{quantity} shares"
+      "shares": "{quantity} {quantityCount, plural, one {share} other {shares}}"
     },
     "directory": {
       "title": "Quick links",
@@ -909,7 +916,15 @@
       "compensationNoPeriod": "{amount} of stock compensation recognized through {date} was recorded after the run through that date and has not posted. Open or generate the next accounting period to post it.",
       "interest": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted. It posts with the run through {through}, once that period ends.",
       "interestNow": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted. The run through {through} catches it up.",
-      "interestNoPeriod": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted. Open or generate the next accounting period to post it."
+      "interestNoPeriod": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted. Open or generate the next accounting period to post it.",
+      "compensationNoPeriodTitle": "{amount} of stock compensation recognized through {date} was recorded after the run through that date and has not posted, and no open accounting period follows that run to post it in.",
+      "interestNoPeriodTitle": "{amount} of note interest accrued through {date} was recorded after the run through that date and has not posted, and no open accounting period follows that run to post it in.",
+      "generateRemedy": "Generate the accounting periods of fiscal year {year}; the next run posts the catch-up once its first period has ended.",
+      "generateRemedyReadOnly": "Ask someone who manages accounting periods to generate fiscal year {year} (Setup → Period Close); the next run posts the catch-up once its first period has ended.",
+      "reopenRemedy": "The periods after the last run are closed. Request a controlled reopen of the next one through Period Close so the run can post the catch-up.",
+      "reopenRemedyReadOnly": "The periods after the last run are closed. Ask someone who manages accounting periods to request a controlled reopen of the next one through Period Close.",
+      "generatePeriods": "Generate FY{year} periods",
+      "openPeriods": "Open accounting periods"
     }
   },
   "preferenceBasis": {

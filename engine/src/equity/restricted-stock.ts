@@ -123,7 +123,7 @@ export function releasedUnits(book: EquityBook, certificate: SecurityRecord, thr
 /** Functional deposit for restricted units [from, to) at the exercise-date rate. */
 export function depositSlice(certificate: SecurityRecord, from: Rational, to: Rational, exponent: number): bigint {
   const { vestedOnIssue } = restrictedPortion(certificate);
-  const price = parsePrice(certificate.pricePerShare ?? "0", "the exercise price");
+  const price = parsePrice(certificate.pricePerShare ?? "0", "exercisePrice");
   const at = (count: Rational): bigint => functionalUnits(ledgerUnits(multiplyRational(price, addRational(rational(vestedOnIssue), count)), exponent), certificate.fxRate);
   return at(to) - at(from);
 }
@@ -166,9 +166,9 @@ export function measureRelease(
   const released = releasedUnits(book, certificate, through);
   const deposit = depositSlice(certificate, ZERO, released, exponents.certificate);
   const toOption = splitFactor(book.splits, shareClass.id, option.issueDate, certificate.issueDate);
-  const fairValue = option.fairValuePerUnit ? parsePrice(option.fairValuePerUnit, "the fair value per unit") : ZERO;
+  const fairValue = option.fairValuePerUnit ? parsePrice(option.fairValuePerUnit, "fairValuePerUnit") : ZERO;
   const reclass = ledgerUnits(restate(multiplyRational(divideRational(released, toOption), fairValue), option.fxRate), exponents.functional);
-  const parValue = restatePrice(book.splits, shareClass.id, parsePrice(shareClass.parValue, "the par value"), shareClass.effectiveOn, certificate.issueDate);
+  const parValue = restatePrice(book.splits, shareClass.id, parsePrice(shareClass.parValue, "parValue"), shareClass.effectiveOn, certificate.issueDate);
   const par = ledgerUnits(multiplyRational(parValue, released), exponents.functional);
   return { securityId: certificate.id, shares: floorShares(released), deposit, reclass, par };
 }

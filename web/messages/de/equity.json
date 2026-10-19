@@ -251,7 +251,7 @@
     "authorized": "Genehmigte Anteile",
     "conversionPrice": "Wandlungspreis",
     "split": "Aktiensplit",
-    "currentAuthorized": "Derzeit {value} Anteile",
+    "currentAuthorized": "Derzeit {value} {valueCount, plural, one {Anteil} other {Anteile}}",
     "currentConversionPrice": "Derzeit {value}",
     "splitHelp": "Ein Split stellt jeden Bestand, jede Zuteilung, jeden Pool und jeden Preis der Klasse ab seinem Datum neu dar und passt den Wandlungspreis der Vorzugsklassen an, die in sie gewandelt werden. Er muss nach der zuletzt erfassten Aktivität der Klasse und dieser Vorzugsklassen datiert sein.",
     "saved": "Gespeichert",
@@ -368,7 +368,9 @@
     "driftBadge": "Pre-Money weicht ab",
     "preMoneyDrift": "Die Pre-Money-Bewertung von {preMoney} stimmt nicht mehr mit dem Preis der Runde mal den {shares} voll verwässerten Anteilen vor ihr überein ({implied}): Vor der Runde datierte Anteile wurden nach ihr erfasst.",
     "preMoneyDriftRemedy": "Berichtigen Sie die Pre-Money-Bewertung unten auf {implied}, oder erfassen Sie unter „Grundlage der Pre-Money-Bewertung“, worauf sie beruht.",
-    "preMoneyDriftReadOnly": "Ein Equity-Verwalter kann die Bewertung berichtigen oder ihre Grundlage erfassen."
+    "preMoneyDriftReadOnly": "Ein Equity-Verwalter kann die Bewertung berichtigen oder ihre Grundlage erfassen.",
+    "conversionDrift": "<link>{number}</link> wurde zu {recorded} gewandelt; die Runde bewertet dessen Bedingungen jetzt mit {standing}.",
+    "conversionDriftHint": "Vor der Runde datierte Vorgänge wurden nach diesen Wandlungen erfasst. Jede Wandlung bleibt wie erfasst bestehen; öffnen Sie den SAFE oder das Darlehen, um erneut zu wandeln, wenn die Vorgänge vor die Runde gehören."
   },
   "model": {
     "description": "Bepreist eine Runde nach der Pre-Money-Methode anhand der Kapitaltabelle zum Stichtag: Ausstehende SAFEs und Wandeldarlehen werden gewandelt, geschützte Klassen erhalten ihre Verwässerungsschutzanteile und der Pool wird innerhalb der Pre-Money-Bewertung auf sein Ziel aufgefüllt. Es wird nichts erfasst.",
@@ -407,7 +409,7 @@
     },
     "prompt": "Geben Sie eine Pre-Money-Bewertung und das neue Kapital ein, um die Runde gegen die Kapitaltabelle zum Stichtag zu bepreisen.",
     "sharesOfFullyDiluted": "{shares} · {percent} voll verwässert",
-    "newShares": "{shares} neue Aktien",
+    "newShares": "{shares} neue {sharesCount, plural, one {Aktie} other {Aktien}}",
     "poolAfter": "Pool nach der Runde",
     "percentOfFullyDiluted": "{percent} voll verwässert"
   },
@@ -593,7 +595,11 @@
     "outstandingPrincipal": "Ausstehend",
     "convertedInto": "Umgewandelt in",
     "invalidConversionTitle": "Diese Umwandlung nutzte von {source} übernommene Bedingungen; {source} wurde am {date} storniert.",
-    "invalidConversionRemedy": "Stornieren Sie Zertifikat {certificate} zum {date}, dem Abschlussdatum der Runde, um die Umwandlung aufzuheben; machen Sie die MFN-Wahl mit Datum spätestens {date} rückgängig; wandeln Sie das Instrument dann zu seinen eigenen Bedingungen erneut um."
+    "invalidConversionRemedy": "Stornieren Sie Zertifikat {certificate} zum {date}, dem Abschlussdatum der Runde, um die Umwandlung aufzuheben; machen Sie die MFN-Wahl mit Datum spätestens {date} rückgängig; wandeln Sie das Instrument dann zu seinen eigenen Bedingungen erneut um.",
+    "undone": "Rückgängig gemacht",
+    "undoneByVoid": "Rückgängig gemacht: {certificate} wurde am {date} storniert",
+    "conversionDriftTitle": "Diese Wandlung wurde zu {recorded} für {recordedShares} {recordedSharesCount, plural, one {Anteil} other {Anteile}} erfasst; die Runde bewertet dieselben Bedingungen jetzt mit {standing} für {standingShares} {standingSharesCount, plural, one {Anteil} other {Anteile}}.",
+    "conversionDriftRemedy": "Vor der Runde datierte Vorgänge wurden nach der Wandlung erfasst und ändern die Anzahl der Anteile, durch die der Preis geteilt wird. Die Wandlung bleibt wie erfasst bestehen. Gehören diese Vorgänge vor die Runde, stornieren Sie {certificate} zum {date} und wandeln Sie zum aktuellen Preis erneut; andernfalls korrigieren Sie das Datum des Vorgangs, indem Sie ihn stornieren und neu erfassen."
   },
   "events": {
     "saved": "{kind} erfasst",
@@ -690,7 +696,7 @@
     "open": "83(b) fällig",
     "missed": "83(b) versäumt",
     "filedOn": "Eingereicht am {date}",
-    "due": "Fällig am {date} · noch {days} Tage",
+    "due": "Fällig am {date} · noch {days, plural, one {# Tag} other {# Tage}}",
     "missedOn": "Frist abgelaufen am {date}",
     "deadline": "83(b)-Frist {date}"
   },
@@ -828,11 +834,11 @@
     "attention": {
       "title": "Handlungsbedarf",
       "allClear": "Kein Handlungsbedarf.",
-      "cliff": "{holder} · {number} erreicht am {date} den Cliff: {quantity} Einheiten werden unverfallbar",
+      "cliff": "{holder} · {number} erreicht am {date} den Cliff: {quantity} {quantityCount, plural, one {Einheit wird} other {Einheiten werden}} unverfallbar",
       "election83b": "{holder} · die 83(b)-Wahl für {number} ist bis {date} fällig (noch {days, plural, one {# Tag} other {# Tage}})",
-      "restrictedDeposit": "{holder} · {shares} vorzeitig ausgeübte Anteile von {number} sind verfallbar; die Einlage wird bis zur Unverfallbarkeit gehalten",
-      "departed": "{holder} ist am {date} ausgeschieden und hält noch {units} Options- und RSU-Einheiten; erfassen Sie Verfall und Ablauf",
-      "expiring": "{holder} · {number} läuft am {date} mit {quantity} ausstehenden Einheiten ab",
+      "restrictedDeposit": "{holder} · {shares} vorzeitig {sharesCount, plural, one {ausgeübter Anteil} other {ausgeübte Anteile}} von {number} {sharesCount, plural, one {ist} other {sind}} verfallbar; die Einlage wird bis zur Unverfallbarkeit gehalten",
+      "departed": "{holder} ist am {date} ausgeschieden und hält noch {units} Options- und RSU-{unitsCount, plural, one {Einheit} other {Einheiten}}; erfassen Sie Verfall und Ablauf",
+      "expiring": "{holder} · {number} läuft am {date} mit {quantity} {quantityCount, plural, one {ausstehenden Einheit} other {ausstehenden Einheiten}} ab",
       "compensationDue": "Die Aktienvergütung ist bis {date} nicht gebucht: {amount} zu buchen",
       "compensationRefused": "Die Aktienvergütung bis {date} kann nicht bemessen werden: {message}",
       "interestDue": "Darlehenszinsen sind bis {date} nicht abgegrenzt: {amount} zu buchen",
@@ -847,14 +853,15 @@
       "interestCatchUp": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht; sie werden mit dem Lauf bis {through} gebucht, sobald diese Periode endet",
       "interestCatchUpNow": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht; buchen Sie den Lauf bis {through}, um sie nachzuholen",
       "interestCatchUpNoPeriod": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht; öffnen oder erzeugen Sie die nächste Buchungsperiode, um sie zu buchen",
-      "roundPreMoneyDrift": "Runde {name} nennt eine Pre-Money-Bewertung von {preMoney}, aber ihr Preis mal die {shares} voll verwässerten Anteile vor ihr ergibt jetzt {implied}; berichtigen Sie die Bewertung oder erfassen Sie ihre Grundlage"
+      "roundPreMoneyDrift": "Runde {name} nennt eine Pre-Money-Bewertung von {preMoney}, aber ihr Preis mal die {shares} voll verwässerten Anteile vor ihr ergibt jetzt {implied}; berichtigen Sie die Bewertung oder erfassen Sie ihre Grundlage",
+      "conversionPriceDrift": "{number} wurde in {round} zu {recorded} gewandelt; vor der Runde datierte, aber danach erfasste Vorgänge bewerten die Wandlung jetzt mit {standing}"
     },
     "activity": {
       "title": "Letzte Aktivität",
       "empty": "Noch keine Eigenkapitalaktivität erfasst.",
       "issue": "{kind} {number} an {holder} ausgegeben",
       "round": "{name} abgeschlossen zu {price} je Anteil",
-      "shares": "{quantity} Anteile"
+      "shares": "{quantity} {quantityCount, plural, one {Anteil} other {Anteile}}"
     },
     "directory": {
       "title": "Schnellzugriff",
@@ -909,7 +916,15 @@
       "compensationNoPeriod": "{amount} Aktienvergütung bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Öffnen oder erzeugen Sie die nächste Buchungsperiode, um sie zu buchen.",
       "interest": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Sie werden mit dem Lauf bis {through} gebucht, sobald diese Periode endet.",
       "interestNow": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Der Lauf bis {through} holt sie nach.",
-      "interestNoPeriod": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Öffnen oder erzeugen Sie die nächste Buchungsperiode, um sie zu buchen."
+      "interestNoPeriod": "{amount} Darlehenszinsen bis {date} wurden nach diesem Lauf erfasst und sind nicht gebucht. Öffnen oder erzeugen Sie die nächste Buchungsperiode, um sie zu buchen.",
+      "compensationNoPeriodTitle": "{amount} Aktienvergütung bis {date} wurden nach dem Lauf bis zu diesem Datum erfasst und sind nicht gebucht, und auf diesen Lauf folgt keine offene Buchungsperiode, in der sie gebucht werden können.",
+      "interestNoPeriodTitle": "{amount} Darlehenszinsen bis {date} wurden nach dem Lauf bis zu diesem Datum erfasst und sind nicht gebucht, und auf diesen Lauf folgt keine offene Buchungsperiode, in der sie gebucht werden können.",
+      "generateRemedy": "Erzeugen Sie die Buchungsperioden des Geschäftsjahres {year}; der nächste Lauf bucht die Nachholung, sobald dessen erste Periode beendet ist.",
+      "generateRemedyReadOnly": "Bitten Sie eine Person, die Buchungsperioden verwaltet, das Geschäftsjahr {year} zu erzeugen (Einrichtung → Periodenabschluss); der nächste Lauf bucht die Nachholung, sobald dessen erste Periode beendet ist.",
+      "reopenRemedy": "Die Perioden nach dem letzten Lauf sind abgeschlossen. Beantragen Sie über den Periodenabschluss eine kontrollierte Wiedereröffnung der nächsten Periode, damit der Lauf die Nachholung buchen kann.",
+      "reopenRemedyReadOnly": "Die Perioden nach dem letzten Lauf sind abgeschlossen. Bitten Sie eine Person, die Buchungsperioden verwaltet, über den Periodenabschluss eine kontrollierte Wiedereröffnung der nächsten Periode zu beantragen.",
+      "generatePeriods": "Perioden für GJ{year} erzeugen",
+      "openPeriods": "Buchungsperioden öffnen"
     }
   },
   "preferenceBasis": {

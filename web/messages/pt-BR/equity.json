@@ -251,7 +251,7 @@
     "authorized": "Ações autorizadas",
     "conversionPrice": "Preço de conversão",
     "split": "Desdobramento",
-    "currentAuthorized": "Atualmente {value} ações",
+    "currentAuthorized": "Atualmente {value} {valueCount, plural, one {ação} other {ações}}",
     "currentConversionPrice": "Atualmente {value}",
     "splitHelp": "Um desdobramento reapresenta todas as participações, outorgas, pools e preços da classe a partir de sua data e ajusta o preço de conversão das classes preferenciais que se convertem nela. Ele deve ser datado após a atividade mais recente registrada para a classe e para essas classes preferenciais.",
     "saved": "Salvo",
@@ -368,7 +368,9 @@
     "driftBadge": "Pre-money divergente",
     "preMoneyDrift": "A avaliação pre-money de {preMoney} não confere mais com o preço da rodada vezes as {shares} ações totalmente diluídas anteriores ({implied}): ações com data anterior à rodada foram registradas depois dela.",
     "preMoneyDriftRemedy": "Corrija abaixo a avaliação pre-money para {implied}, ou registre em “Base da avaliação pre-money” a base em que ela é expressa.",
-    "preMoneyDriftReadOnly": "Um gestor de participações pode corrigir a avaliação ou registrar sua base."
+    "preMoneyDriftReadOnly": "Um gestor de participações pode corrigir a avaliação ou registrar sua base.",
+    "conversionDrift": "<link>{number}</link> foi convertido a {recorded}; a rodada agora avalia suas condições a {standing}.",
+    "conversionDriftHint": "Operações datadas antes da rodada foram registradas após estas conversões. Cada conversão permanece como registrada; abra o SAFE ou a nota para convertê-lo novamente se as operações pertencem a antes da rodada."
   },
   "model": {
     "description": "Precifica uma rodada pelo método pré-money com base na tabela de capitalização na data de referência: SAFEs e notas em circulação são convertidos, classes protegidas recebem suas ações de antidiluição e o pool é complementado até a meta dentro do pré-money. Nada é registrado.",
@@ -407,7 +409,7 @@
     },
     "prompt": "Informe uma avaliação pré-money e o capital novo para precificar a rodada sobre a tabela de capitalização na data de referência.",
     "sharesOfFullyDiluted": "{shares} · {percent} do totalmente diluído",
-    "newShares": "{shares} novas ações",
+    "newShares": "{shares} {sharesCount, plural, one {nova ação} other {novas ações}}",
     "poolAfter": "Reserva após a rodada",
     "percentOfFullyDiluted": "{percent} do totalmente diluído"
   },
@@ -593,7 +595,11 @@
     "outstandingPrincipal": "Em aberto",
     "convertedInto": "Convertido em",
     "invalidConversionTitle": "Esta conversão usou condições adotadas de {source}, anulado em {date}.",
-    "invalidConversionRemedy": "Anule o certificado {certificate} com data de {date}, a data de fechamento da rodada, para desfazer a conversão; reverta a eleição MFN com data até {date}; depois converta o instrumento novamente em suas próprias condições."
+    "invalidConversionRemedy": "Anule o certificado {certificate} com data de {date}, a data de fechamento da rodada, para desfazer a conversão; reverta a eleição MFN com data até {date}; depois converta o instrumento novamente em suas próprias condições.",
+    "undone": "Desfeita",
+    "undoneByVoid": "Desfeita: {certificate} foi anulado em {date}",
+    "conversionDriftTitle": "Esta conversão foi registrada a {recorded} por {recordedShares} {recordedSharesCount, plural, one {ação} other {ações}}; a rodada agora avalia as mesmas condições a {standing} por {standingShares} {standingSharesCount, plural, one {ação} other {ações}}.",
+    "conversionDriftRemedy": "Operações datadas antes da rodada foram registradas após a conversão e mudam as ações pelas quais o preço é dividido. A conversão permanece como registrada. Se essas operações pertencem a antes da rodada, anule {certificate} com data de {date} e converta novamente ao preço atual; caso contrário, corrija a data da operação anulando-a e registrando-a novamente."
   },
   "events": {
     "saved": "Evento registrado: {kind}",
@@ -690,7 +696,7 @@
     "open": "83(b) pendente",
     "missed": "83(b) perdida",
     "filedOn": "Apresentada em {date}",
-    "due": "Vence em {date} · faltam {days} dias",
+    "due": "Vence em {date} · {days, plural, one {falta # dia} other {faltam # dias}}",
     "missedOn": "Prazo encerrado em {date}",
     "deadline": "Prazo da 83(b): {date}"
   },
@@ -828,11 +834,11 @@
     "attention": {
       "title": "Requer atenção",
       "allClear": "Nada requer atenção.",
-      "cliff": "{holder} · {number} atinge o cliff em {date}: {quantity} unidades são adquiridas",
+      "cliff": "{holder} · {number} atinge o cliff em {date}: {quantity} {quantityCount, plural, one {unidade é adquirida} other {unidades são adquiridas}}",
       "election83b": "{holder} · a eleição 83(b) de {number} vence em {date} ({days, plural, one {resta # dia} other {restam # dias}})",
-      "restrictedDeposit": "{holder} · {shares} ações de exercício antecipado de {number} não foram adquiridas; o depósito fica retido até a aquisição",
-      "departed": "{holder} saiu em {date} e ainda detém {units} unidades de opções e RSUs; registre as perdas e os vencimentos",
-      "expiring": "{holder} · {number} vence em {date} com {quantity} unidades em circulação",
+      "restrictedDeposit": "{holder} · {shares} {sharesCount, plural, one {ação} other {ações}} de exercício antecipado de {number} não {sharesCount, plural, one {foi adquirida} other {foram adquiridas}}; o depósito fica retido até a aquisição",
+      "departed": "{holder} saiu em {date} e ainda detém {units} {unitsCount, plural, one {unidade} other {unidades}} de opções e RSUs; registre as perdas e os vencimentos",
+      "expiring": "{holder} · {number} vence em {date} com {quantity} {quantityCount, plural, one {unidade} other {unidades}} em circulação",
       "compensationDue": "A remuneração em ações não está contabilizada até {date}: {amount} a contabilizar",
       "compensationRefused": "A remuneração em ações até {date} não pode ser mensurada: {message}",
       "interestDue": "Os juros das notas não estão apropriados até {date}: {amount} a contabilizar",
@@ -847,14 +853,15 @@
       "interestCatchUp": "{amount} de juros de notas acumulados até {date} foram registrados após essa execução e não estão contabilizados; serão contabilizados com a execução até {through}, quando esse período terminar",
       "interestCatchUpNow": "{amount} de juros de notas acumulados até {date} foram registrados após essa execução e não estão contabilizados; contabilize a execução até {through} para colocá-los em dia",
       "interestCatchUpNoPeriod": "{amount} de juros de notas acumulados até {date} foram registrados após essa execução e não estão contabilizados; abra ou gere o próximo período contábil para contabilizá-los",
-      "roundPreMoneyDrift": "A rodada {name} informa uma avaliação pre-money de {preMoney}, mas seu preço vezes as {shares} ações totalmente diluídas anteriores agora resulta em {implied}; corrija a avaliação ou registre sua base"
+      "roundPreMoneyDrift": "A rodada {name} informa uma avaliação pre-money de {preMoney}, mas seu preço vezes as {shares} ações totalmente diluídas anteriores agora resulta em {implied}; corrija a avaliação ou registre sua base",
+      "conversionPriceDrift": "{number} foi convertido em {round} a {recorded}; operações datadas antes da rodada e registradas depois dela agora avaliam a conversão a {standing}"
     },
     "activity": {
       "title": "Atividade recente",
       "empty": "Nenhuma atividade de patrimônio registrada ainda.",
       "issue": "{kind} {number} emitido para {holder}",
       "round": "{name} encerrada a {price} por ação",
-      "shares": "{quantity} ações"
+      "shares": "{quantity} {quantityCount, plural, one {ação} other {ações}}"
     },
     "directory": {
       "title": "Atalhos",
@@ -909,7 +916,15 @@
       "compensationNoPeriod": "{amount} de remuneração em ações reconhecida até {date} foi registrada após essa execução e não está contabilizada. Abra ou gere o próximo período contábil para contabilizá-la.",
       "interest": "{amount} de juros de notas acumulados até {date} foram registrados após essa execução e não estão contabilizados. Serão contabilizados com a execução até {through}, quando esse período terminar.",
       "interestNow": "{amount} de juros de notas acumulados até {date} foram registrados após essa execução e não estão contabilizados. A execução até {through} os coloca em dia.",
-      "interestNoPeriod": "{amount} de juros de notas acumulados até {date} foram registrados após essa execução e não estão contabilizados. Abra ou gere o próximo período contábil para contabilizá-los."
+      "interestNoPeriod": "{amount} de juros de notas acumulados até {date} foram registrados após essa execução e não estão contabilizados. Abra ou gere o próximo período contábil para contabilizá-los.",
+      "compensationNoPeriodTitle": "{amount} de remuneração em ações reconhecidos até {date} foram registrados após a execução até essa data e não foram lançados, e nenhum período contábil aberto segue essa execução para lançá-los.",
+      "interestNoPeriodTitle": "{amount} de juros de notas conversíveis acumulados até {date} foram registrados após a execução até essa data e não foram lançados, e nenhum período contábil aberto segue essa execução para lançá-los.",
+      "generateRemedy": "Gere os períodos contábeis do exercício {year}; a próxima execução lança a regularização assim que o primeiro período dele terminar.",
+      "generateRemedyReadOnly": "Peça a quem gerencia os períodos contábeis que gere o exercício {year} (Configuração → Fechamento de período); a próxima execução lança a regularização assim que o primeiro período dele terminar.",
+      "reopenRemedy": "Os períodos após a última execução estão fechados. Solicite uma reabertura controlada do próximo pelo fechamento de período para que a execução lance a regularização.",
+      "reopenRemedyReadOnly": "Os períodos após a última execução estão fechados. Peça a quem gerencia os períodos contábeis que solicite uma reabertura controlada do próximo pelo fechamento de período.",
+      "generatePeriods": "Gerar os períodos do exercício {year}",
+      "openPeriods": "Abrir períodos contábeis"
     }
   },
   "preferenceBasis": {

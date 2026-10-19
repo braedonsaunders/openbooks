@@ -5,7 +5,7 @@ import { runWaterfall, type WaterfallClass, type WaterfallResult } from "./water
 import { piecewiseCurve, type CurvePoint } from "./waterfall-curve.ts";
 
 const ONE = rational(1n);
-const money = (value: string): Rational => parseMoney(value, "amount");
+const money = (value: string): Rational => parseMoney(value, "price");
 
 const classes: WaterfallClass[] = [
   {

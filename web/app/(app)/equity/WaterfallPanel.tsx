@@ -177,7 +177,7 @@ function WaterfallScenarioView({ view }: { view: WaterfallViewData }) {
                       : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800',
                   )}
                 >
-                  {`${preset.multiple}×`}
+                  {`${formatDecimal(locale, preset.multiple, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}×`}
                 </button>
               ))}
             </div>

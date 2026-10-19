@@ -18,7 +18,7 @@
  */
 import { adjustedConversionPrice, adjustedConversionPriceExact } from "./anti-dilution.ts";
 import { convertAtRound, exactConversionShares, type ConversionResult, type ConvertingInstrument } from "./convertibles.ts";
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import {
   addRational,
   ceilShares,
@@ -137,32 +137,27 @@ function impliedPreMoney(input: RoundModelInput, terms: Terms, price: Rational):
 
 /** Model a priced round. Unsatisfiable terms refuse with the reason. */
 export function modelRound(input: RoundModelInput): RoundModelResult {
-  const pre = parseMoney(input.preMoneyValuation, "the pre-money valuation");
-  const investment = parseMoney(input.investment, "the investment");
-  const target = input.targetPoolPercent ? parsePercent(input.targetPoolPercent, "the target pool") : ZERO;
+  const pre = parseMoney(input.preMoneyValuation, "preMoneyValuation");
+  const investment = parseMoney(input.investment, "investment");
+  const target = input.targetPoolPercent ? parsePercent(input.targetPoolPercent, "targetPool") : ZERO;
   if (compareRational(pre, ZERO) <= 0) {
-    throw new EquityError("The pre-money valuation must be greater than zero.", { code: "equity_round_terms_invalid", remedy: "Enter the pre-money valuation.", field: "preMoneyValuation" });
+    throw equityError("roundPreMoneyNotPositive", {}, { field: "preMoneyValuation" });
   }
   if (compareRational(investment, ZERO) <= 0) {
-    throw new EquityError("The investment must be greater than zero.", { code: "equity_round_terms_invalid", remedy: "Enter the new money raised.", field: "investment" });
+    throw equityError("roundInvestmentNotPositive", {}, { field: "investment" });
   }
   if (compareRational(target, ZERO) < 0 || compareRational(target, ONE) >= 0) {
-    throw new EquityError("The target pool must be at least 0% and below 100%.", { code: "equity_round_terms_invalid", remedy: "Enter the post-round pool target as a percentage.", field: "targetPoolPercent" });
+    throw equityError("roundTargetPoolOutOfRange", { min: fig.percent("0"), max: fig.percent("100") }, { field: "targetPoolPercent" });
   }
   if (input.fullyDilutedBefore <= 0n) {
-    throw new EquityError("The company has no shares to price the round against.", {
-      code: "equity_round_no_shares", remedy: "Record the company's issued shares before modelling a round.",
-    });
+    throw equityError("roundNoShares");
   }
   const terms: Terms = { pre, investment, target };
   // Highest candidate: pre-money over the pre-round count alone, rounded up.
   let high = ceilShares(multiplyRational(divideRational(pre, rational(input.fullyDilutedBefore)), rational(PRICE_UNIT)));
   let low = 1n;
   if (compareRational(impliedPreMoney(input, terms, priceOf(low)), pre) > 0) {
-    throw new EquityError("No positive price satisfies these terms: the converting instruments and pool top-up claim the whole pre-money valuation.", {
-      code: "equity_round_unpriceable",
-      remedy: "Raise the pre-money valuation, lower the pool target, or review the caps and discounts of the converting instruments.",
-    });
+    throw equityError("roundUnpriceable");
   }
   if (high < low) high = low;
   // Invariant: implied(low) ≤ pre < implied(high + 1).
@@ -174,9 +169,7 @@ export function modelRound(input: RoundModelInput): RoundModelResult {
   const price = priceOf(low);
   const investorShares = floorShares(divideRational(investment, price));
   if (investorShares <= 0n) {
-    throw new EquityError("The investment buys less than one share at the round price.", {
-      code: "equity_round_terms_invalid", remedy: "Raise the investment or lower the pre-money valuation.", field: "investment",
-    });
+    throw equityError("roundInvestmentBelowOneShare", {}, { field: "investment" });
   }
   const { conversions } = convertAtRound(input.convertibles, price, input.fullyDilutedBefore);
   const conversionShares = conversions.reduce((sum, conversion) => sum + conversion.shares, 0n);

@@ -1,0 +1,1164 @@
+{
+  "equity": {
+    "featureOff": {
+      "message": "Equity & cap table is not enabled for this organization.",
+      "remedy": "Turn on Equity & cap table in Company Settings → Features."
+    },
+    "forbidden": {
+      "message": "This action requires the {permission} permission.",
+      "remedy": "Ask an administrator to grant {permission} (Company Settings → Roles), then try again."
+    },
+    "forbiddenForEntity": {
+      "message": "This action requires the {permission} permission for the legal entity.",
+      "remedy": "Ask an administrator to grant {permission} and access to the legal entity (Company Settings → Roles), then try again."
+    },
+    "entityOutsideAccess": {
+      "message": "The legal entity does not exist or is outside your access.",
+      "remedy": "Choose a legal entity you can access."
+    },
+    "entityInvalid": {
+      "message": "Choose a valid legal entity.",
+      "remedy": "Choose a legal entity of this organization."
+    },
+    "entityInactive": {
+      "message": "The legal entity does not exist or is inactive.",
+      "remedy": "Choose an active legal entity of this organization."
+    },
+    "entityCurrencyMissing": {
+      "message": "Legal entity {entity} has no functional currency.",
+      "remedy": "Set the legal entity's base currency in Company Settings → Subsidiaries."
+    },
+    "currencyUnknown": {
+      "message": "Currency {currency} has no supported precision in the currency registry.",
+      "remedy": "Restore {currency} in the currency registry (Company Settings → Currencies)."
+    },
+    "currencyPrecisionUnsupported": {
+      "message": "The currency precision is not supported.",
+      "remedy": "Restore the currency in Company Settings → Currencies."
+    },
+    "currencyCodeInvalid": {
+      "message": "Choose the currency the record is stated in.",
+      "remedy": "Enter a three-letter ISO currency code."
+    },
+    "classUnknown": {
+      "message": "The share class does not exist for this legal entity.",
+      "remedy": "Choose a share class of the legal entity."
+    },
+    "classReferenceUnknown": {
+      "message": "A security references a share class that does not exist.",
+      "remedy": "Reload the cap table."
+    },
+    "planUnknown": {
+      "message": "The plan does not exist for this legal entity.",
+      "remedy": "Choose a plan of the legal entity."
+    },
+    "roundUnknown": {
+      "message": "The round does not exist for this legal entity.",
+      "remedy": "Choose a round of the legal entity."
+    },
+    "securityUnknown": {
+      "message": "The security does not exist.",
+      "remedy": "Choose a security."
+    },
+    "safeUnknown": {
+      "message": "The SAFE does not exist.",
+      "remedy": "Choose a SAFE."
+    },
+    "holderInvalid": {
+      "message": "Choose a valid holder.",
+      "remedy": "Choose a person or company from the directory."
+    },
+    "holderInactive": {
+      "message": "The holder must be an active person or company of this organization.",
+      "remedy": "Choose an active person or company, or reactivate it in the directory."
+    },
+    "idempotencyConflict": {
+      "message": "This request key was already used for a different {subject, select, round {round change} reversal {reversal} issuance {issuance} event {event} action {equity action} election {election} other {request}}.",
+      "remedy": "Retry with a new request key."
+    },
+    "auditUnwritten": {
+      "message": "The audit record was not written; the change was not saved.",
+      "remedy": "Try the change again."
+    },
+    "reasonRequired": {
+      "message": "Record a reason of {min} to {max} characters for {subject, select, classAmendment {the class amendment} split {the split} reserveChange {the reserve change} mfnElection {the MFN election} mfnReversal {the MFN election reversal} roundAmendment {the round amendment} roundVoid {the round void} accountPolicy {the account policy version} forfeit {the forfeiture} expire {the expiry} cancel {the cancellation} repurchase {the repurchase} void {the void} reverse {the reversal} withdrawal {withdrawing the action} other {the change}}.",
+      "remedy": "Describe why (for example, the board resolution that approved it), then submit again."
+    },
+    "preMoneyBasisTooShort": {
+      "message": "State the basis of the pre-money valuation in {min} to {max} characters.",
+      "remedy": "Describe the basis under “{field}” (for example, a pool increase or conversions counted in the valuation), or leave it blank."
+    },
+    "fxRateMissing": {
+      "message": "No {from} to {to} exchange rate is recorded on or before {date}.",
+      "remedy": "Record the {from}/{to} spot rate for {date} (Setup → Exchange Rates), then try again."
+    },
+    "fxRateUnresolved": {
+      "message": "No {from} to {to} exchange rate was resolved for {subject, select, conversion {the conversion} model {the model} other {the calculation}}.",
+      "remedy": "Record the {from}/{to} spot rate for {date} (Setup → Exchange Rates), then try again."
+    },
+    "decimalInvalid": {
+      "message": "“{label}” must be a plain decimal number.",
+      "remedy": "Enter “{label}” as digits with an optional decimal point, such as {example}."
+    },
+    "decimalPrecision": {
+      "message": "“{label}” carries more than {places} decimal {placesCount, plural, one {place} other {places}}.",
+      "remedy": "Enter “{label}” with at most {places} decimal {placesCount, plural, one {place} other {places}}."
+    },
+    "valueMissing": {
+      "message": "“{label}” is required.",
+      "remedy": "Record “{label}” before continuing."
+    },
+    "sharesInvalid": {
+      "message": "“{label}” must be a whole number of shares.",
+      "remedy": "Enter “{label}” as a whole number of shares."
+    },
+    "dateInvalid": {
+      "message": "“{label}” must be a valid date.",
+      "remedy": "Choose a date for “{label}”."
+    },
+    "textInvalid": {
+      "message": "“{label}” is required, in at most {max} characters.",
+      "remedy": "Enter “{label}”."
+    },
+    "accountPolicyIncomplete": {
+      "message": "The equity account policy in force from {date} does not map “{account}”.",
+      "remedy": "Add an equity account policy version that maps “{account}”, effective on or before the transaction date (Setup → Equity accounts)."
+    },
+    "accountPolicyMissing": {
+      "message": "No equity account policy is in force for this legal entity on {date}.",
+      "remedy": "Add an equity account policy for the legal entity, effective on or before the transaction date (Setup → Equity accounts)."
+    },
+    "fxAccountMissing": {
+      "message": "The realized FX gain/loss account is not configured.",
+      "remedy": "Map the realized FX gain/loss account in Setup → Company & Accounting → Control accounts, then try again."
+    },
+    "considerationAccountMissing": {
+      "message": "Choose the account the consideration settles through.",
+      "remedy": "Choose the cash or bank account that received or paid the cash under “{field}”."
+    },
+    "considerationAccountInvalid": {
+      "message": "The consideration account must be an active cash or bank posting account.",
+      "remedy": "Choose an active cash or bank account under “{field}”; receivables, prepaid, inventory and allowance accounts cannot receive or pay the cash."
+    },
+    "postingRefused": {
+      "message": "The ledger refused the equity entry dated {date} ({reason}).",
+      "remedy": "Resolve the ledger refusal (for example, reopen the period through Period Close or reactivate the account), then try again."
+    },
+    "postingPeriodClosed": {
+      "message": "The equity entry dated {date} falls in {period}, which is closed for posting.",
+      "remedy": "Request a controlled reopen of {closing} through Period Close, or record the transaction on a date in an open period."
+    },
+    "bookMissing": {
+      "message": "The organization has no active primary book that posts to the general ledger.",
+      "remedy": "Activate the primary accounting book in Company Settings → Accounting books."
+    },
+    "periodMissing": {
+      "message": "No accounting period covers {date}.",
+      "remedy": "Generate the accounting periods of the fiscal year that covers {date} (Setup → Period Close → Accounting periods), then try again."
+    },
+    "entryUnbalanced": {
+      "message": "The equity entry dated {date} does not balance.",
+      "remedy": "Review the amounts and try again."
+    },
+    "entryUnknown": {
+      "message": "The entry to reverse is not an equity entry of this organization.",
+      "remedy": "Reload the record and try again."
+    },
+    "entryNotPosted": {
+      "message": "Entry {entry} is not a posted entry and cannot be reversed.",
+      "remedy": "Reload the record; it may already be reversed."
+    },
+    "notSaved": {
+      "message": "{record, select, round {The round} roundAmendment {The round amendment} roundVoid {The round void} shareClass {The share class} classAmendment {The class amendment} split {The split} plan {The plan} reserveChange {The reserve change} security {The security} event {The event} election {The election} reversal {The reversal} accountPolicy {The policy version} compensationRun {The compensation run} interestRun {The interest run} request {The equity action} other {The change}} was not saved.",
+      "remedy": "Try again."
+    },
+    "notStoredCompletely": {
+      "message": "{record, select, compensationLines {The compensation run lines} releaseLines {The restricted stock releases} interestLines {The interest run lines} positions {The cap table positions} vesting {The vesting tranches} other {The records}} were not stored completely; nothing was saved.",
+      "remedy": "Try again."
+    },
+    "positionsStale": {
+      "message": "The cap table position ledger was not brought up to date; nothing was saved.",
+      "remedy": "Try again."
+    },
+    "issuanceEntryUnknown": {
+      "message": "The issuance entry of {security} does not identify its principal.",
+      "remedy": "Review the instrument's issuance entry in the journal; a SAFE or note settles the principal its issuance credited."
+    },
+    "interestUnreconciled": {
+      "message": "The ledger carries {carried} in accrued interest on {security}, but {accrued} has accrued to {date}.",
+      "remedy": "Review the note's interest entries in the journal; accrued interest is posted only by interest runs and settlements."
+    },
+    "eventKindMissing": {
+      "message": "Choose what happened to the security.",
+      "remedy": "Choose an event kind."
+    },
+    "eventNotApplicable": {
+      "message": "{event, select, exercise {An exercise} settle {A settlement} forfeit {A forfeiture} expire {An expiry} cancel {A cancellation} repurchase {A repurchase} transfer {A transfer} convert {A conversion} void {A void} repay {A repayment} reverse {A reversal} election_83b {An 83(b) election} other {This event}} cannot be recorded on {kind, select, share {a share certificate} option {an option} rsu {an RSU} warrant {a warrant} safe {a SAFE} note {a convertible note} other {this security}}.",
+      "remedy": "Choose an event that applies to this security."
+    },
+    "eventSecurityVoid": {
+      "message": "Security {security} is void.",
+      "remedy": "A void security takes no further events; record the event on a security that stands."
+    },
+    "eventBeforeIssue": {
+      "message": "The event cannot precede the issue date, {issueDate}.",
+      "remedy": "Date the event on or after {issueDate}."
+    },
+    "eventQuantityNotPositive": {
+      "message": "The quantity must be at least one share.",
+      "remedy": "Enter a quantity of at least one under “{field}”."
+    },
+    "convertibleNotOutstanding": {
+      "message": "Security {security} is {status, select, outstanding {outstanding} exercised {exercised} settled {settled} forfeited {forfeited} expired {expired} cancelled {cancelled} repurchased {repurchased} transferred {transferred} converted {converted} void {void} repaid {repaid} not_issued {not yet issued} other {no longer outstanding}} as of {date}.",
+      "remedy": "Record a settlement only on an outstanding SAFE or note; reverse the earlier settlement first if it was recorded in error."
+    },
+    "exerciseAfterExpiry": {
+      "message": "Security {security} expired on {date}.",
+      "remedy": "Record the expiry instead."
+    },
+    "nothingVestedUntilNext": {
+      "message": "Every unit of {security} vested by {date} is already {event, select, exercise {exercised} other {settled}} or no longer outstanding; the next units vest on {nextVest}.",
+      "remedy": "Set “{field}” on or after {nextVest}, when the next units vest."
+    },
+    "nothingVestedYet": {
+      "message": "Nothing on {security} is vested yet on {date}; the first units vest on {nextVest}.",
+      "remedy": "Set “{field}” on or after {nextVest}, when the first units vest."
+    },
+    "nothingVestedEver": {
+      "message": "No units of {security} are vested and {event, select, exercise {unexercised} other {unsettled}} on {date}, and no further units vest under its schedule.",
+      "remedy": "Review the award's history: every vested unit is already exercised, settled, forfeited or expired."
+    },
+    "exerciseExceedsOutstanding": {
+      "message": "Only {ceiling} {ceilingCount, plural, one {unit is} other {units are}} outstanding on {date}.",
+      "remedy": "Exercise no more than {ceiling} {ceilingCount, plural, one {unit} other {units}}."
+    },
+    "exerciseExceedsVested": {
+      "message": "Only {ceiling} {ceilingCount, plural, one {unit is} other {units are}} vested and {event, select, exercise {unexercised} other {unsettled}} on {date}.",
+      "remedy": "Record no more than {ceiling} {ceilingCount, plural, one {unit} other {units}}; unvested units cannot be {event, select, exercise {exercised} other {settled}}."
+    },
+    "earlyExerciseTermsMissing": {
+      "message": "Grant {security} does not record the price at which the company repurchases unvested shares.",
+      "remedy": "Exercise no more than the {ceiling} vested {ceilingCount, plural, one {unit} other {units}}."
+    },
+    "exerciseBelowPar": {
+      "message": "The shares would be issued below par value.",
+      "remedy": "Review the exercise price and the class's par value."
+    },
+    "eventExceedsHolding": {
+      "message": "Only {ceiling} {ceilingCount, plural, one {unit is} other {units are}} {event, select, forfeit {unvested} expire {vested and unexercised} other {outstanding}} on {date}.",
+      "remedy": "Record no more than {ceiling} {ceilingCount, plural, one {unit} other {units}}."
+    },
+    "repurchaseExceedsOutstanding": {
+      "message": "Only {ceiling} {ceilingCount, plural, one {share is} other {shares are}} outstanding on {date}.",
+      "remedy": "Repurchase no more than {ceiling} {ceilingCount, plural, one {share} other {shares}}."
+    },
+    "restrictedRepurchaseMixed": {
+      "message": "{ceiling} of the shares {ceilingCount, plural, one {is} other {are}} unvested on {date}; the company repurchases unvested shares on the grant's terms.",
+      "remedy": "Repurchase the {ceiling} unvested {ceilingCount, plural, one {share} other {shares}} first, then record a separate repurchase of vested shares."
+    },
+    "restrictedRepurchaseTermsMissing": {
+      "message": "Grant {grant} does not record the repurchase price of unvested shares.",
+      "remedy": "Record “{field}” on the grant's terms before repurchasing unvested shares."
+    },
+    "repurchaseFairValueMissing": {
+      "message": "The grant repurchases unvested shares at the lower of cost and fair market value, so the fair market value on the repurchase date is required.",
+      "remedy": "Enter “{field}” on the repurchase date."
+    },
+    "repurchaseFairValueNegative": {
+      "message": "“{field}” cannot be negative.",
+      "remedy": "Enter “{field}” as zero or more."
+    },
+    "repurchasePriceFixed": {
+      "message": "The grant prices this repurchase at {amount}.",
+      "remedy": "Clear “{field}”; the repurchase price follows the grant's terms."
+    },
+    "earlyExerciseDepositUnreconciled": {
+      "message": "The early-exercise deposit of {security} is not on the ledger.",
+      "remedy": "Review the exercise entry in the journal; the deposit is credited by the exercise and released by the compensation run."
+    },
+    "repurchaseAmountNegative": {
+      "message": "“{field}” cannot be negative.",
+      "remedy": "Enter the cash paid for the shares under “{field}”."
+    },
+    "transfereeIsHolder": {
+      "message": "The transferee is already the holder.",
+      "remedy": "Choose a different holder under “{field}”."
+    },
+    "transferExceedsVested": {
+      "message": "Only {ceiling} vested {ceilingCount, plural, one {unit} other {units}} can be transferred on {date}.",
+      "remedy": "Transfer no more than {ceiling} {ceilingCount, plural, one {unit} other {units}}."
+    },
+    "conversionNotPreferred": {
+      "message": "Only preferred shares convert into common.",
+      "remedy": "Choose a preferred share certificate."
+    },
+    "conversionTargetMissing": {
+      "message": "Choose the common class the shares convert into.",
+      "remedy": "Choose a common class of the legal entity."
+    },
+    "conversionClassMismatch": {
+      "message": "Class {shareClass} converts into {target}.",
+      "remedy": "Convert into the class's conversion class, or amend the conversion class first."
+    },
+    "conversionClassMismatchUnnamed": {
+      "message": "Class {shareClass} converts into another common class.",
+      "remedy": "Convert into the class's conversion class, or amend the conversion class first."
+    },
+    "conversionClassNotEffective": {
+      "message": "Class {shareClass} is not effective until {date}.",
+      "remedy": "Date the conversion on or after {date}."
+    },
+    "conversionExceedsHolding": {
+      "message": "Only {ceiling} {ceilingCount, plural, one {share} other {shares}} can convert on {date}.",
+      "remedy": "Convert no more than {ceiling} {ceilingCount, plural, one {share} other {shares}}."
+    },
+    "conversionBelowOneCommon": {
+      "message": "The shares convert into less than one common share.",
+      "remedy": "Convert more shares."
+    },
+    "conversionRoundMissing": {
+      "message": "Choose the round the instrument converts in.",
+      "remedy": "Choose a round of the legal entity."
+    },
+    "conversionOffClosingDate": {
+      "message": "Round {round} closed on {date}; an instrument converts in it on its closing date.",
+      "remedy": "Date the conversion on {date}."
+    },
+    "conversionTermsVoid": {
+      "message": "The MFN election on {security} of {electedOn} adopted the terms of {source}, which is void as of {voidedOn}.",
+      "remedy": "Reverse the MFN election on {security}, dated on or before {closedOn} (Securities → {security} → MFN terms → Reverse election), then convert it again on the terms that stand."
+    },
+    "conversionBelowOneShare": {
+      "message": "The instrument converts into less than one share.",
+      "remedy": "Review the round price and the instrument's terms."
+    },
+    "convertingAmountUnreconciled": {
+      "message": "The converting amount of {security} does not match what the ledger carries.",
+      "remedy": "Review the instrument's issuance and interest entries in the journal."
+    },
+    "conversionBelowPar": {
+      "message": "The conversion would issue shares below par value.",
+      "remedy": "Review the round price and the class's par value."
+    },
+    "repaymentAmountMissing": {
+      "message": "The amount repaid must be more than zero.",
+      "remedy": "Enter the cash paid to the holder under “{field}”."
+    },
+    "safeRepaymentAmount": {
+      "message": "A SAFE is repaid at its purchase amount, {amount}.",
+      "remedy": "Record the repayment at the purchase amount; record any settlement difference as a separate journal entry."
+    },
+    "voidMfnSource": {
+      "message": "{safe} adopted the terms of {security} by its MFN election of {electedOn}; voiding {security} would leave that election naming terms entered in error.",
+      "remedy": "Reverse the MFN election on {safe} first (Securities → {safe} → MFN terms → Reverse election), then void {security}."
+    },
+    "voidMfnSourceConverted": {
+      "message": "{safe} adopted the terms of {security} by its MFN election of {electedOn}; voiding {security} would leave that election naming terms entered in error.",
+      "remedy": "Void certificate {certificate}, which the conversion of {safe} produced, dated {convertedOn} (the round's closing date); reverse the MFN election on {safe} (Securities → {safe} → MFN terms → Reverse election); then void {security} and convert {safe} again."
+    },
+    "voidHasActivity": {
+      "message": "Security {security} has recorded activity and cannot be voided.",
+      "remedy": "Void the certificates its events produced first, reverse its other events, or record a cancellation instead."
+    },
+    "reversalTargetUnknown": {
+      "message": "The event to reverse does not exist on this security.",
+      "remedy": "Choose an event from the security's history."
+    },
+    "eventFinal": {
+      "message": "{event, select, void {A void} other {A reversal}} cannot be reversed.",
+      "remedy": "Voids and reversals are final; record the security or event again if it is still needed."
+    },
+    "eventNotReversible": {
+      "message": "{event, select, exercise {An exercise} settle {A settlement} forfeit {A forfeiture} expire {An expiry} cancel {A cancellation} repurchase {A repurchase} transfer {A transfer} convert {A conversion} void {A void} repay {A repayment} reverse {A reversal} election_83b {An 83(b) election} other {This event}} cannot be reversed.",
+      "remedy": "Void the certificate the event produced instead; that undoes the event."
+    },
+    "eventAlreadyReversed": {
+      "message": "The event is already reversed.",
+      "remedy": "Reload the security's history."
+    },
+    "reversalBeforeEvent": {
+      "message": "The reversal cannot precede the event it reverses, dated {date}.",
+      "remedy": "Date the reversal on or after {date}."
+    },
+    "reversalHasDependents": {
+      "message": "Later activity on {security} relies on the {event, select, forfeit {forfeiture} expire {expiry} cancel {cancellation} repurchase {repurchase} repay {repayment} election_83b {83(b) election} other {event}} of {date}: {count} later {countCount, plural, one {event} other {events}}, the latest on {latestOn}.",
+      "remedy": "Undo the later activity first, latest first, starting with the {latest, select, exercise {exercise} settle {settlement} forfeit {forfeiture} expire {expiry} cancel {cancellation} repurchase {repurchase} transfer {transfer} convert {conversion} repay {repayment} election_83b {83(b) election} other {event}} of {latestOn}: reverse each, or void the certificate it produced; then reverse this {event, select, forfeit {forfeiture} expire {expiry} cancel {cancellation} repurchase {repurchase} repay {repayment} election_83b {83(b) election} other {event}}."
+    },
+    "election83bNotApplicable": {
+      "message": "Security {security} has no vesting schedule, so no 83(b) election applies.",
+      "remedy": "Record 83(b) elections on restricted stock only."
+    },
+    "election83bWindowClosed": {
+      "message": "The 83(b) window for {security} closed on {deadline}.",
+      "remedy": "An election must be filed within 30 days of {issueDate}; record only an election filed on or before {deadline}."
+    },
+    "election83bRecorded": {
+      "message": "An 83(b) election filed on {date} is already recorded.",
+      "remedy": "Reverse the recorded election first if its date was entered in error."
+    },
+    "mfnNotApplicable": {
+      "message": "Security {security} has no most-favored-nation term.",
+      "remedy": "Record MFN elections only on SAFEs issued with the MFN term."
+    },
+    "mfnElectionClosed": {
+      "message": "Security {security} is {status, select, outstanding {outstanding} exercised {exercised} settled {settled} forfeited {forfeited} expired {expired} cancelled {cancelled} repurchased {repurchased} transferred {transferred} converted {converted} void {void} repaid {repaid} not_issued {not yet issued} other {no longer outstanding}} as of {date}; its terms can no longer change.",
+      "remedy": "Record an election only while the SAFE is outstanding; correct a conversion by voiding the certificate it produced first."
+    },
+    "mfnReversalClosedConverted": {
+      "message": "Security {security} is {status, select, outstanding {outstanding} exercised {exercised} settled {settled} forfeited {forfeited} expired {expired} cancelled {cancelled} repurchased {repurchased} transferred {transferred} converted {converted} void {void} repaid {repaid} not_issued {not yet issued} other {no longer outstanding}} as of {date}; its terms can no longer change.",
+      "remedy": "Void certificate {certificate}, which the conversion produced, dated {date} (the round's closing date), to undo the conversion; then reverse the election and convert {security} again."
+    },
+    "mfnReversalClosed": {
+      "message": "Security {security} is {status, select, outstanding {outstanding} exercised {exercised} settled {settled} forfeited {forfeited} expired {expired} cancelled {cancelled} repurchased {repurchased} transferred {transferred} converted {converted} void {void} repaid {repaid} not_issued {not yet issued} other {no longer outstanding}} as of {date}; its terms can no longer change.",
+      "remedy": "Reverse the {status, select, repaid {repayment} other {cancellation}} first, then reverse the election."
+    },
+    "mfnBackdated": {
+      "message": "An MFN election or reversal on {security} is already recorded from {date}.",
+      "remedy": "Date the {action, select, election {election} other {reversal}} on or after {date} under “{field}”."
+    },
+    "mfnSourceNotConvertible": {
+      "message": "The instrument is not a SAFE or note of this legal entity.",
+      "remedy": "Choose a SAFE or convertible note issued after this SAFE."
+    },
+    "mfnSourceNotLater": {
+      "message": "{source} was issued on {sourceIssuedOn}, not after {safe}, issued on {safeIssuedOn}.",
+      "remedy": "Choose an instrument issued after this SAFE; the MFN term covers later instruments only."
+    },
+    "mfnSourceNotYetIssued": {
+      "message": "{source} was not yet issued on {date}.",
+      "remedy": "Set “{field}” on or after {issuedOn}, when {source} was issued."
+    },
+    "mfnSourceCurrency": {
+      "message": "{source} is stated in {sourceCurrency}, not {currency}.",
+      "remedy": "Choose an instrument stated in {currency}."
+    },
+    "mfnSourceVoid": {
+      "message": "{source} is void.",
+      "remedy": "Choose an instrument that stands; a void instrument's terms were entered in error."
+    },
+    "mfnTermsAlreadyAdopted": {
+      "message": "{safe} already carries the terms of {source} from {date}.",
+      "remedy": "Nothing to elect; the terms are already adopted."
+    },
+    "mfnSourceNoTerms": {
+      "message": "{source} has neither a valuation cap nor a discount.",
+      "remedy": "Choose an instrument with a cap or a discount the SAFE lacks or betters."
+    },
+    "mfnTermsNotBetter": {
+      "message": "None of the terms of {source} is better than the terms of {safe} in force on {date}.",
+      "remedy": "Choose an instrument whose cap is lower, discount higher or conversion post-money where the SAFE's is pre-money."
+    },
+    "mfnElectionUnknown": {
+      "message": "The MFN election does not exist on this SAFE.",
+      "remedy": "Choose an election from the SAFE's MFN terms."
+    },
+    "mfnElectionAlreadyReversed": {
+      "message": "The MFN election is already reversed.",
+      "remedy": "Reload the SAFE's MFN terms."
+    },
+    "mfnReversalBeforeElection": {
+      "message": "The reversal cannot precede the election, dated {date}.",
+      "remedy": "Date the reversal on or after {date}."
+    },
+    "mfnReversalHasDependents": {
+      "message": "A later MFN election on {security} is recorded from {date}.",
+      "remedy": "Reverse the election of {date} first, latest first."
+    },
+    "actionRejected": {
+      "message": "This action was rejected by its approver.",
+      "remedy": "Review the approver's reason, then record the action again with a new request key if it still applies."
+    },
+    "actionWithdrawn": {
+      "message": "This action was withdrawn by its requester.",
+      "remedy": "Record the action again with a new request key if it still applies."
+    },
+    "actionPending": {
+      "message": "{action, select, void {A void} reverse {A reversal} repurchase {A repurchase} repay {A repayment} cancel_convertible {A cancellation} class_amendment {A class amendment} split {A split} reserve_change {A reserve change} mfn_election {An MFN election} mfn_reversal {An MFN election reversal} compensation_run {A stock compensation run} interest_run {A note interest run} account_policy {An account policy version} round_amendment {A round amendment} round_void {A round void} other {An equity action}} of {subject} is already awaiting approval.",
+      "remedy": "Wait for the approver's decision, or withdraw the pending request from Inbox → Submitted by me, before recording another."
+    },
+    "actionRoutingFailed": {
+      "message": "The equity action could not be routed for approval: {reason}.",
+      "remedy": "Correct the Equity action Flow in Flows (or disable it), then record the action again."
+    },
+    "actionChangedWhileApplied": {
+      "message": "The equity action changed while it was being applied.",
+      "remedy": "Reload and try again."
+    },
+    "actionChangedWhileWithdrawn": {
+      "message": "The equity action changed while it was being withdrawn.",
+      "remedy": "Reload the Inbox to see its outcome."
+    },
+    "actionChangedWhileDecided": {
+      "message": "The equity action changed while it was being decided.",
+      "remedy": "Reload the Inbox and decide it again if it is still pending."
+    },
+    "withdrawalReasonRequired": {
+      "message": "Give a reason of {min} to {max} characters for withdrawing the action.",
+      "remedy": "Explain why the action no longer applies, then withdraw it again."
+    },
+    "actionUnknown": {
+      "message": "The equity action does not exist.",
+      "remedy": "Reload the Inbox."
+    },
+    "withdrawForbidden": {
+      "message": "Only the requester can withdraw an equity action.",
+      "remedy": "Ask the requester to withdraw it, or reject it from the Inbox if you are an approver named on its Flow."
+    },
+    "actionDecidedNoWithdrawal": {
+      "message": "The equity action is {status, select, pending_approval {awaiting approval} applied {applied} rejected {rejected} withdrawn {withdrawn} other {decided}}, not awaiting approval, so it cannot be withdrawn.",
+      "remedy": "Reload the Inbox to see its outcome."
+    },
+    "actionDecided": {
+      "message": "The equity action is {status, select, pending_approval {awaiting approval} applied {applied} rejected {rejected} withdrawn {withdrawn} other {decided}}, not awaiting approval.",
+      "remedy": "Reload the Inbox to see its outcome."
+    },
+    "approvalSignInRequired": {
+      "message": "An equity approval must be decided by a signed-in user.",
+      "remedy": "Sign in and decide the approval from the Inbox."
+    },
+    "selfApproval": {
+      "message": "The requester of an equity action cannot decide its approval.",
+      "remedy": "Ask another approver named on the Flow's gate to decide it."
+    },
+    "rejectionReasonRequired": {
+      "message": "Record the reason for rejecting the equity action.",
+      "remedy": "Add a comment explaining the rejection, then reject again."
+    },
+    "accountPolicyEntityMissing": {
+      "message": "Choose the legal entity the policy applies to.",
+      "remedy": "Choose the legal entity, then save the policy version again."
+    },
+    "accountPolicyEffectiveDateInvalid": {
+      "message": "Enter the date the policy takes effect.",
+      "remedy": "Choose a valid date under “{field}”, then save the policy version again."
+    },
+    "accountPolicyAccountMissing": {
+      "message": "Choose the account for “{account}”.",
+      "remedy": "Choose an account under “{account}”, then save the policy version again."
+    },
+    "accountPolicyAccountType": {
+      "message": "“{account}” must be {kind, select, equity {an active equity posting account} expense {an active expense posting account} liabilityOrEquity {an active liability or equity posting account} liability {an active other current or long-term liability posting account} other {an active posting account of an accepted type}} of the organization.",
+      "remedy": "Choose {kind, select, equity {an active equity posting account} expense {an active expense posting account} liabilityOrEquity {an active liability or equity posting account} liability {an active other current or long-term liability posting account} other {an active posting account of an accepted type}} under “{account}”, then save the policy version again."
+    },
+    "accountPolicyBeforeLatestPosting": {
+      "message": "Equity entries are posted through {date}; a new policy version must take effect after that date so posted history keeps its accounts.",
+      "remedy": "Record a new policy version effective after {date}, so it satisfies the current ledger."
+    },
+    "exitValueInvalid": {
+      "message": "“{field}” must be an amount with at most {places} decimal {placesCount, plural, one {place} other {places}}.",
+      "remedy": "Enter “{field}” as an amount, such as {example}."
+    },
+    "transactionFeesInvalid": {
+      "message": "“{field}” must be an amount with at most {places} decimal {placesCount, plural, one {place} other {places}}.",
+      "remedy": "Enter the fees paid from the exit under “{field}”, such as {example}, or leave it blank."
+    },
+    "transactionFeesNegative": {
+      "message": "The transaction fees cannot be negative.",
+      "remedy": "Enter the fees paid from the exit, or leave them blank."
+    },
+    "transactionFeesExceedExit": {
+      "message": "The transaction fees exceed the exit value.",
+      "remedy": "Enter fees no greater than the exit value."
+    },
+    "exitValueNegative": {
+      "message": "The exit value cannot be negative.",
+      "remedy": "Enter the proceeds available to equity holders."
+    },
+    "waterfallUnsettled": {
+      "message": "The preferred classes' conversion choices do not settle at this exit value.",
+      "remedy": "Review the classes' preferences, participation caps and seniority, or model a different exit value."
+    },
+    "roundPreMoneyNotPositive": {
+      "message": "The pre-money valuation must be greater than zero.",
+      "remedy": "Enter the pre-money valuation."
+    },
+    "roundInvestmentNotPositive": {
+      "message": "The investment must be greater than zero.",
+      "remedy": "Enter the new money raised."
+    },
+    "roundTargetPoolOutOfRange": {
+      "message": "The target pool must be at least {min} and below {max}.",
+      "remedy": "Enter the post-round pool target as a percentage."
+    },
+    "roundNoShares": {
+      "message": "The company has no shares to price the round against.",
+      "remedy": "Record the company's issued shares before modelling a round."
+    },
+    "roundUnpriceable": {
+      "message": "No positive price satisfies these terms: the converting instruments and pool top-up claim the whole pre-money valuation.",
+      "remedy": "Raise the pre-money valuation, lower the pool target, or review the caps and discounts of the converting instruments."
+    },
+    "roundInvestmentBelowOneShare": {
+      "message": "The investment buys less than one share at the round price.",
+      "remedy": "Raise the investment or lower the pre-money valuation."
+    },
+    "runPeriodNotEnded": {
+      "message": "The {run, select, compensation {stock compensation run} interest {note interest run} other {posting}} through {date} falls in {period}, which ends on {endsOn}, after today ({today}).",
+      "remedy": "Run through the end of a period that has ended by today ({today}); the runs view offers the next one with activity due, and anything recognized since the last run is caught up in it."
+    },
+    "runPeriodClosed": {
+      "message": "The {run, select, compensation {stock compensation run} interest {note interest run} other {posting}} through {date} falls in {period}, which is closed for posting.",
+      "remedy": "Run through the end of an open period (the runs view offers the next one with activity due), or request a controlled reopen of {closing} through Period Close."
+    },
+    "compensationRunBackdated": {
+      "message": "A stock compensation run through {last} is already posted.",
+      "remedy": "Run through a date after {last}; earlier periods are already measured."
+    },
+    "interestRunBackdated": {
+      "message": "A note interest run through {last} is already posted.",
+      "remedy": "Run through a date after {last}; earlier periods are already accrued."
+    },
+    "compensationNothingDue": {
+      "message": "No stock compensation is due through {date}.",
+      "remedy": "Nothing changes in this period; run through a later period end once awards vest or are granted."
+    },
+    "compensationNothingDueSince": {
+      "message": "No stock compensation is due through {date} beyond the run through {last}.",
+      "remedy": "Nothing changes in this period; run through a later period end once awards vest or are granted."
+    },
+    "interestNothingDue": {
+      "message": "No note interest is due through {date}.",
+      "remedy": "No note accrues interest in this period; run through a later period end while a note is outstanding."
+    },
+    "interestNothingDueSince": {
+      "message": "No note interest is due through {date} beyond the run through {last}.",
+      "remedy": "No note accrues interest in this period; run through a later period end while a note is outstanding."
+    },
+    "interestBelowAccrued": {
+      "message": "Interest on {security} through {date} is below what is already accrued.",
+      "remedy": "Review the note's interest entries and settlements in the journal; accrued interest only falls when a note is voided."
+    },
+    "noteDayCountMissing": {
+      "message": "The note has no day-count convention.",
+      "remedy": "Record the note's day count (Actual/365, Actual/360, 30/360 or Actual/Actual)."
+    },
+    "noteInterestBasisMissing": {
+      "message": "The note has no interest basis.",
+      "remedy": "Record how the note's interest builds (simple, or compounded annually, semiannually, quarterly or monthly)."
+    },
+    "equityIdNotGenerated": {
+      "message": "No identifier was generated.",
+      "remedy": "Try again."
+    },
+    "issuanceKindRequired": {
+      "message": "Choose what kind of security to issue.",
+      "remedy": "Choose share, option, RSU, warrant, SAFE or note under “{field}”."
+    },
+    "issuanceMemoTooLong": {
+      "message": "“{field}” is longer than {max} {maxCount, plural, one {character} other {characters}}.",
+      "remedy": "Shorten “{field}” to at most {max} {maxCount, plural, one {character} other {characters}}."
+    },
+    "issuanceClassRequired": {
+      "message": "Choose the share class of this legal entity the security is in.",
+      "remedy": "Choose a share class under “{field}”."
+    },
+    "issuanceClassNotYetEffective": {
+      "message": "Class {code} is not effective until {date}.",
+      "remedy": "Date the issuance on or after {date} under “{field}”."
+    },
+    "issuancePlanKindInvalid": {
+      "message": "Only options and RSUs are granted from a plan.",
+      "remedy": "Clear “{field}”."
+    },
+    "issuancePlanClassMismatch": {
+      "message": "Plan {plan} grants awards over its own class.",
+      "remedy": "Choose the plan's share class under “{field}”."
+    },
+    "issuancePlanNotYetEffective": {
+      "message": "Plan {plan} is not effective until {date}.",
+      "remedy": "Date the grant on or after {date} under “{field}”."
+    },
+    "issuanceRoundKindInvalid": {
+      "message": "Only shares and warrants are issued in a round.",
+      "remedy": "Clear “{field}”."
+    },
+    "issuanceRoundClassMismatch": {
+      "message": "The round sells class {code}.",
+      "remedy": "Choose the round's share class under “{field}”."
+    },
+    "issuanceQuantityNotPositive": {
+      "message": "Issue at least one share.",
+      "remedy": "Enter at least one share under “{field}”."
+    },
+    "issuanceConvertibleQuantity": {
+      "message": "SAFEs and notes are measured in money, not shares.",
+      "remedy": "Clear “{quantity}” and enter “{principal}”."
+    },
+    "issuanceRoundCurrencyMismatch": {
+      "message": "The round is priced in {currency}.",
+      "remedy": "Choose {currency} under “{field}”, or leave it blank to use the round's currency."
+    },
+    "issuanceCurrencyInvalid": {
+      "message": "Choose the currency the security is stated in.",
+      "remedy": "Choose a three-letter ISO currency code under “{field}”."
+    },
+    "issuanceExercisePriceRequired": {
+      "message": "Enter the exercise price per share.",
+      "remedy": "Enter “{field}”."
+    },
+    "issuancePriceNegative": {
+      "message": "“{field}” cannot be negative.",
+      "remedy": "Enter zero or more under “{field}”."
+    },
+    "issuanceConvertiblePrice": {
+      "message": "A SAFE or note has no price per share.",
+      "remedy": "Clear “{field}”."
+    },
+    "issuanceRsuPrice": {
+      "message": "An RSU has no purchase or exercise price.",
+      "remedy": "Clear “{field}”."
+    },
+    "issuanceConsiderationNegative": {
+      "message": "“{field}” cannot be negative.",
+      "remedy": "Enter the cash received under “{field}”."
+    },
+    "issuancePrincipalRequired": {
+      "message": "Enter the principal the investor paid.",
+      "remedy": "Enter the purchase amount or note principal under “{field}”."
+    },
+    "issuanceAwardConsideration": {
+      "message": "Awards are granted without consideration; the exercise price is paid on exercise.",
+      "remedy": "Clear “{field}”."
+    },
+    "issuanceVestingKindInvalid": {
+      "message": "Only shares, options and RSUs vest.",
+      "remedy": "Clear the vesting terms."
+    },
+    "issuanceAccelerationRequired": {
+      "message": "Choose the acceleration terms.",
+      "remedy": "Choose none, single trigger or double trigger under “{field}”."
+    },
+    "issuanceAccelerationOutOfRange": {
+      "message": "“{field}” must be above {zero} and at most {hundred}.",
+      "remedy": "Enter the share of unvested units that accelerates under “{field}”."
+    },
+    "issuanceAccelerationKindInvalid": {
+      "message": "Only vesting securities accelerate.",
+      "remedy": "Clear “{field}”."
+    },
+    "issuanceExpirationNotAfterIssue": {
+      "message": "“{field}” must follow “{issueDate}”.",
+      "remedy": "Choose a date for “{field}” after “{issueDate}”."
+    },
+    "issuanceExpirationKindInvalid": {
+      "message": "Only options and warrants expire.",
+      "remedy": "Clear “{field}”."
+    },
+    "issuanceOptionTypeRequired": {
+      "message": "Choose whether the option is an incentive or non-qualified option.",
+      "remedy": "Choose ISO or NSO under “{field}”."
+    },
+    "issuanceEarlyExerciseKindInvalid": {
+      "message": "Only options admit early exercise.",
+      "remedy": "Turn off “{field}”."
+    },
+    "issuanceRepurchaseBasisRequired": {
+      "message": "Choose the price at which the company repurchases unvested early-exercised shares.",
+      "remedy": "Choose cost, or the lower of cost and fair market value, under “{field}”."
+    },
+    "issuanceRepurchaseBasisUnused": {
+      "message": "Only an early-exercisable option carries an unvested repurchase price.",
+      "remedy": "Clear “{field}”, or turn on “{earlyExercise}”."
+    },
+    "issuanceSafeTypeRequired": {
+      "message": "Choose a pre-money or post-money SAFE.",
+      "remedy": "Choose pre-money or post-money under “{field}”."
+    },
+    "issuanceMfnKindInvalid": {
+      "message": "Only a SAFE carries a most-favored-nation term.",
+      "remedy": "Turn off “{field}”."
+    },
+    "issuanceCapDiscountKindInvalid": {
+      "message": "Only SAFEs and notes carry a cap or discount.",
+      "remedy": "Clear “{cap}” and “{discount}”."
+    },
+    "issuanceValuationCapNotPositive": {
+      "message": "“{field}” must be greater than zero.",
+      "remedy": "Enter an amount greater than zero under “{field}”, or clear it."
+    },
+    "issuanceDiscountOutOfRange": {
+      "message": "“{field}” must be at least {zero} and below {hundred}.",
+      "remedy": "Enter a discount from {zero} up to, but not including, {hundred} under “{field}”, or leave it blank for none."
+    },
+    "issuanceInterestRateRequired": {
+      "message": "Enter the note's annual interest rate.",
+      "remedy": "Enter the annual rate under “{field}”, or zero for none."
+    },
+    "issuanceInterestBasisRequired": {
+      "message": "Choose how the note's interest accrues.",
+      "remedy": "Choose simple interest, or compounding annually, semiannually, quarterly or monthly, under “{field}”."
+    },
+    "issuanceDayCountRequired": {
+      "message": "Choose the note's day-count convention.",
+      "remedy": "Choose Actual/365, Actual/360, 30/360 or Actual/Actual under “{field}”."
+    },
+    "issuanceMaturityNotAfterIssue": {
+      "message": "“{field}” must follow “{issueDate}”.",
+      "remedy": "Choose a date for “{field}” after “{issueDate}”."
+    },
+    "issuanceDayCountKindInvalid": {
+      "message": "Only a note carries a day-count convention.",
+      "remedy": "Clear “{field}”."
+    },
+    "issuanceValuationRequired": {
+      "message": "Awards need their grant-date valuation.",
+      "remedy": "Enter “{field}” and the valuation assumptions."
+    },
+    "issuanceAttributionRequired": {
+      "message": "Choose how the award's cost is attributed.",
+      "remedy": "Choose straight-line or graded under “{field}”."
+    },
+    "issuanceGrantSharePriceNotPositive": {
+      "message": "“{field}” must be greater than zero.",
+      "remedy": "Enter the fair value of a share on the grant date under “{field}”."
+    },
+    "issuanceValuationKindInvalid": {
+      "message": "Only options and RSUs carry a share-based payment valuation.",
+      "remedy": "Clear the valuation."
+    },
+    "issuanceNumberTooLong": {
+      "message": "“{field}” is longer than {max} {maxCount, plural, one {character} other {characters}}.",
+      "remedy": "Shorten “{field}” to at most {max} {maxCount, plural, one {character} other {characters}}."
+    },
+    "securityNumberTaken": {
+      "message": "Security number {number} is already used by this legal entity.",
+      "remedy": "Enter a different number under “{field}”, or leave it blank to number it automatically."
+    },
+    "issuanceBelowPar": {
+      "message": "The consideration is below the shares' par value.",
+      "remedy": "Shares cannot be issued below par; enter the full consideration received under “{field}”."
+    },
+    "issuanceParConsiderationRequired": {
+      "message": "Shares carry par value, so their issuance needs consideration.",
+      "remedy": "Enter the cash received for the shares under “{field}” and the account that received it under “{account}”."
+    },
+    "vestingShapesMixed": {
+      "message": "A schedule is either dated tranches or a time-based schedule, not both.",
+      "remedy": "Remove the time-based terms or the tranches."
+    },
+    "vestingTrancheDateInvalid": {
+      "message": "Every tranche needs a valid YYYY-MM-DD date.",
+      "remedy": "Correct the tranche dates."
+    },
+    "vestingTranchesUnordered": {
+      "message": "Tranche dates must be distinct and in ascending order.",
+      "remedy": "List each tranche once, earliest first."
+    },
+    "vestingTrancheEmpty": {
+      "message": "Every tranche must vest at least one share.",
+      "remedy": "Remove empty tranches."
+    },
+    "vestingTranchesTotalMismatch": {
+      "message": "The tranches vest {total} {totalCount, plural, one {share} other {shares}}, but the security carries {quantity} {quantityCount, plural, one {share} other {shares}}.",
+      "remedy": "Make the tranche quantities sum to the security's quantity."
+    },
+    "vestingCliffWithoutTerm": {
+      "message": "A cliff or frequency needs a vesting term in months.",
+      "remedy": "Enter “{months}”, or clear “{cliff}” and “{frequency}”."
+    },
+    "vestingMonthsOutOfRange": {
+      "message": "“{field}” must be a whole number of months from {min} to {max}.",
+      "remedy": "Enter a whole number of months from {min} to {max} under “{field}”."
+    },
+    "vestingCliffOutOfRange": {
+      "message": "“{field}” must be a whole number of months within “{term}”.",
+      "remedy": "Enter whole months from {min} up to the value of “{term}” under “{field}”."
+    },
+    "vestingFrequencyRequired": {
+      "message": "A time-based schedule needs a vesting frequency.",
+      "remedy": "Choose monthly, quarterly or annual under “{field}”."
+    },
+    "vestingStartRequired": {
+      "message": "A time-based schedule needs a vesting start date.",
+      "remedy": "Choose a date for “{field}”."
+    },
+    "vestingStoredTranchesNotList": {
+      "message": "The stored vesting tranches are not a list.",
+      "remedy": "Record the tranches as a list of dated whole-share quantities."
+    },
+    "vestingStoredTrancheInvalid": {
+      "message": "A vesting tranche needs a YYYY-MM-DD date and a whole-share quantity.",
+      "remedy": "Correct the tranche dates and quantities."
+    },
+    "valuationLogarithmUndefined": {
+      "message": "The logarithm needs a positive value.",
+      "remedy": "Check “{sharePrice}” and “{exercisePrice}”."
+    },
+    "valuationSharePriceNotPositive": {
+      "message": "“{field}” must be greater than zero.",
+      "remedy": "Enter the fair value of a share on the grant date under “{field}”."
+    },
+    "valuationExercisePriceNegative": {
+      "message": "“{field}” cannot be negative.",
+      "remedy": "Enter zero or more under “{field}”."
+    },
+    "valuationVolatilityNotPositive": {
+      "message": "“{field}” must be greater than zero.",
+      "remedy": "Enter the expected volatility as a percentage under “{field}”."
+    },
+    "valuationTermNotPositive": {
+      "message": "“{field}” must be greater than zero.",
+      "remedy": "Enter the expected term in years under “{field}”."
+    },
+    "valuationDividendYieldNegative": {
+      "message": "“{field}” cannot be negative.",
+      "remedy": "Enter the expected dividend yield as a percentage under “{field}”, or zero for none."
+    },
+    "awardFairValueNegative": {
+      "message": "Security {security} carries a negative fair value.",
+      "remedy": "Review the award's valuation."
+    },
+    "securityNotShareBased": {
+      "message": "Security {security} is not share-based.",
+      "remedy": "Use the convertible view for SAFEs and notes."
+    },
+    "holdingEventQuantityMissing": {
+      "message": "An event on {security} has no quantity.",
+      "remedy": "Record the event's quantity."
+    },
+    "holdingEventExceeded": {
+      "message": "The {kind, select, exercise {exercise} settle {settlement} forfeit {forfeiture} expire {expiry} cancel {cancellation} repurchase {repurchase} transfer {transfer} convert {conversion} other {event}} of {quantity} {quantityCount, plural, one {unit} other {units}} on {date} exceeds what {security} held.",
+      "remedy": "Review the security's history; the recorded quantities cannot be replayed."
+    },
+    "classConversionTermsMissing": {
+      "message": "Class {code} has no conversion terms.",
+      "remedy": "Record the class's “{issuePrice}” and “{conversionPrice}”."
+    },
+    "securityNotConvertible": {
+      "message": "Security {security} is not a convertible instrument.",
+      "remedy": "Choose a SAFE or a convertible note."
+    },
+    "postMoneyOverclaim": {
+      "message": "The capped post-money SAFEs claim {limit} or more of the company, so the conversion has no meaningful solution.",
+      "remedy": "Check “{principal}” and “{cap}” of the post-money SAFEs; a cap entered in the wrong unit is the usual cause."
+    },
+    "postMoneyUnsettled": {
+      "message": "The post-money conversion did not settle.",
+      "remedy": "Review “{cap}” of the converting SAFEs."
+    },
+    "conversionPriceZero": {
+      "message": "The conversion price rounds to zero.",
+      "remedy": "Check the round price and the converting instruments’ “{cap}” and “{discount}”."
+    },
+    "conversionRoundPriceNotPositive": {
+      "message": "The round price must be greater than zero.",
+      "remedy": "Enter the round price per share."
+    },
+    "conversionNotOutstanding": {
+      "message": "Instrument {security} is not outstanding on {date}, the round's closing date.",
+      "remedy": "Check the instrument's issue date and history."
+    },
+    "authorizedExceeded": {
+      "message": "Class {shareClass} would commit {committed} {committedCount, plural, one {share} other {shares}} on {date} but authorizes {authorized}.",
+      "remedy": "{purpose, select, authorized_amendment {Authorize at least {committed} {committedCount, plural, one {share} other {shares}} of class {shareClass}: its outstanding shares, outstanding awards and unallocated plan pools need them on {date}.} reserve_increase {Add no more than {room} {roomCount, plural, one {share} other {shares}} to the reserve, or first record an authorized-share amendment raising class {shareClass} to at least {committed} {committedCount, plural, one {share} other {shares}}.} plan {Reserve no more than {room} {roomCount, plural, one {share} other {shares}}, or first record an authorized-share amendment raising class {shareClass} to at least {committed} {committedCount, plural, one {share} other {shares}}.} reversal {Record an authorized-share amendment raising class {shareClass} to at least {committed} {committedCount, plural, one {share} other {shares}} before reversing the event.} other {Record an authorized-share amendment raising class {shareClass} to at least {committed} {committedCount, plural, one {share} other {shares}}, or issue {excess} fewer {excessCount, plural, one {share} other {shares}}.}}"
+    },
+    "poolExhausted": {
+      "message": "Plan {plan} would have {available} {availableCount, plural, one {share} other {shares}} available on {date}.",
+      "remedy": "{action, select, reduce {Remove no more than {maximum} {maximumCount, plural, one {share} other {shares}} from the reserve of plan {plan} from {from}; the rest is granted to awards.} empty {Plan {plan} has no unallocated shares to remove on or after {from}; forfeit or cancel awards first.} other {Grant {shortfall} fewer {shortfallCount, plural, one {unit} other {units}}, or first increase the reserve of plan {plan}.}}"
+    },
+    "classIdUnknown": {
+      "message": "The share class does not exist.",
+      "remedy": "Choose a share class."
+    },
+    "planIdUnknown": {
+      "message": "The plan does not exist.",
+      "remedy": "Choose a plan."
+    },
+    "roundIdUnknown": {
+      "message": "The round does not exist.",
+      "remedy": "Choose a round of the legal entity."
+    },
+    "authorizedSharesNotPositive": {
+      "message": "Authorize at least one share.",
+      "remedy": "Enter at least one share under “{field}”."
+    },
+    "parValueNegative": {
+      "message": "The par value cannot be negative.",
+      "remedy": "Enter the par value per share under “{field}” (zero for no-par stock)."
+    },
+    "classKindInvalid": {
+      "message": "A share class is either common or preferred.",
+      "remedy": "Choose common or preferred under “{field}”."
+    },
+    "classSeniorityInvalid": {
+      "message": "Seniority must be a whole number from {min} to {max}.",
+      "remedy": "Enter “{field}” as a whole number from {min} to {max}; a higher seniority is paid first."
+    },
+    "preferredPricesNotPositive": {
+      "message": "Preferred stock needs a positive original issue price and conversion price.",
+      "remedy": "Enter the price the class was sold at under “{issue}”, and a conversion price above zero under “{conversion}” if it differs."
+    },
+    "liquidationMultipleNegative": {
+      "message": "The liquidation multiple cannot be negative.",
+      "remedy": "Enter “{field}” as zero or more, such as {example}."
+    },
+    "participationCapNotAboveMultiple": {
+      "message": "The participation cap of {cap} must exceed the liquidation multiple of {multiple}.",
+      "remedy": "Enter “{field}” above {multiple}."
+    },
+    "liquidationPreferenceBasisInvalid": {
+      "message": "Choose what the liquidation preference is measured on.",
+      "remedy": "Choose the amount paid for each certificate or the original issue price of the class under “{field}”."
+    },
+    "classCodeTaken": {
+      "message": "Class code {code} is already used by this legal entity.",
+      "remedy": "Choose a different class code."
+    },
+    "conversionClassRequired": {
+      "message": "Choose the common class the preferred shares convert into.",
+      "remedy": "Choose a common class of the legal entity under “{field}”, recording it first if needed."
+    },
+    "conversionClassNotYetEffective": {
+      "message": "Class {target} is not effective until {date}.",
+      "remedy": "Date the class on or after {date}, or choose another conversion class."
+    },
+    "conversionClassNotEffectiveForAmendment": {
+      "message": "Class {target} is not effective until {date}.",
+      "remedy": "Date the amendment on or after {date}."
+    },
+    "conversionClassOnCommon": {
+      "message": "Only a preferred class converts into another class.",
+      "remedy": "Clear “{field}”."
+    },
+    "conversionClassAmendmentOnCommon": {
+      "message": "Only a preferred class converts into another class.",
+      "remedy": "Amend the authorized shares instead."
+    },
+    "conversionPriceAmendmentOnCommon": {
+      "message": "Only a preferred class has a conversion price.",
+      "remedy": "Amend the authorized shares instead."
+    },
+    "conversionPriceNotPositive": {
+      "message": "The conversion price must be greater than zero.",
+      "remedy": "Enter the new conversion price under “{field}”."
+    },
+    "classAmendmentBeforeClass": {
+      "message": "An amendment cannot precede the effective date of class {shareClass} ({date}).",
+      "remedy": "Date the amendment on or after {date}."
+    },
+    "conversionClassUnchanged": {
+      "message": "Class {shareClass} already converts into {target}.",
+      "remedy": "Choose a different conversion class."
+    },
+    "conversionClassSplitRecorded": {
+      "message": "A split of the conversion class is recorded on {date}; changing the conversion class before it would reinterpret it.",
+      "remedy": "Date the amendment after {date}."
+    },
+    "classAmendmentKindInvalid": {
+      "message": "Choose what the amendment changes.",
+      "remedy": "Amend the authorized shares, the conversion price or the conversion class."
+    },
+    "splitRatioInvalid": {
+      "message": "A split ratio needs two different positive whole numbers.",
+      "remedy": "Enter the new and old share counts of the split under “{newShares}” and “{oldShares}”, such as 2 for 1 or 1 for 10."
+    },
+    "splitBackdated": {
+      "message": "Class {shareClass} has activity recorded through {date}; a split must be dated after it.",
+      "remedy": "Date the split after {date}."
+    },
+    "splitBackdatedByConversion": {
+      "message": "Class {shareClass} converts into {splitClass} and has activity recorded through {date}; the split adjusts its conversion price, so it must be dated after that.",
+      "remedy": "Date the split after {date}."
+    },
+    "splitConversionClassMissing": {
+      "message": "Preferred {codes} {classesCount, plural, one {does not name the common class it converts into, so the effect of the split on its conversion price is unknown.} other {do not name the common class they convert into, so the effect of the split on their conversion price is unknown.}}",
+      "remedy": "Record the class each preferred class converts into (Share classes → Amend → “{field}”), then record the split."
+    },
+    "planReserveNotPositive": {
+      "message": "Reserve at least one share.",
+      "remedy": "Enter the shares reserved for the plan under “{field}”."
+    },
+    "planBeforeClass": {
+      "message": "A plan cannot precede its share class, effective {date}.",
+      "remedy": "Date the plan on or after {date}."
+    },
+    "planCodeTaken": {
+      "message": "Plan code {code} is already used by this legal entity.",
+      "remedy": "Choose a different plan code."
+    },
+    "reserveChangeInvalid": {
+      "message": "The reserve change must be a nonzero whole number of shares.",
+      "remedy": "Enter the shares to add under “{field}”, or a negative number to remove shares."
+    },
+    "reserveChangeBeforePlan": {
+      "message": "A reserve change cannot precede plan {plan}, effective {date}.",
+      "remedy": "Date the change on or after {date}."
+    },
+    "preMoneyUnmeasurable": {
+      "message": "A pre-money valuation of {preMoney} cannot be checked against the round price of {price}: no shares are outstanding before the round.",
+      "remedy": "State the basis of the valuation under “{field}”."
+    },
+    "preMoneyInconsistent": {
+      "message": "A pre-money valuation of {preMoney} does not match the round price of {price} times the {fullyDiluted} fully diluted {fullyDilutedCount, plural, one {share} other {shares}} before the round ({implied}).",
+      "remedy": "Enter a pre-money valuation of {implied} or a price per share of {impliedPrice}; if the valuation is stated on another basis (a pool increase or conversions counted in it), state that basis under “{field}”."
+    },
+    "preMoneyInconsistentPriceLocked": {
+      "message": "A pre-money valuation of {preMoney} does not match the round price of {price} times the {fullyDiluted} fully diluted {fullyDilutedCount, plural, one {share} other {shares}} before the round ({implied}).",
+      "remedy": "Enter a pre-money valuation of {implied} (the price stays at {price}, since live securities were issued or converted at it); if the valuation is stated on another basis (a pool increase or conversions counted in it), state that basis under “{field}”."
+    },
+    "preMoneyInconsistentValuationOnly": {
+      "message": "A pre-money valuation of {preMoney} does not match the round price of {price} times the {fullyDiluted} fully diluted {fullyDilutedCount, plural, one {share} other {shares}} before the round ({implied}).",
+      "remedy": "Enter a pre-money valuation of {implied}; if the valuation is stated on another basis (a pool increase or conversions counted in it), state that basis under “{field}”."
+    },
+    "roundPricePerShareNotPositive": {
+      "message": "The price per share must be greater than zero.",
+      "remedy": "Enter the price per share of the round under “{field}”."
+    },
+    "roundPreMoneyValuationNotPositive": {
+      "message": "The pre-money valuation must be greater than zero.",
+      "remedy": "Enter the pre-money valuation under “{field}”."
+    },
+    "roundBeforeClass": {
+      "message": "A round cannot close before its share class is effective on {date}.",
+      "remedy": "Date the round on or after {date}."
+    },
+    "roundNameTaken": {
+      "message": "A round named {name} already exists for this legal entity, or did before it was renamed or voided.",
+      "remedy": "Choose a different round name."
+    },
+    "roundNameTooLong": {
+      "message": "The round name must be at most {max} characters.",
+      "remedy": "Shorten “{field}” to at most {max} characters."
+    },
+    "roundIsVoid": {
+      "message": "The round is void.",
+      "remedy": "Record a new round if it is still needed; a void round takes no further changes."
+    },
+    "roundTermsUnchanged": {
+      "message": "Round {round} already has these terms.",
+      "remedy": "Change the name, the price per share or the pre-money valuation."
+    },
+    "roundAmendmentBeforeClose": {
+      "message": "An amendment cannot precede the closing date of round {round} ({date}).",
+      "remedy": "Date the amendment on or after {date}."
+    },
+    "roundPriceLockedBySecurities": {
+      "message": "Round {round} has issued or converted {securities} at its price.",
+      "remedy": "Void those certificates first (each void reverses its entry), then amend the price and record them again; or record the correct round and void this one once it is empty."
+    },
+    "roundVoidBeforeClose": {
+      "message": "The void cannot precede the closing date of round {round} ({date}).",
+      "remedy": "Date the void on or after {date}."
+    },
+    "roundVoidHasSecurities": {
+      "message": "Round {round} still has {securities} issued or converted in it.",
+      "remedy": "Void those certificates first (each void reverses its entry and returns a converted SAFE or note to outstanding), then void the round."
+    },
+    "antiDilutionBaseMissing": {
+      "message": "The weighted-average adjustment needs the shares outstanding before the round.",
+      "remedy": "Record the outstanding shares of the company before modelling the round."
+    },
+    "terms": {
+      "roundPrice": "Round price",
+      "runDate": "Run date",
+      "eventDate": "Event date",
+      "trancheDate": "Tranche date",
+      "trancheQuantity": "Tranche quantity",
+      "exchangeRate": "Exchange rate",
+      "payout": "Payout",
+      "convertibleTerm": "Conversion term",
+      "sharePrice": "Share price",
+      "price": "Price"
+    }
+  }
+}

@@ -1,0 +1,1164 @@
+{
+  "equity": {
+    "featureOff": {
+      "message": "この組織では資本とキャップのテーブルが有効になっていません。",
+      "remedy": "[会社設定] → [機能] で [資本と上限] テーブルをオンにします。"
+    },
+    "forbidden": {
+      "message": "このアクションには {permission} 権限が必要です。",
+      "remedy": "管理者に {permission} の付与を依頼して ([会社設定] → [役割])、再試行してください。"
+    },
+    "forbiddenForEntity": {
+      "message": "このアクションには、法人に対する {permission} 権限が必要です。",
+      "remedy": "{permission} と法人へのアクセスを許可するように管理者に依頼して ([会社設定] → [役割])、再試行してください。"
+    },
+    "entityOutsideAccess": {
+      "message": "法人が存在しないか、アクセス範囲外にあります。",
+      "remedy": "アクセスできる法人を選択してください。"
+    },
+    "entityInvalid": {
+      "message": "有効な法人を選択してください。",
+      "remedy": "この組織の法人を選択してください。"
+    },
+    "entityInactive": {
+      "message": "法人が存在しないか、非アクティブです。",
+      "remedy": "この組織のアクティブな法人を選択してください。"
+    },
+    "entityCurrencyMissing": {
+      "message": "法人 {entity} には機能通貨がありません。",
+      "remedy": "[会社設定] → [子会社] で法人の基本通貨を設定します。"
+    },
+    "currencyUnknown": {
+      "message": "通貨 {currency} には、通貨レジストリでサポートされている精度がありません。",
+      "remedy": "通貨レジストリで {currency} を復元します ([会社設定] → [通貨])。"
+    },
+    "currencyPrecisionUnsupported": {
+      "message": "通貨精度はサポートされていません。",
+      "remedy": "[企業設定] → [通貨] で通貨を復元します。"
+    },
+    "currencyCodeInvalid": {
+      "message": "レコードに使用される通貨を選択します。",
+      "remedy": "3 文字の ISO 通貨コードを入力してください。"
+    },
+    "classUnknown": {
+      "message": "この法人には共有クラスが存在しません。",
+      "remedy": "法人の共有クラスを選択してください。"
+    },
+    "classReferenceUnknown": {
+      "message": "セキュリティが存在しない共有クラスを参照しています。",
+      "remedy": "キャップ テーブルをリロードします。"
+    },
+    "planUnknown": {
+      "message": "この法人にはプランが存在しません。",
+      "remedy": "法人のプランを選択してください。"
+    },
+    "roundUnknown": {
+      "message": "この法人には資金調達ラウンドが存在しません。",
+      "remedy": "法人の資金調達ラウンドを選択してください。"
+    },
+    "securityUnknown": {
+      "message": "セキュリティが存在しません。",
+      "remedy": "証券を選択してください。"
+    },
+    "safeUnknown": {
+      "message": "SAFE が存在しません。",
+      "remedy": "SAFE を選択してください。"
+    },
+    "holderInvalid": {
+      "message": "有効なホルダーを選択してください。",
+      "remedy": "ディレクトリから個人または会社を選択します。"
+    },
+    "holderInactive": {
+      "message": "所有者は、この組織の活動的な個人または会社である必要があります。",
+      "remedy": "アクティブな個人または会社を選択するか、ディレクトリ内で再アクティブ化してください。"
+    },
+    "idempotencyConflict": {
+      "message": "{subject, select, round {このリクエスト キーは、別の資金調達ラウンドの変更にすでに使用されています。} reversal {この要求キーは別の取り消しにすでに使用されています。} issuance {この要求キーは別の発行にすでに使用されています。} event {この要求キーは別のイベントですでに使用されています。} action {このリクエスト キーは、別の株式アクションにすでに使用されています。} election {この要求キーはすでに別の選択に使用されています。} other {この要求キーは別の要求ですでに使用されています。}}",
+      "remedy": "新しいリクエストキーを使用して再試行してください。"
+    },
+    "auditUnwritten": {
+      "message": "監査レコードは書き込まれませんでした。変更は保存されませんでした。",
+      "remedy": "変更を再試行してください。"
+    },
+    "reasonRequired": {
+      "message": "{subject, select, classAmendment {クラス修正のための {min} から {max} 文字の理由を記録します。} split {{min} ～ {max} 文字の分割の理由を記録します。} reserveChange {予約変更の {min} から {max} 文字の理由を記録します。} mfnElection {MFN 選択の {min} から {max} 文字の理由を記録します。} mfnReversal {MFN 選択取り消しの {min} から {max} 文字の理由を記録します。} roundAmendment {資金調達ラウンド修正の {min} から {max} 文字の理由を記録します。} roundVoid {資金調達ラウンドが無効になる {min} ～ {max} 文字の理由を記録します。} accountPolicy {アカウント ポリシー バージョンの {min} ～ {max} 文字の理由を記録します。} forfeit {{min} ～ {max} 文字の没収の理由を記録します。} expire {{min} ～ {max} 文字の有効期限切れの理由を記録します。} cancel {{min} ～ {max} 文字のキャンセル理由を記録します。} repurchase {{min} ～ {max} 文字の再購入の理由を記録します。} void {{min} ～ {max} 文字が空白になった理由を記録します。} reverse {{min} ～ {max} 文字の反転の理由を記録します。} withdrawal {アクションを取り消すための {min} から {max} 文字の理由を記録します。} other {{min} から {max} 文字の変更の理由を記録します。}}",
+      "remedy": "理由 (承認した理事会決議など) を説明して、再度送信してください。"
+    },
+    "preMoneyBasisTooShort": {
+      "message": "投資前評価額の算定根拠を{min}～{max}文字で記入してください。",
+      "remedy": "「{field}」に、株式プールの増加や評価額に含めた転換などの算定根拠を記入するか、空欄にしてください。"
+    },
+    "fxRateMissing": {
+      "message": "{date} 以前には、{from} から {to} への為替レートが記録されていません。",
+      "remedy": "{date} の {from}/{to} スポット レートを記録して (セットアップ → 為替レート)、再試行してください。"
+    },
+    "fxRateUnresolved": {
+      "message": "{subject, select, conversion {{from} から {to} への変換レートは変換用に解決されませんでした。} model {モデルの {from} から {to} への交換レートは解決されませんでした。} other {{from} から {to} への為替レートは計算用に解決されませんでした。}}",
+      "remedy": "{date} の {from}/{to} スポット レートを記録して (セットアップ → 為替レート)、再試行してください。"
+    },
+    "decimalInvalid": {
+      "message": "「{label}」は単純な 10 進数でなければなりません。",
+      "remedy": "「{label}」を、{example} のように、オプションの小数点を含む数字として入力します。"
+    },
+    "decimalPrecision": {
+      "message": "「{label}」の小数部が{places}桁を超えています。",
+      "remedy": "「{label}」は小数点以下{places}桁以内で入力してください。"
+    },
+    "valueMissing": {
+      "message": "「{label}」が必要です。",
+      "remedy": "続行する前に「{label}」を記録します。"
+    },
+    "sharesInvalid": {
+      "message": "「{label}」は整数のシェア数である必要があります。",
+      "remedy": "シェアの整数として「{label}」を入力します。"
+    },
+    "dateInvalid": {
+      "message": "「{label}」には有効な日付が必要です。",
+      "remedy": "「{label}」に有効な日付を選択してください。"
+    },
+    "textInvalid": {
+      "message": "「{label}」は最大 {max} 文字で必須です。",
+      "remedy": "「{label}」と入力します。"
+    },
+    "accountPolicyIncomplete": {
+      "message": "{date} から適用されている資本勘定ポリシーは、「{account}」をマップしません。",
+      "remedy": "「{account}」をマップする株式口座ポリシーのバージョンを追加します。これは、取引日以前に有効になります ([設定] → [株式口座])。"
+    },
+    "accountPolicyMissing": {
+      "message": "{date}にこの法人へ適用される資本科目方針がありません。",
+      "remedy": "設定 → 資本科目で、この法人の取引日以前から有効な科目方針を追加してください。"
+    },
+    "fxAccountMissing": {
+      "message": "実現された FX 損益勘定が設定されていません。",
+      "remedy": "[設定] → [会社と会計] → [制御口座] で実現した FX 損益口座をマッピングしてから、再試行してください。"
+    },
+    "considerationAccountMissing": {
+      "message": "検討が解決されるアカウントを選択してください。",
+      "remedy": "「{field}」で現金を受け取った、または現金を支払った銀行口座を選択します。"
+    },
+    "considerationAccountInvalid": {
+      "message": "対価口座は、有効な現金口座または銀行転記口座である必要があります。",
+      "remedy": "「{field}」で有効な現金または銀行口座を選択します。売掛金、前払い、在庫、および引当金の口座では、現金の受け取りや支払いができません。"
+    },
+    "postingRefused": {
+      "message": "元帳は、{date} ({reason}) の日付の資本エントリを拒否しました。",
+      "remedy": "元帳の拒否を解決して (たとえば、期間クローズを通じて期間を再度開くか、アカウントを再アクティブ化します)、再試行してください。"
+    },
+    "postingPeriodClosed": {
+      "message": "{date} の日付の株式エントリは {period} に分類され、転記は終了しています。",
+      "remedy": "期間終了を通じて {closing} の制御された再オープンを要求するか、オープン期間内の日付にトランザクションを記録します。"
+    },
+    "bookMissing": {
+      "message": "組織には、総勘定元帳に転記する有効な主要帳簿がありません。",
+      "remedy": "[会社設定] → [会計帳簿] で主会計帳簿を有効にします。"
+    },
+    "periodMissing": {
+      "message": "{date}を含む会計期間がありません。",
+      "remedy": "設定 → 期間締め → 会計期間で、{date}を含む会計年度の期間を生成してから再試行してください。"
+    },
+    "entryUnbalanced": {
+      "message": "{date} の資本エントリーの残高が一致していません。",
+      "remedy": "金額を見直して再試行してください。"
+    },
+    "entryUnknown": {
+      "message": "取り消すエントリは、この組織の株式エントリではありません。",
+      "remedy": "レコードをリロードして、再試行してください。"
+    },
+    "entryNotPosted": {
+      "message": "エントリ {entry} はポストされたエントリではないため、取り消すことはできません。",
+      "remedy": "レコードを再ロードします。すでに逆転している可能性があります。"
+    },
+    "notSaved": {
+      "message": "{record, select, round {資金調達ラウンドは保存されませんでした。} roundAmendment {資金調達ラウンドの修正は保存されませんでした。} roundVoid {ファイナンス ラウンドの無効は保存されませんでした。} shareClass {共有クラスが保存されませんでした。} classAmendment {クラス修正は保存されませんでした。} split {分割は保存されませんでした。} plan {計画は保存されませんでした。} reserveChange {予約変更は保存されませんでした。} security {セキュリティは保存されませんでした。} event {イベントは保存されませんでした。} election {選択は保存されませんでした。} reversal {取消は保存されませんでした。} accountPolicy {ポリシーのバージョンが保存されませんでした。} compensationRun {補正実行は保存されませんでした。} interestRun {関心のある実行は保存されませんでした。} request {資本アクションは保存されませんでした。} other {変更は保存されませんでした。}}",
+      "remedy": "再試行してください。"
+    },
+    "notStoredCompletely": {
+      "message": "{record, select, compensationLines {補正実行行が完全に格納されていませんでした。何も救われなかった。} releaseLines {制限付き在庫リリースは完全には保管されていませんでした。何も救われなかった。} interestLines {対象の実行行が完全には格納されませんでした。何も救われなかった。} positions {キャップ テーブルの位置が完全には保存されていませんでした。何も救われなかった。} vesting {権利確定トランシェが完全に保管されていませんでした。何も救われなかった。} other {レコードは完全には保存されませんでした。何も救われなかった。}}",
+      "remedy": "再試行してください。"
+    },
+    "positionsStale": {
+      "message": "キャップ テーブル位置台帳が最新ではありませんでした。何も救われなかった。",
+      "remedy": "再試行してください。"
+    },
+    "issuanceEntryUnknown": {
+      "message": "{security} の発行エントリはそのプリンシパルを識別しません。",
+      "remedy": "ジャーナル内の機器の発行エントリを確認します。 SAFE または転換社債は、その発行額が入金された元本を決済します。"
+    },
+    "interestUnreconciled": {
+      "message": "元帳には、{security} の未収利息として {carried} が含まれていますが、{accrued} は {date} まで発生しています。",
+      "remedy": "仕訳帳内の転換社債の利息エントリを確認します。未払利息は利息の実行と決済によってのみ計上されます。"
+    },
+    "eventKindMissing": {
+      "message": "セキュリティに何が起こったかを選択してください。",
+      "remedy": "イベントの種類を選択してください。"
+    },
+    "eventNotApplicable": {
+      "message": "{event, select, exercise {{kind, select, share {行使を株券に記録することはできません。} option {オプションではエクササイズを記録できません。} rsu {演習を RSU に記録できません。} warrant {行使を令状に記録することはできません。} safe {演習を SAFE に記録できません。} note {エクササイズを兌換紙幣に記録することはできません。} other {この証券では演習を記録できません。}}} settle {{kind, select, share {株券に決済を記録できません。} option {オプションに決済を記録できません。} rsu {決済を RSU に記録できません。} warrant {和解を令状に記録できません。} safe {決済を SAFE に記録できません。} note {決済は転換社債に記録できません。} other {この証券では決済を記録できません。}}} forfeit {{kind, select, share {株券に没収を記録することはできません。} option {権利喪失はオプションに記録できません。} rsu {没収は RSU に記録できません。} warrant {没収は令状に記録できません。} safe {没収は SAFE に記録できません。} note {没収は兌換紙幣には記録できません。} other {この証券では没収を記録できません。}}} expire {{kind, select, share {株券に有効期限を記録できません。} option {オプションに有効期限を記録できません。} rsu {有効期限を RSU に記録できません。} warrant {令状に有効期限を記録することはできません。} safe {有効期限を SAFE に記録できません。} note {有効期限を兌換紙幣に記録することはできません。} other {この証券には有効期限を記録できません。}}} cancel {{kind, select, share {株券に消却を記録することはできません。} option {オプションにキャンセルを記録できません。} rsu {キャンセルを RSU に記録できません。} warrant {キャンセルを令状に記録することはできません。} safe {キャンセルを SAFE に記録できません。} note {取消は転換社債には記録できません。} other {この証券では取消を記録できません。}}} repurchase {{kind, select, share {株券に買戻しを記録することはできません。} option {オプションに買戻しを記録できません。} rsu {再購入を RSU に記録できません。} warrant {再購入を令状に記録することはできません。} safe {再購入を SAFE に記録できません。} note {買戻しは転換社債に記録できません。} other {この証券では買い戻しを記録できません。}}} transfer {{kind, select, share {株券に譲渡を記録できません。} option {オプションに転送を記録できません。} rsu {RSU に転送を記録できません。} warrant {転送を令状に記録できません。} safe {転送を SAFE に記録できません。} note {振替は兌換紙幣に記録できません。} other {この証券では転送を記録できません。}}} convert {{kind, select, share {変換を株券に記録できません。} option {オプションに変換を記録できません。} rsu {変換を RSU に記録できません。} warrant {変換を令状に記録できません。} safe {変換を SAFE に記録できません。} note {コンバージョンは、兌換紙幣に記録できません。} other {この証券ではコンバージョンを記録できません。}}} void {{kind, select, share {株券に無効を記録することはできません。} option {オプションに void を記録できません。} rsu {RSU にボイドを記録できません。} warrant {無効を令状に記録することはできません。} safe {ボイドは SAFE に記録できません。} note {転換社債にはボイドを記録できません。} other {この有価証券にはボイドを記録できません。}}} repay {{kind, select, share {払戻金を株券に記載することはできません。} option {オプションに返済を記録できません。} rsu {返済を RSU に記録できません。} warrant {返済を令状に記録することはできません。} safe {返済を SAFE に記録できません。} note {返済額を転換社債に記録することはできません。} other {この証券には返済を記録できません。}}} reverse {{kind, select, share {取り消しを株券に記録することはできません。} option {オプションに取消を記録できません。} rsu {反転を RSU に記録できません。} warrant {取消は令状に記録できません。} safe {反転を SAFE に記録できません。} note {転換は転換社債に記録できません。} other {この証券では反転を記録できません。}}} election_83b {{kind, select, share {83(b) の選挙は株券に記録できません。} option {83(b) の選択をオプションに記録できません。} rsu {83(b) 選択を RSU に記録できません。} warrant {83(b) の選挙は令状に記録できません。} safe {83(b) 選択を SAFE に記録できません。} note {83(b) の選挙は、兌換紙幣に記録できません。} other {この証券には 83(b) の選択を記録できません。}}} other {{kind, select, share {このイベントは共有証明書に記録できません。} option {このイベントはオプションに記録できません。} rsu {このイベントは RSU に記録できません。} warrant {このイベントは令状に記録できません。} safe {このイベントは SAFE に記録できません。} note {このイベントは兌換紙幣に記録できません。} other {このイベントはこの証券には記録できません。}}}}",
+      "remedy": "このセキュリティに適用するイベントを選択してください。"
+    },
+    "eventSecurityVoid": {
+      "message": "セキュリティ {security} は無効です。",
+      "remedy": "無効なセキュリティはそれ以上のイベントを受け取りません。立っている証券にイベントを記録します。"
+    },
+    "eventBeforeIssue": {
+      "message": "イベントは発行日 {issueDate} より前に発生することはできません。",
+      "remedy": "{issueDate} 以降のイベントの日付。"
+    },
+    "eventQuantityNotPositive": {
+      "message": "数量は少なくとも 1 株である必要があります。",
+      "remedy": "「{field}」の下に少なくとも 1 つの数量を入力してください。"
+    },
+    "convertibleNotOutstanding": {
+      "message": "{status, select, outstanding {セキュリティ {security} は、{date} の時点で未解決です。} exercised {セキュリティ {security} は {date} から適用されます。} settled {セキュリティ {security} は {date} で解決されました。} forfeited {セキュリティ {security} は、{date} 時点で失効します。} expired {セキュリティ {security} は、{date} の時点で有効期限が切れています。} cancelled {セキュリティ {security} は、{date} でキャンセルされました。} repurchased {セキュリティ {security} は、{date} として再購入されました。} transferred {セキュリティ {security} は {date} として転送されます。} converted {セキュリティ {security} は {date} として変換されます。} void {セキュリティ {security} は、{date} 時点では無効です。} repaid {セキュリティ {security} は、{date} の時点で返済されます。} not_issued {セキュリティ {security} は、{date} の時点ではまだ発行されていません。} other {セキュリティ {security} は、{date} 以降、未処理ではなくなりました。}}",
+      "remedy": "未払いの SAFE または転換社債にのみ決済を記録します。誤って記録された場合は、最初に以前の決済を取り消します。"
+    },
+    "exerciseAfterExpiry": {
+      "message": "セキュリティ {security} は {date} で期限切れになりました。",
+      "remedy": "代わりに有効期限を記録します。"
+    },
+    "nothingVestedUntilNext": {
+      "message": "{event, select, exercise {{date} によって権利が付与された {security} のすべての単位はすでに行使されているか、未払いではなくなっています。次のユニットは {nextVest} に権利を与えられます。} other {{date} によって権利が付与された {security} のすべての単位はすでに決済されているか、未払いではありません。次のユニットは {nextVest} に権利を与えられます。}}",
+      "remedy": "次のユニットの権利確定時に、{nextVest} 以降に「{field}」を設定します。"
+    },
+    "nothingVestedYet": {
+      "message": "{date}時点では{security}の権利はまだ確定していません。最初の権利確定日は{nextVest}です。",
+      "remedy": "「{field}」を、最初の権利が確定する{nextVest}以降に設定してください。"
+    },
+    "nothingVestedEver": {
+      "message": "{event, select, exercise {{security} のユニットは {date} に権利確定しておらず、未行使であり、スケジュールに従ってそれ以上のユニットは権利確定していません。} other {{security} のユニットは {date} に対して権利確定および未決済ではなく、そのスケジュールに従って権利確定するさらなるユニットはありません。}}",
+      "remedy": "特典の履歴を確認してください。すべての権利確定済みユニットはすでに行使、決済、没収、または期限切れになっています。"
+    },
+    "exerciseExceedsOutstanding": {
+      "message": "{ceilingCount, plural, one {{date} では {ceiling} ユニットのみが未処理です。} other {{date} では {ceiling} ユニットのみが未処理です。}}",
+      "remedy": "{ceilingCount, plural, one {{ceiling} 単位以上の演習は行わないでください。} other {{ceiling} 単位を超えて練習しないでください。}}"
+    },
+    "exerciseExceedsVested": {
+      "message": "{date}時点で権利確定済みかつ{event, select, exercise {未行使} other {未決済}}の数量は{ceiling}単位のみです。",
+      "remedy": "記録する数量を{ceiling}単位以下にしてください。権利未確定の単位は{event, select, exercise {行使} other {決済}}できません。"
+    },
+    "earlyExerciseTermsMissing": {
+      "message": "助成金 {security} には、会社が権利確定していない株式を買い戻す価格が記録されていません。",
+      "remedy": "{ceilingCount, plural, one {{ceiling} 既得ユニット以上の演習は行わないでください。} other {{ceiling} 既得ユニットを超えて行使しないでください。}}"
+    },
+    "exerciseBelowPar": {
+      "message": "株式は額面以下で発行されます。",
+      "remedy": "行使価格とクラスの額面金額を確認します。"
+    },
+    "eventExceedsHolding": {
+      "message": "{ceilingCount, plural, one {{event, select, forfeit {{ceiling} ユニットのみが {date} で未権利です。} expire {{ceiling} ユニットのみが {date} に付与されており、行使されていません。} other {{date} では {ceiling} ユニットのみが未処理です。}}} other {{event, select, forfeit {{ceiling} ユニットのみが {date} で権利確定されていません。} expire {{ceiling} ユニットのみが {date} に付与されており、行使されていません。} other {{date} では {ceiling} ユニットのみが未処理です。}}}}",
+      "remedy": "{ceilingCount, plural, one {{ceiling} 単位までを記録してください。} other {{ceiling} ユニット以下を記録してください。}}"
+    },
+    "repurchaseExceedsOutstanding": {
+      "message": "{ceilingCount, plural, one {{date} では {ceiling} シェアのみが未処理です。} other {{date} では {ceiling} 株のみが発行されています。}}",
+      "remedy": "{ceilingCount, plural, one {{ceiling} 株を超えては買い戻しません。} other {{ceiling} 株を超えないように買い戻します。}}"
+    },
+    "restrictedRepurchaseMixed": {
+      "message": "{ceilingCount, plural, one {{ceiling} の株式は {date} に権利確定していません。会社は助成金の条件に基づいて未権利の株式を買い戻します。} other {{ceiling} の株式は {date} で権利確定されていません。会社は助成金の条件に基づいて未権利の株式を買い戻します。}}",
+      "remedy": "{ceilingCount, plural, one {最初に {ceiling} 未確定株式を買い戻してから、確定株式の個別の買い戻しを記録します。} other {最初に {ceiling} 未確定株式を買い戻してから、確定株式の個別の買い戻しを記録します。}}"
+    },
+    "restrictedRepurchaseTermsMissing": {
+      "message": "助成金 {grant} には、権利確定していない株式の買戻し価格が記録されていません。",
+      "remedy": "未確定株式を買い戻す前に、付与条件に「{field}」を記録します。"
+    },
+    "repurchaseFairValueMissing": {
+      "message": "補助金は、原価と公正市場価格の低い方で未確定株式を買い戻すため、買い戻し日の公正市場価格が必要です。",
+      "remedy": "再購入日には「{field}」と入力します。"
+    },
+    "repurchaseFairValueNegative": {
+      "message": "「{field}」に負の値を指定することはできません。",
+      "remedy": "「{field}」を0以上入力してください。"
+    },
+    "repurchasePriceFixed": {
+      "message": "補助金の価格は、今回の買い戻し価格は {amount} です。",
+      "remedy": "「{field}」をクリアします。買い戻し価格は補助金の条件に従います。"
+    },
+    "earlyExerciseDepositUnreconciled": {
+      "message": "{security} の早期行使デポジットが元帳にありません。",
+      "remedy": "ジャーナルの演習エントリーを確認してください。デポジットは権利行使によって入金され、補償実行によって解放されます。"
+    },
+    "repurchaseAmountNegative": {
+      "message": "「{field}」に負の値を指定することはできません。",
+      "remedy": "「{field}」に株式に対して支払った現金を入力します。"
+    },
+    "transfereeIsHolder": {
+      "message": "譲受人はすでに所有者です。",
+      "remedy": "「{field}」で別のホルダーを選択します。"
+    },
+    "transferExceedsVested": {
+      "message": "{ceilingCount, plural, one {{date} では、{ceiling} 取得済みユニットのみを転送できます。} other {{date} では、{ceiling} 権利確定ユニットのみを転送できます。}}",
+      "remedy": "{ceilingCount, plural, one {{ceiling} ユニットまでを転送してください。} other {{ceiling} ユニット以下を転送してください。}}"
+    },
+    "conversionNotPreferred": {
+      "message": "優先株のみが普通株に変換されます。",
+      "remedy": "優先共有証明書を選択してください。"
+    },
+    "conversionTargetMissing": {
+      "message": "共有が変換される共通クラスを選択します。",
+      "remedy": "法人の共通クラスを選択してください。"
+    },
+    "conversionClassMismatch": {
+      "message": "クラス {shareClass} は {target} に変換されます。",
+      "remedy": "クラスの変換クラスに変換するか、最初に変換クラスを修正してください。"
+    },
+    "conversionClassMismatchUnnamed": {
+      "message": "クラス {shareClass} は別の共通クラスに変換されます。",
+      "remedy": "クラスの変換クラスに変換するか、最初に変換クラスを修正してください。"
+    },
+    "conversionClassNotEffective": {
+      "message": "クラス {shareClass} は、{date} まで有効ではありません。",
+      "remedy": "変換の日付は {date} 以降です。"
+    },
+    "conversionExceedsHolding": {
+      "message": "{ceilingCount, plural, one {{date} では {ceiling} 共有のみを変換できます。} other {{date} では {ceiling} 共有のみを変換できます。}}",
+      "remedy": "{ceilingCount, plural, one {{ceiling} シェアを超えて変換しないでください。} other {{ceiling} シェアを超えて変換しないでください。}}"
+    },
+    "conversionBelowOneCommon": {
+      "message": "株式は 1 未満の普通株式に変換されます。",
+      "remedy": "さらに多くの共有を変換します。"
+    },
+    "conversionRoundMissing": {
+      "message": "商品が変換される資金調達ラウンドを選択します。",
+      "remedy": "法人の資金調達ラウンドを選択してください。"
+    },
+    "conversionOffClosingDate": {
+      "message": "資金調達ラウンド {round} は {date} で終了しました。金融商品はその決済日に換算されます。",
+      "remedy": "{date} での変換の日付。"
+    },
+    "conversionTermsVoid": {
+      "message": "{security}の{electedOn}付の最恵国条項の選択は{source}の条件を採用していますが、その証券は{voidedOn}付で無効化されています。",
+      "remedy": "証券 → {security} → 最恵国条項 → 選択の取消で、{closedOn}以前の日付を指定して選択を取り消してください。その後、有効な条件で{security}を再度転換してください。"
+    },
+    "conversionBelowOneShare": {
+      "message": "商品は 1 株未満に変換されます。",
+      "remedy": "資金調達ラウンド価格と商品条件を確認してください。"
+    },
+    "convertingAmountUnreconciled": {
+      "message": "{security} の換算金額が元帳の金額と一致しません。",
+      "remedy": "仕訳帳の金融商品の発行と利息のエントリを確認します。"
+    },
+    "conversionBelowPar": {
+      "message": "転換により額面以下の株式が発行されます。",
+      "remedy": "融資ラウンド価格とクラスの額面金額を確認します。"
+    },
+    "repaymentAmountMissing": {
+      "message": "返済額はゼロより大きくなければなりません。",
+      "remedy": "所有者に支払われる現金を「{field}」に入力します。"
+    },
+    "safeRepaymentAmount": {
+      "message": "SAFE は、購入金額 {amount} で返済されます。",
+      "remedy": "購入金額で返済を記録します。決済差額を別の仕訳として記録します。"
+    },
+    "voidMfnSource": {
+      "message": "{safe} は、{electedOn} の MFN 選出により {security} の条件を採用しました。 {security} を無効にすると、選挙の命名用語が誤って入力されたままになります。",
+      "remedy": "最初に {safe} の MFN 選択を取り消して (証券 → {safe} → MFN 条件 → 選択を取り消し)、次に {security} を無効にします。"
+    },
+    "voidMfnSourceConverted": {
+      "message": "{safe} は、{electedOn} の MFN 選出により {security} の条件を採用しました。 {security} を無効にすると、選挙の命名用語が誤って入力されたままになります。",
+      "remedy": "{safe} の変換によって生成された無効証明書 {certificate} の日付は、{convertedOn} (資金調達ラウンドの終了日) です。 {safe} での MFN の選択を取り消します (証券 → {safe} → MFN 条件 → 選択の取り消し)。次に、{security} を無効にして、{safe} を再度変換します。"
+    },
+    "voidHasActivity": {
+      "message": "セキュリティ {security} はアクティビティを記録しているため、無効にすることはできません。",
+      "remedy": "最初に生成されたイベントの証明書を無効にするか、他のイベントを取り消すか、代わりにキャンセルを記録してください。"
+    },
+    "reversalTargetUnknown": {
+      "message": "この証券には取り消すイベントが存在しません。",
+      "remedy": "セキュリティの履歴からイベントを選択してください。"
+    },
+    "eventFinal": {
+      "message": "{event, select, void {void を元に戻すことはできません。} other {取り消しを取り消すことはできません。}}",
+      "remedy": "ボイドと反転は最終的なものです。それでも必要な場合は、セキュリティまたはイベントを再度記録します。"
+    },
+    "eventNotReversible": {
+      "message": "{event, select, exercise {演習を元に戻すことはできません。} settle {決済を取り消すことはできません。} forfeit {没収を取り消すことはできません。} expire {有効期限を取り消すことはできません。} cancel {キャンセルを取り消すことはできません。} repurchase {買い戻しは取り消しできません。} transfer {転送を元に戻すことはできません。} convert {変換を元に戻すことはできません。} void {void を元に戻すことはできません。} repay {返済を取り消すことはできません。} reverse {取り消しを取り消すことはできません。} election_83b {83(b) の選択を取り消すことはできません。} other {このイベントを元に戻すことはできません。}}",
+      "remedy": "イベントが代わりに生成した証明書を無効にします。それはイベントを元に戻します。"
+    },
+    "eventAlreadyReversed": {
+      "message": "イベントはすでに取り消されています。",
+      "remedy": "セキュリティの履歴を再ロードします。"
+    },
+    "reversalBeforeEvent": {
+      "message": "反転は、{date} 日付の反転イベントよりも前に行うことはできません。",
+      "remedy": "{date} 以降の取り消しの日付。"
+    },
+    "reversalHasDependents": {
+      "message": "{event, select, forfeit {{countCount, plural, one {{security} に関するその後のアクティビティは、{date} の没収に依存しています: {count} 以降のイベント、{latestOn} に関する最新のイベント。} other {{security} に関するその後のアクティビティは、{date}: {count} 以降のイベント、{latestOn} に関する最新のイベントの没収に依存しています。}}} expire {{countCount, plural, one {{security} のその後のアクティビティは、{date}: {count} 以降のイベント ({latestOn} の最新) の有効期限に依存します。} other {{security} のその後のアクティビティは、{date}: {count} 以降のイベント、{latestOn} の最新のイベントの有効期限に依存します。}}} cancel {{countCount, plural, one {{security} のその後のアクティビティは、{date}: {count} 以降のイベント ({latestOn} の最新) のキャンセルに依存しています。} other {{security} のその後のアクティビティは、{date}: {count} 以降のイベント ({latestOn} の最新) のキャンセルに依存しています。}}} repurchase {{countCount, plural, one {{security} のその後のアクティビティは、{date} の再購入に依存しています: {count} 以降のイベント、{latestOn} の最新。} other {{security} のその後のアクティビティは、{date} の再購入に依存しています: {count} 以降のイベント、{latestOn} の最新。}}} repay {{countCount, plural, one {{security} のその後のアクティビティは、{date} の返済に依存しています: {count} 以降のイベント、{latestOn} の最新。} other {{security} のその後のアクティビティは、{date} の返済に依存しています。{count} 以降のイベント、{latestOn} の最新のイベント。}}} election_83b {{countCount, plural, one {{security} に関するその後のアクティビティは、{date}: {count} 以降のイベント、{latestOn} に関する最新の 83(b) の選択に依存します。} other {{security} に関するその後のアクティビティは、{date}: {count} 以降のイベント、{latestOn} に関する最新の 83(b) の選択に依存します。}}} other {{countCount, plural, one {{security} のその後のアクティビティは、{date} のイベ​​ントに依存しています: {count} 以降のイベント、{latestOn} の最新のイベント。} other {{security} のその後のアクティビティは、{date}: {count} 以降のイベント、{latestOn} の最新のイベントに依存しています。}}}}",
+      "remedy": "{latest, select, exercise {{event, select, forfeit {{latestOn} の実行から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} の実行から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} の実行から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} の実行から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} の実行から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} の実行から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} の実行から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このイベントを元に戻します。}}} settle {{event, select, forfeit {{latestOn} の決済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} の決済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} の決済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} の決済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} の決済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} の決済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} の決済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、このイベントを元に戻します。}}} forfeit {{event, select, forfeit {{latestOn} の没収から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} の失効から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} の失効から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} の失効から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} の失効から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} の失効から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} の失効から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、このイベントを元に戻します。}}} expire {{event, select, forfeit {{latestOn} の期限切れから始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} の期限切れから始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} の期限切れから始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} の期限切れから始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} の期限切れから始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} の期限切れから始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} の期限切れから始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このイベントを元に戻します。}}} cancel {{event, select, forfeit {{latestOn} のキャンセルから始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} のキャンセルから始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} のキャンセルから始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} のキャンセルから始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} のキャンセルから始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} のキャンセルから始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} のキャンセルから始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、このイベントを元に戻します。}}} repurchase {{event, select, forfeit {{latestOn} の再購入から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} の再購入から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} の再購入から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} の再購入から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} の再購入から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} の再購入から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} の再購入から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、このイベントを元に戻します。}}} transfer {{event, select, forfeit {{latestOn} の転送から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} の転送から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} の転送から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} の転送から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} の転送から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} の転送から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} の転送から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このイベントを元に戻します。}}} convert {{event, select, forfeit {{latestOn} の変換から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} の変換から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} の変換から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} の変換から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} の変換から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} の変換から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} の変換から始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このイベントを元に戻します。}}} repay {{event, select, forfeit {{latestOn} の返済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} の返済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} の返済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} の返済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} の返済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} の返済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} の返済から始めて、後のアクティビティを最初に取り消します。それぞれを取り消すか、生成した証明書を無効にします。その後、このイベントを元に戻します。}}} election_83b {{event, select, forfeit {{latestOn} の 83(b) 選択から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} の 83(b) 選択から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} の 83(b) 選択から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} の 83(b) 選択から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} の 83(b) 選択から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} の 83(b) 選択から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを取り消すか、生成された証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} の 83(b) 選択から始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このイベントを元に戻します。}}} other {{event, select, forfeit {{latestOn} のイベ​​ントから始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この没収を取り消します。} expire {{latestOn} のイベ​​ントから始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この有効期限を取り消します。} cancel {{latestOn} のイベ​​ントから始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このキャンセルを取り消します。} repurchase {{latestOn} のイベ​​ントから始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この買い戻しを取り消します。} repay {{latestOn} のイベ​​ントから始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この返済を取り消します。} election_83b {{latestOn} のイベ​​ントから始めて、後のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、この 83(b) の選択を取り消します。} other {{latestOn} のイベ​​ントから始めて、後のアクティビティを最初に取り消し、最新のアクティビティを最初に取り消します。それぞれを元に戻すか、生成された証明書を無効にします。その後、このイベントを元に戻します。}}}}"
+    },
+    "election83bNotApplicable": {
+      "message": "セキュリティ {security} には権利確定スケジュールがないため、83(b) の選択は適用されません。",
+      "remedy": "制限付き株式のみに関するレコード 83(b) の選挙。"
+    },
+    "election83bWindowClosed": {
+      "message": "{security} の 83(b) ウィンドウが {deadline} で閉じられました。",
+      "remedy": "選挙は {issueDate} から 30 日以内に提出する必要があります。 {deadline} 以前に提出された選挙のみを記録します。"
+    },
+    "election83bRecorded": {
+      "message": "{date} に提出された 83(b) 選挙はすでに記録されています。",
+      "remedy": "日付が誤って入力された場合は、記録された選択を最初に取り消します。"
+    },
+    "mfnNotApplicable": {
+      "message": "セキュリティ {security} には最恵国待遇という用語はありません。",
+      "remedy": "MFN 条件で発行された SAFE にのみ MFN 選挙を記録します。"
+    },
+    "mfnElectionClosed": {
+      "message": "{status, select, outstanding {セキュリティ {security} は、{date} の時点で未解決です。その条件はもはや変更できません。} exercised {セキュリティ {security} は {date} から適用されます。その条件はもはや変更できません。} settled {セキュリティ {security} は {date} で解決されました。その条件はもはや変更できません。} forfeited {セキュリティ {security} は、{date} の時点で失効します。その条件はもはや変更できません。} expired {セキュリティ {security} は、{date} の時点で期限切れです。その条件はもはや変更できません。} cancelled {セキュリティ {security} は {date} 時点でキャンセルされています。その条件はもはや変更できません。} repurchased {セキュリティ {security} は {date} として再購入されました。その条件はもはや変更できません。} transferred {セキュリティ {security} は {date} として転送されます。その条件はもはや変更できません。} converted {セキュリティ {security} は {date} として変換されます。その条件はもはや変更できません。} void {セキュリティ {security} は、{date} 時点では無効です。その条件はもはや変更できません。} repaid {セキュリティ {security} は {date} の時点で返済されます。その条件はもはや変更できません。} not_issued {セキュリティ {security} は、{date} の時点ではまだ発行されていません。その条件はもはや変更できません。} other {セキュリティ {security} は、{date} の時点で未処理ではなくなりました。その条件はもはや変更できません。}}",
+      "remedy": "SAFE が未処理の間のみ選択を記録します。最初に生成した証明書を無効にして変換を修正します。"
+    },
+    "mfnReversalClosedConverted": {
+      "message": "{status, select, outstanding {セキュリティ {security} は、{date} の時点で未解決です。その条件はもはや変更できません。} exercised {セキュリティ {security} は {date} から適用されます。その条件はもはや変更できません。} settled {セキュリティ {security} は {date} で解決されました。その条件はもはや変更できません。} forfeited {セキュリティ {security} は、{date} の時点で失効します。その条件はもはや変更できません。} expired {セキュリティ {security} は、{date} の時点で期限切れです。その条件はもはや変更できません。} cancelled {セキュリティ {security} は {date} 時点でキャンセルされています。その条件はもはや変更できません。} repurchased {セキュリティ {security} は {date} として再購入されました。その条件はもはや変更できません。} transferred {セキュリティ {security} は {date} として転送されます。その条件はもはや変更できません。} converted {セキュリティ {security} は {date} として変換されます。その条件はもはや変更できません。} void {セキュリティ {security} は、{date} 時点では無効です。その条件はもはや変更できません。} repaid {セキュリティ {security} は {date} の時点で返済されます。その条件はもはや変更できません。} not_issued {セキュリティ {security} は、{date} の時点ではまだ発行されていません。その条件はもはや変更できません。} other {セキュリティ {security} は、{date} の時点で未処理ではなくなりました。その条件はもはや変更できません。}}",
+      "remedy": "変換を取り消すために、変換によって生成された {date} (資金調達ラウンドの終了日) の日付が付いた証明書 {certificate} を無効にします。次に、選択を取り消して、{security} を再度変換します。"
+    },
+    "mfnReversalClosed": {
+      "message": "{status, select, outstanding {セキュリティ {security} は、{date} の時点で未解決です。その条件はもはや変更できません。} exercised {セキュリティ {security} は {date} から適用されます。その条件はもはや変更できません。} settled {セキュリティ {security} は {date} で解決されました。その条件はもはや変更できません。} forfeited {セキュリティ {security} は、{date} の時点で失効します。その条件はもはや変更できません。} expired {セキュリティ {security} は、{date} の時点で期限切れです。その条件はもはや変更できません。} cancelled {セキュリティ {security} は {date} 時点でキャンセルされています。その条件はもはや変更できません。} repurchased {セキュリティ {security} は {date} として再購入されました。その条件はもはや変更できません。} transferred {セキュリティ {security} は {date} として転送されます。その条件はもはや変更できません。} converted {セキュリティ {security} は {date} として変換されます。その条件はもはや変更できません。} void {セキュリティ {security} は、{date} 時点では無効です。その条件はもはや変更できません。} repaid {セキュリティ {security} は {date} の時点で返済されます。その条件はもはや変更できません。} not_issued {セキュリティ {security} は、{date} の時点ではまだ発行されていません。その条件はもはや変更できません。} other {セキュリティ {security} は、{date} の時点で未処理ではなくなりました。その条件はもはや変更できません。}}",
+      "remedy": "{status, select, repaid {最初に返済を取り消してから、選択を取り消します。} other {最初にキャンセルを取り消してから、選択を取り消します。}}"
+    },
+    "mfnBackdated": {
+      "message": "{security}には{date}以降の最恵国条項の選択または取消が記録されています。",
+      "remedy": "「{field}」で{action, select, election {選択} other {取消}}の日付を{date}以降に設定してください。"
+    },
+    "mfnSourceNotConvertible": {
+      "message": "この商品は、この法人の SAFE または転換可能紙幣ではありません。",
+      "remedy": "SAFE またはこの SAFE 以降に発行された転換社債を選択してください。"
+    },
+    "mfnSourceNotLater": {
+      "message": "{source} は、{safeIssuedOn} で発行された {safe} の後ではなく、{sourceIssuedOn} で発行されました。",
+      "remedy": "この SAFE の後に発行された機器を選択してください。 MFN という用語は、それ以降の商品のみを対象としています。"
+    },
+    "mfnSourceNotYetIssued": {
+      "message": "{source} は {date} でまだ発行されていません。",
+      "remedy": "{source} 発行時は、{issuedOn} 以降に「{field}」を設定してください。"
+    },
+    "mfnSourceCurrency": {
+      "message": "{source} は {currency} ではなく、{sourceCurrency} に記載されています。",
+      "remedy": "{currency} に記載されている機器を選択してください。"
+    },
+    "mfnSourceVoid": {
+      "message": "{source} は無効です。",
+      "remedy": "スタンド型の機器を選択してください。無効な金融商品の条件が誤って入力されました。"
+    },
+    "mfnTermsAlreadyAdopted": {
+      "message": "{safe} には、{date} から {source} の条件がすでに引き継がれています。",
+      "remedy": "選択するものはありません。条件はすでに採用されています。"
+    },
+    "mfnSourceNoTerms": {
+      "message": "{source} には評価上限も割引もありません。",
+      "remedy": "SAFE にはない上限または割引、またはそれ以上の割引がある機器を選択してください。"
+    },
+    "mfnTermsNotBetter": {
+      "message": "{source} の条件は、{date} で有効な {safe} の条件よりも優れたものはありません。",
+      "remedy": "上限が低く、割引が高く、または SAFE がプレマネーである場合の変換ポストマネーの商品を選択してください。"
+    },
+    "mfnElectionUnknown": {
+      "message": "MFN 選択はこの SAFE に存在しません。",
+      "remedy": "SAFE の MFN 条件から選択を選択してください。"
+    },
+    "mfnElectionAlreadyReversed": {
+      "message": "MFN の選出はすでに取り消されています。",
+      "remedy": "SAFE の MFN 条件を再ロードします。"
+    },
+    "mfnReversalBeforeElection": {
+      "message": "{date} の日付の選択よりも前に逆転を行うことはできません。",
+      "remedy": "{date} 以降の取り消しの日付。"
+    },
+    "mfnReversalHasDependents": {
+      "message": "{security} での後の MFN 選択は {date} から記録されます。",
+      "remedy": "{date} の選択を最新のものから順に反転します。"
+    },
+    "actionRejected": {
+      "message": "このアクションは承認者によって拒否されました。",
+      "remedy": "承認者の理由を確認し、それがまだ適用される場合は、新しい要求キーを使用してアクションを再度記録します。"
+    },
+    "actionWithdrawn": {
+      "message": "このアクションは要求者によって取り消されました。",
+      "remedy": "まだ適用​​される場合は、新しい要求キーを使用してアクションを再度記録します。"
+    },
+    "actionPending": {
+      "message": "{action, select, void {{subject} のボイドはすでに承認を待っています。} reverse {{subject} の取り消しはすでに承認待ちです。} repurchase {{subject} の再購入はすでに承認を待っています。} repay {{subject} の返済はすでに承認待ちです。} cancel_convertible {{subject} のキャンセルはすでに承認待ちです。} class_amendment {{subject} のクラス修正はすでに承認待ちです。} split {{subject} の分割はすでに承認待ちです。} reserve_change {{subject} の予約変更はすでに承認待ちです。} mfn_election {{subject} の MFN 選挙はすでに承認待ちです。} mfn_reversal {{subject} の MFN 選挙の逆転はすでに承認を待っています。} compensation_run {{subject} の株式報酬実行はすでに承認待ちです。} interest_run {{subject} の転換社債金利実行はすでに承認待ちです。} account_policy {{subject} のアカウント ポリシー バージョンはすでに承認待ちです。} round_amendment {{subject} の資金調達ラウンドの修正はすでに承認待ちです。} round_void {{subject} の無効な資金調達ラウンドはすでに承認を待っています。} other {{subject} の持分法訴訟はすでに承認待ちです。}}",
+      "remedy": "承認者の決定を待つか、別の記録を行う前に保留中のリクエストを「受信箱」→「私が送信」から取り下げてください。"
+    },
+    "actionRoutingFailed": {
+      "message": "株式アクションを承認のためにルーティングできませんでした: {reason}。",
+      "remedy": "フロー内のエクイティ アクション フローを修正して (または無効にして)、アクションを再度記録します。"
+    },
+    "actionChangedWhileApplied": {
+      "message": "エクイティアクションが適用中に変更されました。",
+      "remedy": "リロードして再試行してください。"
+    },
+    "actionChangedWhileWithdrawn": {
+      "message": "株式アクションは、引き出し中に変更されました。",
+      "remedy": "受信ボックスを再ロードして、結果を確認します。"
+    },
+    "actionChangedWhileDecided": {
+      "message": "株式アクションは決定中に変更されました。",
+      "remedy": "受信トレイをリロードし、まだ保留中の場合は再度決定します。"
+    },
+    "withdrawalReasonRequired": {
+      "message": "アクションを取り消す理由を {min} ～ {max} 文字で指定します。",
+      "remedy": "アクションが適用されなくなった理由を説明し、再度アクションを撤回してください。"
+    },
+    "actionUnknown": {
+      "message": "資本アクションが存在しません。",
+      "remedy": "受信トレイをリロードします。"
+    },
+    "withdrawForbidden": {
+      "message": "エクイティアクションを取り下げることができるのは、要求者のみです。",
+      "remedy": "要求者に要求を撤回するか、フローに指定されている承認者の場合は受信トレイから拒否するよう依頼してください。"
+    },
+    "actionDecidedNoWithdrawal": {
+      "message": "{status, select, pending_approval {持分法行為は承認待ちではなく承認待ち状態であるため、取り下げることができません。} applied {持分法訴訟は適用されており、承認を待っていないため、取り下げることができません。} rejected {持分法訴訟は拒否され、承認を待っていないため、取り下げることができません。} withdrawn {持分法訴訟は撤回されており、承認を待っていないため、撤回できません。} other {持分法訴訟は承認を待っていないため決定済みであるため、撤回できません。}}",
+      "remedy": "受信ボックスを再ロードして、結果を確認します。"
+    },
+    "actionDecided": {
+      "message": "{status, select, pending_approval {持分法アクションは承認待ちではなく、承認待ちです。} applied {資本訴訟は適用されており、承認を待っていません。} rejected {資本訴訟は拒否され、承認を待っていません。} withdrawn {持分法訴訟は承認を待っておらず、取り下げられています。} other {持分法訴訟は決定されましたが、承認を待っていません。}}",
+      "remedy": "受信ボックスを再ロードして、結果を確認します。"
+    },
+    "approvalSignInRequired": {
+      "message": "株式の承認は、サインインしているユーザーによって決定される必要があります。",
+      "remedy": "サインインし、受信トレイから承認を決定します。"
+    },
+    "selfApproval": {
+      "message": "持分法訴訟の要求者は、その承認を決定できません。",
+      "remedy": "フローのゲートに指定されている別の承認者に決定を依頼します。"
+    },
+    "rejectionReasonRequired": {
+      "message": "資本訴訟を拒否した理由を記録します。",
+      "remedy": "拒否について説明するコメントを追加し、再度拒否します。"
+    },
+    "accountPolicyEntityMissing": {
+      "message": "ポリシーが適用される法人を選択してください。",
+      "remedy": "法人を選択し、ポリシー バージョンを再度保存します。"
+    },
+    "accountPolicyEffectiveDateInvalid": {
+      "message": "ポリシーが発効する日付を入力します。",
+      "remedy": "「{field}」で有効な日付を選択し、ポリシー バージョンを再度保存します。"
+    },
+    "accountPolicyAccountMissing": {
+      "message": "「{account}」のアカウントを選択します。",
+      "remedy": "「{account}」でアカウントを選択し、ポリシー バージョンを再度保存します。"
+    },
+    "accountPolicyAccountType": {
+      "message": "{kind, select, equity {「{account}」は、組織の有効な株式転記口座である必要があります。} expense {「{account}」は、組織の有効な経費転記アカウントである必要があります。} liabilityOrEquity {「{account}」は、組織の有効な負債または資本転記口座である必要があります。} liability {「{account}」は、組織のアクティブなその他の現在または長期の負債転記口座である必要があります。} other {「{account}」は、組織の承認された種類のアクティブな投稿アカウントである必要があります。}}",
+      "remedy": "{kind, select, equity {「{account}」の下でアクティブな株式転記口座を選択し、ポリシー バージョンを再度保存します。} expense {「{account}」の下で有効な経費転記アカウントを選択し、ポリシー バージョンを再度保存します。} liabilityOrEquity {「{account}」の下で有効な負債または資本転記勘定を選択し、保険契約バージョンを再度保存してください。} liability {「{account}」の下でアクティブな他の現在または長期負債転記勘定を選択し、ポリシー バージョンを再度保存します。} other {「{account}」の下で承認されたタイプのアクティブな投稿アカウントを選択し、ポリシー バージョンを再度保存します。}}"
+    },
+    "accountPolicyBeforeLatestPosting": {
+      "message": "株式エントリは {date} を通じて転記されます。投稿された履歴がアカウントを保持できるように、新しいポリシー バージョンはその日付以降に発効する必要があります。",
+      "remedy": "{date} 以降に有効となる新しいポリシー バージョンを記録し、現在の台帳を満たすようにします。"
+    },
+    "exitValueInvalid": {
+      "message": "{placesCount, plural, one {「{field}」は、小数点以下第 2 位が最大 {places} の金額である必要があります。} other {「{field}」は、小数点以下最大 {places} 桁の金額である必要があります。}}",
+      "remedy": "{example} など、金額として「{field}」を入力します。"
+    },
+    "transactionFeesInvalid": {
+      "message": "{placesCount, plural, one {「{field}」は、小数点以下第 2 位が最大 {places} の金額である必要があります。} other {「{field}」は、小数点以下最大 {places} 桁の金額である必要があります。}}",
+      "remedy": "「{field}」の下に出口から支払われる料金 ({example} など) を入力するか、空白のままにします。"
+    },
+    "transactionFeesNegative": {
+      "message": "取引手数料をマイナスにすることはできません。",
+      "remedy": "出口から支払われる料金を入力するか、空白のままにしてください。"
+    },
+    "transactionFeesExceedExit": {
+      "message": "取引手数料が終了値を超えています。",
+      "remedy": "終了値を超えない料金を入力してください。"
+    },
+    "exitValueNegative": {
+      "message": "終了値を負にすることはできません。",
+      "remedy": "株式保有者が利用できる収益を入力します。"
+    },
+    "waterfallUnsettled": {
+      "message": "優先クラスの変換選択は、この終了値で確定しません。",
+      "remedy": "クラスの設定、参加上限、年功序列を確認するか、別の終了値をモデル化してください。"
+    },
+    "roundPreMoneyNotPositive": {
+      "message": "事前金額評価はゼロより大きくなければなりません。",
+      "remedy": "事前金額評価を入力してください。"
+    },
+    "roundInvestmentNotPositive": {
+      "message": "投資はゼロより大きくなければなりません。",
+      "remedy": "新たに調達した資金を入力してください。"
+    },
+    "roundTargetPoolOutOfRange": {
+      "message": "ターゲット プールは {min} 以上、{max} 未満である必要があります。",
+      "remedy": "融資後のラウンドプール目標をパーセンテージで入力します。"
+    },
+    "roundNoShares": {
+      "message": "同社には資金調達ラウンドの価格設定に適した株式がありません。",
+      "remedy": "資金調達ラウンドをモデル化する前に、会社の発行済み株式を記録します。"
+    },
+    "roundUnpriceable": {
+      "message": "これらの条件を満たすプラスの価格はありません。変換商品とプールのチャージは、マネー前の評価全体を主張します。",
+      "remedy": "プレマネー評価を引き上げるか、プール目標を引き下げるか、換算商品の上限と割引を見直してください。"
+    },
+    "roundInvestmentBelowOneShare": {
+      "message": "投資は資金調達ラウンド価格で 1 株未満を購入します。",
+      "remedy": "投資額を増やすか、事前評価額を下げてください。"
+    },
+    "runPeriodNotEnded": {
+      "message": "{run, select, compensation {株式報酬} interest {転換社債利息} other {計上}}の{date}までの処理は会計期間{period}に属します。この期間の終了日{endsOn}は、本日（{today}）より後です。",
+      "remedy": "本日（{today}）までに終了した会計期間の末日を選択してください。処理画面では未計上額がある次の期間が提示され、前回処理後に記録された金額もその期間で計上されます。"
+    },
+    "runPeriodClosed": {
+      "message": "{run, select, compensation {株式報酬} interest {転換社債利息} other {計上}}の{date}までの処理は会計期間{period}に属します。この期間は締め済みのため計上できません。",
+      "remedy": "未計上額がある未締め期間の末日を選択するか、期間締め画面から{closing}の管理された再開を申請してください。"
+    },
+    "compensationRunBackdated": {
+      "message": "{last}までの株式報酬処理は計上済みです。",
+      "remedy": "{last}より後の日付を選択してください。それ以前の期間は処理済みです。"
+    },
+    "interestRunBackdated": {
+      "message": "{last} を通じて実行される転換社債の利息はすでに転記されています。",
+      "remedy": "{last} 以降の日付まで実行します。それ以前の期間はすでに発生しています。"
+    },
+    "compensationNothingDue": {
+      "message": "{date} を通じて支払われるべき株式報酬はありません。",
+      "remedy": "この期間では何も変わりません。賞が確定または付与されると、その後の期間が終了します。"
+    },
+    "compensationNothingDueSince": {
+      "message": "{last} の実行を超えると、{date} を通じて株式報酬は支払われません。",
+      "remedy": "この期間では何も変わりません。賞が確定または付与されると、その後の期間が終了します。"
+    },
+    "interestNothingDue": {
+      "message": "{date} を通じて支払われる転換社債の利息はありません。",
+      "remedy": "この期間中に利息が発生する転換社債はありません。転換社債が未払いである間、後の期間の終了まで実行されます。"
+    },
+    "interestNothingDueSince": {
+      "message": "{last}までの処理分を超えて、{date}までに計上すべき転換社債利息はありません。",
+      "remedy": "この期間には追加利息が発生していません。転換社債が未決済である間は、後の期間末を選択してください。"
+    },
+    "interestBelowAccrued": {
+      "message": "{security} ～ {date} の利息は、すでに発生した利息を下回っています。",
+      "remedy": "仕訳帳での転換社債の利息入力と決済を確認します。未収利息は、転換社債が無効になった場合にのみ減額されます。"
+    },
+    "noteDayCountMissing": {
+      "message": "兌換紙幣には日数カウント規則がありません。",
+      "remedy": "兌換紙幣の日数カウント (実績/365、実績/360、30/360、または実績/実績) を記録します。"
+    },
+    "noteInterestBasisMissing": {
+      "message": "転換社債には利息基準がありません。",
+      "remedy": "転換社債の利息がどのように増加するかを記録します (単純、または年、半年、四半期、または月次の複利)。"
+    },
+    "equityIdNotGenerated": {
+      "message": "識別子が生成されませんでした。",
+      "remedy": "再試行してください。"
+    },
+    "issuanceKindRequired": {
+      "message": "発行するセキュリティの種類を選択してください。",
+      "remedy": "「{field}」で株式、オプション、RSU、ワラント、SAFE、または転換社債を選択してください。"
+    },
+    "issuanceMemoTooLong": {
+      "message": "{maxCount, plural, one {「{field}」は {max} 文字より長くなっています。} other {「{field}」は {max} 文字より長くなっています。}}",
+      "remedy": "{maxCount, plural, one {「{field}」を最大 {max} 文字に短縮します。} other {「{field}」を最大 {max} 文字に短縮します。}}"
+    },
+    "issuanceClassRequired": {
+      "message": "証券が属するこの法人の共有クラスを選択してください。",
+      "remedy": "「{field}」で共有クラスを選択します。"
+    },
+    "issuanceClassNotYetEffective": {
+      "message": "クラス {code} は、{date} まで有効ではありません。",
+      "remedy": "「{field}」には、{date} 以降の発行日が記載されています。"
+    },
+    "issuancePlanKindInvalid": {
+      "message": "プランからはオプションと RSU のみが付与されます。",
+      "remedy": "「{field}」をクリアします。"
+    },
+    "issuancePlanClassMismatch": {
+      "message": "プラン {plan} は、独自のクラスを超える賞を付与します。",
+      "remedy": "「{field}」でプランの共有クラスを選択します。"
+    },
+    "issuancePlanNotYetEffective": {
+      "message": "計画 {plan} は、{date} まで有効になりません。",
+      "remedy": "「{field}」の下に、{date} 以降の付与の日付を付けます。"
+    },
+    "issuanceRoundKindInvalid": {
+      "message": "資金調達ラウンドでは株式と新株予約権のみが発行されます。",
+      "remedy": "「{field}」をクリアします。"
+    },
+    "issuanceRoundClassMismatch": {
+      "message": "資金調達ラウンドではクラス {code} を販売します。",
+      "remedy": "「{field}」で資金調達ラウンドの株式クラスを選択します。"
+    },
+    "issuanceQuantityNotPositive": {
+      "message": "少なくとも 1 つの共有を発行します。",
+      "remedy": "「{field}」の下に少なくとも 1 つの共有を入力します。"
+    },
+    "issuanceConvertibleQuantity": {
+      "message": "SAFE および転換社債は株式ではなく金銭で測定されます。",
+      "remedy": "「{quantity}」をクリアし、「{principal}」を入力します。"
+    },
+    "issuanceRoundCurrencyMismatch": {
+      "message": "資金調達ラウンドの価格は {currency} です。",
+      "remedy": "「{field}」で {currency} を選択するか、資金調達ラウンドの通貨を使用する場合は空白のままにします。"
+    },
+    "issuanceCurrencyInvalid": {
+      "message": "証券に記載されている通貨を選択してください。",
+      "remedy": "「{field}」の下で 3 文字の ISO 通貨コードを選択します。"
+    },
+    "issuanceExercisePriceRequired": {
+      "message": "1 株あたりの行使価格を入力します。",
+      "remedy": "「{field}」と入力します。"
+    },
+    "issuancePriceNegative": {
+      "message": "「{field}」に負の値を指定することはできません。",
+      "remedy": "「{field}」に 0 個以上を入力します。"
+    },
+    "issuanceConvertiblePrice": {
+      "message": "SAFE または転換社債には 1 株あたりの価格がありません。",
+      "remedy": "「{field}」をクリアします。"
+    },
+    "issuanceRsuPrice": {
+      "message": "RSU には購入価格または行使価格がありません。",
+      "remedy": "「{field}」をクリアします。"
+    },
+    "issuanceConsiderationNegative": {
+      "message": "「{field}」に負の値を指定することはできません。",
+      "remedy": "「{field}」に受け取った現金を入力します。"
+    },
+    "issuancePrincipalRequired": {
+      "message": "投資家が支払った元本を入力します。",
+      "remedy": "「{field}」に購入金額または転換社債の元本を入力します。"
+    },
+    "issuanceAwardConsideration": {
+      "message": "賞は無考慮で付与されます。行使価格は行使時に支払われます。",
+      "remedy": "「{field}」をクリアします。"
+    },
+    "issuanceVestingKindInvalid": {
+      "message": "株式、オプション、および RSU のみが権利を有します。",
+      "remedy": "権利確定条件をクリアします。"
+    },
+    "issuanceAccelerationRequired": {
+      "message": "加速項を選択します。",
+      "remedy": "「{field}」で、なし、シングル トリガー、またはダブル トリガーを選択します。"
+    },
+    "issuanceAccelerationOutOfRange": {
+      "message": "「{field}」は、{zero} より大きく、最大でも {hundred} でなければなりません。",
+      "remedy": "「{field}」の下に加速する未確定ユニットのシェアを入力します。"
+    },
+    "issuanceAccelerationKindInvalid": {
+      "message": "権利確定証券のみが加速されます。",
+      "remedy": "「{field}」をクリアします。"
+    },
+    "issuanceExpirationNotAfterIssue": {
+      "message": "「{field}」は「{issueDate}」の後に続く必要があります。",
+      "remedy": "「{issueDate}」の後の「{field}」の日付を選択してください。"
+    },
+    "issuanceExpirationKindInvalid": {
+      "message": "オプションと保証のみが期限切れになります。",
+      "remedy": "「{field}」をクリアします。"
+    },
+    "issuanceOptionTypeRequired": {
+      "message": "オプションがインセンティブであるか、非適格オプションであるかを選択します。",
+      "remedy": "「{field}」で ISO または NSO を選択します。"
+    },
+    "issuanceEarlyExerciseKindInvalid": {
+      "message": "早期の実行を許可するのはオプションのみです。",
+      "remedy": "「{field}」をオフにします。"
+    },
+    "issuanceRepurchaseBasisRequired": {
+      "message": "会社が未権利の早期行使株式を買い戻す価格を選択します。",
+      "remedy": "「{field}」で、コスト、またはコストと公正市場価格の低い方を選択します。"
+    },
+    "issuanceRepurchaseBasisUnused": {
+      "message": "早期行使可能なオプションのみが未確定の買戻価格を伴います。",
+      "remedy": "「{field}」をクリアするか、「{earlyExercise}」をオンにしてください。"
+    },
+    "issuanceSafeTypeRequired": {
+      "message": "プレマネー SAFE またはポストマネー SAFE を選択してください。",
+      "remedy": "「{field}」でプレマネーまたはポストマネーを選択します。"
+    },
+    "issuanceMfnKindInvalid": {
+      "message": "最恵国待遇の用語を含むのは SAFE のみです。",
+      "remedy": "「{field}」をオフにします。"
+    },
+    "issuanceCapDiscountKindInvalid": {
+      "message": "SAFE および兌換紙幣のみに上限または割引が適用されます。",
+      "remedy": "「{cap}」と「{discount}」をクリアします。"
+    },
+    "issuanceValuationCapNotPositive": {
+      "message": "「{field}」はゼロより大きくなければなりません。",
+      "remedy": "「{field}」にゼロより大きい値を入力するか、クリアしてください。"
+    },
+    "issuanceDiscountOutOfRange": {
+      "message": "「{field}」は、{zero} 以上、{hundred} 未満である必要があります。",
+      "remedy": "{zero} から {hundred} までの割引を「{field}」に入力するか、何もしない場合は空白のままにします。"
+    },
+    "issuanceInterestRateRequired": {
+      "message": "転換社債の年利を入力します。",
+      "remedy": "「{field}」の下に年率を入力するか、なしの場合はゼロを入力します。"
+    },
+    "issuanceInterestBasisRequired": {
+      "message": "転換社債の利息の発生方法を選択します。",
+      "remedy": "「{field}」で、単利または複利を年、半年、四半期、または月単位で選択します。"
+    },
+    "issuanceDayCountRequired": {
+      "message": "兌換紙幣の日数カウント規則を選択します。",
+      "remedy": "「{field}」の下で、Actual/365、Actual/360、30/360、または Actual/Actual を選択します。"
+    },
+    "issuanceMaturityNotAfterIssue": {
+      "message": "「{field}」は「{issueDate}」の後に続く必要があります。",
+      "remedy": "「{issueDate}」の後の「{field}」の日付を選択してください。"
+    },
+    "issuanceDayCountKindInvalid": {
+      "message": "日数カウント規則を適用するのは転換社債のみです。",
+      "remedy": "「{field}」をクリアします。"
+    },
+    "issuanceValuationRequired": {
+      "message": "特典には付与日の評価が必要です。",
+      "remedy": "「{field}」と評価の前提を入力します。"
+    },
+    "issuanceAttributionRequired": {
+      "message": "特典の費用の帰属方法を選択します。",
+      "remedy": "「{field}」で直線またはグレーディングを選択します。"
+    },
+    "issuanceGrantSharePriceNotPositive": {
+      "message": "「{field}」はゼロより大きくなければなりません。",
+      "remedy": "「{field}」に付与日における株式の公正価値を入力します。"
+    },
+    "issuanceValuationKindInvalid": {
+      "message": "オプションと RSU のみが株式ベースの支払い評価を行います。",
+      "remedy": "評価をクリアします。"
+    },
+    "issuanceNumberTooLong": {
+      "message": "{maxCount, plural, one {「{field}」は {max} 文字より長くなっています。} other {「{field}」は {max} 文字より長くなっています。}}",
+      "remedy": "{maxCount, plural, one {「{field}」を最大 {max} 文字に短縮します。} other {「{field}」を最大 {max} 文字に短縮します。}}"
+    },
+    "securityNumberTaken": {
+      "message": "セキュリティ番号 {number} は、この法人によってすでに使用されています。",
+      "remedy": "「{field}」の下に別の番号を入力するか、空白のままにして自動的に番号を付けます。"
+    },
+    "issuanceBelowPar": {
+      "message": "対価は株式額面を下回ります。",
+      "remedy": "株式は額面以下で発行できません。 「{field}」に受け取った対価をすべて入力します。"
+    },
+    "issuanceParConsiderationRequired": {
+      "message": "株式には額面価値があるため、発行には検討が必要です。",
+      "remedy": "株式で受け取った現金を「{field}」に入力し、それを受け取った口座を「{account}」に入力します。"
+    },
+    "vestingShapesMixed": {
+      "message": "スケジュールは日付付きトランシェまたは時間ベースのスケジュールのいずれかであり、両方ではありません。",
+      "remedy": "時間ベースの期間またはトランシェを削除します。"
+    },
+    "vestingTrancheDateInvalid": {
+      "message": "すべてのトランシェには有効な YYYY-MM-DD 日付が必要です。",
+      "remedy": "トランシェの日付を修正します。"
+    },
+    "vestingTranchesUnordered": {
+      "message": "トランシュの日付は個別で昇順である必要があります。",
+      "remedy": "各トランシェを古いものから順に 1 回リストします。"
+    },
+    "vestingTrancheEmpty": {
+      "message": "すべてのトランシェは少なくとも 1 株を権利確定する必要があります。",
+      "remedy": "空のトランシェを削除します。"
+    },
+    "vestingTranchesTotalMismatch": {
+      "message": "{totalCount, plural, one {{quantityCount, plural, one {トランシェには {total} シェアが付与されますが、セキュリティには {quantity} シェアが含まれます。} other {トランシェには {total} 株が権利確定していますが、証券には {quantity} 株が含まれています。}}} other {{quantityCount, plural, one {トランシェは {total} 株を権利確定しますが、証券は {quantity} 株を保有します。} other {トランシェには {total} 株が権利確定しますが、証券には {quantity} 株が含まれます。}}}}",
+      "remedy": "トランシェ数量の合計を証券の数量と一致させます。"
+    },
+    "vestingCliffWithoutTerm": {
+      "message": "クリフまたは周波数には、数カ月単位の権利確定期間が必要です。",
+      "remedy": "「{months}」を入力するか、「{cliff}」と「{frequency}」をクリアしてください。"
+    },
+    "vestingMonthsOutOfRange": {
+      "message": "「{field}」は、{min} から {max} までの整数の月でなければなりません。",
+      "remedy": "「{field}」に {min} から {max} までの整数の月を入力します。"
+    },
+    "vestingCliffOutOfRange": {
+      "message": "「{field}」は「{term}」内の整数の月でなければなりません。",
+      "remedy": "{min} から「{field}」の下の「{term}」の値までの整数月を入力します。"
+    },
+    "vestingFrequencyRequired": {
+      "message": "時間ベースのスケジュールには権利確定頻度が必要です。",
+      "remedy": "「{field}」で月次、四半期、または年次を選択します。"
+    },
+    "vestingStartRequired": {
+      "message": "時間ベースのスケジュールには権利確定開始日が必要です。",
+      "remedy": "「{field}」の日付を選択してください。"
+    },
+    "vestingStoredTranchesNotList": {
+      "message": "保管された権利確定トランシェはリストではありません。",
+      "remedy": "トランシェを日付付きの全株式数量のリストとして記録します。"
+    },
+    "vestingStoredTrancheInvalid": {
+      "message": "権利確定トランシェには、YYYY-MM-DD の日付と全株式数量が必要です。",
+      "remedy": "トランシェの日付と数量を修正します。"
+    },
+    "valuationLogarithmUndefined": {
+      "message": "対数には正の値が必要です。",
+      "remedy": "「{sharePrice}」と「{exercisePrice}」をチェックしてください。"
+    },
+    "valuationSharePriceNotPositive": {
+      "message": "「{field}」はゼロより大きくなければなりません。",
+      "remedy": "「{field}」に付与日における株式の公正価値を入力します。"
+    },
+    "valuationExercisePriceNegative": {
+      "message": "「{field}」に負の値を指定することはできません。",
+      "remedy": "「{field}」に 0 個以上を入力します。"
+    },
+    "valuationVolatilityNotPositive": {
+      "message": "「{field}」はゼロより大きくなければなりません。",
+      "remedy": "「{field}」の下に、予想されるボラティリティをパーセンテージで入力します。"
+    },
+    "valuationTermNotPositive": {
+      "message": "「{field}」はゼロより大きくなければなりません。",
+      "remedy": "「{field}」の下に予想期間を年単位で入力します。"
+    },
+    "valuationDividendYieldNegative": {
+      "message": "「{field}」に負の値を指定することはできません。",
+      "remedy": "「{field}」の下に予想配当利回りをパーセンテージで入力するか、なしの場合はゼロを入力します。"
+    },
+    "awardFairValueNegative": {
+      "message": "セキュリティ {security} の公正価値はマイナスです。",
+      "remedy": "賞の評価を確認します。"
+    },
+    "securityNotShareBased": {
+      "message": "セキュリティ {security} は共有ベースではありません。",
+      "remedy": "SAFE および転換可能ノートには転換可能ビューを使用します。"
+    },
+    "holdingEventQuantityMissing": {
+      "message": "{security} のイベ​​ントには数量がありません。",
+      "remedy": "イベントの数量を記録します。"
+    },
+    "holdingEventExceeded": {
+      "message": "{kind, select, exercise {{quantityCount, plural, one {{date} 上の {quantity} ユニットの行使は、{security} が保持していたものを超えています。} other {{date} 上の {quantity} 単位の行使は、{security} が保持していたものを超えています。}}} settle {{quantityCount, plural, one {{date} 上の {quantity} ユニットの決済は、{security} が保持していたものを超えています。} other {{date} 上の {quantity} ユニットの決済は、{security} が保持していたものを超えています。}}} forfeit {{quantityCount, plural, one {{date} 上の {quantity} ユニットの没収は、{security} が保持していたものを超えています。} other {{date} 上の {quantity} ユニットの没収は、{security} が保持していたものを超えています。}}} expire {{quantityCount, plural, one {{date} 上の {quantity} ユニットの有効期限が、{security} が保持していた有効期限を超えています。} other {{date} 上の {quantity} ユニットの有効期限が、{security} が保持していた有効期限を超えています。}}} cancel {{quantityCount, plural, one {{date} 上の {quantity} ユニットのキャンセルは、{security} が保持した量を超えています。} other {{date} 上の {quantity} ユニットのキャンセルは、{security} が保持していた量を超えています。}}} repurchase {{quantityCount, plural, one {{date} での {quantity} ユニットの再購入は、{security} が保持していた金額を超えています。} other {{date} での {quantity} ユニットの買い戻しは、{security} が保持していたものを超えています。}}} transfer {{quantityCount, plural, one {{date} 上の {quantity} ユニットの転送は、{security} が保持していた転送量を超えています。} other {{date} 上の {quantity} ユニットの転送は、{security} が保持していた転送量を超えています。}}} convert {{quantityCount, plural, one {{date} 上の {quantity} ユニットの変換は、{security} が保持していたものを超えています。} other {{date} 上の {quantity} 単位の変換は、{security} が保持していた単位を超えています。}}} other {{quantityCount, plural, one {{date} 上の {quantity} ユニットのイベントは、{security} が保持したイベントを超えています。} other {{date} 上の {quantity} ユニットのイベントは、{security} が保持していたものを超えています。}}}}",
+      "remedy": "セキュリティの履歴を確認します。記録された量を再生することはできません。"
+    },
+    "classConversionTermsMissing": {
+      "message": "クラス {code} には変換項がありません。",
+      "remedy": "クラスの「{issuePrice}」および「{conversionPrice}」を記録します。"
+    },
+    "securityNotConvertible": {
+      "message": "セキュリティ {security} は変換可能な機器ではありません。",
+      "remedy": "SAFE または兌換紙幣を選択してください。"
+    },
+    "postMoneyOverclaim": {
+      "message": "上限付きポストマネー SAFE は会社の {limit} 以上を主張しているため、変換には意味のある解決策がありません。",
+      "remedy": "ポストマネー SAFE の「{principal}」と「{cap}」を確認します。通常の原因は、間違ったユニットにキャップが入力されたことです。"
+    },
+    "postMoneyUnsettled": {
+      "message": "ポストマネー換算が決済されませんでした。",
+      "remedy": "変換用 SAFE の「{cap}」を確認してください。"
+    },
+    "conversionPriceZero": {
+      "message": "転換価格融資はゼロに丸められます。",
+      "remedy": "資金調達ラウンド価格と変換商品「{cap}」「{discount}」を確認します。"
+    },
+    "conversionRoundPriceNotPositive": {
+      "message": "資金調達ラウンド価格はゼロより大きくなければなりません。",
+      "remedy": "1 株あたりの資金調達ラウンド価格を入力します。"
+    },
+    "conversionNotOutstanding": {
+      "message": "金融商品 {security} は、資金調達ラウンドの終了日である {date} には未処理です。",
+      "remedy": "機器の発行日と履歴を確認してください。"
+    },
+    "authorizedExceeded": {
+      "message": "{committedCount, plural, one {クラス {shareClass} は、{date} 上で {committed} 共有をコミットしますが、{authorized} を許可します。} other {クラス {shareClass} は、{date} 上で {committed} 共有をコミットしますが、{authorized} を許可します。}}",
+      "remedy": "{purpose, select, authorized_amendment {{committedCount, plural, one {クラス {shareClass} の少なくとも {committed} シェアを許可します。その発行済み株式、未払いの特典、および未割り当てのプラン プールは、{date} でそれらを必要とします。} other {クラス {shareClass} の少なくとも {committed} 株を認可します。その発行済み株式、未払いの特典、および未割り当てのプランプールは、{date} で必要です。}}} reserve_increase {{roomCount, plural, one {{committedCount, plural, one {{room} シェアを超えてリザーブに追加しないか、クラス {shareClass} を少なくとも {committed} シェアに引き上げる認可株式修正を最初に記録してください。} other {{room} 株以下を準備金に追加するか、クラス {shareClass} を少なくとも {committed} 株に引き上げる認可株修正を最初に記録してください。}}} other {{committedCount, plural, one {{room} 株以下を準備金に追加するか、クラス {shareClass} を少なくとも {committed} 株に引き上げる授権株修正を最初に記録してください。} other {{room} 株以下を準備金に追加するか、クラス {shareClass} を少なくとも {committed} 株に引き上げる授権株修正を最初に記録してください。}}}}} plan {{roomCount, plural, one {{committedCount, plural, one {{room} シェア以下を予約するか、クラス {shareClass} を少なくとも {committed} シェアに引き上げる認可株式修正を最初に記録してください。} other {{room} 株以下を予約するか、クラス {shareClass} を少なくとも {committed} 株に引き上げる認可株修正を最初に記録してください。}}} other {{committedCount, plural, one {{room} 株以下を予約するか、クラス {shareClass} を少なくとも {committed} 株に引き上げる認可株修正を最初に記録してください。} other {{room} 株以下を予約するか、クラス {shareClass} を少なくとも {committed} 株に引き上げる授権株修正を最初に記録してください。}}}}} reversal {{committedCount, plural, one {イベントを取り消す前に、クラス {shareClass} を少なくとも {committed} シェアに引き上げる認可シェア修正を記録します。} other {イベントを取り消す前に、クラス {shareClass} を少なくとも {committed} 株に引き上げる認可株修正を記録します。}}} other {{committedCount, plural, one {{excessCount, plural, one {クラス {shareClass} を少なくとも {committed} シェアに引き上げる認可シェア修正を記録するか、{excess} 少ないシェアを発行します。} other {クラス {shareClass} を少なくとも {committed} シェアに引き上げる承認株式修正を記録するか、{excess} 少ないシェアを発行します。}}} other {{excessCount, plural, one {クラス {shareClass} を少なくとも {committed} 株に引き上げる承認株式修正を記録するか、{excess} 少ない株を発行します。} other {クラス {shareClass} を少なくとも {committed} 株に引き上げる承認株式修正を記録するか、{excess} 少ない株を発行します。}}}}}}"
+    },
+    "poolExhausted": {
+      "message": "{availableCount, plural, one {プラン {plan} には、{date} で利用可能な {available} シェアがあります。} other {プラン {plan} には、{date} で利用可能な {available} シェアがあります。}}",
+      "remedy": "{action, select, reduce {{maximumCount, plural, one {{from} からのプラン {plan} の予約からは、{maximum} 共有を削除しません。残りは賞に与えられます。} other {{from} からのプラン {plan} の予約からは、{maximum} シェアを超えて削除しません。残りは賞に与えられます。}}} empty {プラン {plan} には、{from} 以降に削除する未割り当ての共有がありません。まず特典を剥奪またはキャンセルしてください。} other {{shortfallCount, plural, one {許可するユニットを {shortfall} 少なくするか、最初に計画 {plan} の予約を増やしてください。} other {許可するユニット数を {shortfall} 少なくするか、最初に計画 {plan} の予約を増やしてください。}}}}"
+    },
+    "classIdUnknown": {
+      "message": "共有クラスが存在しません。",
+      "remedy": "共有クラスを選択してください。"
+    },
+    "planIdUnknown": {
+      "message": "プランが存在しません。",
+      "remedy": "プランを選択してください。"
+    },
+    "roundIdUnknown": {
+      "message": "資金調達ラウンドが存在しません。",
+      "remedy": "法人の資金調達ラウンドを選択してください。"
+    },
+    "authorizedSharesNotPositive": {
+      "message": "少なくとも 1 つの共有を許可します。",
+      "remedy": "「{field}」の下に少なくとも 1 つの共有を入力します。"
+    },
+    "parValueNegative": {
+      "message": "額面金額を負にすることはできません。",
+      "remedy": "「{field}」の下に 1 株当たりの額面金額を入力します (非額面株の場合はゼロ)。"
+    },
+    "classKindInvalid": {
+      "message": "共有クラスは共通または優先のいずれかです。",
+      "remedy": "「{field}」で共通または優先を選択します。"
+    },
+    "classSeniorityInvalid": {
+      "message": "年功序列は {min} から {max} までの整数である必要があります。",
+      "remedy": "{min} から {max} までの整数として「{field}」を入力します。より高い年功序列が最初に支払われます。"
+    },
+    "preferredPricesNotPositive": {
+      "message": "優先株にはプラスの発行価格と転換価格が必要です。",
+      "remedy": "「{issue}」にクラスの販売価格を入力し、異なる場合は「{conversion}」にゼロを超える換算価格を入力します。"
+    },
+    "liquidationMultipleNegative": {
+      "message": "清算倍率を負にすることはできません。",
+      "remedy": "「{field}」を 0 以上で入力します ({example} など)。"
+    },
+    "participationCapNotAboveMultiple": {
+      "message": "{cap} の参加上限は、{multiple} の清算倍率を超える必要があります。",
+      "remedy": "{multiple} の上に「{field}」と入力します。"
+    },
+    "liquidationPreferenceBasisInvalid": {
+      "message": "清算優先度を測定する対象を選択してください。",
+      "remedy": "各証明書の支払額、または「{field}」のクラスの元の発行価格を選択します。"
+    },
+    "classCodeTaken": {
+      "message": "クラス コード {code} は、この法人によってすでに使用されています。",
+      "remedy": "別のクラス コードを選択してください。"
+    },
+    "conversionClassRequired": {
+      "message": "優先株が変換される共通クラスを選択してください。",
+      "remedy": "「{field}」で法人の共通クラスを選択し、必要に応じて最初に記録します。"
+    },
+    "conversionClassNotYetEffective": {
+      "message": "クラス {target} は、{date} まで有効ではありません。",
+      "remedy": "{date} 以降のクラスの日付を指定するか、別の変換クラスを選択してください。"
+    },
+    "conversionClassNotEffectiveForAmendment": {
+      "message": "クラス {target} は、{date} まで有効ではありません。",
+      "remedy": "修正の日付は {date} 以降です。"
+    },
+    "conversionClassOnCommon": {
+      "message": "優先クラスのみが別のクラスに変換されます。",
+      "remedy": "「{field}」をクリアします。"
+    },
+    "conversionClassAmendmentOnCommon": {
+      "message": "優先クラスのみが別のクラスに変換されます。",
+      "remedy": "代わりに、認可された共有を修正してください。"
+    },
+    "conversionPriceAmendmentOnCommon": {
+      "message": "優先クラスのみに変換価格があります。",
+      "remedy": "代わりに、認可された共有を修正してください。"
+    },
+    "conversionPriceNotPositive": {
+      "message": "変換価格はゼロより大きくなければなりません。",
+      "remedy": "「{field}」の下に新しい換算価格を入力します。"
+    },
+    "classAmendmentBeforeClass": {
+      "message": "修正は、クラス {shareClass} ({date}) の発効日より前に行うことはできません。",
+      "remedy": "修正の日付は {date} 以降です。"
+    },
+    "conversionClassUnchanged": {
+      "message": "クラス {shareClass} はすでに {target} に変換されています。",
+      "remedy": "別の変換クラスを選択してください。"
+    },
+    "conversionClassSplitRecorded": {
+      "message": "変換クラスの分割が {date} に記録されます。再解釈する前に変換クラスを変更します。",
+      "remedy": "{date} 以降の修正の日付。"
+    },
+    "classAmendmentKindInvalid": {
+      "message": "修正内容の変更内容を選択してください。",
+      "remedy": "授権株式、転換価格、または転換クラスを修正します。"
+    },
+    "splitRatioInvalid": {
+      "message": "分割比には 2 つの異なる正の整数が必要です。",
+      "remedy": "「{newShares}」および「{oldShares}」の下に分割の新旧の株式数を入力します (1 に対して 2 または 10 に対して 1 など)。"
+    },
+    "splitBackdated": {
+      "message": "クラス {shareClass} には、{date} を通じて記録されたアクティビティがあります。分割の日付はそれ以降である必要があります。",
+      "remedy": "{date} 以降の分割の日付。"
+    },
+    "splitBackdatedByConversion": {
+      "message": "クラス {shareClass} は {splitClass} に変換され、{date} を通じてアクティビティが記録されます。分割では転換価格が調整されるため、それ以降の日付を付ける必要があります。",
+      "remedy": "{date} 以降の分割の日付。"
+    },
+    "splitConversionClassMissing": {
+      "message": "{classesCount, plural, one {優先 {codes} は、変換先の共通クラスに名前を付けていないため、分割が変換価格に与える影響は不明です。} other {優先 {codes} は変換先の共通クラスに名前を付けていないため、分割が変換価格に与える影響は不明です。}}",
+      "remedy": "各優先クラスが変換後のクラスを記録し (クラスの共有 → 修正 → 「{field}」)、分割を記録します。"
+    },
+    "planReserveNotPositive": {
+      "message": "少なくとも 1 つの共有を予約します。",
+      "remedy": "「{field}」の下にプラン用に予約されたシェアを入力します。"
+    },
+    "planBeforeClass": {
+      "message": "プランはその共有クラス、つまり {date} よりも前に置くことはできません。",
+      "remedy": "{date} 以降の計画の日付を指定します。"
+    },
+    "planCodeTaken": {
+      "message": "プラン コード {code} は、この法人によってすでに使用されています。",
+      "remedy": "別のプラン コードを選択してください。"
+    },
+    "reserveChangeInvalid": {
+      "message": "準備金の変更は、ゼロ以外の整数の株式数である必要があります。",
+      "remedy": "「{field}」の下に追加する共有を入力するか、共有を削除する場合は負の数値を入力します。"
+    },
+    "reserveChangeBeforePlan": {
+      "message": "予約変更は計画 {plan} よりも前に行うことはできません。有効な {date}。",
+      "remedy": "変更の日付は {date} 以降です。"
+    },
+    "preMoneyUnmeasurable": {
+      "message": "{preMoney} の資金調達前の評価を {price} の資金調達ラウンド価格と照合することはできません。資金調達ラウンドの前に発行済みの株式はありません。",
+      "remedy": "「{field}」に評価の根拠を記載します。"
+    },
+    "preMoneyInconsistent": {
+      "message": "{fullyDilutedCount, plural, one {{preMoney} の資金調達前の評価額は、{price} の資金調達ラウンド価格に、資金調達ラウンド前の {fullyDiluted} の完全希薄化株式 ({implied}) を掛けたものと一致しません。} other {{preMoney} の資金調達前の評価額は、{price} の資金調達ラウンド価格に、資金調達ラウンド前の {fullyDiluted} の完全希薄化株式 ({implied}) を掛けたものと一致しません。}}",
+      "remedy": "{implied} のプレマネー評価額、または {impliedPrice} の 1 株あたりの価格を入力します。評価が別の基準（プールの増加またはその中でカウントされるコンバージョン）に基づいて記載されている場合は、「{field}」の下にその基準を記載します。"
+    },
+    "preMoneyInconsistentPriceLocked": {
+      "message": "{fullyDilutedCount, plural, one {{preMoney} の資金調達前の評価額は、{price} の資金調達ラウンド価格に、資金調達ラウンド前の {fullyDiluted} の完全希薄化株式 ({implied}) を掛けたものと一致しません。} other {{preMoney} の資金調達前の評価額は、{price} の資金調達ラウンド価格に、資金調達ラウンド前の {fullyDiluted} の完全希薄化株式 ({implied}) を掛けたものと一致しません。}}",
+      "remedy": "{implied} の事前評価額を入力します (生証券が発行または換算されたため、価格は {price} のままです)。評価が別の基準（プールの増加またはその中でカウントされるコンバージョン）に基づいて記載されている場合は、「{field}」の下にその基準を記載します。"
+    },
+    "preMoneyInconsistentValuationOnly": {
+      "message": "{fullyDilutedCount, plural, one {{preMoney} の資金調達前の評価額は、{price} の資金調達ラウンド価格に、資金調達ラウンド前の {fullyDiluted} の完全希薄化株式 ({implied}) を掛けたものと一致しません。} other {{preMoney} の資金調達前の評価額は、{price} の資金調達ラウンド価格に、資金調達ラウンド前の {fullyDiluted} の完全希薄化株式 ({implied}) を掛けたものと一致しません。}}",
+      "remedy": "{implied} の事前評価額を入力します。評価が別の基準（プールの増加またはその中でカウントされるコンバージョン）に基づいて記載されている場合は、「{field}」の下にその基準を記載します。"
+    },
+    "roundPricePerShareNotPositive": {
+      "message": "1 株あたりの価格はゼロより大きくなければなりません。",
+      "remedy": "「{field}」の下に資金調達ラウンドの 1 株あたりの価格を入力します。"
+    },
+    "roundPreMoneyValuationNotPositive": {
+      "message": "事前金額評価はゼロより大きくなければなりません。",
+      "remedy": "「{field}」の下に事前評価額を入力します。"
+    },
+    "roundBeforeClass": {
+      "message": "資金調達ラウンドは、その株式クラスが {date} で有効になるまで終了できません。",
+      "remedy": "{date} 以降の資金調達ラウンドの日付。"
+    },
+    "roundNameTaken": {
+      "message": "{name} という名前の資金調達ラウンドは、この法人に対してすでに存在するか、名前が変更されるか無効になる前に存在します。",
+      "remedy": "別の資金調達ラウンド名を選択してください。"
+    },
+    "roundNameTooLong": {
+      "message": "資金調達ラウンド名は最大 {max} 文字である必要があります。",
+      "remedy": "「{field}」を最大 {max} 文字に短縮します。"
+    },
+    "roundIsVoid": {
+      "message": "資金調達ラウンドは無効です。",
+      "remedy": "まだ必要な場合は、新しい資金調達ラウンドを記録します。無効な資金調達ラウンドにはそれ以上の変更は必要ありません。"
+    },
+    "roundTermsUnchanged": {
+      "message": "資金調達ラウンド {round} にはすでにこれらの条件が定められています。",
+      "remedy": "名前、1 株あたりの価格、または事前評価額を変更します。"
+    },
+    "roundAmendmentBeforeClose": {
+      "message": "修正は、{round} ({date}) ラウンドの資金調達の締め日より前に行うことはできません。",
+      "remedy": "修正の日付は {date} 以降です。"
+    },
+    "roundPriceLockedBySecurities": {
+      "message": "資金調達ラウンド {round} は、その価格で {securities} を発行または転換しました。",
+      "remedy": "最初にこれらの証明書を無効にし (無効になるたびにそのエントリが取り消されます)、その後価格を修正して再度記録します。または、正しい資金調達ラウンドを記録し、空になったらこれを無効にします。"
+    },
+    "roundVoidBeforeClose": {
+      "message": "無効は、{round} ({date}) ラウンドの資金調達の締め日より前に設定することはできません。",
+      "remedy": "{date} 以降の無効の日付。"
+    },
+    "roundVoidHasSecurities": {
+      "message": "資金調達ラウンド {round} には、まだ {securities} が発行または変換されています。",
+      "remedy": "まずこれらの証明書を無効にし (無効になるたびにエントリが取り消され、変換された SAFE または転換社債が未払いに戻されます)、次に資金調達ラウンドを無効にします。"
+    },
+    "antiDilutionBaseMissing": {
+      "message": "加重平均調整には、資金調達ラウンド前の発行済み株式が必要です。",
+      "remedy": "資金調達ラウンドをモデル化する前に、会社の発行済み株式を記録します。"
+    },
+    "terms": {
+      "roundPrice": "資金調達ラウンド価格",
+      "runDate": "実行日",
+      "eventDate": "イベントの日付",
+      "trancheDate": "トランシェ日付",
+      "trancheQuantity": "トランシェ個",
+      "exchangeRate": "為替レート",
+      "payout": "支払い",
+      "convertibleTerm": "変換項",
+      "sharePrice": "株価",
+      "price": "価格"
+    }
+  }
+}

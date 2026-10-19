@@ -64,4 +64,7 @@ test('a business-date stamp prints as the date alone and a real time keeps its c
   assert.equal(formatStamp(new Date('2026-10-19T00:00:00Z')), '2026-10-19')
   assert.equal(formatStamp(new Date('2026-10-19T14:05:09Z')), '2026-10-19 14:05:09 UTC')
   assert.equal(formatStamp(new Date('2026-10-19T00:00:00.250Z')), '2026-10-19 00:00:00 UTC')
+  assert.equal(formatStamp(new Date('2026-10-19T00:00:00Z'), 'en'), 'Oct 19, 2026', 'a locale reads the business date in its own format')
+  assert.equal(formatStamp(new Date('2026-10-19T00:00:00Z'), 'de'), '19.10.2026')
+  assert.match(formatStamp(new Date('2026-10-19T14:05:09Z'), 'de'), /^19\.10\.2026, 14:05:09 UTC$/)
 })

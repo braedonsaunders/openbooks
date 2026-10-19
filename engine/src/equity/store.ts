@@ -90,8 +90,18 @@ export async function loadEquityBook(runner: SqlExecutor, orgId: string, subsidi
   return memoizedRead(`equity-book:${orgId}:${subsidiaryId}`, () => readEquityBook(runner, orgId, subsidiaryId));
 }
 
-async function readEquityBook(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<EquityBook> {
-  const scope = sql`org_id = ${orgId} and subsidiary_id = ${subsidiaryId}`;
+/** The immutable records known when an event was recorded, including its own transaction. */
+export async function loadEquityBookAtEvent(runner: SqlExecutor, orgId: string, eventId: string): Promise<EquityBook | null> {
+  const event = (await runner.execute<{ subsidiary_id: string; created_at: string }>(sql`
+    select subsidiary_id, created_at::text as created_at from equity_security_events
+     where org_id = ${orgId} and id = ${eventId}`)).rows[0];
+  if (!event) return null;
+  return readEquityBook(runner, orgId, event.subsidiary_id, event.created_at);
+}
+
+async function readEquityBook(runner: SqlExecutor, orgId: string, subsidiaryId: string, recordedThrough?: string): Promise<EquityBook> {
+  const scope = sql`org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
+    ${recordedThrough ? sql`and created_at <= ${recordedThrough}::timestamptz` : sql``}`;
   const classes = (await runner.execute<Row>(sql`
     select id, code, name, kind, effective_on::text as effective_on, initial_authorized_shares::text as initial_authorized_shares,
            par_value::text as par_value, original_issue_price::text as original_issue_price,
@@ -136,7 +146,7 @@ async function readEquityBook(runner: SqlExecutor, orgId: string, subsidiaryId: 
       pricePerShare: str(row, "price_per_share"), preMoneyValuation: str(row, "pre_money_valuation"), currency: str(row, "currency"),
       preMoneyBasisReason: opt(row, "pre_money_basis_reason"),
     })),
-    await loadRoundAmendments(runner, orgId, subsidiaryId),
+    await loadRoundAmendments(runner, orgId, subsidiaryId, recordedThrough),
   ).live;
   const securities = (await runner.execute<Row>(sql`
     select ${SECURITY_COLUMNS} from equity_securities where ${scope} order by created_at, id`)).rows.map(securityFromRow);
@@ -168,11 +178,12 @@ export interface RoundAmendmentRecord {
 }
 
 /** Every change recorded to the legal entity's rounds, in recording order. */
-export async function loadRoundAmendments(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<RoundAmendmentRecord[]> {
+export async function loadRoundAmendments(runner: SqlExecutor, orgId: string, subsidiaryId: string, recordedThrough?: string): Promise<RoundAmendmentRecord[]> {
   return (await runner.execute<Row>(sql`
     select id, round_id, kind, effective_on::text as effective_on, name, price_per_share::text as price_per_share,
            pre_money_valuation::text as pre_money_valuation, pre_money_basis_reason, reason, created_at::text as created_at
       from equity_round_amendments where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
+       ${recordedThrough ? sql`and created_at <= ${recordedThrough}::timestamptz` : sql``}
      order by created_at, id`)).rows.map((row) => ({
     id: str(row, "id"), roundId: str(row, "round_id"), kind: str(row, "kind") as RoundAmendmentRecord["kind"], effectiveOn: str(row, "effective_on"),
     name: opt(row, "name"), pricePerShare: opt(row, "price_per_share"), preMoneyValuation: opt(row, "pre_money_valuation"),

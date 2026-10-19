@@ -34,10 +34,11 @@ import type {
 } from '@openbooks/reports'
 import { perShareFractionDigits, resolveReportLayout } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
+import { getTranslations } from 'next-intl/server'
 import { resolveLocale } from './locale'
 import { pdfMoney } from './report-pdf-detail'
 import { formatDecimal } from './money-format'
-import { formatExactPercent } from './format'
+import { formatCivilDate, formatExactPercent } from './format'
 export { generalLedgerExportData } from './report-pdf-detail'
 
 /**
@@ -71,6 +72,8 @@ type ExportTableGroup = PdfTableGroup & {
   /** Per money column, its currency when it is not the report's own (see ReportGroup.moneyCurrencies). */
   moneyCurrencies?: (ReportMoneyCurrency | null)[]
   numberFormats?: (ReportNumberFormat | null)[]
+  /** Per column, ISO calendar dates the PDF prints in the viewer's locale (see ReportGroup.dates). */
+  dates?: boolean[]
 }
 
 export type ExportData = {
@@ -160,6 +163,15 @@ function formattedPdfCell(cell: PdfTableCell, locale: string, isMoney: boolean, 
   return pdfCell(cell, locale, isMoney, numberFormat)
 }
 
+const ISO_CIVIL_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+/** A date cell for print: an ISO calendar date in the viewer's locale; any other text prints as is. */
+function pdfDateCell(cell: PdfTableCell, locale: string): PdfTableCell {
+  const date = (text: string | number | null | undefined) => (typeof text === 'string' && ISO_CIVIL_DATE.test(text) ? formatCivilDate(text, locale) : text ?? '')
+  if (cell !== null && typeof cell === 'object') return { ...cell, text: String(date(cell.text)) }
+  return typeof cell === 'string' ? String(date(cell)) : cell
+}
+
 /** Column alignment for print: the group's own, else money and quantity
  *  columns right-aligned and everything else left. */
 function pdfGroupAlign(g: ExportTableGroup): PdfColumnAlign[] | undefined {
@@ -199,6 +211,7 @@ export function runResultToExportData(
       ...(g.money ? { money: g.money } : {}),
       ...(g.moneyCurrencies ? { moneyCurrencies: g.moneyCurrencies } : {}),
       ...(g.numberFormats ? { numberFormats: g.numberFormats } : {}),
+      ...(g.dates ? { dates: g.dates } : {}),
       align: g.align,
       isEmpty: g.isEmpty,
     })),
@@ -233,6 +246,7 @@ export function exportDataToRunResult(data: ExportData): ReportRunResult {
     ...(g.money ? { money: g.money } : {}),
     ...(g.moneyCurrencies ? { moneyCurrencies: g.moneyCurrencies } : {}),
     ...(g.numberFormats ? { numberFormats: g.numberFormats } : {}),
+    ...(g.dates ? { dates: g.dates } : {}),
     isEmpty: g.isEmpty,
   }))
   const rowCount = data.groups.reduce((n, g) => n + g.rows.length, 0)
@@ -250,7 +264,7 @@ export function exportDataToPdfInput(
   data: ExportData,
   branding: PdfBranding,
   page: PdfPageSetup,
-  opts: { showSummary?: boolean; generatedAt?: Date; footerLeft?: string; locale?: string } = {},
+  opts: { showSummary?: boolean; generatedAt?: Date; footerLeft?: string; locale?: string; pageLabel?: (page: number, total: number) => string } = {},
 ): PdfDocumentInput {
   const locale = opts.locale ?? 'en'
   const groups: PdfTableGroup[] = data.groups.map((g) => ({
@@ -258,7 +272,7 @@ export function exportDataToPdfInput(
     title: g.title,
     subtitle: g.subtitle,
     columns: g.columns,
-    rows: g.rows.map((row) => row.map((cell, i) => formattedPdfCell(cell, locale, g.money?.[i] === true, g.numberFormats?.[i] ?? null))),
+    rows: g.rows.map((row) => row.map((cell, i) => (g.dates?.[i] === true ? pdfDateCell(cell, locale) : formattedPdfCell(cell, locale, g.money?.[i] === true, g.numberFormats?.[i] ?? null)))),
     align: pdfGroupAlign(g),
     isEmpty: g.isEmpty,
   }))
@@ -271,12 +285,16 @@ export function exportDataToPdfInput(
     groups,
     layout: page,
     footerLeft: opts.footerLeft,
+    // The header and footer stamps and the page numbering read in the viewer's locale.
+    locale,
+    pageLabel: opts.pageLabel,
   }
 }
 
 export async function exportDataToPdf(data: ExportData, branding: PdfBranding, page: PdfPageSetup, opts?: { showSummary?: boolean; generatedAt?: Date }): Promise<Buffer> {
   const locale = await resolveLocale()
-  return renderPdfDocument(exportDataToPdfInput(data, branding, page, { ...opts, locale }))
+  const t = await getTranslations({ locale, namespace: 'reports' })
+  return renderPdfDocument(exportDataToPdfInput(data, branding, page, { ...opts, locale, pageLabel: (n, total) => t('export.pageOf', { page: n, total }) }))
 }
 
 /**
@@ -675,6 +693,7 @@ export async function renderStatementViewPdf(
 ): Promise<Buffer> {
   const { divisor, note } = scaleForExport(opts.scale)
   const locale = await resolveLocale()
+  const t = await getTranslations({ locale, namespace: 'reports' })
   return renderStatementPdf({
     companyName: branding.orgName,
     title: opts.title,
@@ -694,6 +713,7 @@ export async function renderStatementViewPdf(
     branding,
     page,
     generatedAt: opts.generatedAt ?? new Date(),
+    pageLabel: (n, total) => t('export.pageOf', { page: n, total }),
     footnote: divisor !== 1 ? 'Amounts are rounded; columns may not sum exactly.' : undefined,
   })
 }

@@ -251,7 +251,7 @@
     "authorized": "授権株式数",
     "conversionPrice": "転換価格",
     "split": "株式分割",
-    "currentAuthorized": "現在 {value} 株",
+    "currentAuthorized": "現在 {value} {valueCount, plural, other {株}}",
     "currentConversionPrice": "現在 {value}",
     "splitHelp": "株式分割は、その日付以降のクラスのすべての保有株式、アワード、プール、価格を修正再表示し、このクラスに転換される優先株式クラスの転換価格を調整します。日付はクラスおよびそれらの優先株式クラスで最後に記録された取引より後である必要があります。",
     "saved": "保存しました",
@@ -368,7 +368,9 @@
     "driftBadge": "プレマネー不一致",
     "preMoneyDrift": "プレマネー評価額 {preMoney} が、ラウンド価格にラウンド前の完全希薄化後株式数 {shares} を掛けた額（{implied}）と一致しなくなりました。ラウンド前の日付の株式がラウンド後に記録されました。",
     "preMoneyDriftRemedy": "下でプレマネー評価額を {implied} に訂正するか、「プレマネー評価の根拠」にその評価の根拠を記録してください。",
-    "preMoneyDriftReadOnly": "エクイティ管理者が評価額を訂正するか、その根拠を記録できます。"
+    "preMoneyDriftReadOnly": "エクイティ管理者が評価額を訂正するか、その根拠を記録できます。",
+    "conversionDrift": "<link>{number}</link> は {recorded} で転換されました。ラウンドは現在、その条件を {standing} と評価します。",
+    "conversionDriftHint": "ラウンド前の日付の取引がこれらの転換の後に記録されました。各転換は記録どおり有効です。取引がラウンド前に属する場合は、SAFE または転換社債を開いて再度転換してください。"
   },
   "model": {
     "description": "基準日時点の資本政策表に対し、プレマネー方式でラウンドの価格を算定します。発行済の SAFE とノートは転換され、保護されたクラスには希薄化防止株式が割り当てられ、プールはプレマネーの範囲内で目標まで補充されます。記録は行われません。",
@@ -407,7 +409,7 @@
     },
     "prompt": "プレマネー評価額と新規調達額を入力すると、基準日の資本政策表に対してラウンドの価格を算定します。",
     "sharesOfFullyDiluted": "{shares}・完全希薄化後の {percent}",
-    "newShares": "新株 {shares} 株",
+    "newShares": "新株 {shares} {sharesCount, plural, other {株}}",
     "poolAfter": "ラウンド後のプール",
     "percentOfFullyDiluted": "完全希薄化後の {percent}"
   },
@@ -593,7 +595,11 @@
     "outstandingPrincipal": "未決済残高",
     "convertedInto": "転換先",
     "invalidConversionTitle": "この転換は{source}から採用した条件を使用しましたが、{source}は{date}に取り消されました。",
-    "invalidConversionRemedy": "ラウンドの締結日である{date}付で証書{certificate}を取り消して転換を取り消し、{date}以前の日付で MFN 選択を取り消してから、この商品を自身の条件で再度転換してください。"
+    "invalidConversionRemedy": "ラウンドの締結日である{date}付で証書{certificate}を取り消して転換を取り消し、{date}以前の日付で MFN 選択を取り消してから、この商品を自身の条件で再度転換してください。",
+    "undone": "取り消し済み",
+    "undoneByVoid": "取り消し済み: {certificate} は {date} に無効化されました",
+    "conversionDriftTitle": "この転換は {recorded} で {recordedShares} {recordedSharesCount, plural, other {株}}として記録されました。ラウンドは現在、同じ条件を {standing} で {standingShares} {standingSharesCount, plural, other {株}}と評価します。",
+    "conversionDriftRemedy": "ラウンド前の日付の取引が転換の後に記録され、価格の分母となる株式数が変わりました。転換は記録どおり有効です。その取引がラウンド前に属する場合は、{certificate} を {date} 付で無効化し、現在の価格で再度転換してください。そうでない場合は、取引を無効化して再記録し、日付を訂正してください。"
   },
   "events": {
     "saved": "{kind}を記録しました",
@@ -690,7 +696,7 @@
     "open": "83(b) 提出期限前",
     "missed": "83(b) 期限超過",
     "filedOn": "{date} 提出",
-    "due": "期限 {date} · 残り {days} 日",
+    "due": "期限 {date} · 残り {days, plural, other {# 日}}",
     "missedOn": "{date} に期限終了",
     "deadline": "83(b) 期限 {date}"
   },
@@ -828,11 +834,11 @@
     "attention": {
       "title": "要対応",
       "allClear": "対応が必要な項目はありません。",
-      "cliff": "{holder} · {number} は {date} にクリフに到達し、{quantity} 単位が権利確定します",
+      "cliff": "{holder} · {number} は {date} にクリフに到達し、{quantity} {quantityCount, plural, other {単位}}が権利確定します",
       "election83b": "{holder} · {number} の 83(b)選択の期限は {date} です（残り {days} 日）",
-      "restrictedDeposit": "{holder} · {number} の早期行使株式 {shares} 株は権利未確定です。権利確定まで預り金を保持します",
-      "departed": "{holder} は {date} に退職し、オプションと RSU を {units} 単位保有しています。失効と期限切れを記録してください",
-      "expiring": "{holder} · {number} は {date} に失効し、{quantity} 単位が未行使です",
+      "restrictedDeposit": "{holder} · {number} の早期行使株式 {shares} {sharesCount, plural, other {株}}は権利未確定です。権利確定まで預り金を保持します",
+      "departed": "{holder} は {date} に退職し、オプションと RSU を {units} {unitsCount, plural, other {単位}}保有しています。失効と期限切れを記録してください",
+      "expiring": "{holder} · {number} は {date} に失効し、{quantity} {quantityCount, plural, other {単位}}が未行使です",
       "compensationDue": "{date} までの株式報酬が転記されていません：転記額 {amount}",
       "compensationRefused": "{date} までの株式報酬を測定できません：{message}",
       "interestDue": "{date} までのノート利息が未計上です：転記額 {amount}",
@@ -847,14 +853,15 @@
       "interestCatchUp": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。その期間の終了後、{through} までの実行で転記されます",
       "interestCatchUpNow": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。{through} までの実行を転記して追加計上してください",
       "interestCatchUpNoPeriod": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。転記するには次の会計期間を開くか作成してください",
-      "roundPreMoneyDrift": "ラウンド {name} のプレマネー評価額は {preMoney} ですが、価格にラウンド前の完全希薄化後株式数 {shares} を掛けると現在 {implied} です。評価額を訂正するか、その根拠を記録してください"
+      "roundPreMoneyDrift": "ラウンド {name} のプレマネー評価額は {preMoney} ですが、価格にラウンド前の完全希薄化後株式数 {shares} を掛けると現在 {implied} です。評価額を訂正するか、その根拠を記録してください",
+      "conversionPriceDrift": "{number} は {round} で {recorded} で転換されました。ラウンド前の日付でラウンド後に記録された取引により、この転換は現在 {standing} と評価されます"
     },
     "activity": {
       "title": "最近のアクティビティ",
       "empty": "資本に関するアクティビティはまだありません。",
       "issue": "{holder} に {kind} {number} を発行",
       "round": "{name} が1株 {price} でクローズ",
-      "shares": "{quantity} 株"
+      "shares": "{quantity} {quantityCount, plural, other {株}}"
     },
     "directory": {
       "title": "クイックリンク",
@@ -909,7 +916,15 @@
       "compensationNoPeriod": "{date} までに認識された株式報酬 {amount} がその実行後に記録され、未転記です。転記するには次の会計期間を開くか作成してください。",
       "interest": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。その期間の終了後、{through} までの実行で転記されます。",
       "interestNow": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。{through} までの実行で追加計上されます。",
-      "interestNoPeriod": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。転記するには次の会計期間を開くか作成してください。"
+      "interestNoPeriod": "{date} までに発生したノート利息 {amount} がその実行後に記録され、未転記です。転記するには次の会計期間を開くか作成してください。",
+      "compensationNoPeriodTitle": "{date} までに認識された株式報酬 {amount} は、その日までの実行の後に記録されたため未転記です。また、その実行の後に転記できる開いている会計期間がありません。",
+      "interestNoPeriodTitle": "{date} までに発生した転換社債の利息 {amount} は、その日までの実行の後に記録されたため未転記です。また、その実行の後に転記できる開いている会計期間がありません。",
+      "generateRemedy": "会計年度 {year} の会計期間を生成してください。最初の期間が終了すると、次の実行で追加計上が転記されます。",
+      "generateRemedyReadOnly": "会計期間を管理する担当者に会計年度 {year} の生成を依頼してください（設定 → 期間締め）。最初の期間が終了すると、次の実行で追加計上が転記されます。",
+      "reopenRemedy": "最後の実行以降の期間は締められています。実行で追加計上を転記できるよう、期間締めから次の期間の管理された再オープンを申請してください。",
+      "reopenRemedyReadOnly": "最後の実行以降の期間は締められています。会計期間を管理する担当者に、期間締めから次の期間の管理された再オープンを申請するよう依頼してください。",
+      "generatePeriods": "FY{year} の期間を生成",
+      "openPeriods": "会計期間を開く"
     }
   },
   "preferenceBasis": {

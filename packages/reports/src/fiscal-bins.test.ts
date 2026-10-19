@@ -61,3 +61,17 @@ test('fiscal bucket labels include their fiscal year and period number', async (
   assert.equal(await labels('fiscal_quarter'), 'Q1 FY 2027')
   assert.equal(await labels('fiscal_year'), 'FY 2027')
 })
+
+test('localized bucket labels receive civil bounds and fiscal position', async () => {
+  const buckets: unknown[] = []
+  const client: PgQueryable = { async query() { return { rows: [{ d0: '2026-07-01', m0: 1 }] } } }
+  const result = await runCustomQuery(client, {
+    entity: 'ledger_lines', mode: 'summarize', columns: [],
+    breakouts: [{ column: 'posting_date', bin: 'fiscal_period' }], measures: [{ fn: 'count' }],
+  }, {
+    orgId: ORG, entityMap: REPORT_ENTITY_MAP, fiscalStartMonth: 7,
+    labels: { temporalBucket: (bucket) => { buckets.push(bucket); return 'P01 FY2027 · Juli 2026' } },
+  })
+  assert.deepEqual(buckets, [{ bin: 'fiscal_period', from: '2026-07-01', to: '2026-07-31', fiscalYear: 2027, number: 1 }])
+  assert.equal(result.groups[0]?.rows[0]?.[0], 'P01 FY2027 · Juli 2026')
+})

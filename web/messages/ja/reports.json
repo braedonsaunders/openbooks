@@ -3462,7 +3462,8 @@
     "exported": "{filename} をエクスポートしました。",
     "exportFailed": "{format} をエクスポートできませんでした。",
     "exporting": "{format} をエクスポート中…",
-    "export": "エクスポート"
+    "export": "エクスポート",
+    "pageOf": "{page} / {total} ページ"
   },
   "builtIns": {
     "equity-stock-compensation-schedule": {

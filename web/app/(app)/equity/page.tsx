@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
-import { getLocale, getTranslations } from 'next-intl/server'
+import { getTranslations } from 'next-intl/server'
 import { EquityError } from '@openbooks/engine/equity'
 import { Button } from '@openbooks/ui'
 import { RouteStateView } from '@/components/route-state'
+import { readerRefusal } from '@/lib/reader-refusal'
 import { ModuleView } from '@/components/viewspec/module-view'
 import { equitySpec, loadEquity } from './view'
 
@@ -34,7 +35,7 @@ export default async function EquityPage({
   } catch (error) {
     if (!(error instanceof EquityError)) throw error
     const t = await getTranslations('shell.routeState')
-    const refusal = error.localized(await getLocale())
+    const refusal = await readerRefusal(error)
     return (
       <RouteStateView
         state="error"

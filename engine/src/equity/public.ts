@@ -1,5 +1,7 @@
 /** Equity and cap table: the public engine contract for the application. */
-export { EquityError, EQUITY_FEATURE_KEY, EQUITY_FEATURE_REMEDY, EQUITY_ACCOUNTS_REMEDY, localizeRefusalDates, type RefusalValue } from "./errors.ts";
+export { EquityError, EQUITY_FEATURE_KEY, type EquityRefusalKey, type RefusalValue } from "./errors.ts";
+export { EQUITY_REFUSALS } from "./refusals/index.ts";
+export { EQUITY_TERMS } from "./refusals/terms.ts";
 export { equityAccountPolicyRefusal, EQUITY_POLICY_ACCOUNT_FIELDS, EQUITY_POLICY_OPTIONAL_ACCOUNT_FIELDS } from "./account-policy.ts";
 export { EQUITY_JOURNAL_ORIGIN, CONSIDERATION_ACCOUNT_TYPES } from "./posting.ts";
 export {

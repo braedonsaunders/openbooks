@@ -18,9 +18,9 @@
  */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { toUnits } from "../money/money.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import { effectiveConvertibleTerms } from "./cap-table.ts";
-import { EquityError } from "./errors.ts";
+import { equityError, fig } from "./errors.ts";
 import { functionalUnits, spotRate } from "./fx.ts";
 import { noteInterest } from "./interest.ts";
 import { currencyExponent } from "./internal.ts";
@@ -77,11 +77,7 @@ async function principalLine(orgId: string, subsidiaryId: string, security: Secu
      where s.org_id = ${orgId} and s.id = ${security.id} and l.amount < 0
        and l.account_id = ${issuedUnder.convertibleInstrumentsAccountId}`)).rows;
   if (rows.length !== 1) {
-    throw new EquityError(`The issuance entry of ${security.securityNumber} does not identify its principal.`, {
-      status: 409,
-      code: "equity_issuance_entry_unknown",
-      remedy: "Review the instrument's issuance entry in the journal; a SAFE or note settles the principal its issuance credited.",
-    });
+    throw equityError("issuanceEntryUnknown", { security: fig.text(security.securityNumber) });
   }
   const row = rows[0]!;
   return { accountId: row.account_id, currency: row.currency, fxRate: row.fx_rate, units: -toUnits(row.amount), txnUnits: -toUnits(row.txn_amount) };
@@ -139,10 +135,9 @@ export async function settleConvertible(input: {
     const groups = await instrumentBalance(db, input.orgId, input.subsidiaryId, security.id, "interest");
     const carried = groups.reduce((sum, group) => sum - group.txnUnits, 0n);
     if (carried !== interestTxnUnits || groups.some((group) => group.currency !== security.currency)) {
-      throw new EquityError(`The ledger carries ${carried} in accrued interest on ${security.securityNumber} but ${interestTxnUnits} has accrued to ${on}.`, {
-        status: 409,
-        code: "equity_interest_unreconciled",
-        remedy: "Review the note's interest entries in the journal; accrued interest is posted only by interest runs and settlements.",
+      throw equityError("interestUnreconciled", {
+        carried: fig.money(fromUnits(carried), security.currency), accrued: fig.money(fromUnits(interestTxnUnits), security.currency),
+        security: fig.text(security.securityNumber), date: fig.date(on),
       });
     }
     for (const group of groups) {

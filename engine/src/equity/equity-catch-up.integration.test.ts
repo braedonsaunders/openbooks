@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { renderRefusal } from "../platform/catalog-refusal.ts";
+import { EQUITY_REFUSALS } from "./refusals/index.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
@@ -110,8 +112,8 @@ test("a round's pre-money drifts when shares dated before it are recorded later,
       (error: unknown) => {
         if (!(error instanceof EquityError) || error.code !== "equity_round_pre_money_inconsistent") return false;
         assert.doesNotMatch(error.remedy, /price per share of/, "the price is held by the shares issued at it");
-        assert.match(error.remedy, /pre-money valuation of CA\$7,003,500\.00 \(the price stays at 3\.5, since live securities were issued or converted at it\)/);
-        assert.match(error.remedy, /under Pre-money basis\.$/);
+        assert.match(error.remedy, /pre-money valuation of CA\$7,003,500\.00 \(the price stays at CA\$3\.5000, since live securities were issued or converted at it\)/, "the price reads under the four-place per-share rule");
+        assert.match(error.remedy, /under “Pre-money basis”\.$/, "the remedy names the field by its form label");
         return true;
       },
     );
@@ -136,8 +138,8 @@ test("an exercise with nothing vested names the next vest date, vesting starts a
     await assert.rejects(
       recordSecurityEvent({ ...manage(w), securityId: option.id, kind: "exercise", effectiveOn: "2026-08-01", quantity: "100", considerationAccountId: w.org.accounts.bank }),
       (error: unknown) => error instanceof EquityError && error.code === "equity_event_nothing_vested" && error.field === "effectiveOn"
-        && /is vested yet on 2026-08-01; the first units vest on 2027-07-01/.test(error.message) && error.remedy === "Date the exercise on or after 2027-07-01, when the next units vest."
-        && error.localized("en-US").remedy === "Date the exercise on or after Jul 1, 2027, when the next units vest.",
+        && /is vested yet on Aug 1, 2026; the first units vest on Jul 1, 2027/.test(error.message) && error.remedy === "Set “Effective date” on or after Jul 1, 2027, when the first units vest."
+        && renderRefusal(EQUITY_REFUSALS[error.key].remedy, error.values, "de-DE").includes("1. Juli 2027"),
     );
 
     const safe = await issueSecurity({

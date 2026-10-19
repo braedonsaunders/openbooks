@@ -73,6 +73,7 @@ import purchasing from './purchasing.json'
 import query from './query.json'
 import receipts from './receipts.json'
 import records from './records.json'
+import refusals from './refusals.json'
 import reports from './reports.json'
 import resourcing from './resourcing.json'
 import returns from './returns.json'
@@ -161,6 +162,7 @@ export default {
   query,
   receipts,
   records,
+  refusals,
   reports,
   resourcing,
   returns,

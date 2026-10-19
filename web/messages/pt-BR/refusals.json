@@ -1,0 +1,1164 @@
+{
+  "equity": {
+    "featureOff": {
+      "message": "A tabela de patrimônio e capital não está ativada para esta organização.",
+      "remedy": "Ative a tabela de patrimônio líquido e capitalização em Configurações da empresa → Recursos."
+    },
+    "forbidden": {
+      "message": "Esta ação requer a permissão {permission}.",
+      "remedy": "Peça a um administrador para conceder {permission} (Configurações da empresa → Funções) e tente novamente."
+    },
+    "forbiddenForEntity": {
+      "message": "Esta ação requer a permissão {permission} para a entidade legal.",
+      "remedy": "Peça a um administrador para conceder {permission} e acesso à entidade legal (Configurações da empresa → Funções) e tente novamente."
+    },
+    "entityOutsideAccess": {
+      "message": "A entidade legal não existe ou está fora do seu acesso.",
+      "remedy": "Escolha uma entidade legal que você possa acessar."
+    },
+    "entityInvalid": {
+      "message": "Escolha uma entidade legal válida.",
+      "remedy": "Escolha uma entidade legal desta organização."
+    },
+    "entityInactive": {
+      "message": "A entidade legal não existe ou está inativa.",
+      "remedy": "Escolha uma entidade legal ativa desta organização."
+    },
+    "entityCurrencyMissing": {
+      "message": "A pessoa jurídica {entity} não possui moeda funcional.",
+      "remedy": "Defina a moeda base da pessoa jurídica em Configurações da Empresa → Subsidiárias.\nMoeda"
+    },
+    "currencyUnknown": {
+      "message": "{currency} não tem precisão suportada no registro de moeda.",
+      "remedy": "Restaure {currency} no registro de moeda (Configurações da Empresa → Moedas)."
+    },
+    "currencyPrecisionUnsupported": {
+      "message": "A precisão da moeda não é suportada.",
+      "remedy": "Restaure a moeda em Configurações da Empresa → Moedas."
+    },
+    "currencyCodeInvalid": {
+      "message": "Escolha a moeda em que o registro é declarado.",
+      "remedy": "Insira um código de moeda ISO de três letras."
+    },
+    "classUnknown": {
+      "message": "A classe de ações não existe para esta entidade legal.",
+      "remedy": "Escolha uma classe de ações da pessoa jurídica."
+    },
+    "classReferenceUnknown": {
+      "message": "Um título faz referência a uma classe de compartilhamento que não existe.",
+      "remedy": "Recarregue a tabela de limites."
+    },
+    "planUnknown": {
+      "message": "O plano não existe para esta entidade legal.",
+      "remedy": "Escolha um plano da pessoa jurídica."
+    },
+    "roundUnknown": {
+      "message": "A rodada de financiamento não existe para esta entidade legal.",
+      "remedy": "Escolha uma rodada de financiamento da pessoa jurídica."
+    },
+    "securityUnknown": {
+      "message": "A segurança não existe.",
+      "remedy": "Escolha um título."
+    },
+    "safeUnknown": {
+      "message": "O SAFE não existe.",
+      "remedy": "Escolha um SEGURO."
+    },
+    "holderInvalid": {
+      "message": "Escolha um suporte válido.",
+      "remedy": "Escolha uma pessoa ou empresa no diretório."
+    },
+    "holderInactive": {
+      "message": "O titular deverá ser pessoa ou empresa ativa desta organização.",
+      "remedy": "Escolha uma pessoa ou empresa ativa ou reative-a no diretório."
+    },
+    "idempotencyConflict": {
+      "message": "{subject, select, round {Esta chave de solicitação já foi usada para uma alteração de rodada de financiamento diferente.} reversal {Esta chave de solicitação já foi utilizada para um estorno diferente.} issuance {Esta chave de solicitação já foi utilizada para uma emissão diferente.} event {Esta chave de solicitação já foi usada para um evento diferente.} action {Esta chave de solicitação já foi utilizada para uma ação de patrimônio diferente.} election {Esta chave de solicitação já foi utilizada para uma eleição diferente.} other {Esta chave de solicitação já foi usada para uma solicitação diferente.}}",
+      "remedy": "Tente novamente com uma nova chave de solicitação."
+    },
+    "auditUnwritten": {
+      "message": "O registro de auditoria não foi gravado; a alteração não foi salva.",
+      "remedy": "Tente a alteração novamente."
+    },
+    "reasonRequired": {
+      "message": "{subject, select, classAmendment {Registre um motivo de caracteres {min} a {max} para a alteração de classe.} split {Registre um motivo de caracteres {min} a {max} para a divisão.} reserveChange {Registre um motivo de caracteres {min} para {max} para a alteração da reserva.} mfnElection {Registre um motivo de caracteres {min} a {max} para a eleição MFN.} mfnReversal {Registre um motivo de caracteres {min} a {max} para a reversão da eleição MFN.} roundAmendment {Registre um motivo de caracteres {min} a {max} para a alteração da rodada de financiamento.} roundVoid {Registre um motivo de caracteres {min} a {max} para anulação da rodada de financiamento.} accountPolicy {Registre um motivo de caracteres {min} a {max} para a versão da política de conta.} forfeit {Registre um motivo de caracteres {min} a {max} para o confisco.} expire {Registre um motivo de caracteres {min} a {max} para a expiração.} cancel {Registre um motivo de caracteres {min} a {max} para o cancelamento.} repurchase {Registre um motivo de caracteres {min} a {max} para a recompra.} void {Registre um motivo de caracteres {min} a {max} para o vazio.} reverse {Registre um motivo de caracteres {min} a {max} para a reversão.} withdrawal {Registre um motivo de caracteres {min} a {max} para retirar a ação.} other {Registre um motivo de caracteres {min} para {max} para a alteração.}}",
+      "remedy": "Descreva o motivo (por exemplo, a resolução do conselho que a aprovou) e depois envie novamente."
+    },
+    "preMoneyBasisTooShort": {
+      "message": "Indique a base da avaliação pré-monetária em caracteres {min} a {max}.",
+      "remedy": "Descreva a base em “{field}” (por exemplo, um aumento no pool ou conversões contadas na avaliação) ou deixe em branco."
+    },
+    "fxRateMissing": {
+      "message": "Nenhuma taxa de câmbio de {from} para {to} é registrada em ou antes de {date}.",
+      "remedy": "Registre a taxa spot {from}/{to} para {date} (Configuração → Taxas de câmbio) e tente novamente."
+    },
+    "fxRateUnresolved": {
+      "message": "{subject, select, conversion {Nenhuma taxa de câmbio de {from} para {to} foi resolvida para a conversão.} model {Nenhuma taxa de câmbio de {from} para {to} foi resolvida para o modelo.} other {Nenhuma taxa de câmbio de {from} para {to} foi resolvida para o cálculo.}}",
+      "remedy": "Registre a taxa spot {from}/{to} para {date} (Configuração → Taxas de câmbio) e tente novamente."
+    },
+    "decimalInvalid": {
+      "message": "“{label}” deve ser um número decimal simples.",
+      "remedy": "Insira “{label}” como dígitos com um ponto decimal opcional, como {example}."
+    },
+    "decimalPrecision": {
+      "message": "{placesCount, plural, one {“{label}” carrega mais do que {places} casa decimal.} other {“{label}” carrega mais casas decimais do que {places}.}}",
+      "remedy": "{placesCount, plural, one {Insira “{label}” com no máximo {places} casa decimal.} other {Insira “{label}” com no máximo {places} casas decimais.}}"
+    },
+    "valueMissing": {
+      "message": "“{label}” é necessário.",
+      "remedy": "Grave “{label}” antes de continuar."
+    },
+    "sharesInvalid": {
+      "message": "“{label}” deve ser um número inteiro de ações.",
+      "remedy": "Insira “{label}” como um número inteiro de compartilhamentos."
+    },
+    "dateInvalid": {
+      "message": "“{label}” deve ser uma data válida.",
+      "remedy": "Escolha uma data para “{label}”.\nÉ necessário"
+    },
+    "textInvalid": {
+      "message": "“{label}”, em no máximo caracteres {max}.",
+      "remedy": "Insira “{label}”."
+    },
+    "accountPolicyIncomplete": {
+      "message": "A política de conta patrimonial vigente a partir do {date} não mapeia “{account}”.",
+      "remedy": "Adicione uma versão da política de conta patrimonial que mapeie “{account}”, em vigor na data da transação ou antes dela (Configuração → Contas patrimoniais)."
+    },
+    "accountPolicyMissing": {
+      "message": "Nenhuma política de conta patrimonial está em vigor para esta entidade legal no {date}.",
+      "remedy": "Adicione uma política de conta patrimonial para a entidade legal, em vigor na data da transação ou antes dela (Configuração → Contas patrimoniais)."
+    },
+    "fxAccountMissing": {
+      "message": "A conta de ganho/perda FX realizada não está configurada.",
+      "remedy": "Mapeie a conta de ganhos/perdas cambiais realizadas em Configuração → Empresa e Contabilidade → Contas de controle e tente novamente."
+    },
+    "considerationAccountMissing": {
+      "message": "Escolha a conta por meio da qual a contraprestação é liquidada.",
+      "remedy": "Escolha o dinheiro ou a conta bancária que recebeu ou pagou o dinheiro em “{field}”."
+    },
+    "considerationAccountInvalid": {
+      "message": "A conta de contraprestação deve ser uma conta ativa de caixa ou de lançamento bancário.",
+      "remedy": "Escolha um dinheiro ativo ou conta bancária em “{field}”; contas a receber, pré-pagas, estoques e provisões não podem receber ou pagar o dinheiro."
+    },
+    "postingRefused": {
+      "message": "O razão recusou o lançamento de patrimônio datado de {date} ({reason}).",
+      "remedy": "Resolva a recusa do razão (por exemplo, reabra o período por meio do Fechamento do Período ou reative a conta) e tente novamente."
+    },
+    "postingPeriodClosed": {
+      "message": "O lançamento patrimonial datado de {date} cai em {period}, que está fechado para lançamento.",
+      "remedy": "Solicite uma reabertura controlada do {closing} através do Fechamento do Período, ou registre a transação em uma data em um período aberto."
+    },
+    "bookMissing": {
+      "message": "A organização não possui nenhum livro primário ativo que seja contabilizado no razão geral.",
+      "remedy": "Ative o livro contábil primário em Configurações da Empresa → Livros contábeis."
+    },
+    "periodMissing": {
+      "message": "Nenhum período contábil cobre {date}.",
+      "remedy": "Gere os períodos contábeis do ano fiscal que cobre {date} (Configuração → Fechamento do período → Períodos contábeis) e tente novamente."
+    },
+    "entryUnbalanced": {
+      "message": "O lançamento patrimonial datado de {date} não é balanceado.",
+      "remedy": "Revise os valores e tente novamente."
+    },
+    "entryUnknown": {
+      "message": "O lançamento a reverter não é um lançamento patrimonial desta organização.",
+      "remedy": "Recarregue o registro e tente novamente."
+    },
+    "entryNotPosted": {
+      "message": "A entrada {entry} não é uma entrada contabilizada e não pode ser revertida.",
+      "remedy": "Recarregue o registro; já pode estar revertido."
+    },
+    "notSaved": {
+      "message": "{record, select, round {A rodada de financiamento não foi salva.} roundAmendment {A alteração da rodada de financiamento não foi salva.} roundVoid {A rodada de financiamento anulada não foi salva.} shareClass {A classe de compartilhamento não foi salva.} classAmendment {A alteração de classe não foi salva.} split {A divisão não foi salva.} plan {O plano não foi salvo.} reserveChange {A alteração da reserva não foi salva.} security {A segurança não foi salva.} event {O evento não foi salvo.} election {A eleição não foi salva.} reversal {O estorno não foi salvo.} accountPolicy {A versão da política não foi salva.} compensationRun {A execução de compensação não foi salva.} interestRun {A execução de juros não foi salva.} request {A ação de capital não foi salva.} other {A alteração não foi salva.}}",
+      "remedy": "Tente novamente."
+    },
+    "notStoredCompletely": {
+      "message": "{record, select, compensationLines {As linhas de execução de compensação não foram armazenadas completamente; nada foi salvo.} releaseLines {As liberações de estoque restrito não foram armazenadas completamente; nada foi salvo.} interestLines {As linhas de execução de juros não foram armazenadas completamente; nada foi salvo.} positions {As posições da tabela de limites não foram armazenadas completamente; nada foi salvo.} vesting {As tranches de aquisição não foram armazenadas completamente; nada foi salvo.} other {Os registros não foram armazenados completamente; nada foi salvo.}}",
+      "remedy": "Tente novamente."
+    },
+    "positionsStale": {
+      "message": "O razão de posição da tabela de limites não foi atualizado; nada foi salvo.",
+      "remedy": "Tente novamente."
+    },
+    "issuanceEntryUnknown": {
+      "message": "A entrada de emissão do {security} não identifica seu principal.",
+      "remedy": "Revise o lançamento de emissão do instrumento no diário; uma nota SAFE ou conversível liquida o principal creditado por sua emissão."
+    },
+    "interestUnreconciled": {
+      "message": "O razão contém {carried} em juros acumulados sobre {security}, mas {accrued} foi acumulado para {date}.",
+      "remedy": "Revise as entradas de juros da nota conversível no diário; os juros acumulados são lançados somente por corridas e liquidações de juros."
+    },
+    "eventKindMissing": {
+      "message": "Escolha o que aconteceu com a segurança.",
+      "remedy": "Escolha um tipo de evento."
+    },
+    "eventNotApplicable": {
+      "message": "{event, select, exercise {{kind, select, share {Um exercício não pode ser registrado em um certificado de ações.} option {Um exercício não pode ser registrado em uma opção.} rsu {Um exercício não pode ser gravado em uma RSU.} warrant {Um exercício não pode ser registrado em um warrant.} safe {Um exercício não pode ser gravado em um SAFE.} note {Um exercício não pode ser registrado em uma nota conversível conversível.} other {Um exercício não pode ser registrado neste título.}}} settle {{kind, select, share {Uma liquidação não pode ser registrada em um certificado de ações.} option {Uma liquidação não pode ser registrada em uma opção.} rsu {Uma liquidação não pode ser registrada em uma RSU.} warrant {Uma liquidação não pode ser registrada em um warrant.} safe {Uma liquidação não pode ser registrada em um SAFE.} note {Uma liquidação não pode ser registrada em uma nota conversível conversível.} other {Uma liquidação não pode ser registrada neste título.}}} forfeit {{kind, select, share {Um confisco não pode ser registrado em um certificado de ações.} option {Uma perda não pode ser registrada em uma opção.} rsu {Um confisco não pode ser registrado em uma RSU.} warrant {Um confisco não pode ser registrado em um mandado.} safe {Um confisco não pode ser registrado em um SAFE.} note {Um confisco não pode ser registrado em uma nota conversível conversível.} other {Um confisco não pode ser registrado neste título.}}} expire {{kind, select, share {Um vencimento não pode ser registrado em um certificado de ações.} option {Uma expiração não pode ser registrada em uma opção.} rsu {Uma expiração não pode ser registrada em uma RSU.} warrant {Uma expiração não pode ser registrada em um mandado.} safe {Uma expiração não pode ser registrada em um SAFE.} note {Um vencimento não pode ser registrado em uma nota conversível conversível.} other {Uma expiração não pode ser registrada neste título.}}} cancel {{kind, select, share {Um cancelamento não pode ser registrado em um certificado de ações.} option {Um cancelamento não pode ser registrado em uma opção.} rsu {Um cancelamento não pode ser registrado em uma RSU.} warrant {Um cancelamento não pode ser registrado em um mandado.} safe {Um cancelamento não pode ser registrado em um SAFE.} note {Um cancelamento não pode ser registrado em uma nota conversível conversível.} other {Um cancelamento não pode ser registrado neste título.}}} repurchase {{kind, select, share {Uma recompra não pode ser registrada em um certificado de ações.} option {Uma recompra não pode ser registrada em uma opção.} rsu {Uma recompra não pode ser registrada em uma RSU.} warrant {Uma recompra não pode ser registrada em um warrant.} safe {Uma recompra não pode ser registrada em um SAFE.} note {Uma recompra não pode ser registrada em uma nota conversível conversível.} other {Uma recompra não pode ser registrada neste título.}}} transfer {{kind, select, share {Uma transferência não pode ser registrada em um certificado de ações.} option {Uma transferência não pode ser registrada em uma opção.} rsu {Uma transferência não pode ser registrada em uma RSU.} warrant {Uma transferência não pode ser registrada em um mandado.} safe {Uma transferência não pode ser registrada em um SAFE.} note {Uma transferência não pode ser registrada em uma nota conversível conversível.} other {Uma transferência não pode ser registrada neste título.}}} convert {{kind, select, share {Uma conversão não pode ser registrada em um certificado de ações.} option {Uma conversão não pode ser registrada em uma opção.} rsu {Uma conversão não pode ser registrada em uma RSU.} warrant {Uma conversão não pode ser registrada em um warrant.} safe {Uma conversão não pode ser registrada em um SAFE.} note {Uma conversão não pode ser registrada em uma nota conversível conversível.} other {Uma conversão não pode ser registrada neste título.}}} void {{kind, select, share {Um nulo não pode ser registrado em um certificado de ações.} option {Um vazio não pode ser registrado em uma opção.} rsu {Um vazio não pode ser registrado em uma RSU.} warrant {Uma nulidade não pode ser registrada em um mandado.} safe {Um vazio não pode ser registrado em um SAFE.} note {Um nulo não pode ser registrado em uma nota conversível conversível.} other {Um nulo não pode ser registrado neste título.}}} repay {{kind, select, share {Um reembolso não pode ser registrado em um certificado de ações.} option {Um reembolso não pode ser registrado em uma opção.} rsu {Um reembolso não pode ser registrado em uma RSU.} warrant {Um reembolso não pode ser registrado em um warrant.} safe {Um reembolso não pode ser registrado em um SAFE.} note {Um reembolso não pode ser registrado em uma nota conversível conversível.} other {Um reembolso não pode ser registrado neste título.}}} reverse {{kind, select, share {Uma reversão não pode ser registrada em um certificado de ações.} option {Uma reversão não pode ser registrada em uma opção.} rsu {Uma reversão não pode ser registrada em uma RSU.} warrant {Uma reversão não pode ser registrada em um warrant.} safe {Uma reversão não pode ser registrada em um SAFE.} note {Uma reversão não pode ser registrada em uma nota conversível conversível.} other {Uma reversão não pode ser registrada neste título.}}} election_83b {{kind, select, share {Uma opção 83(b) não pode ser registrada em um certificado de ações.} option {Uma escolha 83(b) não pode ser registrada em uma opção.} rsu {Uma eleição 83(b) não pode ser registrada em uma RSU.} warrant {Uma eleição 83(b) não pode ser registrada em um mandado.} safe {Uma eleição 83(b) não pode ser registrada em um SAFE.} note {Uma eleição 83(b) não pode ser registrada em uma nota conversível conversível.} other {Uma eleição 83(b) não pode ser registrada neste título.}}} other {{kind, select, share {Este evento não pode ser registrado em um certificado de compartilhamento.} option {Este evento não pode ser registrado em uma opção.} rsu {Este evento não pode ser registrado em uma RSU.} warrant {Este evento não pode ser registrado em um mandado.} safe {Este evento não pode ser registrado em um SAFE.} note {Este evento não pode ser registrado em uma nota conversível conversível.} other {Este evento não pode ser registrado neste título.}}}}",
+      "remedy": "Escolha um evento que se aplique a esta segurança."
+    },
+    "eventSecurityVoid": {
+      "message": "Segurança {security} é nula.",
+      "remedy": "Uma segurança nula não leva mais eventos; registrar o evento em um título que esteja de pé."
+    },
+    "eventBeforeIssue": {
+      "message": "O evento não pode preceder a data de emissão, {issueDate}.",
+      "remedy": "Data do evento em ou após {issueDate}."
+    },
+    "eventQuantityNotPositive": {
+      "message": "A quantidade deve ser de pelo menos uma ação.",
+      "remedy": "Insira uma quantidade de pelo menos um em “{field}”."
+    },
+    "convertibleNotOutstanding": {
+      "message": "{status, select, outstanding {Segurança {security} é excelente a partir de {date}.} exercised {Segurança {security} é exercida a partir de {date}.} settled {Segurança {security} é liquidada a partir de {date}.} forfeited {Segurança {security} é perdida a partir de {date}.} expired {Segurança {security} expirou a partir de {date}.} cancelled {Segurança {security} foi cancelado a partir de {date}.} repurchased {Segurança {security} é recomprado a partir de {date}.} transferred {Segurança {security} é transferida a partir de {date}.} converted {Segurança {security} é convertido como {date}.} void {Segurança {security} é nula a partir de {date}.} repaid {Segurança {security} é reembolsado a partir de {date}.} not_issued {Segurança {security} ainda não foi emitido a partir de {date}.} other {Segurança {security} não está mais disponível a partir do {date}.}}",
+      "remedy": "Registrar uma liquidação apenas em uma nota SAFE ou conversível em circulação; reverter primeiro a liquidação anterior se ela tiver sido registrada erroneamente."
+    },
+    "exerciseAfterExpiry": {
+      "message": "Segurança {security} expirou em {date}.",
+      "remedy": "Registre a expiração."
+    },
+    "nothingVestedUntilNext": {
+      "message": "{event, select, exercise {Cada unidade de {security} adquirida por {date} já foi exercida ou não está mais em circulação; as próximas unidades serão adquiridas no {nextVest}.} other {Cada unidade de {security} adquirida por {date} já está liquidada ou não está mais pendente; as próximas unidades serão adquiridas no {nextVest}.}}",
+      "remedy": "Defina “{field}” em ou após {nextVest}, quando as próximas unidades forem adquiridas."
+    },
+    "nothingVestedYet": {
+      "message": "Nada no {security} foi adquirido ainda no {date}; as primeiras unidades são adquiridas no {nextVest}.",
+      "remedy": "Defina “{field}” em ou após {nextVest}, quando as primeiras unidades forem adquiridas."
+    },
+    "nothingVestedEver": {
+      "message": "{event, select, exercise {Nenhuma unidade do {security} é adquirida e não exercida no {date}, e nenhuma outra unidade é adquirida de acordo com seu cronograma.} other {Nenhuma unidade do {security} é adquirida e não liquidada no {date}, e nenhuma outra unidade é adquirida de acordo com seu cronograma.}}",
+      "remedy": "Revise o histórico do prêmio: cada unidade adquirida já foi exercida, liquidada, perdida ou expirada."
+    },
+    "exerciseExceedsOutstanding": {
+      "message": "{ceilingCount, plural, one {Apenas a unidade {ceiling} é excelente no {date}.} other {Somente unidades {ceiling} são excelentes no {date}.}}",
+      "remedy": "{ceilingCount, plural, one {Não exerça mais do que a unidade {ceiling}.} other {Não exerça mais do que unidades {ceiling}.}}"
+    },
+    "exerciseExceedsVested": {
+      "message": "Em {date}, somente {ceiling} {ceilingCount, plural, one {unidade tem direito adquirido} other {unidades têm direito adquirido}} e {event, select, exercise {não foi exercida} other {não foi liquidada}}.",
+      "remedy": "Registre no máximo {ceiling} {ceilingCount, plural, one {unidade} other {unidades}}; unidades sem direito adquirido não podem ser {event, select, exercise {exercidas} other {liquidadas}}."
+    },
+    "earlyExerciseTermsMissing": {
+      "message": "Grant {security} não registra o preço pelo qual a empresa recompra ações não adquiridas.",
+      "remedy": "{ceilingCount, plural, one {Não exerça mais do que a unidade adquirida {ceiling}.} other {Não exerça mais do que as unidades adquiridas {ceiling}.}}"
+    },
+    "exerciseBelowPar": {
+      "message": "As ações seriam emitidas abaixo do valor nominal.",
+      "remedy": "Revise o preço de exercício e o valor nominal da classe."
+    },
+    "eventExceedsHolding": {
+      "message": "{ceilingCount, plural, one {{event, select, forfeit {Apenas a unidade {ceiling} não está adquirida no {date}.} expire {Somente a unidade {ceiling} é adquirida e não exercida no {date}.} other {Apenas a unidade {ceiling} é excelente no {date}.}}} other {{event, select, forfeit {Somente unidades {ceiling} não foram adquiridas no {date}.} expire {Somente unidades {ceiling} são adquiridas e não exercidas no {date}.} other {Somente unidades {ceiling} são excelentes no {date}.}}}}",
+      "remedy": "{ceilingCount, plural, one {Não grave mais que a unidade {ceiling}.} other {Não registre mais do que unidades {ceiling}.}}"
+    },
+    "repurchaseExceedsOutstanding": {
+      "message": "{ceilingCount, plural, one {Apenas o compartilhamento {ceiling} está pendente no {date}.} other {Somente ações {ceiling} estão em circulação no {date}.}}",
+      "remedy": "{ceilingCount, plural, one {Não recomprar mais do que ações {ceiling}.} other {Não recomprar mais do que ações {ceiling}.}}"
+    },
+    "restrictedRepurchaseMixed": {
+      "message": "{ceilingCount, plural, one {{ceiling} das ações não foram adquiridas em {date}; a empresa recompra ações não adquiridas nos termos da concessão.} other {{ceiling} das ações não foram adquiridas em {date}; a empresa recompra ações não adquiridas nos termos da concessão.}}",
+      "remedy": "{ceilingCount, plural, one {Recompra primeiro as ações não adquiridas {ceiling} e, em seguida, registre uma recompra separada de ações adquiridas.} other {Recompra primeiro as ações não adquiridas {ceiling} e, em seguida, registre uma recompra separada de ações adquiridas.}}"
+    },
+    "restrictedRepurchaseTermsMissing": {
+      "message": "A concessão {grant} não registra o preço de recompra de ações não adquiridas.",
+      "remedy": "Registre “{field}” nos termos da concessão antes de recomprar ações não adquiridas."
+    },
+    "repurchaseFairValueMissing": {
+      "message": "A concessão recompra ações não adquiridas pelo menor valor entre o custo e o valor justo de mercado, portanto, o valor justo de mercado na data da recompra é exigido.",
+      "remedy": "Insira “{field}” na data da recompra."
+    },
+    "repurchaseFairValueNegative": {
+      "message": "“{field}” não pode ser negativo.",
+      "remedy": "Insira “{field}” como zero ou mais."
+    },
+    "repurchasePriceFixed": {
+      "message": "A concessão precifica esta recompra em {amount}.",
+      "remedy": "Limpar “{field}”; o preço de recompra segue os termos da concessão."
+    },
+    "earlyExerciseDepositUnreconciled": {
+      "message": "O depósito de exercício antecipado de {security} não está no razão.",
+      "remedy": "Revise a entrada do exercício no diário; o depósito é creditado pelo exercício e liberado pela corrida de compensação."
+    },
+    "repurchaseAmountNegative": {
+      "message": "“{field}” não pode ser negativo.",
+      "remedy": "Insira o dinheiro pago pelas ações em “{field}”."
+    },
+    "transfereeIsHolder": {
+      "message": "O cessionário já é o titular.",
+      "remedy": "Escolha um suporte diferente em “{field}”."
+    },
+    "transferExceedsVested": {
+      "message": "{ceilingCount, plural, one {Somente a unidade adquirida do {ceiling} pode ser transferida no {date}.} other {Somente unidades adquiridas do {ceiling} podem ser transferidas no {date}.}}",
+      "remedy": "{ceilingCount, plural, one {Não transfira mais do que a unidade {ceiling}.} other {Não transfira mais do que unidades {ceiling}.}}"
+    },
+    "conversionNotPreferred": {
+      "message": "Somente ações preferenciais são convertidas em ordinárias.",
+      "remedy": "Escolha um certificado de ação preferencial."
+    },
+    "conversionTargetMissing": {
+      "message": "Escolha a classe ordinária em que as ações serão convertidas.",
+      "remedy": "Escolha uma classe comum da entidade legal."
+    },
+    "conversionClassMismatch": {
+      "message": "Classe {shareClass} converte em {target}.",
+      "remedy": "Converta na classe de conversão da classe ou altere a classe de conversão primeiro.\nClasse"
+    },
+    "conversionClassMismatchUnnamed": {
+      "message": "{shareClass} é convertida em outra classe comum.",
+      "remedy": "Converta na classe de conversão da classe ou altere a classe de conversão primeiro.\nClasse"
+    },
+    "conversionClassNotEffective": {
+      "message": "Classe {shareClass} não é eficaz até {date}.",
+      "remedy": "Data da conversão em ou após {date}."
+    },
+    "conversionExceedsHolding": {
+      "message": "{ceilingCount, plural, one {Somente o compartilhamento {ceiling} pode ser convertido em {date}.} other {Somente compartilhamentos {ceiling} podem ser convertidos em {date}.}}",
+      "remedy": "{ceilingCount, plural, one {Não converta mais que o compartilhamento {ceiling}.} other {Não converta mais do que compartilhamentos {ceiling}.}}"
+    },
+    "conversionBelowOneCommon": {
+      "message": "As ações são convertidas em menos de uma ação ordinária.",
+      "remedy": "Converta mais compartilhamentos."
+    },
+    "conversionRoundMissing": {
+      "message": "Escolha a rodada de financiamento na qual o instrumento será convertido.\nRodada de financiamento",
+      "remedy": "Escolha uma rodada de financiamento da pessoa jurídica."
+    },
+    "conversionOffClosingDate": {
+      "message": "{round} fechada em {date}; um instrumento é convertido nele na data de fechamento.",
+      "remedy": "Data a conversão em {date}."
+    },
+    "conversionTermsVoid": {
+      "message": "A eleição MFN em {security} de {electedOn} adotou os termos de {source}, que é nulo a partir de {voidedOn}.",
+      "remedy": "Reverta a eleição MFN em {security}, com data igual ou anterior a {closedOn} (Títulos → {security} → termos MFN → Eleição reversa) e, em seguida, converta-a novamente nos termos vigentes."
+    },
+    "conversionBelowOneShare": {
+      "message": "O instrumento é convertido em menos de uma ação.",
+      "remedy": "Revise o preço da rodada de financiamento e os termos do instrumento."
+    },
+    "convertingAmountUnreconciled": {
+      "message": "O valor de conversão de {security} não corresponde ao que o razão contém.",
+      "remedy": "Revise as entradas de emissão e juros do instrumento no diário."
+    },
+    "conversionBelowPar": {
+      "message": "A conversão emitiria ações abaixo do valor nominal.",
+      "remedy": "Revise o preço da rodada de financiamento e o valor nominal da classe."
+    },
+    "repaymentAmountMissing": {
+      "message": "O valor reembolsado deve ser maior que zero.",
+      "remedy": "Insira o dinheiro pago ao titular em “{field}”."
+    },
+    "safeRepaymentAmount": {
+      "message": "A SAFE é reembolsado pelo valor da compra, {amount}.",
+      "remedy": "Registrar o reembolso no valor da compra; registrar qualquer diferença de liquidação como um lançamento contábil manual separado."
+    },
+    "voidMfnSource": {
+      "message": "{safe} adotou os termos de {security} por meio de sua eleição MFN de {electedOn}; anular {security} deixaria os termos de nomenclatura eleitos inseridos incorretamente.",
+      "remedy": "Reverta a eleição MFN em {safe} primeiro (Títulos → {safe} → Termos MFN → Eleição reversa) e, em seguida, anule {security}."
+    },
+    "voidMfnSourceConverted": {
+      "message": "{safe} adotou os termos de {security} por meio de sua eleição MFN de {electedOn}; anular {security} deixaria os termos de nomenclatura eleitos inseridos incorretamente.",
+      "remedy": "Anula o certificado {certificate}, produzido pela conversão de {safe}, datado de {convertedOn} (data de encerramento da rodada de financiamento); reverter a eleição MFN em {safe} (Títulos → {safe} → termos MFN → Eleição reversa); em seguida, anule {security} e converta {safe} novamente."
+    },
+    "voidHasActivity": {
+      "message": "Segurança {security} registrou atividade e não pode ser anulado.",
+      "remedy": "Anule os certificados que seus eventos produziram primeiro, reverta seus outros eventos ou registre um cancelamento."
+    },
+    "reversalTargetUnknown": {
+      "message": "O evento a ser revertido não existe neste título.",
+      "remedy": "Escolha um evento do histórico da segurança."
+    },
+    "eventFinal": {
+      "message": "{event, select, void {Um vazio não pode ser revertido.} other {Uma reversão não pode ser revertida.}}",
+      "remedy": "Os vazios e reversões são finais; registre a segurança ou evento novamente se ainda for necessário."
+    },
+    "eventNotReversible": {
+      "message": "{event, select, exercise {Um exercício não pode ser revertido.} settle {Uma liquidação não pode ser revertida.} forfeit {Um confisco não pode ser revertido.} expire {Uma expiração não pode ser revertida.} cancel {Um cancelamento não pode ser revertido.} repurchase {Uma recompra não pode ser revertida.} transfer {Uma transferência não pode ser revertida.} convert {Uma conversão não pode ser revertida.} void {Um vazio não pode ser revertido.} repay {Um reembolso não pode ser revertido.} reverse {Uma reversão não pode ser revertida.} election_83b {Uma eleição 83(b) não pode ser revertida.} other {Este evento não pode ser revertido.}}",
+      "remedy": "Anula o certificado que o evento produziu; isso desfaz o evento."
+    },
+    "eventAlreadyReversed": {
+      "message": "O evento já está revertido.",
+      "remedy": "Recarregue o histórico da segurança."
+    },
+    "reversalBeforeEvent": {
+      "message": "A reversão não pode preceder o evento que reverte, datado de {date}.",
+      "remedy": "Data a reversão em ou após {date}.\nA atividade posterior de"
+    },
+    "reversalHasDependents": {
+      "message": "{event, select, forfeit {{countCount, plural, one {no {security} depende do confisco do {date}: evento posterior do {count}, o mais recente no {latestOn}.\nA atividade posterior de} other {no {security} depende do confisco de eventos posteriores do {date}: {count}, o mais recente no {latestOn}.\nA atividade posterior de}}} expire {{countCount, plural, one {no {security} depende da expiração do evento {date}: {count} posterior, o mais recente no {latestOn}.\nA atividade posterior de} other {no {security} depende da expiração do {date}: eventos posteriores do {count}, o mais recente no {latestOn}.\nA atividade posterior de}}} cancel {{countCount, plural, one {no {security} depende do cancelamento do evento posterior do {date}: {count}, o mais recente no {latestOn}.\nA atividade posterior de} other {no {security} depende do cancelamento de eventos posteriores do {date}: {count}, o mais recente no {latestOn}.\nA atividade posterior de}}} repurchase {{countCount, plural, one {no {security} depende da recompra do {date}: evento posterior do {count}, o mais recente no {latestOn}.\nA atividade posterior de} other {no {security} depende da recompra de eventos posteriores do {date}: {count}, o mais recente no {latestOn}.\nA atividade posterior de}}} repay {{countCount, plural, one {no {security} depende do reembolso do {date}: evento posterior do {count}, o mais recente no {latestOn}.\nA atividade posterior de} other {no {security} depende do reembolso de eventos posteriores do {date}: {count}, o mais recente no {latestOn}.\nA atividade posterior de}}} election_83b {{countCount, plural, one {no {security} depende da eleição 83(b) do {date}: evento posterior do {count}, o mais recente no {latestOn}.} other {no {security} depende da eleição 83(b) do {date}: eventos posteriores do {count}, o mais recente no {latestOn}.\nA atividade posterior de}}} other {{countCount, plural, one {no {security} depende do evento do {date}: evento posterior do {count}, o mais recente no {latestOn}.\nA atividade posterior de} other {no {security} depende do evento de {date}: eventos posteriores do {count}, o mais recente no {latestOn}.}}}}",
+      "remedy": "{latest, select, exercise {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o exercício de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o exercício de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o exercício de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o exercício de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o exercício de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o exercício de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o exercício de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}} settle {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a liquidação de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a liquidação de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a liquidação de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a liquidação de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a liquidação de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a liquidação de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a liquidação de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}} forfeit {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o confisco do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o confisco do {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o confisco do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o confisco do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o confisco do {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o confisco do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o confisco do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}} expire {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a expiração do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a expiração do {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a expiração do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a expiração do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a expiração do {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a expiração do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a expiração do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}} cancel {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o cancelamento do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o cancelamento de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o cancelamento do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o cancelamento do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o cancelamento de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o cancelamento de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o cancelamento de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}} repurchase {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a recompra de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a recompra de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a recompra de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a recompra do {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a recompra de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a recompra de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a recompra de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}} transfer {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a transferência de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a transferência de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a transferência de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a transferência de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a transferência de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a transferência de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a transferência de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}} convert {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a conversão de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a conversão de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a conversão de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a conversão de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a conversão de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a conversão de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a conversão de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}} repay {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o reembolso de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o reembolso de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o reembolso de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o reembolso de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o reembolso de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o reembolso de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o reembolso de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}} election_83b {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a eleição 83(b) de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a eleição 83(b) de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a eleição 83(b) de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a eleição 83(b) de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a eleição 83(b) de {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a eleição 83(b) de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com a eleição 83(b) de {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}} other {{event, select, forfeit {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o evento {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse confisco.} expire {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o evento {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse vencimento.} cancel {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o evento {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse cancelamento.} repurchase {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o evento {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta essa recompra.} repay {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o evento {latestOn}: reverta cada uma ou anule o certificado produzido; em seguida, reverta esse reembolso.} election_83b {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o evento {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esta eleição 83 (b).} other {Desfaça primeiro a atividade posterior, a mais recente primeiro, começando com o evento {latestOn}: reverta cada uma ou anule o certificado produzido; então reverta esse evento.}}}}"
+    },
+    "election83bNotApplicable": {
+      "message": "Segurança {security} não tem cronograma de aquisição de direitos, portanto, nenhuma eleição 83(b) se aplica.",
+      "remedy": "Registro 83(b) eleições somente em ações restritas."
+    },
+    "election83bWindowClosed": {
+      "message": "A janela 83(b) para {security} foi fechada no {deadline}.",
+      "remedy": "Uma eleição deve ser apresentada dentro de 30 dias a partir do {issueDate}; registrar apenas uma eleição arquivada em ou antes de {deadline}."
+    },
+    "election83bRecorded": {
+      "message": "Uma eleição 83(b) arquivada em {date} já está registrada.",
+      "remedy": "Reverta primeiro a eleição registrada se sua data tiver sido inserida incorretamente."
+    },
+    "mfnNotApplicable": {
+      "message": "Segurança {security} não possui termo de nação mais favorecida.",
+      "remedy": "Registre eleições MFN apenas em SAFEs emitidos com o termo MFN."
+    },
+    "mfnElectionClosed": {
+      "message": "{status, select, outstanding {Segurança {security} é excelente a partir de {date}; seus termos não podem mais mudar.} exercised {Segurança {security} é exercida a partir de {date}; seus termos não podem mais mudar.} settled {Segurança {security} é liquidada a partir de {date}; seus termos não podem mais mudar.} forfeited {Segurança {security} é perdida a partir de {date}; seus termos não podem mais mudar.} expired {Segurança {security} expirou em {date}; seus termos não podem mais mudar.} cancelled {Segurança {security} foi cancelada a partir de {date}; seus termos não podem mais mudar.} repurchased {Segurança {security} é recomprado a partir de {date}; seus termos não podem mais mudar.} transferred {Segurança {security} é transferida a partir de {date}; seus termos não podem mais mudar.} converted {Segurança {security} é convertido a partir de {date}; seus termos não podem mais mudar.} void {Segurança {security} é nula a partir de {date}; seus termos não podem mais mudar.} repaid {Segurança {security} é reembolsado a partir de {date}; seus termos não podem mais mudar.} not_issued {Segurança {security} ainda não foi emitido a partir de {date}; seus termos não podem mais mudar.} other {Segurança {security} não é mais excelente a partir de {date}; seus termos não podem mais mudar.}}",
+      "remedy": "Grave uma eleição apenas enquanto o SAFE estiver pendente; corrija uma conversão anulando o certificado produzido primeiro."
+    },
+    "mfnReversalClosedConverted": {
+      "message": "{status, select, outstanding {Segurança {security} é excelente a partir de {date}; seus termos não podem mais mudar.} exercised {Segurança {security} é exercida a partir de {date}; seus termos não podem mais mudar.} settled {Segurança {security} é liquidada a partir de {date}; seus termos não podem mais mudar.} forfeited {Segurança {security} é perdida a partir de {date}; seus termos não podem mais mudar.} expired {Segurança {security} expirou em {date}; seus termos não podem mais mudar.} cancelled {Segurança {security} foi cancelada a partir de {date}; seus termos não podem mais mudar.} repurchased {Segurança {security} é recomprado a partir de {date}; seus termos não podem mais mudar.} transferred {Segurança {security} é transferida a partir de {date}; seus termos não podem mais mudar.} converted {Segurança {security} é convertido a partir de {date}; seus termos não podem mais mudar.} void {Segurança {security} é nula a partir de {date}; seus termos não podem mais mudar.} repaid {Segurança {security} é reembolsado a partir de {date}; seus termos não podem mais mudar.} not_issued {Segurança {security} ainda não foi emitido a partir de {date}; seus termos não podem mais mudar.} other {Segurança {security} não é mais excelente a partir de {date}; seus termos não podem mais mudar.}}",
+      "remedy": "Anula o certificado {certificate}, que a conversão produziu, datado de {date} (data de encerramento da rodada de financiamento), para desfazer a conversão; em seguida, inverta a eleição e converta {security} novamente."
+    },
+    "mfnReversalClosed": {
+      "message": "{status, select, outstanding {Segurança {security} é excelente a partir de {date}; seus termos não podem mais mudar.} exercised {Segurança {security} é exercida a partir de {date}; seus termos não podem mais mudar.} settled {Segurança {security} é liquidada a partir de {date}; seus termos não podem mais mudar.} forfeited {Segurança {security} é perdida a partir de {date}; seus termos não podem mais mudar.} expired {Segurança {security} expirou em {date}; seus termos não podem mais mudar.} cancelled {Segurança {security} foi cancelada a partir de {date}; seus termos não podem mais mudar.} repurchased {Segurança {security} é recomprado a partir de {date}; seus termos não podem mais mudar.} transferred {Segurança {security} é transferida a partir de {date}; seus termos não podem mais mudar.} converted {Segurança {security} é convertido a partir de {date}; seus termos não podem mais mudar.} void {Segurança {security} é nula a partir de {date}; seus termos não podem mais mudar.} repaid {Segurança {security} é reembolsado a partir de {date}; seus termos não podem mais mudar.} not_issued {Segurança {security} ainda não foi emitido a partir de {date}; seus termos não podem mais mudar.} other {Segurança {security} não é mais excelente a partir de {date}; seus termos não podem mais mudar.}}",
+      "remedy": "{status, select, repaid {Reverta primeiro o reembolso e depois reverta a escolha.} other {Reverta primeiro o cancelamento e depois reverta a eleição.}}"
+    },
+    "mfnBackdated": {
+      "message": "Uma eleição ou reversão de MFN no {security} já foi registrada no {date}.",
+      "remedy": "{action, select, election {Data da eleição em ou após {date} em “{field}”.} other {Data a reversão em ou após {date} em “{field}”.}}"
+    },
+    "mfnSourceNotConvertible": {
+      "message": "O instrumento não é uma nota SEGURA ou conversível desta entidade legal.",
+      "remedy": "Escolha uma nota SAFE ou conversível conversível emitida após esta SAFE."
+    },
+    "mfnSourceNotLater": {
+      "message": "{source} foi emitido em {sourceIssuedOn}, não depois de {safe}, emitido em {safeIssuedOn}.",
+      "remedy": "Escolha um instrumento emitido após este SAFE; o termo NMF abrange apenas instrumentos posteriores."
+    },
+    "mfnSourceNotYetIssued": {
+      "message": "{source} ainda não foi emitido no {date}.",
+      "remedy": "Defina “{field}” em ou após {issuedOn}, quando {source} foi emitido."
+    },
+    "mfnSourceCurrency": {
+      "message": "{source} é indicado em {sourceCurrency}, não em {currency}.",
+      "remedy": "Escolha um instrumento indicado em {currency}."
+    },
+    "mfnSourceVoid": {
+      "message": "{source} é nulo.",
+      "remedy": "Escolha um instrumento que fique de pé; os termos de um instrumento nulo foram inseridos incorretamente."
+    },
+    "mfnTermsAlreadyAdopted": {
+      "message": "{safe} já carrega os termos de {source} de {date}.",
+      "remedy": "Nada a eleger; os termos já foram adotados."
+    },
+    "mfnSourceNoTerms": {
+      "message": "{source} não tem limite de avaliação nem desconto.",
+      "remedy": "Escolha um instrumento com limite ou desconto que o SAFE não possui ou é melhor."
+    },
+    "mfnTermsNotBetter": {
+      "message": "Nenhum dos termos do {source} é melhor que os termos do {safe} em vigor no {date}.",
+      "remedy": "Escolha um instrumento cujo limite seja menor, desconto maior ou conversão pós-monetária onde o SAFE é pré-monetário."
+    },
+    "mfnElectionUnknown": {
+      "message": "A eleição MFN não existe neste SAFE.",
+      "remedy": "Escolha uma opção nos termos MFN do SAFE."
+    },
+    "mfnElectionAlreadyReversed": {
+      "message": "A eleição MFN já foi revertida.",
+      "remedy": "Recarregue os termos MFN do SAFE."
+    },
+    "mfnReversalBeforeElection": {
+      "message": "A reversão não pode preceder a eleição, datada de {date}.",
+      "remedy": "Data a reversão em ou após {date}.\nA atividade posterior de"
+    },
+    "mfnReversalHasDependents": {
+      "message": "Uma eleição MFN posterior em {security} é registrada a partir de {date}.",
+      "remedy": "Reverta a eleição do {date} primeiro, o mais recente primeiro."
+    },
+    "actionRejected": {
+      "message": "Esta ação foi rejeitada por seu aprovador.",
+      "remedy": "Revise o motivo do aprovador e, em seguida, registre a ação novamente com uma nova chave de solicitação, se ela ainda se aplicar."
+    },
+    "actionWithdrawn": {
+      "message": "Esta ação foi retirada por seu solicitante.",
+      "remedy": "Grave a ação novamente com uma nova chave de solicitação, se ela ainda se aplicar."
+    },
+    "actionPending": {
+      "message": "{action, select, void {Um vazio do {subject} já está aguardando aprovação.} reverse {Uma reversão do {subject} já está aguardando aprovação.} repurchase {Uma recompra do {subject} já aguarda aprovação.} repay {Um reembolso de {subject} já está aguardando aprovação.} cancel_convertible {Um cancelamento do {subject} já aguarda aprovação.} class_amendment {Uma alteração de classe do {subject} já está aguardando aprovação.} split {Uma divisão do {subject} já está aguardando aprovação.} reserve_change {Uma alteração de reserva do {subject} já está aguardando aprovação.} mfn_election {Uma eleição MFN do {subject} já está aguardando aprovação.} mfn_reversal {Uma reversão da eleição MFN do {subject} já está aguardando aprovação.} compensation_run {Uma execução de compensação em ações do {subject} já está aguardando aprovação.} interest_run {Uma nota conversível com juros de {subject} já está aguardando aprovação.} account_policy {Uma versão da política de conta do {subject} já está aguardando aprovação.} round_amendment {Uma alteração da rodada de financiamento do {subject} já está aguardando aprovação.} round_void {Uma rodada de financiamento anulada de {subject} já está aguardando aprovação.} other {Uma ação patrimonial de {subject} já aguarda aprovação.}}",
+      "remedy": "Aguarde a decisão do aprovador ou retire a solicitação pendente da Caixa de entrada → Enviada por mim, antes de gravar outra."
+    },
+    "actionRoutingFailed": {
+      "message": "A ação patrimonial não pôde ser roteada para aprovação: {reason}.",
+      "remedy": "Corrija o Fluxo de ação de patrimônio em Fluxos (ou desative-o) e, em seguida, registre a ação novamente."
+    },
+    "actionChangedWhileApplied": {
+      "message": "A ação de capital foi alterada enquanto estava sendo aplicada.",
+      "remedy": "Recarregue e tente novamente."
+    },
+    "actionChangedWhileWithdrawn": {
+      "message": "A ação de capital foi alterada enquanto estava sendo retirada.",
+      "remedy": "Recarregue a Caixa de Entrada para ver seu resultado."
+    },
+    "actionChangedWhileDecided": {
+      "message": "A ação patrimonial mudou enquanto estava sendo decidida.",
+      "remedy": "Recarregue a Caixa de Entrada e decida novamente se ainda estiver pendente."
+    },
+    "withdrawalReasonRequired": {
+      "message": "Forneça uma razão entre os caracteres {min} e {max} para retirar a ação.",
+      "remedy": "Explique por que a ação não se aplica mais e, em seguida, retire-a novamente."
+    },
+    "actionUnknown": {
+      "message": "A ação de capital não existe.",
+      "remedy": "Recarregue a Caixa de Entrada."
+    },
+    "withdrawForbidden": {
+      "message": "Somente o solicitante pode retirar uma ação de capital.",
+      "remedy": "Peça ao solicitante para retirá-lo ou rejeitá-lo da Caixa de Entrada se você for um aprovador nomeado em seu Fluxo."
+    },
+    "actionDecidedNoWithdrawal": {
+      "message": "{status, select, pending_approval {A ação patrimonial está aguardando aprovação, não aguardando aprovação, portanto não pode ser retirada.} applied {A ação patrimonial é aplicada, não aguardando aprovação, portanto não pode ser retirada.} rejected {A ação patrimonial foi rejeitada, não aguardando aprovação, portanto não pode ser retirada.} withdrawn {A ação patrimonial foi retirada, não aguardando aprovação, portanto não pode ser retirada.} other {A ação patrimonial é decidida, não aguardando aprovação, portanto não pode ser retirada.}}",
+      "remedy": "Recarregue a Caixa de Entrada para ver seu resultado."
+    },
+    "actionDecided": {
+      "message": "{status, select, pending_approval {A ação patrimonial está aguardando aprovação, não aguardando aprovação.} applied {A ação patrimonial é aplicada, não aguardando aprovação.} rejected {A ação patrimonial foi rejeitada, não aguardando aprovação.} withdrawn {A ação patrimonial foi retirada, sem aguardar aprovação.} other {A ação patrimonial é decidida, não aguardando aprovação.}}",
+      "remedy": "Recarregue a Caixa de Entrada para ver seu resultado."
+    },
+    "approvalSignInRequired": {
+      "message": "Uma aprovação de capital deve ser decidida por um usuário conectado.",
+      "remedy": "Faça login e decida a aprovação na Caixa de entrada."
+    },
+    "selfApproval": {
+      "message": "O solicitante de uma ação patrimonial não pode decidir sua aprovação.",
+      "remedy": "Peça a outro aprovador nomeado no portão do Flow para decidir."
+    },
+    "rejectionReasonRequired": {
+      "message": "Registre o motivo da rejeição da ação patrimonial.",
+      "remedy": "Adicione um comentário explicando a rejeição e rejeite novamente."
+    },
+    "accountPolicyEntityMissing": {
+      "message": "Escolha a entidade legal à qual a política se aplica.",
+      "remedy": "Escolha a entidade legal e salve a versão da política novamente."
+    },
+    "accountPolicyEffectiveDateInvalid": {
+      "message": "Insira a data em que a política entra em vigor.",
+      "remedy": "Escolha uma data válida em “{field}” e salve a versão da política novamente."
+    },
+    "accountPolicyAccountMissing": {
+      "message": "Escolha a conta para “{account}”.",
+      "remedy": "Escolha uma conta em “{account}” e salve a versão da política novamente."
+    },
+    "accountPolicyAccountType": {
+      "message": "{kind, select, equity {“{account}” deve ser uma conta de lançamento de patrimônio ativo da organização.} expense {“{account}” deve ser uma conta ativa de lançamento de despesas da organização.} liabilityOrEquity {“{account}” deve ser um passivo ativo ou conta de lançamento de patrimônio da organização.} liability {“{account}” deve ser uma outra conta ativa de lançamento de passivo circulante ou de longo prazo da organização.} other {“{account}” deve ser uma conta de lançamento ativa de um tipo aceito de organização.}}",
+      "remedy": "{kind, select, equity {Escolha uma conta de lançamento de patrimônio ativo em “{account}” e salve a versão da política novamente.} expense {Escolha uma conta de lançamento de despesas ativa em “{account}” e salve a versão da política novamente.} liabilityOrEquity {Escolha um passivo ativo ou conta de lançamento de patrimônio líquido em “{account}” e salve a versão da apólice novamente.} liability {Escolha outra conta ativa de lançamento de passivo circulante ou de longo prazo em “{account}” e salve a versão da apólice novamente.} other {Escolha uma conta de lançamento ativa de um tipo aceito em “{account}” e salve a versão da política novamente.}}"
+    },
+    "accountPolicyBeforeLatestPosting": {
+      "message": "Os lançamentos de patrimônio líquido são lançados por meio do {date}; uma nova versão da política deve entrar em vigor após essa data para que o histórico publicado mantenha suas contas.",
+      "remedy": "Registre uma nova versão de política em vigor após {date}, para que satisfaça o razão atual."
+    },
+    "exitValueInvalid": {
+      "message": "{placesCount, plural, one {“{field}” deve ser um valor com no máximo {places} casa decimal.} other {“{field}” deve ser um valor com no máximo {places} casas decimais.}}",
+      "remedy": "Insira “{field}” como um valor, como {example}."
+    },
+    "transactionFeesInvalid": {
+      "message": "{placesCount, plural, one {“{field}” deve ser um valor com no máximo {places} casa decimal.} other {“{field}” deve ser um valor com no máximo {places} casas decimais.}}",
+      "remedy": "Insira as taxas pagas na saída em “{field}”, como {example}, ou deixe em branco."
+    },
+    "transactionFeesNegative": {
+      "message": "As taxas de transação não podem ser negativas.",
+      "remedy": "Insira as taxas pagas na saída ou deixe em branco."
+    },
+    "transactionFeesExceedExit": {
+      "message": "As taxas de transação excedem o valor de saída.",
+      "remedy": "Insira taxas não superiores ao valor de saída."
+    },
+    "exitValueNegative": {
+      "message": "O valor de saída não pode ser negativo.",
+      "remedy": "Insira os rendimentos disponíveis aos acionistas."
+    },
+    "waterfallUnsettled": {
+      "message": "As opções de conversão das classes preferenciais não são liquidadas neste valor de saída.",
+      "remedy": "Revise as preferências das turmas, os limites de participação e a antiguidade ou modele um valor de saída diferente."
+    },
+    "roundPreMoneyNotPositive": {
+      "message": "A avaliação pré-monetária deve ser maior que zero.",
+      "remedy": "Insira a avaliação pré-monetária."
+    },
+    "roundInvestmentNotPositive": {
+      "message": "O investimento deve ser maior que zero.",
+      "remedy": "Insira o novo dinheiro arrecadado."
+    },
+    "roundTargetPoolOutOfRange": {
+      "message": "O conjunto de destino deve ser pelo menos {min} e inferior a {max}.",
+      "remedy": "Insira a meta do conjunto da rodada pós-financiamento como uma porcentagem."
+    },
+    "roundNoShares": {
+      "message": "A empresa não possui ações para avaliar a rodada de financiamento.",
+      "remedy": "Registre as ações emitidas pela empresa antes de modelar uma rodada de financiamento."
+    },
+    "roundUnpriceable": {
+      "message": "Nenhum preço positivo satisfaz estes termos: os instrumentos de conversão e a recarga do pool reivindicam toda a avaliação pré-monetária.",
+      "remedy": "Aumente a avaliação pré-monetária, reduza a meta do pool ou revise os limites e descontos dos instrumentos de conversão."
+    },
+    "roundInvestmentBelowOneShare": {
+      "message": "O investimento compra menos de uma ação ao preço da rodada de financiamento.",
+      "remedy": "Aumente o investimento ou diminua a avaliação pré-monetária."
+    },
+    "runPeriodNotEnded": {
+      "message": "{run, select, compensation {A remuneração em ações executada através de {date} cai em {period}, que termina em {endsOn}, depois de hoje ({today}).} interest {Os juros das notas conversíveis que passam por {date} caem em {period}, que termina em {endsOn}, depois de hoje ({today}).} other {O lançamento através de {date} cai em {period}, que termina em {endsOn}, depois de hoje ({today}).}}",
+      "remedy": "Executa o final de um período que terminou hoje ({today}); a visualização das execuções oferece a próxima com atividade vencida e tudo o que for reconhecido desde a última execução será capturado nela."
+    },
+    "runPeriodClosed": {
+      "message": "{run, select, compensation {A compensação em ações executada através de {date} cai em {period}, que está fechado para lançamento.} interest {Os juros da nota conversível executados através de {date} caem em {period}, que está fechado para contabilização.} other {O lançamento através de {date} cai em {period}, que está fechado para lançamento.}}",
+      "remedy": "Execute até o final de um período aberto (a visualização de execuções oferece a próxima com atividade vencida) ou solicite uma reabertura controlada de {closing} através do Fechamento do Período."
+    },
+    "compensationRunBackdated": {
+      "message": "Uma compensação de ações executada através do {last} já foi lançada.",
+      "remedy": "Executa uma data posterior a {last}; períodos anteriores já estão medidos."
+    },
+    "interestRunBackdated": {
+      "message": "Os juros de uma nota conversível executados através do {last} já foram lançados.",
+      "remedy": "Executa uma data posterior a {last}; períodos anteriores já estão acumulados."
+    },
+    "compensationNothingDue": {
+      "message": "Nenhuma compensação em ações é devida por meio do {date}.",
+      "remedy": "Nada muda neste período; executado até o final do período posterior, uma vez que os prêmios sejam adquiridos ou concedidos."
+    },
+    "compensationNothingDueSince": {
+      "message": "Nenhuma compensação em ações é devida através do {date} além da execução através do {last}.",
+      "remedy": "Nada muda neste período; executado até o final do período posterior, uma vez que os prêmios sejam adquiridos ou concedidos."
+    },
+    "interestNothingDue": {
+      "message": "Nenhum juro de nota conversível é devido através do {date}.",
+      "remedy": "Nenhuma nota conversível rende juros neste período; executado até o final do período posterior enquanto uma nota conversível estiver em circulação."
+    },
+    "interestNothingDueSince": {
+      "message": "Nenhum juro de nota conversível é devido através do {date} além da execução através do {last}.",
+      "remedy": "Nenhuma nota conversível rende juros neste período; executado até o final do período posterior enquanto uma nota conversível estiver em circulação."
+    },
+    "interestBelowAccrued": {
+      "message": "Os juros de {security} até {date} estão abaixo do que já está acumulado.",
+      "remedy": "Revise as entradas de juros e liquidações da nota conversível no diário; os juros acumulados só caem quando uma nota conversível é anulada."
+    },
+    "noteDayCountMissing": {
+      "message": "A nota conversível não possui convenção de contagem de dias.",
+      "remedy": "Registra a contagem de dias da nota conversível (Real/365, Real/360, 30/360 ou Real/Real)."
+    },
+    "noteInterestBasisMissing": {
+      "message": "A nota conversível não tem base de juros.",
+      "remedy": "Registre como os juros da nota conversível aumentam (simples ou compostos anualmente, semestralmente, trimestralmente ou mensalmente)."
+    },
+    "equityIdNotGenerated": {
+      "message": "Nenhum identificador foi gerado.",
+      "remedy": "Tente novamente."
+    },
+    "issuanceKindRequired": {
+      "message": "Escolha que tipo de segurança emitir.",
+      "remedy": "Escolha ação, opção, RSU, warrant, SAFE ou nota conversível em “{field}”."
+    },
+    "issuanceMemoTooLong": {
+      "message": "{maxCount, plural, one {“{field}” é maior que o caractere {max}.} other {“{field}” é maior que os caracteres {max}.}}",
+      "remedy": "{maxCount, plural, one {Abrevie “{field}” para no máximo o caractere {max}.} other {Abrevie “{field}” para no máximo caracteres {max}.}}"
+    },
+    "issuanceClassRequired": {
+      "message": "Escolha a classe de ações desta pessoa jurídica em que o título está.",
+      "remedy": "Escolha uma classe de ações em “{field}”."
+    },
+    "issuanceClassNotYetEffective": {
+      "message": "Classe {code} não é eficaz até {date}.",
+      "remedy": "Data de emissão em ou após {date} em “{field}”."
+    },
+    "issuancePlanKindInvalid": {
+      "message": "Somente opções e RSUs são concedidas de um plano.",
+      "remedy": "Limpe “{field}”.\nO plano"
+    },
+    "issuancePlanClassMismatch": {
+      "message": "{plan} concede prêmios em sua própria classe.",
+      "remedy": "Escolha a classe de ações do plano em “{field}”."
+    },
+    "issuancePlanNotYetEffective": {
+      "message": "O plano {plan} não é efetivo até {date}.",
+      "remedy": "Data a concessão em ou após {date} em “{field}”."
+    },
+    "issuanceRoundKindInvalid": {
+      "message": "Apenas ações e warrants são emitidos numa ronda de financiamento.",
+      "remedy": "Limpe “{field}”.\nO plano"
+    },
+    "issuanceRoundClassMismatch": {
+      "message": "A rodada de financiamento vende a classe {code}.",
+      "remedy": "Escolha a classe de ações da rodada de financiamento em “{field}”."
+    },
+    "issuanceQuantityNotPositive": {
+      "message": "Emita pelo menos um compartilhamento.",
+      "remedy": "Insira pelo menos um compartilhamento em “{field}”."
+    },
+    "issuanceConvertibleQuantity": {
+      "message": "SAFEs e notas conversíveis são medidos em dinheiro, não em ações.",
+      "remedy": "Limpe “{quantity}” e insira “{principal}”."
+    },
+    "issuanceRoundCurrencyMismatch": {
+      "message": "A rodada de financiamento tem preço em {currency}.",
+      "remedy": "Escolha {currency} em “{field}” ou deixe em branco para usar a moeda da rodada de financiamento."
+    },
+    "issuanceCurrencyInvalid": {
+      "message": "Escolha a moeda em que o título é declarado.",
+      "remedy": "Escolha um código de moeda ISO de três letras em “{field}”."
+    },
+    "issuanceExercisePriceRequired": {
+      "message": "Insira o preço de exercício por ação.",
+      "remedy": "Insira “{field}”."
+    },
+    "issuancePriceNegative": {
+      "message": "“{field}” não pode ser negativo.",
+      "remedy": "Insira zero ou mais em “{field}”."
+    },
+    "issuanceConvertiblePrice": {
+      "message": "Uma nota SEGURA ou conversível não tem preço por ação.",
+      "remedy": "Limpe “{field}”.\nO plano"
+    },
+    "issuanceRsuPrice": {
+      "message": "Uma RSU não tem preço de compra ou exercício.",
+      "remedy": "Limpe “{field}”.\nO plano"
+    },
+    "issuanceConsiderationNegative": {
+      "message": "“{field}” não pode ser negativo.",
+      "remedy": "Insira o dinheiro recebido em “{field}”."
+    },
+    "issuancePrincipalRequired": {
+      "message": "Insira o principal pago pelo investidor.",
+      "remedy": "Insira o valor da compra ou principal da nota conversível em “{field}”.\nOs prêmios"
+    },
+    "issuanceAwardConsideration": {
+      "message": "são concedidos sem contrapartida; o preço de exercício é pago no exercício.",
+      "remedy": "Limpe “{field}”.\nO plano"
+    },
+    "issuanceVestingKindInvalid": {
+      "message": "Somente ações, opções e RSUs são adquiridos.",
+      "remedy": "Limpe os termos de aquisição."
+    },
+    "issuanceAccelerationRequired": {
+      "message": "Escolha os termos de aceleração.",
+      "remedy": "Escolha nenhum, gatilho único ou gatilho duplo em “{field}”."
+    },
+    "issuanceAccelerationOutOfRange": {
+      "message": "“{field}” deve estar acima de {zero} e no máximo {hundred}.",
+      "remedy": "Insira a parcela de unidades não adquiridas que acelera em “{field}”."
+    },
+    "issuanceAccelerationKindInvalid": {
+      "message": "Apenas a aquisição de títulos é acelerada.",
+      "remedy": "Limpe “{field}”.\nO plano"
+    },
+    "issuanceExpirationNotAfterIssue": {
+      "message": "“{field}” deve seguir “{issueDate}”.",
+      "remedy": "Escolha uma data para “{field}” após “{issueDate}”."
+    },
+    "issuanceExpirationKindInvalid": {
+      "message": "Somente opções e warrants expiram.",
+      "remedy": "Limpe “{field}”.\nO plano"
+    },
+    "issuanceOptionTypeRequired": {
+      "message": "Escolha se a opção é um incentivo ou uma opção não qualificada.",
+      "remedy": "Escolha ISO ou NSO em “{field}”."
+    },
+    "issuanceEarlyExerciseKindInvalid": {
+      "message": "Somente opções admitem exercício antecipado.",
+      "remedy": "Desligue “{field}”."
+    },
+    "issuanceRepurchaseBasisRequired": {
+      "message": "Escolha o preço pelo qual a empresa recompra ações não adquiridas e exercidas antecipadamente.",
+      "remedy": "Escolha o custo, ou o menor entre o custo e o valor justo de mercado, em “{field}”."
+    },
+    "issuanceRepurchaseBasisUnused": {
+      "message": "Apenas uma opção exercível antecipadamente acarreta um preço de recompra não adquirido.",
+      "remedy": "Limpe “{field}” ou ative “{earlyExercise}”."
+    },
+    "issuanceSafeTypeRequired": {
+      "message": "Escolha um SEGURO pré-monetário ou pós-monetário.",
+      "remedy": "Escolha pré-monetário ou pós-monetário em “{field}”."
+    },
+    "issuanceMfnKindInvalid": {
+      "message": "Somente um SAFE carrega o termo de nação mais favorecida.",
+      "remedy": "Desligue “{field}”."
+    },
+    "issuanceCapDiscountKindInvalid": {
+      "message": "Somente SAFEs e notas conversíveis possuem limite ou desconto.",
+      "remedy": "Limpe “{cap}” e “{discount}”."
+    },
+    "issuanceValuationCapNotPositive": {
+      "message": "“{field}” deve ser maior que zero.",
+      "remedy": "Insira um valor maior que zero em “{field}” ou limpe-o."
+    },
+    "issuanceDiscountOutOfRange": {
+      "message": "“{field}” deve ser pelo menos {zero} e inferior a {hundred}.",
+      "remedy": "Insira um desconto de {zero} até, mas não incluindo, {hundred} em “{field}” ou deixe em branco para nenhum."
+    },
+    "issuanceInterestRateRequired": {
+      "message": "Insira a taxa de juros anual da nota conversível.",
+      "remedy": "Insira a taxa anual em “{field}” ou zero para nenhuma."
+    },
+    "issuanceInterestBasisRequired": {
+      "message": "Escolha como os juros da nota conversível são acumulados.",
+      "remedy": "Escolha juros simples, ou compostos anualmente, semestralmente, trimestralmente ou mensalmente, em “{field}”."
+    },
+    "issuanceDayCountRequired": {
+      "message": "Escolha a convenção de contagem de dias da nota conversível.",
+      "remedy": "Escolha Real/365, Real/360, 30/360 ou Real/Real em “{field}”."
+    },
+    "issuanceMaturityNotAfterIssue": {
+      "message": "“{field}” deve seguir “{issueDate}”.",
+      "remedy": "Escolha uma data para “{field}” após “{issueDate}”."
+    },
+    "issuanceDayCountKindInvalid": {
+      "message": "Apenas uma nota conversível possui uma convenção de contagem de dias.\nOs prêmios",
+      "remedy": "Limpe “{field}”.\nO plano"
+    },
+    "issuanceValuationRequired": {
+      "message": "precisam de sua avaliação na data de concessão.",
+      "remedy": "Insira “{field}” e as premissas de avaliação."
+    },
+    "issuanceAttributionRequired": {
+      "message": "Escolha como o custo do prêmio será atribuído.",
+      "remedy": "Escolha linha reta ou graduada em “{field}”."
+    },
+    "issuanceGrantSharePriceNotPositive": {
+      "message": "“{field}” deve ser maior que zero.",
+      "remedy": "Insira o valor justo de uma ação na data de outorga em “{field}”."
+    },
+    "issuanceValuationKindInvalid": {
+      "message": "Somente opções e RSUs possuem uma avaliação de pagamento baseada em ações.",
+      "remedy": "Limpe a avaliação."
+    },
+    "issuanceNumberTooLong": {
+      "message": "{maxCount, plural, one {“{field}” é maior que o caractere {max}.} other {“{field}” é maior que os caracteres {max}.}}",
+      "remedy": "{maxCount, plural, one {Abrevie “{field}” para no máximo o caractere {max}.} other {Abrevie “{field}” para no máximo caracteres {max}.}}"
+    },
+    "securityNumberTaken": {
+      "message": "O número de segurança {number} já é usado por esta entidade legal.",
+      "remedy": "Insira um número diferente em “{field}” ou deixe em branco para numerá-lo automaticamente."
+    },
+    "issuanceBelowPar": {
+      "message": "A contraprestação está abaixo do valor nominal das ações.\nAs Ações",
+      "remedy": "não podem ser emitidas abaixo do valor nominal; insira a contraprestação total recebida em “{field}”.\nAs ações"
+    },
+    "issuanceParConsiderationRequired": {
+      "message": "têm valor nominal, portanto sua emissão precisa ser considerada.",
+      "remedy": "Insira o dinheiro recebido pelas ações em “{field}” e a conta que o recebeu em “{account}”."
+    },
+    "vestingShapesMixed": {
+      "message": "Um planejamento consiste em tranches datadas ou um planejamento baseado em tempo, não ambos.",
+      "remedy": "Remova os termos baseados em tempo ou as tranches."
+    },
+    "vestingTrancheDateInvalid": {
+      "message": "Cada tranche precisa de uma data AAAA-MM-DD válida.",
+      "remedy": "Corrija as datas das tranches."
+    },
+    "vestingTranchesUnordered": {
+      "message": "As datas das tranches devem ser distintas e em ordem crescente.",
+      "remedy": "Liste cada tranche uma vez, a mais antiga primeiro."
+    },
+    "vestingTrancheEmpty": {
+      "message": "Cada tranche deve adquirir pelo menos uma ação.",
+      "remedy": "Remova tranches vazias."
+    },
+    "vestingTranchesTotalMismatch": {
+      "message": "{totalCount, plural, one {{quantityCount, plural, one {As tranches conferem participação {total}, mas o título carrega participação {quantity}.} other {As tranches conferem às ações {total}, mas o título contém ações {quantity}.}}} other {{quantityCount, plural, one {As tranches conferem às ações {total}, mas o título carrega as ações {quantity}.} other {As tranches conferem direitos às ações {total}, mas o título contém ações {quantity}.}}}}",
+      "remedy": "Faça com que as quantidades da parcela sejam somadas à quantidade do título."
+    },
+    "vestingCliffWithoutTerm": {
+      "message": "Um penhasco ou frequência precisa de um prazo de aquisição em meses.",
+      "remedy": "Insira “{months}” ou desmarque “{cliff}” e “{frequency}”."
+    },
+    "vestingMonthsOutOfRange": {
+      "message": "“{field}” deve ser um número inteiro de meses de {min} a {max}.",
+      "remedy": "Insira um número inteiro de meses de {min} a {max} em “{field}”."
+    },
+    "vestingCliffOutOfRange": {
+      "message": "“{field}” deve ser um número inteiro de meses dentro de “{term}”.",
+      "remedy": "Insira meses inteiros de {min} até o valor de “{term}” em “{field}”."
+    },
+    "vestingFrequencyRequired": {
+      "message": "Um planejamento baseado em tempo precisa de uma frequência de aquisição.",
+      "remedy": "Escolha mensal, trimestral ou anual em “{field}”."
+    },
+    "vestingStartRequired": {
+      "message": "Um planejamento baseado em tempo precisa de uma data de início de aquisição.",
+      "remedy": "Escolha uma data para “{field}”.\nÉ necessário"
+    },
+    "vestingStoredTranchesNotList": {
+      "message": "As tranches de aquisição armazenadas não são uma lista.",
+      "remedy": "Registre as parcelas como uma lista de quantidades de ações inteiras datadas."
+    },
+    "vestingStoredTrancheInvalid": {
+      "message": "Uma tranche de aquisição requer uma data AAAA-MM-DD e um valor total da ação.",
+      "remedy": "Corrija as datas e quantidades das parcelas."
+    },
+    "valuationLogarithmUndefined": {
+      "message": "O logaritmo precisa de um valor positivo.",
+      "remedy": "Verifique “{sharePrice}” e “{exercisePrice}”."
+    },
+    "valuationSharePriceNotPositive": {
+      "message": "“{field}” deve ser maior que zero.",
+      "remedy": "Insira o valor justo de uma ação na data de outorga em “{field}”."
+    },
+    "valuationExercisePriceNegative": {
+      "message": "“{field}” não pode ser negativo.",
+      "remedy": "Insira zero ou mais em “{field}”."
+    },
+    "valuationVolatilityNotPositive": {
+      "message": "“{field}” deve ser maior que zero.",
+      "remedy": "Insira a volatilidade esperada como uma porcentagem em “{field}”."
+    },
+    "valuationTermNotPositive": {
+      "message": "“{field}” deve ser maior que zero.",
+      "remedy": "Insira o prazo esperado em anos em “{field}”."
+    },
+    "valuationDividendYieldNegative": {
+      "message": "“{field}” não pode ser negativo.",
+      "remedy": "Insira o rendimento de dividendos esperado como uma porcentagem em “{field}” ou zero para nenhum."
+    },
+    "awardFairValueNegative": {
+      "message": "O título {security} carrega um valor justo negativo.",
+      "remedy": "Revise a avaliação do prêmio."
+    },
+    "securityNotShareBased": {
+      "message": "Segurança {security} não é baseado em compartilhamento.",
+      "remedy": "Utilize a visualização conversível para SAFEs e notas conversíveis."
+    },
+    "holdingEventQuantityMissing": {
+      "message": "Um evento no {security} não possui quantidade.",
+      "remedy": "Registra a quantidade do evento."
+    },
+    "holdingEventExceeded": {
+      "message": "{kind, select, exercise {{quantityCount, plural, one {O exercício da unidade {quantity} no {date} excede o que o {security} continha.} other {O exercício das unidades {quantity} no {date} excede o que o {security} continha.}}} settle {{quantityCount, plural, one {A liquidação da unidade {quantity} no {date} excede o que o {security} manteve.} other {A liquidação das unidades {quantity} no {date} excede o que o {security} manteve.}}} forfeit {{quantityCount, plural, one {O confisco da unidade {quantity} no {date} excede o que o {security} detinha.} other {O confisco de unidades {quantity} no {date} excede o que o {security} detinha.}}} expire {{quantityCount, plural, one {A validade da unidade {quantity} no {date} excede o que o {security} continha.} other {A validade das unidades {quantity} no {date} excede o que o {security} continha.}}} cancel {{quantityCount, plural, one {O cancelamento da unidade {quantity} no {date} excede o que o {security} continha.} other {O cancelamento de unidades {quantity} no {date} excede o que o {security} continha.}}} repurchase {{quantityCount, plural, one {A recompra da unidade {quantity} no {date} excede o que o {security} detinha.} other {A recompra de unidades {quantity} no {date} excede o que o {security} detinha.}}} transfer {{quantityCount, plural, one {A transferência da unidade {quantity} no {date} excede o que o {security} continha.} other {A transferência de unidades {quantity} no {date} excede o que o {security} continha.}}} convert {{quantityCount, plural, one {A conversão da unidade {quantity} em {date} excede o que o {security} continha.} other {A conversão de unidades {quantity} em {date} excede o que {security} continha.}}} other {{quantityCount, plural, one {O evento da unidade {quantity} no {date} excede o que o {security} continha.} other {O evento das unidades {quantity} no {date} excede o que o {security} continha.}}}}",
+      "remedy": "Revise o histórico da segurança; as quantidades registradas não podem ser reproduzidas."
+    },
+    "classConversionTermsMissing": {
+      "message": "Classe {code} não possui termos de conversão.",
+      "remedy": "Grave “{issuePrice}” e “{conversionPrice}” da classe."
+    },
+    "securityNotConvertible": {
+      "message": "Segurança {security} não é um instrumento conversível.",
+      "remedy": "Escolha uma nota SAFE ou conversível conversível."
+    },
+    "postMoneyOverclaim": {
+      "message": "Os SAFEs pós-dinheiro limitados reivindicam {limit} ou mais da empresa, portanto, a conversão não tem solução significativa.",
+      "remedy": "Verifique “{principal}” e “{cap}” dos SAFEs pós-dinheiro; um limite inserido na unidade errada é a causa comum."
+    },
+    "postMoneyUnsettled": {
+      "message": "A conversão pós-monetária não foi liquidada.",
+      "remedy": "Revisão “{cap}” dos SAFEs de conversão."
+    },
+    "conversionPriceZero": {
+      "message": "O financiamento do preço de conversão é arredondado para zero.",
+      "remedy": "Verifique o preço da rodada de financiamento e os instrumentos de conversão “{cap}” e “{discount}”."
+    },
+    "conversionRoundPriceNotPositive": {
+      "message": "O preço da rodada de financiamento deve ser maior que zero.",
+      "remedy": "Insira o preço da rodada de financiamento por ação.\nO instrumento"
+    },
+    "conversionNotOutstanding": {
+      "message": "{security} não está pendente no {date}, data de encerramento da rodada de financiamento.",
+      "remedy": "Verifique a data e o histórico de emissão do instrumento."
+    },
+    "authorizedExceeded": {
+      "message": "{committedCount, plural, one {Classe {shareClass} comprometeria o compartilhamento {committed} em {date}, mas autorizaria {authorized}.} other {Classe {shareClass} comprometeria compartilhamentos {committed} em {date}, mas autorizaria {authorized}.}}",
+      "remedy": "{purpose, select, authorized_amendment {{committedCount, plural, one {Autorize pelo menos ações {committed} da classe {shareClass}: suas ações em circulação, prêmios em circulação e conjuntos de planos não alocados precisam deles em {date}.} other {Autorize pelo menos ações {committed} da classe {shareClass}: suas ações em circulação, prêmios em circulação e conjuntos de planos não alocados precisam deles no {date}.}}} reserve_increase {{roomCount, plural, one {{committedCount, plural, one {Adicione no máximo a ação {room} à reserva, ou primeiro registre uma alteração de ação autorizada elevando a classe {shareClass} para pelo menos ação {committed}.} other {Adicione não mais do que ações {room} à reserva ou primeiro registre uma alteração de ações autorizadas aumentando a classe {shareClass} para pelo menos ações {committed}.}}} other {{committedCount, plural, one {Adicione no máximo ações {room} à reserva ou primeiro registre uma alteração de ações autorizadas elevando a classe {shareClass} para pelo menos ações {committed}.} other {Adicione no máximo ações {room} à reserva ou primeiro registre uma alteração de ações autorizadas aumentando a classe {shareClass} para pelo menos ações {committed}.}}}}} plan {{roomCount, plural, one {{committedCount, plural, one {Reserve não mais do que ações {room} ou primeiro registre uma alteração de ações autorizadas elevando a classe {shareClass} para pelo menos ações {committed}.} other {Reserve não mais do que ações {room} ou primeiro registre uma alteração de ações autorizadas aumentando a classe {shareClass} para pelo menos ações {committed}.}}} other {{committedCount, plural, one {Reserve não mais do que ações {room} ou primeiro registre uma alteração de ações autorizadas elevando a classe {shareClass} para pelo menos ações {committed}.} other {Reserve não mais do que ações {room} ou primeiro registre uma alteração de ações autorizadas aumentando a classe {shareClass} para pelo menos ações {committed}.}}}}} reversal {{committedCount, plural, one {Registrar alteração de ações autorizadas elevando a classe {shareClass} para pelo menos ação {committed} antes de reverter o evento.} other {Registrar alteração de ações autorizadas elevando a classe {shareClass} para pelo menos ações {committed} antes de reverter o evento.}}} other {{committedCount, plural, one {{excessCount, plural, one {Registrar uma alteração de ações autorizadas elevando a classe {shareClass} para pelo menos ações {committed} ou emitir menos ações {excess}.} other {Registrar uma alteração de ações autorizadas elevando a classe {shareClass} para pelo menos ações {committed} ou emitir menos ações {excess}.}}} other {{excessCount, plural, one {Registrar uma alteração de ações autorizadas elevando a classe {shareClass} para pelo menos ações {committed} ou emitir menos ações {excess}.} other {Registrar uma alteração de ações autorizadas elevando a classe {shareClass} para pelo menos ações {committed} ou emitir menos ações {excess}.\nO plano}}}}}}"
+    },
+    "poolExhausted": {
+      "message": "{availableCount, plural, one {{plan} teria o compartilhamento {available} disponível no {date}.\nO plano} other {{plan} teria compartilhamentos {available} disponíveis no {date}.}}",
+      "remedy": "{action, select, reduce {{maximumCount, plural, one {Remover não mais que o compartilhamento {maximum} da reserva do plano {plan} do {from}; o restante é concedido em prêmios.} other {Remover no máximo ações {maximum} da reserva do plano {plan} do {from}; o restante é concedido em prêmios.}}} empty {O plano {plan} não possui compartilhamentos não alocados para remover no {from} ou após ele; perder ou cancelar prêmios primeiro.} other {{shortfallCount, plural, one {Conceda menos unidades ao {shortfall} ou aumente primeiro a reserva do plano {plan}.} other {Conceda menos unidades ao {shortfall} ou aumente primeiro a reserva do plano {plan}.}}}}"
+    },
+    "classIdUnknown": {
+      "message": "A classe de ações não existe.",
+      "remedy": "Escolha uma classe de ações."
+    },
+    "planIdUnknown": {
+      "message": "O plano não existe.",
+      "remedy": "Escolha um plano."
+    },
+    "roundIdUnknown": {
+      "message": "A rodada de financiamento não existe.",
+      "remedy": "Escolha uma rodada de financiamento da pessoa jurídica."
+    },
+    "authorizedSharesNotPositive": {
+      "message": "Autorize pelo menos um compartilhamento.",
+      "remedy": "Insira pelo menos um compartilhamento em “{field}”."
+    },
+    "parValueNegative": {
+      "message": "O valor nominal não pode ser negativo.",
+      "remedy": "Insira o valor nominal por ação em “{field}” (zero para ações sem valor nominal)."
+    },
+    "classKindInvalid": {
+      "message": "Uma classe de ações pode ser ordinária ou preferencial.",
+      "remedy": "Escolha comum ou preferencial em “{field}”."
+    },
+    "classSeniorityInvalid": {
+      "message": "A antiguidade deve ser um número inteiro de {min} a {max}.",
+      "remedy": "Insira “{field}” como um número inteiro de {min} a {max}; uma antiguidade mais elevada é paga primeiro.\nAs ações preferenciais"
+    },
+    "preferredPricesNotPositive": {
+      "message": "precisam de um preço de emissão original positivo e um preço de conversão.",
+      "remedy": "Insira o preço pelo qual a classe foi vendida em “{issue}” e um preço de conversão acima de zero em “{conversion}” se for diferente."
+    },
+    "liquidationMultipleNegative": {
+      "message": "O múltiplo de liquidação não pode ser negativo.",
+      "remedy": "Insira “{field}” como zero ou mais, como {example}."
+    },
+    "participationCapNotAboveMultiple": {
+      "message": "O limite de participação do {cap} deve exceder o múltiplo de liquidação do {multiple}.",
+      "remedy": "Insira “{field}” acima de {multiple}."
+    },
+    "liquidationPreferenceBasisInvalid": {
+      "message": "Escolha em que a preferência de liquidação é medida.",
+      "remedy": "Escolha o valor pago por cada certificado ou o preço de emissão original da classe em “{field}”."
+    },
+    "classCodeTaken": {
+      "message": "O código de classe {code} já é utilizado por esta pessoa jurídica.",
+      "remedy": "Escolha um código de classe diferente."
+    },
+    "conversionClassRequired": {
+      "message": "Escolha a classe ordinária para a qual as ações preferenciais serão convertidas.",
+      "remedy": "Escolha uma classe comum da entidade legal em “{field}”, registrando-a primeiro, se necessário."
+    },
+    "conversionClassNotYetEffective": {
+      "message": "Classe {target} não é eficaz até {date}.",
+      "remedy": "Data a classe em ou após {date} ou escolha outra classe de conversão."
+    },
+    "conversionClassNotEffectiveForAmendment": {
+      "message": "Classe {target} não é eficaz até {date}.",
+      "remedy": "Data da alteração em ou após {date}."
+    },
+    "conversionClassOnCommon": {
+      "message": "Somente uma classe preferencial é convertida em outra classe.",
+      "remedy": "Limpe “{field}”.\nO plano"
+    },
+    "conversionClassAmendmentOnCommon": {
+      "message": "Somente uma classe preferencial é convertida em outra classe.",
+      "remedy": "Altere os compartilhamentos autorizados."
+    },
+    "conversionPriceAmendmentOnCommon": {
+      "message": "Somente uma classe preferencial possui um preço de conversão.",
+      "remedy": "Altere os compartilhamentos autorizados."
+    },
+    "conversionPriceNotPositive": {
+      "message": "O preço de conversão deve ser maior que zero.",
+      "remedy": "Insira o novo preço de conversão em “{field}”."
+    },
+    "classAmendmentBeforeClass": {
+      "message": "Uma alteração não pode preceder a data de vigência da classe {shareClass} ({date}).",
+      "remedy": "Data da alteração em ou após {date}."
+    },
+    "conversionClassUnchanged": {
+      "message": "Classe {shareClass} já converte em {target}.",
+      "remedy": "Escolha uma classe de conversão diferente."
+    },
+    "conversionClassSplitRecorded": {
+      "message": "Uma divisão da classe de conversão é registrada no {date}; alterando a classe de conversão antes de reinterpretá-la.",
+      "remedy": "Data da alteração após {date}."
+    },
+    "classAmendmentKindInvalid": {
+      "message": "Escolha o que a alteração altera.",
+      "remedy": "Alterar as ações autorizadas, o preço de conversão ou a classe de conversão."
+    },
+    "splitRatioInvalid": {
+      "message": "Uma proporção de divisão precisa de dois números inteiros positivos diferentes.",
+      "remedy": "Insira as contagens de ações novas e antigas da divisão em “{newShares}” e “{oldShares}”, como 2 por 1 ou 1 por 10."
+    },
+    "splitBackdated": {
+      "message": "Classe {shareClass} possui atividade registrada por meio de {date}; uma divisão deve ser datada depois dela.",
+      "remedy": "Data a divisão após {date}."
+    },
+    "splitBackdatedByConversion": {
+      "message": "Classe {shareClass} converte em {splitClass} e tem atividade registrada através de {date}; o desdobramento ajusta seu preço de conversão, portanto deve ser datado posteriormente.",
+      "remedy": "Data a divisão após {date}."
+    },
+    "splitConversionClassMissing": {
+      "message": "{classesCount, plural, one {{codes} preferencial não nomeia a classe comum na qual é convertido, portanto, o efeito da divisão em seu preço de conversão é desconhecido.} other {{codes} preferencial não nomeia a classe comum na qual eles são convertidos, portanto, o efeito da divisão em seu preço de conversão é desconhecido.}}",
+      "remedy": "Registre a classe na qual cada classe preferencial é convertida (Compartilhar classes → Alterar → “{field}”) e, em seguida, registre a divisão."
+    },
+    "planReserveNotPositive": {
+      "message": "Reserve pelo menos uma ação.",
+      "remedy": "Insira as ações reservadas para o plano em “{field}”."
+    },
+    "planBeforeClass": {
+      "message": "Um plano não pode preceder sua classe de ações, em vigor {date}.",
+      "remedy": "Data do plano em ou após {date}."
+    },
+    "planCodeTaken": {
+      "message": "O código do plano {code} já é usado por esta entidade legal.",
+      "remedy": "Escolha um código de plano diferente."
+    },
+    "reserveChangeInvalid": {
+      "message": "A alteração da reserva deve ser um número inteiro diferente de zero de ações.",
+      "remedy": "Insira os compartilhamentos a serem adicionados em “{field}” ou um número negativo para remover compartilhamentos."
+    },
+    "reserveChangeBeforePlan": {
+      "message": "Uma alteração de reserva não pode preceder o plano {plan}, em vigor {date}.",
+      "remedy": "Data a alteração em ou após {date}."
+    },
+    "preMoneyUnmeasurable": {
+      "message": "Uma avaliação pré-monetária de {preMoney} não pode ser verificada em relação ao preço da rodada de financiamento de {price}: nenhuma ação está em circulação antes da rodada de financiamento.",
+      "remedy": "Indique a base da avaliação em “{field}”."
+    },
+    "preMoneyInconsistent": {
+      "message": "{fullyDilutedCount, plural, one {Uma avaliação pré-monetária de {preMoney} não corresponde ao preço da rodada de financiamento de {price} vezes a ação totalmente diluída de {fullyDiluted} antes da rodada de financiamento ({implied}).} other {Uma avaliação pré-monetária de {preMoney} não corresponde ao preço da rodada de financiamento de {price} vezes as ações totalmente diluídas de {fullyDiluted} antes da rodada de financiamento ({implied}).}}",
+      "remedy": "Insira uma avaliação pré-monetária de {implied} ou um preço por ação de {impliedPrice}; se a avaliação for declarada em outra base (um aumento do pool ou conversões contabilizadas nela), indique essa base em “{field}”."
+    },
+    "preMoneyInconsistentPriceLocked": {
+      "message": "{fullyDilutedCount, plural, one {Uma avaliação pré-monetária de {preMoney} não corresponde ao preço da rodada de financiamento de {price} vezes a ação totalmente diluída de {fullyDiluted} antes da rodada de financiamento ({implied}).} other {Uma avaliação pré-monetária de {preMoney} não corresponde ao preço da rodada de financiamento de {price} vezes as ações totalmente diluídas de {fullyDiluted} antes da rodada de financiamento ({implied}).}}",
+      "remedy": "Insira uma avaliação pré-monetária de {implied} (o preço permanece em {price}, uma vez que os títulos vivos foram emitidos ou convertidos nele); se a avaliação for declarada em outra base (um aumento do pool ou conversões contabilizadas nela), indique essa base em “{field}”."
+    },
+    "preMoneyInconsistentValuationOnly": {
+      "message": "{fullyDilutedCount, plural, one {Uma avaliação pré-monetária de {preMoney} não corresponde ao preço da rodada de financiamento de {price} vezes a ação totalmente diluída de {fullyDiluted} antes da rodada de financiamento ({implied}).} other {Uma avaliação pré-monetária de {preMoney} não corresponde ao preço da rodada de financiamento de {price} vezes as ações totalmente diluídas de {fullyDiluted} antes da rodada de financiamento ({implied}).}}",
+      "remedy": "Insira uma avaliação pré-monetária de {implied}; se a avaliação for declarada em outra base (um aumento do pool ou conversões contabilizadas nela), indique essa base em “{field}”."
+    },
+    "roundPricePerShareNotPositive": {
+      "message": "O preço por ação deve ser maior que zero.",
+      "remedy": "Insira o preço por ação da rodada de financiamento em “{field}”."
+    },
+    "roundPreMoneyValuationNotPositive": {
+      "message": "A avaliação pré-monetária deve ser maior que zero.",
+      "remedy": "Insira a avaliação pré-monetária em “{field}”."
+    },
+    "roundBeforeClass": {
+      "message": "Uma rodada de financiamento não pode ser encerrada antes que sua classe de ações entre em vigor no {date}.",
+      "remedy": "Data da rodada de financiamento em ou após {date}."
+    },
+    "roundNameTaken": {
+      "message": "Uma rodada de financiamento denominada {name} já existe para esta entidade legal, ou existia antes de ser renomeada ou anulada.",
+      "remedy": "Escolha um nome de rodada de financiamento diferente."
+    },
+    "roundNameTooLong": {
+      "message": "O nome da rodada de financiamento deve ter no máximo caracteres {max}.",
+      "remedy": "Abrevie “{field}” para no máximo caracteres {max}."
+    },
+    "roundIsVoid": {
+      "message": "A rodada de financiamento é nula.",
+      "remedy": "Registrar uma nova rodada de financiamento se ainda for necessária; uma rodada de financiamento anulada não acarreta mais alterações.\nA rodada de financiamento"
+    },
+    "roundTermsUnchanged": {
+      "message": "{round} já possui esses termos.",
+      "remedy": "Altere o nome, o preço por ação ou a avaliação pré-monetária."
+    },
+    "roundAmendmentBeforeClose": {
+      "message": "Uma alteração não pode preceder a data de encerramento da rodada de financiamento {round} ({date}).\nA rodada de financiamento",
+      "remedy": "Data da alteração em ou após {date}."
+    },
+    "roundPriceLockedBySecurities": {
+      "message": "{round} emitiu ou converteu {securities} ao seu preço.",
+      "remedy": "Anule esses certificados primeiro (cada anulação reverte sua entrada), depois altere o preço e registre-os novamente; ou registre a rodada de financiamento correta e anule-a quando estiver vazia."
+    },
+    "roundVoidBeforeClose": {
+      "message": "A anulação não pode preceder a data de fechamento da rodada de financiamento {round} ({date}).",
+      "remedy": "Data do nulo em ou após {date}.\nA rodada de financiamento"
+    },
+    "roundVoidHasSecurities": {
+      "message": "{round} ainda possui {securities} emitido ou convertido.",
+      "remedy": "Anule esses certificados primeiro (cada anulação reverte sua entrada e retorna uma nota SAFE ou conversível convertida em circulação) e, em seguida, anula a rodada de financiamento."
+    },
+    "antiDilutionBaseMissing": {
+      "message": "O ajuste da média ponderada necessita das ações em circulação antes da rodada de financiamento.",
+      "remedy": "Registre as ações em circulação da empresa antes de modelar a rodada de financiamento.\nPreço da rodada de financiamento"
+    },
+    "terms": {
+      "roundPrice": "",
+      "runDate": "Data de execução",
+      "eventDate": "Data do evento",
+      "trancheDate": "Data da parcela\nQuantidade da parcela",
+      "trancheQuantity": "Taxa de câmbio",
+      "exchangeRate": "Pagamento",
+      "payout": "Termo de conversão",
+      "convertibleTerm": "Preço da ação",
+      "sharePrice": "Preço",
+      "price": ""
+    }
+  }
+}

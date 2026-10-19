@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useFormatter, useLocale } from 'next-intl'
 import { useMoney } from '@/components/money-provider'
-import { formatExactPercent } from '@/lib/format'
+import { formatCivilDate, formatExactPercent } from '@/lib/format'
 import { formatDecimal } from '@/lib/money-format'
 import { cn } from '@openbooks/ui'
 import { perShareFractionDigits, type ReportCellLink, type ReportNumberFormat } from '@openbooks/reports'
@@ -50,6 +50,8 @@ export type PaperGroup = {
   money?: boolean[]
   /** Per-column: an exact quantity ('number') or percentage points ('percent'). */
   numberFormats?: (ReportNumberFormat | null)[]
+  /** Per-column: ISO calendar dates, read in the viewer's locale. */
+  dates?: boolean[]
   /** Per-cell drill href (parallel to `rows`); null/absent ⇒ plain cell. */
   links?: (string | null | undefined)[][]
   /** Per-cell report drill target (parallel to `rows`). */
@@ -111,8 +113,9 @@ export function PaperView({
   const format = useFormatter()
   const locale = useLocale()
   const { money } = useMoney()
-  const fmt = (value: PaperCell, isMoney: boolean, numberFormat?: ReportNumberFormat | null): string => {
+  const fmt = (value: PaperCell, isMoney: boolean, numberFormat?: ReportNumberFormat | null, isDate = false): string => {
     if (value === null || value === undefined || value === '') return ''
+    if (isDate && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return formatCivilDate(value, locale)
     if (isMoney) return money(value, { currency: currency || undefined, accounting: true })
     const quantity = numberFormat ? paperQuantity(value, locale, numberFormat) : null
     if (quantity !== null) return quantity
@@ -186,7 +189,7 @@ export function PaperView({
                             const undefinedLabel = group.undefinedCells?.[ri]?.[ci] ?? undefined
                             const drill = group.drills?.[ri]?.[ci]
                               ?? (isNumericCell(cell) ? group.drillTarget ?? data.defaultDrillTarget : undefined)
-                            const text = fmt(cell, isMoney, group.numberFormats?.[ci])
+                            const text = fmt(cell, isMoney, group.numberFormats?.[ci], group.dates?.[ci] === true)
                             return (
                               <TableCell
                                 key={ci}

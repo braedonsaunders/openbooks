@@ -200,7 +200,7 @@ function drawCover(
   })
   doc.font(theme.font).fontSize(theme.meta).fillColor(theme.muted)
   if (input.design !== 'modern') doc.text(input.dateRangeLabel, rightX, doc.y + 2, { width: rightW, align: 'right' })
-  doc.text(formatStamp(input.generatedAt), rightX, doc.y + 1, { width: rightW, align: 'right' })
+  doc.text(formatStamp(input.generatedAt, input.locale), rightX, doc.y + 1, { width: rightW, align: 'right' })
   const rightBottom = doc.y
 
   const headerBottom = Math.max(titleBottom, rightBottom) + s.coverRuleGap
@@ -372,7 +372,8 @@ function stampFooters(
   const centerW = Math.floor(page.contentWidth * 0.2)
   const rightW = page.contentWidth - leftW - centerW
   const leftText = input.footerLeft ?? `${input.branding.orgName} · ${input.title}`
-  const rightText = input.footerRight ?? formatStamp(input.generatedAt)
+  const rightText = input.footerRight ?? formatStamp(input.generatedAt, input.locale)
+  const pageLabel = input.pageLabel ?? ((n: number, of: number) => `Page ${n} of ${of}`)
 
   for (let i = range.start; i < range.start + total; i++) {
     doc.switchToPage(i)
@@ -389,7 +390,7 @@ function stampFooters(
       lineBreak: false,
       ellipsis: true,
     })
-    doc.text(`Page ${n} of ${total}`, page.contentLeft + leftW, footerY, {
+    doc.text(pageLabel(n, total), page.contentLeft + leftW, footerY, {
       width: centerW,
       align: 'center',
       lineBreak: false,
@@ -407,10 +408,15 @@ function stampFooters(
 /**
  * The generated stamp. Exports are stamped with the organization's business
  * date — a civil date carried as UTC midnight — and that prints as the date
- * alone; only a stamp that carries a time of day prints one.
+ * alone; only a stamp that carries a time of day prints one, in UTC. With a
+ * locale the stamp reads in that locale's date (and time) format; without
+ * one it prints ISO.
  */
-export function formatStamp(d: Date): string {
+export function formatStamp(d: Date, locale?: string): string {
   const iso = d.toISOString()
-  if (iso.endsWith('T00:00:00.000Z')) return iso.slice(0, 10)
-  return iso.slice(0, 19).replace('T', ' ') + ' UTC'
+  const civil = iso.endsWith('T00:00:00.000Z')
+  if (!locale) return civil ? iso.slice(0, 10) : iso.slice(0, 19).replace('T', ' ') + ' UTC'
+  return civil
+    ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(d)
+    : new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC' }).format(d) + ' UTC'
 }

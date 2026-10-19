@@ -4121,7 +4121,8 @@
     "exported": "{filename} exporté.",
     "exportFailed": "Impossible d'exporter {format}.",
     "exporting": "Exportation de {format}…",
-    "export": "Exporter"
+    "export": "Exporter",
+    "pageOf": "Page {page} sur {total}"
   },
   "projectProfitability": {
     "title": "Rentabilité des projets",

@@ -43,7 +43,7 @@ export function EquityRoundsPanel({ view }: { view: RoundsViewData | null }) {
     ...view.structure.voidedRounds.map((row) => ({
       id: row.id, name: row.name, shareClassId: '', closedOn: row.closedOn, pricePerShare: row.pricePerShare, preMoneyValuation: row.preMoneyValuation,
       currency: row.currency, raised: '0.0000', sharesIssued: '0', preMoneyBasisReason: null, fullyDilutedBefore: '0', impliedPreMoney: '0.0000',
-      preMoneyDrift: null, liveSecurities: [], amendments: [], voidedOn: row.voidedOn,
+      preMoneyDrift: null, conversionDrift: [], liveSecurities: [], amendments: [], voidedOn: row.voidedOn,
     })),
   ]
   const selected = view.structure.rounds.find((row) => row.id === view.roundId) ?? null
@@ -72,7 +72,7 @@ export function EquityRoundsPanel({ view }: { view: RoundsViewData | null }) {
               <span className="flex items-center gap-2">
                 <Link className={LINK} href={withParams('/equity', view.context.params, { view: 'rounds', round: row.id, model: undefined }) as never}>{row.name}</Link>
                 {row.voidedOn && <Badge variant="outline">{t('rounds.voidedBadge')}</Badge>}
-                {row.preMoneyDrift && <Badge variant="warning">{t('rounds.driftBadge')}</Badge>}
+                {(row.preMoneyDrift || row.conversionDrift.length > 0) && <Badge variant="warning">{t('rounds.driftBadge')}</Badge>}
               </span>
             ),
           },
@@ -162,6 +162,22 @@ function RoundDrawer({ round, context, classCode, closeHref }: { round: RoundRow
             })}{' '}
             {context.canManage ? t('rounds.preMoneyDriftRemedy', { implied: money(round.preMoneyDrift.impliedPreMoney, { currency: round.currency }) }) : t('rounds.preMoneyDriftReadOnly')}
           </p>
+        )}
+        {/* Conversions into the round that its current measurement prices differently, reported with the pre-money drift. */}
+        {round.conversionDrift.length > 0 && (
+          <div role="status" className="space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            <ul className="space-y-0.5">
+              {round.conversionDrift.map((row) => (
+                <li key={row.securityId}>
+                  {t.rich('rounds.conversionDrift', {
+                    number: row.securityNumber, recorded: price(row.recordedPrice, round.currency), standing: price(row.standingPrice, round.currency),
+                    link: (chunks) => <Link className={`font-mono ${LINK}`} href={withParams('/equity', context.params, { view: 'securities', security: row.securityId, round: undefined }) as never}>{chunks}</Link>,
+                  })}
+                </li>
+              ))}
+            </ul>
+            <p>{t('rounds.conversionDriftHint')}</p>
+          </div>
         )}
         {locked && (
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -286,7 +302,7 @@ function RoundModelDrawer({ context, closeHref }: { context: EquityContext; clos
               <Stat label={t('model.investorShares')} value={t('model.sharesOfFullyDiluted', { shares: shares(r.investorShares), percent: percentText(r.investorPercent) })} />
               <Stat label={t('model.fullyDilutedAfter')} value={shares(r.fullyDilutedAfter)} />
               <Stat label={t('model.conversionShares')} value={shares(r.conversionShares)} />
-              <Stat label={t('model.poolTopUp')} value={t('model.newShares', { shares: shares(r.poolTopUp) })} />
+              <Stat label={t('model.poolTopUp')} value={t('model.newShares', { shares: shares(r.poolTopUp), sharesCount: Number(r.poolTopUp) })} />
               <Stat label={t('model.poolAfter')} value={t('model.percentOfFullyDiluted', { percent: percentText(r.poolPercentAfter) })} />
               <Stat label={t('model.antiDilutionShares')} value={shares(r.antiDilutionShares)} />
               <Stat label={t('model.cashRounding')} value={money(r.investorCashRounding, { currency: context.currency })} />

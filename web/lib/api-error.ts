@@ -7,6 +7,7 @@ import {
   type ActionResult,
   type FieldIssue,
 } from '@braedonsaunders/appkit-errors'
+import { joinRefusal } from './refusal-sentence'
 
 /**
  * Reading a failed API response in the browser. The status is checked FIRST:
@@ -99,7 +100,7 @@ function readNamedRefusal(body: unknown): string | null {
   if (!refusal) return null
   const remedy =
     typeof record.remedy === 'string' && record.remedy.trim() !== '' ? record.remedy.trim() : null
-  return remedy ? `${refusal} — ${remedy}` : refusal
+  return joinRefusal(refusal, remedy)
 }
 
 export type ApiBulkFailure = { id: string; error: string }
@@ -268,7 +269,7 @@ export function refusalMessageFromBody(body: unknown, copy: RefusalCopy): string
   if (refusal) {
     const remedy =
       typeof record.remedy === 'string' && record.remedy.trim() !== '' ? record.remedy.trim() : null
-    return remedy ? `${refusal} — ${remedy}` : refusal
+    return joinRefusal(refusal, remedy)
   }
   const code = readRefusalCode(body)
   if (code) return copy.codeMessage?.(code) ?? null

@@ -13,8 +13,8 @@
  * conversions.
  */
 import { buildCapTable, convertibleState } from "./cap-table.ts";
-import { accruedInterest, convertAtRound, type ConvertingInstrument } from "./convertibles.ts";
-import { EquityError } from "./errors.ts";
+import { accruedInterest, convertAtRound, type ConvertibleTerms, type ConvertingInstrument } from "./convertibles.ts";
+import { equityError, fig } from "./errors.ts";
 import { restate } from "./fx.ts";
 import { fromLedgerUnits, ledgerUnits, parseMoney, parsePrice, type Rational } from "./quantities.ts";
 import type { EquityBook, SecurityRecord } from "./types.ts";
@@ -32,7 +32,7 @@ export function bookBeforeRound(book: EquityBook, roundId: string): EquityBook {
 /** Instruments outstanding on the round's closing date (before the round), whose currencies the pricing needs. */
 export function roundInstruments(book: EquityBook, roundId: string): SecurityRecord[] {
   const round = book.rounds.find((row) => row.id === roundId);
-  if (!round) throw new EquityError("The round does not exist for this legal entity.", { status: 404, code: "equity_round_unknown", remedy: "Choose a round of the legal entity.", field: "roundId" });
+  if (!round) throw equityError("roundUnknown", {}, { field: "roundId" });
   const before = bookBeforeRound(book, roundId);
   return before.securities
     .filter((row) => (row.kind === "safe" || row.kind === "note") && row.issueDate <= round.closedOn)
@@ -55,31 +55,38 @@ export interface RoundConversion {
   pricedBy: "round" | "cap" | "discount";
 }
 
-/** Shares a SAFE or note converts into at a round, measured with every instrument converting in it. */
-export function conversionAtRound(book: EquityBook, security: SecurityRecord, roundId: string, pricing: RoundPricing): RoundConversion {
+/**
+ * Shares a SAFE or note converts into at a round, measured with every
+ * instrument converting in it. `adopted` measures the security on other
+ * terms than those that stand for it (terms an MFN election adopted from an
+ * instrument since voided), the others unchanged, to read what a conversion
+ * on those terms recorded.
+ */
+export function conversionAtRound(book: EquityBook, security: SecurityRecord, roundId: string, pricing: RoundPricing, adopted?: Pick<ConvertibleTerms, "valuationCap" | "discountPercent" | "safeType">): RoundConversion {
   const round = book.rounds.find((row) => row.id === roundId)!;
   const before = bookBeforeRound(book, roundId);
   const table = buildCapTable(before, round.closedOn);
   const instruments = roundInstruments(book, roundId);
   if (!instruments.some((row) => row.id === security.id)) {
-    throw new EquityError("The instrument is not outstanding on the round's closing date.", { status: 409, code: "equity_event_invalid", remedy: "Check the instrument's issue date and history." });
+    throw equityError("conversionNotOutstanding", { security: fig.text(security.securityNumber), date: fig.date(round.closedOn) });
   }
   const own = new Map<string, Rational>();
   const converting: ConvertingInstrument[] = instruments.map((row) => {
     const state = convertibleState(before, row, round.closedOn);
+    const terms: ConvertibleTerms = adopted && row.id === security.id ? { ...state.terms, ...adopted } : state.terms;
     const exponent = pricing.exponents.get(row.currency);
     const rate = pricing.rates.get(row.currency);
     if (exponent === undefined || rate === undefined) {
-      throw new EquityError(`No ${row.currency} to ${round.currency} rate was resolved for the conversion.`, { code: "equity_fx_rate_missing", remedy: "Record the exchange rate for the round's closing date (Setup → Exchange Rates)." });
+      throw equityError("fxRateUnresolved", { from: fig.text(row.currency), to: fig.text(round.currency), date: fig.date(round.closedOn), subject: fig.choice("conversion") });
     }
-    const principal = ledgerUnits(parseMoney(state.terms.principal, "the principal"), exponent);
-    const interest = ledgerUnits(accruedInterest(state.terms, round.closedOn), exponent);
+    const principal = ledgerUnits(parseMoney(terms.principal, "principal"), exponent);
+    const interest = ledgerUnits(accruedInterest(terms, round.closedOn), exponent);
     const amount = fromLedgerUnits(principal + interest);
     own.set(row.id, amount);
-    const cap = state.terms.valuationCap ? restate(parseMoney(state.terms.valuationCap, "the valuation cap"), rate) : null;
-    return { terms: state.terms, amount: restate(amount, rate), cap };
+    const cap = terms.valuationCap ? restate(parseMoney(terms.valuationCap, "valuationCap"), rate) : null;
+    return { terms, amount: restate(amount, rate), cap };
   });
-  const { conversions } = convertAtRound(converting, parsePrice(round.pricePerShare, "the round price"), BigInt(table.totals.fullyDiluted));
+  const { conversions } = convertAtRound(converting, parsePrice(round.pricePerShare, "roundPrice"), BigInt(table.totals.fullyDiluted));
   const mine = conversions.find((conversion) => conversion.securityId === security.id)!;
   return { price: mine.price, shares: mine.shares, amount: own.get(security.id)!, pricedBy: mine.pricedBy };
 }

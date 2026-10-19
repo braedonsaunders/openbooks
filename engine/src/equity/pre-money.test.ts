@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { renderRefusal } from "../platform/catalog-refusal.ts";
+import { EQUITY_REFUSALS } from "./refusals/index.ts";
 import { EquityError } from "./errors.ts";
 import { parsePrice, rational } from "./quantities.ts";
 import { assertPreMoneyConsistent, roundPreMoneyDrift } from "./structure.ts";
@@ -27,7 +29,7 @@ const book = (securities: SecurityRecord[], rounds: FinancingRoundRecord[] = [])
   classes: [COMMON], amendments: [], splits: [], plans: [], reserveChanges: [], rounds, securities, events: [], securityAmendments: [],
 });
 
-const PAR = parsePrice("0.0001", "par");
+const PAR = parsePrice("0.0001", "price");
 const refusal = (run: () => void): EquityError => {
   try {
     run();
@@ -45,8 +47,8 @@ test("a pre-money refusal proposes the consistent valuation and the consistent p
   }));
   assert.equal(error.code, "equity_round_pre_money_inconsistent");
   assert.equal(error.field, "preMoneyValuation");
-  assert.match(error.remedy, /pre-money valuation of \$7,000,000\.00, or a price per share of 4\.5;/);
-  assert.match(error.remedy, /state that basis under Pre-money basis\.$/);
+  assert.match(error.remedy, /pre-money valuation of \$7,000,000\.00 or a price per share of \$4\.5000;/, "the proposed price reads under the four-place per-share rule");
+  assert.match(error.remedy, /state that basis under “Pre-money basis”\.$/, "the remedy names the field by its form label");
   assert.doesNotThrow(() => assertPreMoneyConsistent(before, {
     closedOn: "2026-08-15", price: parsePrice("4.5", "price"), preMoney: rational(9_000_000n), currency: "USD", basisReason: null, parValue: PAR, priceLocked: false,
   }), "the proposed price agrees with the stated valuation");
@@ -64,8 +66,8 @@ test("a pre-money refusal never proposes a price below par, at zero, or while li
     closedOn: "2026-08-15", price: parsePrice("3.50", "price"), preMoney: rational(73_000_000n), currency: "USD", basisReason: null, parValue: PAR, priceLocked: true,
   }));
   assert.doesNotMatch(locked.remedy, /price per share of/);
-  assert.match(locked.remedy, /the price stays at 3\.5, since live securities were issued or converted at it/);
-  assert.match(locked.localized("de-DE").remedy, /73\.815\.000,00/);
+  assert.match(locked.remedy, /the price stays at \$3\.5000, since live securities were issued or converted at it/);
+  assert.match(renderRefusal(EQUITY_REFUSALS[locked.key].remedy, locked.values, "de-DE"), /73\.815\.000,00/);
 });
 
 test("a recorded round whose pre-round count changed afterwards reads as drifted until its valuation or basis is amended", () => {
