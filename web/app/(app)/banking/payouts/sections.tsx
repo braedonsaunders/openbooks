@@ -2,15 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   DisclosureSection,
   Drawer,
   EmptyState,
@@ -35,6 +32,8 @@ import type {
 } from './view'
 import { adjustmentCurrency } from './adjustment-currency'
 import { DateField } from '../../../../components/date-field'
+import { Field } from '../../../../components/field'
+import { PagedTable } from '../../../../components/paged-table'
 
 /**
  * Banking → Payouts workspace: one state graph for the cockpit and the
@@ -553,106 +552,110 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
         <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : (
         <>
-          {activeView === 'review' && (queue.length > 0 ? (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle>{strings.queueTitle}</CardTitle>
-                  <a className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={queueAllHref}>
-                    {strings.queueAllLabel}
-                  </a>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{strings.payoutHead}</TableHead>
-                      <TableHead>{strings.dateHead}</TableHead>
-                      <TableHead>{strings.kindHead}</TableHead>
-                      <TableHead>{strings.amountHead}</TableHead>
-                      <TableHead>{strings.actionHead}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {queue.map((row) => (
-                      <TableRow key={row.lineId}>
-                        <TableCell>{row.provider} · {row.externalRef}</TableCell>
-                        <TableCell>{row.settlementDate}</TableCell>
-                        <TableCell>{strings.kindLabels[row.kind] ?? row.kind}</TableCell>
-                        <TableCell>{row.amount}</TableCell>
-                        <TableCell>
-                          <Button size="sm" variant="outline" onClick={() => openDrawer(row.batchId)}>
-                            {strings.reviewLabel}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          ) : (
-            <EmptyState title={strings.queueEmpty} />
-          ))}
-          {activeView === 'batches' ? <Card>
-            <CardHeader>
-              <CardTitle>{strings.batchesTitle}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {batches.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{strings.batchesEmpty}</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{strings.payoutHead}</TableHead>
-                      <TableHead>{strings.dateHead}</TableHead>
-                      <TableHead>{strings.netHead}</TableHead>
-                      <TableHead>{strings.statusHead}</TableHead>
-                      <TableHead>{strings.unmatchedHead}</TableHead>
-                      <TableHead>{strings.depositHead}</TableHead>
-                      <TableHead>{strings.actionHead}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {batches.map((batch) => (
-                      <TableRow key={batch.id}>
-                        <TableCell>{batch.provider} · {batch.externalRef}</TableCell>
-                        <TableCell>{batch.settlementDate}</TableCell>
-                        <TableCell>{batch.netAmount}</TableCell>
-                        <TableCell><Badge variant={statusTone(batch.status)}>{batch.statusLabel}</Badge></TableCell>
-                        <TableCell>
-                          {batch.unmatchedLines > 0 ? (
-                            <Badge variant="warning">{batch.unmatchedLines}</Badge>
-                          ) : (
-                            <Badge variant="success">0</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {batch.status !== 'posted' ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : batch.tied ? (
-                            <Badge variant="success">{strings.tiedLabel}</Badge>
-                          ) : (
-                            <Badge variant="warning">{strings.untiedLabel}</Badge>
-                          )}
-                          {batch.accrued ? (
-                            <> <Badge variant="secondary">{strings.inTransitBadge}</Badge></>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <Button size="sm" variant="outline" onClick={() => openDrawer(batch.id)}>
-                            {strings.openLabel}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card> : null}
+          {activeView === 'review' ? (
+            <section className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold">{strings.queueTitle}</h2>
+                <Link className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={queueAllHref}>
+                  {strings.queueAllLabel}
+                </Link>
+              </div>
+              <PagedTable
+                source="banking_payout_queue"
+                rows={queue}
+                searchable
+                pageSize={10}
+                rowKey={(row) => row.lineId}
+                empty={<EmptyState title={strings.queueEmpty} />}
+                columns={[
+                  {
+                    key: 'payout', header: strings.payoutHead,
+                    cell: (row) => <>{row.provider} · {row.externalRef}</>,
+                    search: (row) => `${row.provider} ${row.externalRef}`,
+                  },
+                  { key: 'date', header: strings.dateHead, cell: (row) => row.settlementDate, search: (row) => row.settlementDate },
+                  {
+                    key: 'kind', header: strings.kindHead,
+                    cell: (row) => strings.kindLabels[row.kind] ?? row.kind,
+                    search: (row) => strings.kindLabels[row.kind] ?? row.kind,
+                  },
+                  {
+                    key: 'amount', header: strings.amountHead, align: 'right', className: 'text-right tabular-nums',
+                    cell: (row) => row.amount, search: (row) => row.amount,
+                  },
+                  {
+                    key: 'action', header: strings.actionHead,
+                    cell: (row) => (
+                      <Button size="sm" variant="outline" onClick={() => openDrawer(row.batchId)}>
+                        {strings.reviewLabel}
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
+            </section>
+          ) : null}
+          {activeView === 'batches' ? (
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold">{strings.batchesTitle}</h2>
+              <PagedTable
+                source="banking_payout_batches"
+                rows={batches}
+                searchable
+                pageSize={10}
+                rowKey={(batch) => batch.id}
+                empty={<EmptyState title={strings.batchesEmpty} />}
+                columns={[
+                  {
+                    key: 'payout', header: strings.payoutHead,
+                    cell: (batch) => <>{batch.provider} · {batch.externalRef}</>,
+                    search: (batch) => `${batch.provider} ${batch.externalRef}`,
+                  },
+                  { key: 'date', header: strings.dateHead, cell: (batch) => batch.settlementDate, search: (batch) => batch.settlementDate },
+                  {
+                    key: 'net', header: strings.netHead, align: 'right', className: 'text-right tabular-nums',
+                    cell: (batch) => batch.netAmount, search: (batch) => batch.netAmount,
+                  },
+                  {
+                    key: 'status', header: strings.statusHead,
+                    cell: (batch) => <Badge variant={statusTone(batch.status)}>{batch.statusLabel}</Badge>,
+                    search: (batch) => batch.statusLabel,
+                  },
+                  {
+                    key: 'unmatched', header: strings.unmatchedHead,
+                    cell: (batch) => batch.unmatchedLines > 0
+                      ? <Badge variant="warning">{batch.unmatchedLines}</Badge>
+                      : <Badge variant="success">0</Badge>,
+                    search: (batch) => String(batch.unmatchedLines),
+                  },
+                  {
+                    key: 'deposit', header: strings.depositHead,
+                    cell: (batch) => <>
+                      {batch.status !== 'posted' ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : batch.tied ? (
+                        <Badge variant="success">{strings.tiedLabel}</Badge>
+                      ) : (
+                        <Badge variant="warning">{strings.untiedLabel}</Badge>
+                      )}
+                      {batch.accrued ? <> <Badge variant="secondary">{strings.inTransitBadge}</Badge></> : null}
+                    </>,
+                    search: (batch) => batch.status === 'posted'
+                      ? `${batch.tied ? strings.tiedLabel : strings.untiedLabel} ${batch.accrued ? strings.inTransitBadge : ''}`
+                      : '',
+                  },
+                  {
+                    key: 'action', header: strings.actionHead,
+                    cell: (batch) => (
+                      <Button size="sm" variant="outline" onClick={() => openDrawer(batch.id)}>
+                        {strings.openLabel}
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
+            </section>
+          ) : null}
         </>
       )}
       </RecordTabs>
@@ -663,25 +666,24 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
           forceOpen={false}
         >
           <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col gap-1 text-sm">
-              {strings.accrualDateLabel}
+            <Field label={strings.accrualDateLabel}>
               <DateField
                 value={accrualDate}
                 onChange={(value) => setAccrualDate(value)}
               />
-            </label>
+            </Field>
             <Button size="sm" disabled={accruing || accrualDate.trim() === ''} onClick={() => void runAccrual()}>
               {accruing ? strings.workingLabel : strings.accrueLabel}
             </Button>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">{strings.accrueHint}</p>
           <p className="mt-2 text-sm">
-            <a className="underline" href={reportHref}>{strings.reportLinkLabel}</a>
+            <Link className="underline" href={reportHref}>{strings.reportLinkLabel}</Link>
           </p>
         </DisclosureSection>
       ) : (
         <p className="text-sm">
-          <a className="underline" href={reportHref}>{strings.reportLinkLabel}</a>
+          <Link className="underline" href={reportHref}>{strings.reportLinkLabel}</Link>
         </p>
       )}
       {selectedBatchId ? (

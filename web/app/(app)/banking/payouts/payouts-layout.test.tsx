@@ -23,7 +23,10 @@ const strings = new Proxy({ queueTitle: 'Needs review', batchesTitle: 'Payout ba
 const props = {
   canReconcile: false,
   tiles: [],
-  queue: [{ lineId: 'line-a', batchId: 'batch-a', provider: 'Provider', externalRef: 'Review payout', settlementDate: '2026-10-01', kind: 'sale', amount: '10.00 USD' }],
+  queue: [
+    { lineId: 'line-a', batchId: 'batch-a', provider: 'Provider', externalRef: 'Review payout', settlementDate: '2026-10-01', kind: 'sale', amount: '10.00 USD' },
+    { lineId: 'line-b', batchId: 'batch-b', provider: 'Secondary provider', externalRef: 'Secondary payout', settlementDate: '2026-10-02', kind: 'sale', amount: '20.00 USD' },
+  ],
   batches: [{ id: 'batch-a', provider: 'Provider', externalRef: 'Batch payout', settlementDate: '2026-10-01', netAmount: '10.00 USD', status: 'draft', statusLabel: 'Draft', unmatchedLines: 1, tied: false, accrued: false }],
   reportHref: '/reports', queueAllHref: '/banking/payouts/unmatched', strings,
   emptyTitle: 'No payouts', emptyDescription: 'Import a provider payout to review it.',
@@ -48,7 +51,21 @@ test('payout review and batches replace each other rather than stacking tables',
   try {
     assert.equal(view.host.querySelectorAll('table').length, 1, 'the review tab must show only its queue table')
     assert.ok(view.host.textContent?.includes('Review payout'))
+    assert.ok(view.host.textContent?.includes('Secondary payout'))
     assert.ok(!view.host.textContent?.includes('Batch payout'))
+    const search = view.host.querySelector<HTMLInputElement>('input[aria-label="Search"]')
+    assert.ok(search, 'the queue uses the shared searchable table')
+    assert.ok(view.host.querySelector('tbody td.text-right.tabular-nums'), 'payout amounts align as figures')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(search, 'Secondary payout')
+      search.dispatchEvent(new window.Event('input', { bubbles: true }))
+    })
+    assert.ok(view.host.textContent?.includes('Secondary payout'))
+    assert.ok(!view.host.textContent?.includes('Review payout'), 'search filters the loaded payout queue')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(search, '')
+      search.dispatchEvent(new window.Event('input', { bubbles: true }))
+    })
     const batches = [...view.host.querySelectorAll('button')].find(button => button.textContent === 'Payout batches')
     assert.ok(batches, 'a separate Payout batches tab must remain reachable')
     await act(async () => batches.click())

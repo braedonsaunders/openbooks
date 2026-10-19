@@ -374,7 +374,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'metric-tile': { props: ['label', 'locale', 'tone', 'value'] },
   'migration-cutover': { props: ['accounts', 'aiEnabled', 'canDraftOpening', 'canImport', 'journey'] },
   'migration-workspace': { props: ['activeId', 'aiEnabled', 'canConfigureAi', 'canImport', 'canWrite', 'conversations', 'initialMessages', 'initialPrompt', 'journey'] },
-  'module-home-tabs': { props: ['placement', 'tabs'] },
+  'module-home-tabs': { props: ['ariaLabel', 'placement', 'tabs'] },
   'narrative-drawer': { props: ['drawer'] },
   'narrative-entry': { props: ['href', 'labels', 'narrative'] },
   'native-extension': { props: ['appKey', 'sp'] },

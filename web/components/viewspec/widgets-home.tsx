@@ -67,6 +67,7 @@ export const HOME_WIDGETS = {
     <ModuleHomeTabs
       tabs={props.tabs as ComponentProps<typeof ModuleHomeTabs>['tabs']}
       placement={props.placement === 'local' ? 'local' : 'header'}
+      ariaLabel={str(props, 'ariaLabel')}
     />
   ),
   'commitments-section': (props) => (
