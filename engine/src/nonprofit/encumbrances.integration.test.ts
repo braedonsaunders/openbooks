@@ -117,8 +117,8 @@ test("commitments and budget control preserve posting policy and derived balance
     const otherSubsidiaryId = randomUUID();
     const sourceDocuments = await withBypassContext(async () => {
       await db.execute(sql`
-        insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-        values (${otherSubsidiaryId}, ${org.orgId}, 'Other Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
       `);
       const sourceDocument = async (orgId: string, subsidiaryId: string, kind: string, number: string, itemId: string) => {
         const id = randomUUID();
