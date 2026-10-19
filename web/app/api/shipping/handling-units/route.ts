@@ -32,7 +32,7 @@ const body = z.discriminatedUnion("action", [
   }),
 ]);
 export const GET = defineRoute({
-  permission: "orders.read",
+  permission: "orders.fulfill",
   feature: "fulfillment",
   handler: async ({ authz, request }) =>
     warehouseExecutionResponse(async () => {
