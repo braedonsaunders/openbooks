@@ -125,8 +125,12 @@ test("commitments and budget control preserve posting policy and derived balance
         await db.execute(sql`
           insert into documents (id, org_id, kind, document_number, party_id, document_date, currency, status, subsidiary_id)
           values (${id}, ${orgId}, ${kind}, ${number}, ${orgId === org.orgId ? org.vendorId : foreignOrg!.vendorId},
-            ${org.date}, 'CAD', 'approved', ${subsidiaryId})
+            ${org.date}, 'CAD', 'draft', ${subsidiaryId})
         `);
+        const approved = await db.execute(sql`
+          update documents set status = 'approved' where org_id = ${orgId} and id = ${id} returning id
+        `);
+        assert.equal(approved.rows.length, 1, 'the source document is approved before it is used');
         return id;
       };
       return {
