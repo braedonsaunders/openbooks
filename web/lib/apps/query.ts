@@ -5,6 +5,7 @@ import { loadApiSchema, resolveApiType, type ApiField } from '../api/schema-regi
 import { customRecordReportCatalog } from '../custom-record-report-catalog'
 import { appQueryPlanSchema, compileAppQuery, type AppQuerySource } from './query-plan'
 import { AppPlatformError, type AppPlatformContext } from './platform'
+import { customFieldViewerFor } from '../custom-fields'
 
 const kindFor = (type: string): ReportColumnKind | null => ({
   string: 'text', 'string (uuid)': 'uuid', 'string (date)': 'date', 'string (date-time)': 'timestamp', number: 'number', boolean: 'boolean',
@@ -27,7 +28,10 @@ export async function queryAppRecords(ctx: AppPlatformContext, raw: unknown) {
   const parsed = appQueryPlanSchema.safeParse(raw)
   if (!parsed.success) throw new AppPlatformError(parsed.error.issues.map(i => i.message).join('; '))
   const plan = parsed.data
-  const schema = await loadApiSchema(ctx.orgId)
+  const schema = await loadApiSchema(ctx.orgId, null, customFieldViewerFor({
+    user: ctx.user,
+    permissions: new Set(ctx.userCan('admin.custom_fields.manage') ? ['admin.custom_fields.manage'] : []),
+  }))
   const custom = await customRecordReportCatalog({ user: ctx.user, permissions: new Set(ctx.userCan('records.read') ? ['records.read'] : []), allowedSubsidiaryIds: ctx.allowedSubsidiaryIds === null ? null : new Set(ctx.allowedSubsidiaryIds) })
   const sources = new Map<string, AppQuerySource>()
   const { permissionSetCovers } = await import('../permissions')

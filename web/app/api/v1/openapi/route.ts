@@ -19,6 +19,10 @@ async function handleV1GET(req: Request) {
         auth.user.orgId,
         `${proto}://${host}`,
         auth.user.roles.map(({ key }) => key),
+        {
+          roleKeys: auth.user.roles.map(({ key }) => key),
+          canManageCustomFields: canApi(auth, "admin.custom_fields.manage"),
+        },
       ),
     };
   });
