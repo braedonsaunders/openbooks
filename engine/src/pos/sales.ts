@@ -695,7 +695,7 @@ async function refundedByLine(runner: SqlExecutor, orgId: string, originalDocume
            sum(refund_line.amount)::text as amount,
            sum(refund_line.tax_amount)::text as tax_amount
       from pos_transactions t
-      join documents d on d.org_id = t.org_id and d.id = t.document_id and d.status = 'posted'
+      join documents d on d.org_id = t.org_id and d.id = t.document_id and d.status = 'posted' -- Live entries only: voided refunds no longer reduce the refundable balance
       cross join lateral jsonb_array_elements(coalesce(t.pricing->'refundLines', '[]'::jsonb)) with ordinality entry(value, refund_ordinality)
       join document_lines refund_line on refund_line.org_id = t.org_id and refund_line.document_id = t.document_id
                                     and refund_line.line_number = entry.refund_ordinality

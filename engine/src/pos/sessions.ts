@@ -224,7 +224,7 @@ export async function readSessionSummary(
            coalesce(sum(t.total_minor) filter (where t.kind = 'sale'), 0)::text as sales_total,
            coalesce(sum(t.total_minor) filter (where t.kind = 'refund'), 0)::text as refunds_total
       from pos_transactions t
-      join documents d on d.org_id = t.org_id and d.id = t.document_id and d.status = 'posted'
+      join documents d on d.org_id = t.org_id and d.id = t.document_id and d.status = 'posted' -- Live entries only: voided transactions do not contribute to current session reconciliation
      where t.org_id = ${orgId} and t.session_id = ${session.id}`)).rows[0]!;
   const tenders = (await runner.execute<{ kind: string; method_label: string; sale_minor: string; refund_minor: string; cash_minor: string; refund_cash_minor: string }>(sql`
     select dt.kind, dt.method_label,
@@ -504,7 +504,7 @@ export async function listSessions(
                sum(total_minor) filter (where kind = 'sale') as sales_total,
                sum(total_minor) filter (where kind = 'refund') as refunds_total
           from pos_transactions pt
-          join documents d on d.org_id = pt.org_id and d.id = pt.document_id and d.status = 'posted'
+          join documents d on d.org_id = pt.org_id and d.id = pt.document_id and d.status = 'posted' -- Live entries only: voided transactions do not contribute to current session totals
          where pt.org_id = s.org_id and pt.session_id = s.id
       ) t on true
      ${where}
