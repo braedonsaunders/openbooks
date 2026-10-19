@@ -64,6 +64,17 @@ test('a remedy is appended to the named refusal', async () => {
   )
 })
 
+test('a structured details remedy is appended to the named refusal', async () => {
+  const res = new Response(
+    JSON.stringify({ error: 'No default warehouse is available', details: { remedy: 'assign a warehouse to the order line' } }),
+    { status: 409, headers: { 'content-type': 'application/json' } },
+  )
+  assert.equal(
+    await readApiErrorMessage(res, 'failed'),
+    'No default warehouse is available — assign a warehouse to the order line',
+  )
+})
+
 test('blank and non-string error fields fall through to the fallback, never an empty toast', async () => {
   for (const body of ['{"error":"   "}', '{"error":42}', '{"error":null}']) {
     const res = new Response(body, {

@@ -18,7 +18,7 @@ import {
  * Server envelopes carry the refusal in `error` (house clients), in
  * `message` (routes shared with non-browser callers), and in `detail`
  * (provider ping routes answering `{ ok: false, detail }`); an optional
- * `remedy` names the operator's next step and is appended so the toast
+ * top-level or `details.remedy` names the operator's next step and is appended so the toast
  * carries both the refusal and what to do about it. All four fields are
  * read defensively: a blank or non-string value falls through to the
  * fallback, so the caller can never toast `undefined` or an empty string.
@@ -81,6 +81,7 @@ function readNamedRefusal(body: unknown): string | null {
     detail?: unknown
     errors?: unknown
     remedy?: unknown
+    details?: unknown
     issues?: unknown
   }
   const fields = [record.error, record.message, record.detail]
@@ -97,8 +98,13 @@ function readNamedRefusal(body: unknown): string | null {
   const field = issueField(record.issues)
   const refusal = unnamed && field && !unnamed.includes(field) ? `${field}: ${unnamed}` : unnamed
   if (!refusal) return null
-  const remedy =
-    typeof record.remedy === 'string' && record.remedy.trim() !== '' ? record.remedy.trim() : null
+  const details = record.details !== null && typeof record.details === 'object' && !Array.isArray(record.details)
+    ? record.details as { remedy?: unknown }
+    : null
+  const remedyValue = typeof record.remedy === 'string' && record.remedy.trim() !== ''
+    ? record.remedy
+    : details?.remedy
+  const remedy = typeof remedyValue === 'string' && remedyValue.trim() !== '' ? remedyValue.trim() : null
   return remedy ? `${refusal} — ${remedy}` : refusal
 }
 

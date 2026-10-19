@@ -170,6 +170,12 @@ function LeaseCreateForm({
         ...(f.pvOfPayments && f.fairValue
           ? { pvOfPayments: f.pvOfPayments, fairValue: f.fairValue }
           : {}),
+        ...(f.termThresholdPercent
+          ? { termThresholdPercent: f.termThresholdPercent }
+          : {}),
+        ...(f.pvThresholdPercent
+          ? { pvThresholdPercent: f.pvThresholdPercent }
+          : {}),
       };
       const agreement = {
         subsidiaryId: f.subsidiaryId,
@@ -337,6 +343,8 @@ function LeaseCreateForm({
               ["economicLifeMonths", t("leases.fieldLife")],
               ["pvOfPayments", t("leases.fieldPv")],
               ["fairValue", t("leases.fieldFairValue")],
+              ["termThresholdPercent", t("leases.fieldTermThreshold")],
+              ["pvThresholdPercent", t("leases.fieldPvThreshold")],
             ] as const
           ).map(([key, label]) => (
             <Field key={key} label={label}>
@@ -541,6 +549,10 @@ function ChangeLease({
   async function propose() {
     setBusy(true);
     try {
+      const classificationInputs = { ...criteria };
+      if (classificationInputs.economicLifeMonths != null) {
+        classificationInputs.economicLifeMonths = Number(classificationInputs.economicLifeMonths);
+      }
       const result = await request(`/api/leases/${lease.id}/changes`, {
         operation,
         effectiveOn: date,
@@ -558,7 +570,7 @@ function ChangeLease({
                 paymentFrequency: frequency,
                 paymentTiming: timing,
                 annualRatePercent: rate,
-                classificationInputs: criteria,
+                classificationInputs,
               },
             }
           : {}),
@@ -670,13 +682,11 @@ function ChangeLease({
             ))}
             <Field label={t("leases.fieldLife")}>
               <Input
+                type="number"
+                min={1}
+                step={1}
                 value={String(criteria.economicLifeMonths ?? "")}
-                onChange={(e) =>
-                  criterion(
-                    "economicLifeMonths",
-                    e.target.value ? Number(e.target.value) : undefined,
-                  )
-                }
+                onChange={(e) => criterion("economicLifeMonths", e.target.value || undefined)}
               />
             </Field>
             {(

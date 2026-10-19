@@ -86,7 +86,11 @@ const payload = {
   changes: [],
 } as unknown as Parameters<typeof LeaseDrawer>[0]['payload']
 
-async function mount(t: TestContext, responder: () => Response): Promise<void> {
+async function mount(
+  t: TestContext,
+  responder: () => Response,
+  view: Parameters<typeof LeaseDrawer>[0]['payload'] = payload,
+): Promise<void> {
   script.errors = []
   ;(globalThis as Record<string, unknown>).__leasesErrorToasts = script.errors
   const prior = globalThis.fetch
@@ -109,7 +113,7 @@ async function mount(t: TestContext, responder: () => Response): Promise<void> {
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <BusinessDateProvider today="2026-09-01">
-            <LeaseDrawer payload={payload} canManage accounts={[]} subsidiaries={[]} />
+            <LeaseDrawer payload={view} canManage accounts={[]} subsidiaries={[]} />
           </BusinessDateProvider>
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -145,4 +149,57 @@ test('a failed commence toasts the translated fallback with the status', async (
     for (let i = 0; i < 6; i++) await tick()
   })
   assert.deepEqual(script.errors, ['Lease action failed (status 502)'])
+})
+
+test('the economic life input keeps numeric values without rendering NaN', async (t) => {
+  const activePayload = {
+    ...payload,
+    lease: { ...payload.lease, status: 'active' },
+  } as Parameters<typeof LeaseDrawer>[0]['payload']
+  await mount(t, () => Response.json({}), activePayload)
+  await act(async () => {
+    clickByText('Change / terminate')
+    await tick()
+  })
+  const life = document.querySelector<HTMLInputElement>('input[type="number"]')
+  assert.ok(life)
+  assert.equal(life.type, 'number')
+  assert.notEqual(life.value, 'NaN')
+})
+
+test('a separate lease form exposes and submits both classification thresholds', async (t) => {
+  const activePayload = {
+    ...payload,
+    lease: { ...payload.lease, status: 'active' },
+  } as Parameters<typeof LeaseDrawer>[0]['payload']
+  let submitted: Record<string, unknown> | null = null
+  await mount(t, () => Response.json({ changeId: 'change-1' }), activePayload)
+  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+    submitted = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return Response.json({ changeId: 'change-1' })
+  }) as typeof fetch
+  await act(async () => {
+    clickByText('Add separate lease')
+    await tick()
+  })
+  const setInput = async (label: string, value: string) => {
+    const input = [...document.querySelectorAll<HTMLInputElement>('input')]
+      .find((candidate) => candidate.getAttribute('aria-label') === label)
+    assert.ok(input, `${label} input should be available`)
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(input, value)
+      input.dispatchEvent(new window.Event('input', { bubbles: true }))
+      input.dispatchEvent(new window.Event('change', { bubbles: true }))
+    })
+  }
+  await setInput('Major part threshold (%)', '80')
+  await setInput('Substantially all threshold (%)', '95')
+  await act(async () => {
+    clickByText('Create approval proposal')
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const agreement = submitted?.separateLease as { agreement?: { classificationInputs?: Record<string, unknown> } } | undefined
+  assert.equal(agreement?.agreement?.classificationInputs?.termThresholdPercent, '80')
+  assert.equal(agreement?.agreement?.classificationInputs?.pvThresholdPercent, '95')
 })
