@@ -9218,7 +9218,7 @@
       "taskAssigneeLabel": "Zuständige Person",
       "taskTitleLabel": "Aufgabentitel",
       "taskDueOffsetLabel": "Fällig nach (Tagen)",
-      "assigneePerson": "Person",
+      "assigneePerson": "Mitarbeiter",
       "assigneeRole": "Rolle",
       "assigneeUnavailable": "Zuständigkeit nicht verfügbar",
       "chooseAssignee": "Zuständigkeit auswählen…",
@@ -9265,7 +9265,7 @@
       },
       "subjectKinds": {
         "employment": "Beschäftigung",
-        "position": "Position",
+        "position": "Stelle",
         "leave_request": "Urlaubsantrag",
         "timesheet_week": "Stundenzettelwoche",
         "expense_report": "Spesenabrechnung",
@@ -9276,10 +9276,10 @@
         "enrollment": "Anmeldung"
       },
       "processTemplateKinds": {
-        "onboarding": "Onboarding"
+        "onboarding": "Einarbeitung"
       },
       "valueTypes": {
-        "text": "Text",
+        "text": "Textwert",
         "number": "Zahl",
         "boolean": "Wahr oder falsch",
         "json": "JSON-Wert",
