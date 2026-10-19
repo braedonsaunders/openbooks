@@ -66,7 +66,7 @@ export type InvoiceWriteOffAccountRole = Extract<
 >;
 
 const MAX_REASON_LENGTH = 500;
-const AMOUNT_PATTERN = /^\d+(\.\d{1,2})?$/;
+const AMOUNT_PATTERN = /^\d+(\.\d{1,4})?$/;
 
 /**
  * Pick the account a write-off debits. An allowance, when the organization
@@ -90,14 +90,14 @@ export function resolveInvoiceWriteOffAccount(
 }
 
 /**
- * Exact, canonical write-off amount: a positive decimal with at most two places
- * (the invoice currency's minor unit), never a float. Returns the ledger's
+ * Exact, canonical write-off amount: a positive decimal with at most four
+ * places (the ledger's stored precision), never a float. Returns the ledger's
  * canonical 4-place string so the same value is stored and compared.
  */
 export function normalizeInvoiceWriteOffAmount(raw: unknown): string {
   const text = typeof raw === "string" ? raw.trim() : "";
   if (!AMOUNT_PATTERN.test(text)) {
-    throw new PaymentError("Write-off amount must be a positive amount with at most two decimal places, such as 125.00");
+    throw new PaymentError("Write-off amount must be a positive amount with at most four decimal places, such as 125.1250");
   }
   const units = toUnits(text);
   if (units <= 0n) throw new PaymentError("Write-off amount must be greater than zero");
