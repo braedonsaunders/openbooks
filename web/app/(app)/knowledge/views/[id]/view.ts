@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { isUuid, parseListParams } from '../../../../../lib/list-params'
 import { dateTime } from '../../../../../lib/format'
-import { requirePermission } from '../../../../../lib/authz'
+import { can, requirePermission } from '../../../../../lib/authz'
 import { canRunReportEntity, requireReportEntityFeature } from '../../../../../lib/report-authz'
 import { loadView, runView } from '../../../../../lib/views'
 import type { ReportRunResult } from '@openbooks/reports'
@@ -144,7 +144,7 @@ export async function loadSavedViewRun(
   await requireReportEntityFeature(authz, view.query)
   if (!(await canRunReportEntity(authz, view.query))) notFound()
 
-  const canEdit = authz.permissions.has('*') || view.owner_id === authz.user.id
+  const canEdit = can(authz, '*') || view.owner_id === authz.user.id
   const [result, branding] = await Promise.all([
     runView(authz.user.orgId, view.query),
     orgBranding(authz.user.orgId),

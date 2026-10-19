@@ -95,7 +95,7 @@ export async function loadCustomReports(
   const tc = await getTranslations('common')
   const tReports = await getTranslations('reports')
   const authz = await requirePermission('reports.read')
-  const canCreate = authz.permissions.has('reports.create') || authz.permissions.has('*')
+  const canCreate = can(authz, 'reports.create')
   const params = parseListParams(sp, {
     sort: 'name',
     dir: 'asc',

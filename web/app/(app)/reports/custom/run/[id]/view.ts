@@ -21,7 +21,7 @@ import {
   POINT_IN_TIME_PERIOD_PRESETS,
   type ReportRunResult,
 } from '@openbooks/reports'
-import { requirePermission } from '../../../../../../lib/authz'
+import { can, requirePermission } from '../../../../../../lib/authz'
 import { canRunReportEntity, requireReportEntityFeature } from '../../../../../../lib/report-authz'
 import { clamp, isUuid, pickString } from '../../../../../../lib/list-params'
 import {
@@ -107,7 +107,7 @@ export async function loadReportRun(
   sp: Record<string, string | undefined>,
 ): Promise<ReportRunData> {
   const authz = await requirePermission('reports.read')
-  const canCreate = authz.permissions.has('reports.create') || authz.permissions.has('*')
+  const canCreate = can(authz, 'reports.create')
   if (!isUuid(id)) notFound()
 
   const definition = await loadReportDefinition(authz.user.orgId, id)

@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { permissionSetCovers } from './permissions'
 import { auditSetupChange } from './setup/audit'
 import {
   REPORT_ENTITY_MAP,
@@ -47,7 +48,7 @@ export type ViewVisibility = {
 }
 
 async function userVisibility(orgId: string, userId: string, perms: Set<string>): Promise<ViewVisibility> {
-  const isAdmin = perms.has('*')
+  const isAdmin = permissionSetCovers(perms, '*')
   let roleKeys: string[] = []
   if (!isAdmin) {
     const r = (await db.execute<{ key: string }>(sql`

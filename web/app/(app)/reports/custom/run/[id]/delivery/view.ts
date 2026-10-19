@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/platform/db'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../../../lib/authz'
+import { can, requirePermission } from '../../../../../../../lib/authz'
 import { canRunReportEntity, requireReportEntityFeature } from '../../../../../../../lib/report-authz'
 import { canAccessReportArtifact } from '../../../../../../../lib/report-execution-context'
 import { isUuid } from '../../../../../../../lib/list-params'
@@ -47,7 +47,7 @@ export interface ReportDeliveryData {
 
 export async function loadReportDelivery(id: string): Promise<ReportDeliveryData> {
   const authz = await requirePermission('reports.read')
-  const canSchedule = authz.permissions.has('reports.schedule') || authz.permissions.has('*')
+  const canSchedule = can(authz, 'reports.schedule')
   if (!isUuid(id)) notFound()
 
   const definition = await loadReportDefinition(authz.user.orgId, id)

@@ -22,7 +22,7 @@ import { parseListParams, pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { REPORT_ENTITIES } from '@openbooks/reports'
+import { canRunReportEntity, hiddenReportEntityKeys } from '../../../../lib/report-authz'
 import { loadViews } from '../../../../lib/views'
 import { orgBranding } from '../../../../lib/report-pdf'
 
@@ -94,8 +94,7 @@ export async function loadViewsPage(
   const tNav = await getTranslations('nav')
   const tc = await getTranslations('common')
   const authz = await requirePermission('reports.read')
-  const canCreate =
-    authz.permissions.has('reports.create') || authz.permissions.has('*')
+  const canCreate = can(authz, 'reports.create')
   const params = parseListParams(sp, {
     sort: 'updated',
     dir: 'desc',
@@ -104,11 +103,16 @@ export async function loadViewsPage(
   })
   const scopeFilter = pickString(sp.scope) ?? 'all'
 
-  const [all, branding, inventoryEnabled] = await Promise.all([
+  const [loadedViews, branding, inventoryEnabled, hiddenEntityKeys] = await Promise.all([
     loadViews(authz.user.orgId, authz.user.id, authz.permissions),
     orgBranding(authz.user.orgId),
     isFeatureEnabled(authz.user.orgId, 'inventory'),
+    hiddenReportEntityKeys(authz),
   ])
+  const all = [] as typeof loadedViews
+  for (const view of loadedViews) {
+    if (await canRunReportEntity(authz, view.query)) all.push(view)
+  }
   const q = params.q?.toLowerCase()
   const filtered = all.filter((s) => {
     if (scopeFilter !== 'all' && s.scope !== scopeFilter) return false
@@ -144,7 +148,7 @@ export async function loadViewsPage(
   const isCreate = openId === 'new' && canCreate
   const openView =
     openId && !isCreate ? (all.find((s) => s.id === openId) ?? null) : null
-  const isAdmin = authz.permissions.has('*')
+  const isAdmin = can(authz, '*')
 
   const currentParams = Object.fromEntries(
     Object.entries(sp).filter(([, v]) => v !== undefined),
@@ -201,9 +205,7 @@ export async function loadViewsPage(
           canAdmin: isAdmin || openView.owner_id === authz.user.id,
           company: branding.orgName,
           inventoryEnabled,
-          hiddenEntityKeys: REPORT_ENTITIES.filter(
-            (e) => e.requiredPermission && !can(authz, e.requiredPermission),
-          ).map((e) => e.key),
+          hiddenEntityKeys,
         }
       : isCreate
         ? {
@@ -212,9 +214,7 @@ export async function loadViewsPage(
             canAdmin: true,
             company: branding.orgName,
             inventoryEnabled,
-            hiddenEntityKeys: REPORT_ENTITIES.filter(
-              (e) => e.requiredPermission && !can(authz, e.requiredPermission),
-            ).map((e) => e.key),
+            hiddenEntityKeys,
             createMode: true,
           }
         : null,
