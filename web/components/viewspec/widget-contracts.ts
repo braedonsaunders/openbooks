@@ -117,7 +117,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'channel-posting-form': { props: ['canManage', 'channels', 'customers', 'history', 'policies', 'today'] },
   'channel-replay-all': { props: ['channelId', 'code', 'scope'] },
   'channel-workspace': { props: ['channelId', 'sp', 'tab'] },
-  'channels-console': { props: [] },
+  'channels-console': { props: ['data'] },
   'choose-recon-account': { props: ['href', 'label'] },
   'close-action-cell': { props: ['actionHref', 'actionLabel', 'actionLinkClassName', 'canStart', 'startBooks', 'startDefaultBookId', 'startPeriodId'] },
   'close-posting-periods-workspace': { props: ['bookId', 'canManageBooks', 'canPreview', 'initialError', 'initialRows', 'manageBooksLabel', 'runId'] },

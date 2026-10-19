@@ -164,11 +164,15 @@
     }
   },
   "tabs": {
+    "overview": "Overview",
     "products": "Products",
     "locations": "Locations",
     "orders": "Orders",
     "exceptions": "Exceptions",
     "posting": "Posting"
+  },
+  "kinds": {
+    "shopify": "Shopify"
   },
   "actions": {
     "connect": "Connect Shopify",
