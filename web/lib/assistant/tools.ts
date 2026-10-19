@@ -5,7 +5,7 @@ import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { abs as absMoney, add as addMoney, cmp as compareMoney } from "@openbooks/engine/money/money";
 import { db } from "@openbooks/engine/platform/db";
 import { canonicalPeriodLabel } from "@openbooks/engine/periods/period-policy";
-import { can, subsidiaryScopeAllows, type Authz } from "../authz";
+import { can, type Authz } from "../authz";
 import { accountsWithBalances, entryDetail } from "../data";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
