@@ -134,7 +134,7 @@ DECLARE proc record; replacement text;
 BEGIN
  SELECT p.oid,p.prosrc INTO STRICT proc FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
   WHERE n.nspname='public' AND p.proname='financial_history_native_clone_matches' AND p.pronargs=2;
- IF encode(public.digest(proc.prosrc,'sha256'),'hex')='4b6adc81110b7ae52766b73186265a2c0d01a43e0bfc45881d647d1586537bc3' THEN
+ IF encode(public.digest(proc.prosrc,'sha256'),'hex')='1f6d14d069fff9020e02fdea2689abfb94073d47900c28d6931ebb817f44ceb8' THEN
   RETURN; -- expected on replay: the identity rebasing is already installed
  END IF;
  IF encode(public.digest(proc.prosrc,'sha256'),'hex')<>'3ed67fd21acf0cf5db9fa8c2837e1848a78af5437525ca85cd94a085633fb939' THEN
@@ -142,14 +142,14 @@ BEGIN
  END IF;
  replacement:=replace(proc.prosrc,$anchor$ IF relation='public.journal_lines'::regclass AND target.masked THEN
   expected:=jsonb_set(expected,'{custom}','{}'::jsonb);
- END IF;$anchor$,$block$ IF relation='public.journal_lines'::regclass AND coalesce(original->'custom'->>'equitySecurityId','') ~ '^[0-9a-fA-F-]{36}$' THEN
+ END IF;$anchor$,$block$ IF relation='public.journal_lines'::regclass AND coalesce(original->'custom'->>'equitySecurityId','') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN
   expected:=jsonb_set(expected,'{custom}',(CASE WHEN target.masked THEN '{}'::jsonb ELSE original->'custom' END)
    || jsonb_build_object('equitySecurityId',public.ob_rebase((original->'custom'->>'equitySecurityId')::uuid,target.sandbox_seed)::text,
       'equityRole',original->'custom'->'equityRole'));
  ELSIF relation='public.journal_lines'::regclass AND target.masked THEN
   expected:=jsonb_set(expected,'{custom}','{}'::jsonb);
  END IF;$block$);
- IF encode(public.digest(replacement,'sha256'),'hex')<>'4b6adc81110b7ae52766b73186265a2c0d01a43e0bfc45881d647d1586537bc3' THEN
+ IF encode(public.digest(replacement,'sha256'),'hex')<>'1f6d14d069fff9020e02fdea2689abfb94073d47900c28d6931ebb817f44ceb8' THEN
   RAISE EXCEPTION 'financial_history_native_clone_matches identity rebasing differs from its published body' USING ERRCODE='55000';
  END IF;
  EXECUTE replace(pg_get_functiondef(proc.oid),proc.prosrc,replacement);
