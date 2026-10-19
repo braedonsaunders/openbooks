@@ -50,6 +50,7 @@ async function setup(org: ScratchOrg, actor: string, mode: "per_order" | "daily_
   const created = await withBypass(() => createChannel(org.orgId, actor, {
     kind: "shopify",
     name: "Test Shop",
+    subsidiaryId: org.subsidiaryId,
     currency: "CAD",
     externalAccount: "test.myshopify.com",
     settings: {},
