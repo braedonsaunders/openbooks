@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
@@ -9,6 +10,7 @@ import {
 } from "../testing/fixtures.ts";
 import type { CanonicalBillingHistory } from "./billing-history.ts";
 import {
+  acceptBillingImportRun,
   type BillingHistorySource,
   runBillingHistoryImport,
 } from "./billing-history-import.ts";
@@ -94,17 +96,59 @@ test(
            where id = ${org.orgId}
         `);
       });
+      const starterPlanId = randomUUID();
+      const growthPlanId = randomUUID();
+      const mappedRunId = randomUUID();
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
+          update parties set kind = 'company', display_name = 'Mapped Acme', subsidiary_id = ${org.subsidiaryId}
+           where id = ${org.customerId} and org_id = ${org.orgId}`);
+        await db.execute(sql`
+          insert into customer_roles (org_id, party_id, currency, is_active)
+          values (${org.orgId}, ${org.customerId}, 'USD', true)`);
+        await db.execute(sql`
+          insert into subscription_plans (id, org_id, name, amount, currency_code, "interval", interval_count, income_account_id, is_active, created_by, updated_by)
+          values
+            (${starterPlanId}, ${org.orgId}, 'Mapped Starter', '29.0000', 'USD', 'monthly', 1, ${org.accounts.revenue}, true, ${actorId}, ${actorId}),
+            (${growthPlanId}, ${org.orgId}, 'Mapped Growth', '99.0000', 'USD', 'monthly', 1, ${org.accounts.revenue}, true, ${actorId}, ${actorId})`);
+        await db.execute(sql`
+          insert into billing_import_runs (id, org_id, provider, external_account, status, mode, config, created_by, updated_by)
+          values (${mappedRunId}, ${org.orgId}, 'chargebee', 'fixture-site', 'preflight', 'opening_balances',
+            ${JSON.stringify({
+              mode: 'opening_balances', cutoverOn: '2024-07-15', historyDepthMonths: null,
+              incomeAccountId: org.accounts.revenue, clearingAccountId: null, taxCodeId: null,
+              planMap: {}, customerMap: {}, autoSync: false, sealedCredentials: null,
+            })}::jsonb,
+            ${actorId}, ${actorId})`);
+      });
+      const customerMap = { cus_fixture_1: org.customerId };
+      const planMap = { starter: starterPlanId, growth: growthPlanId };
+      const accepted = await acceptBillingImportRun(org.orgId, actorId, mappedRunId, { customerMap, planMap });
+      assert.equal(accepted.status, 'ready', 'company parties with active customer roles are valid mappings');
       const options = {
         orgId: org.orgId,
         actorId,
         mode: "opening_balances" as const,
         cutoverOn: "2024-07-15",
         incomeAccountId: org.accounts.revenue,
+        customerMap,
+        planMap,
       };
       const first = await runBillingHistoryImport(fakeSource(), options);
       assert.equal(first.counts.subscriptions, 1);
       assert.equal(first.counts.amendments, 2);
       assert.equal(first.reconciliation.ties, true, JSON.stringify(first.reconciliation.differences));
+      const customerLink = await withOrgContext(org.orgId, () => db.execute<{ native_id: string }>(sql`
+        select native_id from external_links
+         where org_id = ${org.orgId} and provider = 'chargebee' and external_account = 'fixture-site'
+           and object_type = 'customer' and external_id = 'cus_fixture_1'
+      `));
+      assert.equal(customerLink.rows[0]?.native_id, org.customerId, 'mapped customers are linked for native Open AR reconciliation');
+      const publishedMappedVersions = await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
+        select count(*)::int as n from subscription_plan_versions
+         where org_id = ${org.orgId} and plan_id in (${starterPlanId}, ${growthPlanId}) and status = 'published'
+      `));
+      assert.equal(publishedMappedVersions.rows[0]?.n, 2, 'mapped plans receive lifecycle versions before subscription import');
 
       const amendments = await withOrgContext(org.orgId, () => db.execute<{ amendment_type: string; effective_on: string }>(sql`
         select a.amendment_type as amendment_type, a.effective_on::text as effective_on

@@ -605,11 +605,14 @@ async function ensureCustomerParty(ctx: PersistContext, customer: { externalId: 
   const mapped = ctx.customerMap[customer.externalId];
   if (mapped) {
     const found = await (db.execute<{ id: string }>(sql`
-      select id from parties where id = ${mapped} and org_id = ${ctx.orgId} and kind = 'customer'
+      select p.id from parties p
+        join customer_roles r on r.org_id = p.org_id and r.party_id = p.id and r.is_active
+       where p.id = ${mapped} and p.org_id = ${ctx.orgId}
     `));
     if (!found.rows[0]) {
       refuse("billing_import_customer_missing", `Mapped customer ${customer.externalId} is not an OpenBooks customer.`, "Map the customer to an existing OpenBooks customer on the preflight list, then run the import again.");
     }
+    await recordBillingLink(ctx.orgId, ctx.provider, ctx.externalAccount, "customer", customer.externalId, "parties", mapped, null);
     ctx.partyByExternal.set(customer.externalId, mapped);
     return mapped;
   }
@@ -656,6 +659,7 @@ async function ensureNativePlan(
     if (!found.rows[0]) {
       refuse("billing_import_plan_missing", `Mapped plan ${plan.externalId} is not an OpenBooks plan.`, "Map the plan to an existing OpenBooks plan on the preflight list, then run the import again.");
     }
+    if (ctx.advancedOn) await ensurePlanVersion(ctx, mapped, plan);
     ctx.planByExternal.set(plan.externalId, mapped);
     return mapped;
   }
@@ -1919,7 +1923,10 @@ export async function acceptBillingImportRun(
       }
     }
     for (const [externalId, partyId] of Object.entries(merged.customerMap)) {
-      const found = await db.execute(sql`select 1 from parties where id = ${partyId} and org_id = ${orgId} and kind = 'customer'`);
+      const found = await db.execute(sql`
+        select 1 from parties p
+          join customer_roles r on r.org_id = p.org_id and r.party_id = p.id and r.is_active
+         where p.id = ${partyId} and p.org_id = ${orgId}`);
       if (!found.rows.length) {
         refuse("billing_import_customer_missing", `Customer mapping for ${externalId} names an OpenBooks customer that does not exist.`, "Map the customer to an existing OpenBooks customer on the preflight list, then accept again.");
       }

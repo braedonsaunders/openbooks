@@ -6,6 +6,7 @@ const PROVIDERS = new Set(["chargebee", "recurly", "maxio", "zuora"]);
 export const GET = defineRoute({
   permission: "sync.run",
   feature: "billingHistoryImport",
+  scope: "unrestricted",
   handler: async ({ request, authz }) => {
     const provider = new URL(request.url).searchParams.get("provider");
     if (provider !== null && !PROVIDERS.has(provider)) {

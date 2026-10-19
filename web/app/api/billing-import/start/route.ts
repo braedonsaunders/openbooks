@@ -12,6 +12,7 @@ const Body = z.object({
 export const POST = defineRoute({
   permission: "sync.run",
   feature: "billingHistoryImport",
+  scope: "unrestricted",
   body: Body,
   handler: async ({ authz, body }) => Response.json(await runBillingPreflight(
     authz.user.orgId,
