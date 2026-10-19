@@ -2,6 +2,7 @@
 export { CommerceError } from "./errors.ts";
 export {
   createChannel,
+  countChannelOrdersForBusinessDay,
   disconnectChannel,
   getChannel,
   listChannels,
