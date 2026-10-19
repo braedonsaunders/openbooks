@@ -4,10 +4,11 @@ import test from "node:test";
 
 interface RouteState {
   rows: Record<string, unknown>[];
+  queries: string[];
 }
 
 const stateKey = Symbol.for("openbooks.utilization-entries-precision-test");
-const state: RouteState = { rows: [] };
+const state: RouteState = { rows: [], queries: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const featureGateSource = `export async function guardFeaturePermission() {
@@ -24,6 +25,14 @@ stubModules({
     "@openbooks/engine/platform/database": `const state = globalThis[Symbol.for("openbooks.utilization-entries-precision-test")]
      export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/platform/db"))}
      export const db = { execute: async (query) => {
+       const flatten = (value) => {
+         if (typeof value === "string") return value
+         if (!value || typeof value !== "object") return ""
+         if (Array.isArray(value.queryChunks)) return value.queryChunks.map(flatten).join("")
+         if (Array.isArray(value.value)) return value.value.map(String).join("")
+         return ""
+       }
+       state.queries.push(flatten(query))
        // The route resolves the presentation currency through the org row;
        // entry fixture rows carry no currency, so they translate 1:1.
        // (The entry query also names base_currency — match the org lookup,
@@ -42,6 +51,7 @@ const routeUrl = "./route.ts?utilization-entries-precision-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
 
 test("utilization entries preserve exact cost-rate times hours decimals", async () => {
+  state.queries.length = 0;
   state.rows = [
     {
       id: "entry-1",
@@ -59,11 +69,31 @@ test("utilization entries preserve exact cost-rate times hours decimals", async 
 
   const response = await GET(
     new Request(
-      "https://books.example.test/api/analytics/utilization/entries?employee=employee-1&from=2026-01-01&to=2026-01-31",
+      "https://books.example.test/api/analytics/utilization/entries?employee=00000000-0000-4000-8000-000000000001&from=2026-01-01&to=2026-01-31",
     ),
   );
 
   assert.equal(response.status, 200);
   const body = (await response.json()) as { entries: Array<{ cost: unknown }> };
   assert.equal(body.entries[0]?.cost, "9008099974666467.2227");
+});
+
+test("utilization item drill treats the unassigned group as null item id", async () => {
+  state.queries.length = 0;
+  const response = await GET(new Request(
+    "https://books.example.test/api/analytics/utilization/entries?item=0&from=2026-01-01&to=2026-01-31",
+  ));
+
+  assert.equal(response.status, 200);
+  assert.ok(state.queries.some((query) => query.includes("t.item_id is null")));
+});
+
+test("utilization item drill refuses malformed item UUIDs before querying", async () => {
+  state.queries.length = 0;
+  const response = await GET(new Request(
+    "https://books.example.test/api/analytics/utilization/entries?item=not-a-uuid&from=2026-01-01&to=2026-01-31",
+  ));
+
+  assert.equal(response.status, 400);
+  assert.equal(state.queries.length, 0);
 });

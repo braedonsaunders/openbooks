@@ -204,6 +204,9 @@ test("unrestricted Benford drill keeps the shared filter empty", async () => {
   assert.ok(
     routeState.calls.every((text) => !text.includes("d.subsidiary_id")),
   );
+  assert.ok(routeState.calls[0]?.includes("je.org_id = d.org_id"), "journal entry lookup remains in the document organization");
+  assert.ok(routeState.calls.every((text) => text.includes("power(10, coalesce(cu.minor_units, 2)) >= 100")), "drill uses the shared minor-unit amount floor");
+  assert.ok(routeState.calls.every((text) => text.includes("left(trunc(abs(d.total))::bigint::text, 1)")), "1D drill uses sentinelData's exact text prefix");
 });
 
 test("Benford drill preserves unsafe-size monetary decimals", async () => {
