@@ -63,7 +63,7 @@ export async function lookupStoredValueBalance(
   return {
     kind: found.kind,
     currency: found.currency,
-    balance: fromUnits(found.balanceMinor),
+    balance: fromUnits(BigInt(found.balanceMinor)),
     status: found.status,
     expiresOn: found.expiresOn,
   };
@@ -189,7 +189,7 @@ export async function redeemStoredValueForInvoice(
               entryId: null,
               requestId: submission.runId ?? undefined,
               accountId: resolved.accountId,
-              balance: fromUnits(resolved.balanceMinor),
+              balance: fromUnits(BigInt(resolved.balanceMinor)),
             };
           }
           const posted = await postPaymentWithApplications(created.id, undefined, context.authz.user.id, context.source);
