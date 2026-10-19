@@ -78,9 +78,9 @@ test('the ownership hero and activity render populated and empty compositions', 
   const populated = await mount(
     <>
       <EquityOwnership empty="No shares" slices={[
-        { key: 'class:cs', label: 'CS · Common', shares: '12000000', percent: '56.9200', colorSlot: 0 },
-        { key: 'option', label: 'Options', shares: '1500000', percent: '7.1150', colorSlot: 3 },
-        { key: 'pool', label: 'Available pool', shares: '800000', percent: '3.7944', colorSlot: -1 },
+        { key: 'class:cs', label: 'CS · Common', shares: '12000000', percent: '56.9200', color: '#008300' },
+        { key: 'option', label: 'Options', shares: '1500000', percent: '7.1150', color: '#2a78d6' },
+        { key: 'pool', label: 'Available pool', shares: '800000', percent: '3.7944', color: '#cbd5e1' },
       ]} />
       <EquityActivityList empty="No activity" items={[{ key: 'event:1', date: 'Oct 1, 2026', text: 'Exercise · OPT-0007 · Maya Chen · 12,000 shares', href: '/equity?view=securities&security=x' }]} />
       <AttentionList allClear="Nothing needs attention." items={[{ tone: 'warning', text: 'Stock compensation is not posted through Sep 30, 2026', href: '/equity?view=compensation' }]} />
@@ -325,6 +325,7 @@ test('the waterfall opens computed on the latest post-money, with preset multipl
     context: { ...context(), params: { sub: SUB, view: 'waterfall' } }, asOfControl,
     anchor: { roundName: 'Series A', closedOn: '2025-09-30', postMoney: '67200000.0000' },
     presets: [{ multiple: '0.5', value: '33600000.0000' }, { multiple: '1', value: '67200000.0000' }, { multiple: '2', value: '134400000.0000' }, { multiple: '5', value: '336000000.0000' }],
+    classOrder: [COMMON, SA],
     inputs: { exitValue: '67200000.0000', transactionFees: '', unvestedAwards: 'participate' as const, changeOfControl: true, terminated: false },
     scenario, refusal: null,
   }

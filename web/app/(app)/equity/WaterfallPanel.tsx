@@ -21,6 +21,7 @@ import {
   type PayoutLine, type RecipientKey, type WaterfallStep,
 } from '@/lib/equity-waterfall'
 import { TrendChart, Waterfall } from '../analytics/_ui/charts'
+import { EQUITY_EXIT_COLOR, waterfallRecipientColor, waterfallStepColor } from '@/lib/equity-colors'
 import { EquityAsOfControl } from './AsOfControl'
 import type { WaterfallViewData } from './view'
 import { CELL, HEAD, NUM_CELL, NUM_HEAD, Refusal, TOTAL_ROW } from './shared'
@@ -244,7 +245,7 @@ function WaterfallScenarioView({ view }: { view: WaterfallViewData }) {
   if (exitBlank) body = prompt
   else if (invalid) body = <Refusal refusal={inputRefusal(invalid)} />
   else if (outcome.refusal) body = <div className={cn('transition-opacity', pending && 'opacity-60')} aria-busy={pending}><Refusal refusal={outcome.refusal} /></div>
-  else if (outcome.scenario) body = <WaterfallResults scenario={outcome.scenario} pending={pending} payoutsBy={payoutsBy} onPayoutsBy={choosePayouts} />
+  else if (outcome.scenario) body = <WaterfallResults scenario={outcome.scenario} classOrder={view.classOrder} pending={pending} payoutsBy={payoutsBy} onPayoutsBy={choosePayouts} />
   else body = prompt
 
   return (
@@ -255,7 +256,14 @@ function WaterfallScenarioView({ view }: { view: WaterfallViewData }) {
   )
 }
 
-function WaterfallResults({ scenario, pending, payoutsBy, onPayoutsBy }: { scenario: WaterfallScenario; pending: boolean; payoutsBy: PayoutsBy; onPayoutsBy: (value: PayoutsBy) => void }) {
+function WaterfallResults({ scenario, classOrder, pending, payoutsBy, onPayoutsBy }: {
+  scenario: WaterfallScenario
+  /** Share classes in creation order: each class keeps the colour the ownership donut gives it. */
+  classOrder: readonly string[]
+  pending: boolean
+  payoutsBy: PayoutsBy
+  onPayoutsBy: (value: PayoutsBy) => void
+}) {
   const t = useTranslations('equity')
   const { money, moneyCompact, currency, locale } = useMoney()
   const result = scenario.result
@@ -302,8 +310,8 @@ function WaterfallResults({ scenario, pending, payoutsBy, onPayoutsBy }: { scena
             magnitudeLabels
             height={280}
             steps={[
-              { label: t('waterfall.steps.exit'), amount: scenario.grossExitValue, kind: 'start' },
-              ...steps.map((step) => ({ label: stepLabel(step), amount: neg(step.amount), kind: 'deduct' as const })),
+              { label: t('waterfall.steps.exit'), amount: scenario.grossExitValue, kind: 'start', color: EQUITY_EXIT_COLOR },
+              ...steps.map((step) => ({ label: stepLabel(step), amount: neg(step.amount), kind: 'deduct' as const, color: waterfallStepColor(step, classOrder) })),
             ]}
           />
         </HomePanel>
@@ -339,7 +347,7 @@ function WaterfallResults({ scenario, pending, payoutsBy, onPayoutsBy }: { scena
             height={260}
             labels={curve.exitValues.map((value) => moneyCompact(value))}
             xValues={curve.exitValues.map((value) => toChartNumber(value))}
-            series={curve.series.map((series) => ({ name: recipientLabel(series.key), data: series.data.map((value) => toChartNumber(value)) }))}
+            series={curve.series.map((series) => ({ name: recipientLabel(series.key), color: waterfallRecipientColor(series.key, classOrder), data: series.data.map((value) => toChartNumber(value)) }))}
           />
         </HomePanel>
       )}

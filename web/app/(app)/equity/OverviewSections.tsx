@@ -2,28 +2,21 @@
 
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
-import { Donut, PALETTE } from '../analytics/_ui/charts'
+import { Donut } from '../analytics/_ui/charts'
 import { toChartNumber } from '@/lib/chart-number'
 import { normalizeDecimal, roundMoney } from '@openbooks/engine/money'
 import { formatExactPercent } from '@/lib/format'
 
-/** The unallocated pool's neutral slice. */
-const POOL_COLOR = '#cbd5e1'
-
 /**
- * A slice's colour from its stable palette slot (a share class keeps its
- * colour whatever the as-of date shows; -1 is the neutral pool).
+ * The overview's ownership hero: the fully diluted capitalization by class,
+ * awards and the unallocated pool, each slice in its stable equity colour
+ * (web/lib/equity-colors.ts), the same colour the waterfall charts use.
  */
-export function ownershipColor(slot: number): string {
-  return slot < 0 ? POOL_COLOR : PALETTE[slot % PALETTE.length]!
-}
-
-/** The overview's ownership hero: the fully diluted capitalization by class, awards and the unallocated pool. */
-export function EquityOwnership({ slices, empty }: { slices: { key: string; label: string; shares: string; percent: string; colorSlot: number }[]; empty: string }) {
+export function EquityOwnership({ slices, empty }: { slices: { key: string; label: string; shares: string; percent: string; color: string }[]; empty: string }) {
   const locale = useLocale()
   const count = (value: string) => new Intl.NumberFormat(locale).format(BigInt(value))
   if (slices.length === 0) return <p className="px-2 py-10 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
-  const colors = slices.map((slice) => ownershipColor(slice.colorSlot))
+  const colors = slices.map((slice) => slice.color)
   return (
     <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-5">
       <div className="md:col-span-2">

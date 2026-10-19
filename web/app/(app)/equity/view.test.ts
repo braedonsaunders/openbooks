@@ -3,8 +3,7 @@ import test from 'node:test'
 
 const { stubModules } = await import('../../../testing/stub-modules')
 stubModules({ navigation: true, intl: true, authz: true, features: true, extra: { 'server-only': 'export {}', '@openbooks/analytics/viz': 'export function InsightChart(){return null}' } })
-const { equitySpec, EQUITY_VIEWS, VIEW_NEW_ACTION, ownershipColorSlot } = await import('./view')
-const { ownershipColor } = await import('./OverviewSections')
+const { equitySpec, EQUITY_VIEWS, VIEW_NEW_ACTION } = await import('./view')
 const messages = (await import('../../../messages/en/index.ts')).default as unknown as { equity: { new: { actions: Record<string, string> } } }
 
 type Data = Parameters<typeof equitySpec>[0]
@@ -65,50 +64,6 @@ test('the overview composes the module-home cockpit; working views carry no vita
     assert.equal(tiles(working).length, 0, `${view} shows no KPI tiles`)
     assert.ok(!widgets(working).includes('kpi-strip'), `${view} shows no KPI strip`)
   }
-})
-
-test('ownership colours are stable per share class whatever the as-of date shows, and distinct from the award slots', () => {
-  const order = ['cs', 'seed', 'seriesa']
-  // At an early date only CS and SEED exist; later SERIES A joins. Earlier classes keep their colours.
-  const early = ['cs', 'seed'].map((id) => ownershipColorSlot({ key: `class:${id}`, group: 'class' }, order))
-  const late = order.map((id) => ownershipColorSlot({ key: `class:${id}`, group: 'class' }, order))
-  assert.deepEqual(late.slice(0, 2), early)
-  assert.equal(new Set(late).size, late.length, 'classes never share a colour')
-  const awards = ['option', 'rsu', 'warrant'].map((group) => ownershipColorSlot({ key: group, group }, order))
-  assert.equal(new Set([...late, ...awards]).size, late.length + awards.length, 'award kinds never take a class colour')
-  assert.equal(ownershipColorSlot({ key: 'pool', group: 'pool' }, order), -1, 'the pool is drawn neutral')
-})
-
-/** Perceptual distance between two sRGB colours: Euclidean OKLab distance, ×100. */
-function oklabDistance(left: string, right: string): number {
-  const lab = (hex: string) => {
-    const [r, g, b] = [1, 3, 5].map((index) => {
-      const c = parseInt(hex.slice(index, index + 2), 16) / 255
-      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
-    }) as [number, number, number]
-    const l = Math.cbrt(0.4122214708 * r + 0.5363288899 * g + 0.0514008164 * b)
-    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
-    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-    return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s]
-  }
-  const [a, b] = [lab(left), lab(right)]
-  return 100 * Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!)
-}
-
-test('the first three share classes, options, RSUs and the pool are clearly distinct hues on the donut', () => {
-  const order = ['cs', 'seed', 'seriesa']
-  const colours = [
-    ...order.map((id) => ownershipColor(ownershipColorSlot({ key: `class:${id}`, group: 'class' }, order))),
-    ...['option', 'rsu'].map((group) => ownershipColor(ownershipColorSlot({ key: group, group }, order))),
-    ownershipColor(ownershipColorSlot({ key: 'pool', group: 'pool' }, order)),
-  ]
-  for (let i = 0; i < colours.length; i++) {
-    for (let j = i + 1; j < colours.length; j++) {
-      assert.ok(oklabDistance(colours[i]!, colours[j]!) >= 15, `${colours[i]} and ${colours[j]} read apart`)
-    }
-  }
-  const warrant = ownershipColor(ownershipColorSlot({ key: 'warrant', group: 'warrant' }, order))
-  for (const neighbour of [colours[0]!, colours[1]!, colours[3]!]) assert.ok(oklabDistance(warrant, neighbour) >= 15, `warrants read apart from ${neighbour}`)
 })
 
 test('the overview leads its body with the as-of control and keeps the header to the title, description and actions', () => {

@@ -25,7 +25,7 @@ const { TrendChart, Waterfall } = await import('../analytics/_ui/charts')
 type ChartOption = {
   xAxis: { type: string; data?: string[]; axisLabel: { formatter?: (value: number) => string } }
   yAxis: { axisLabel: { formatter?: (value: number) => string } }
-  series: { type: string; smooth?: boolean; showSymbol?: boolean; data: unknown[]; label?: { formatter: (param: { dataIndex: number }) => string } }[]
+  series: { type: string; name?: string; smooth?: boolean; showSymbol?: boolean; data: unknown[]; lineStyle?: { color?: string }; label?: { formatter: (param: { dataIndex: number }) => string } }[]
   tooltip: { formatter: (params: unknown[]) => string }
 }
 const charts = globalThis as unknown as { __chartOptions?: ChartOption[] }
@@ -110,7 +110,7 @@ type PanelView = NonNullable<React.ComponentProps<typeof EquityWaterfallPanel>['
 function viewOf(scenario: WaterfallScenario | null, inputs: Partial<PanelView['inputs']> & { payoutsBy?: 'class' | 'holder' } = {}): PanelView {
   return {
     context, asOfControl,
-    anchor: { roundName: 'Series A', closedOn: '2025-09-30', postMoney: '67316585.6000' }, presets,
+    anchor: { roundName: 'Series A', closedOn: '2025-09-30', postMoney: '67316585.6000' }, presets, classOrder: [COMMON, SA],
     inputs: { exitValue: '67316585.6000', transactionFees: '', unvestedAwards: 'participate', changeOfControl: true, terminated: false, ...inputs },
     scenario, refusal: null,
   } as PanelView
@@ -128,6 +128,10 @@ test('the proceeds chart plots every exit value at its true position with straig
     assert.equal(line.xAxis.axisLabel.formatter?.(20000000), '$20M', 'the exit axis reads as compact money')
     const tip = line.tooltip.formatter([{ dataIndex: 1, seriesIndex: 0, seriesName: 'SERIESA', marker: '', value: [14000000, 14000000], axisValue: 14000000 }])
     assert.equal(tip, '$14M<br/> SERIESA: $14M')
+    // Each class line wears the colour its donut slice and cascade bars wear.
+    const { equityClassColor } = await import('../../../lib/equity-colors')
+    assert.equal(line.series.find((series) => series.name === 'SERIESA')?.lineStyle?.color, equityClassColor(SA, [COMMON, SA]))
+    assert.equal(line.series.find((series) => series.name === 'CS')?.lineStyle?.color, equityClassColor(COMMON, [COMMON, SA]))
   } finally {
     await screen.close()
   }

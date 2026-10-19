@@ -55,6 +55,7 @@ import { perShareFormatOptions } from '../../../lib/equity-price'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { builtInReportDefinitionIds } from '../../../lib/custom-reports'
 import { resolvePeriod } from '../../../lib/periods'
+import { ownershipSliceColor } from '../../../lib/equity-colors'
 import { getMoneyFormatter } from '../../../lib/money-server'
 import { formatCivilDate, formatExactPercent } from '../../../lib/format'
 import { additiveRounding } from '../../../lib/additive-rounding'
@@ -192,6 +193,8 @@ export interface WaterfallViewData {
   anchor: { roundName: string; closedOn: string; postMoney: string } | null
   presets: { multiple: string; value: string }[]
   inputs: { exitValue: string; transactionFees: string; unvestedAwards: 'participate' | 'cancel'; changeOfControl: boolean; terminated: boolean; payoutsBy?: 'class' | 'holder' }
+  /** The legal entity's share classes in creation order: each class's stable chart colour. */
+  classOrder: string[]
   /** The scenario computed for the first paint; null until an exit value is known. */
   scenario: WaterfallScenario | null
   refusal: { message: string; remedy: string } | null
@@ -270,7 +273,7 @@ export interface OverviewData {
     compensation: string; compensationSub: string
   }
   ownershipHint: string
-  ownership: { key: string; label: string; shares: string; percent: string; colorSlot: number }[]
+  ownership: { key: string; label: string; shares: string; percent: string; color: string }[]
   roundPulse: { postMoney: string; preMoney: string; raised: string } | null
   attention: AttentionItem[]
   directory: DirectoryItem[]
@@ -687,27 +690,6 @@ async function classColorOrder(orgId: string, subsidiaryId: string): Promise<str
      order by effective_on, created_at, id`)).rows.map((row) => row.id)
 }
 
-/**
- * Chart palette slots for the ownership donut, from the shared chart
- * palette. Share classes take their slots in creation order and each award
- * kind has a fixed slot of its own; the pool is drawn neutral (-1). The
- * first three class slots and the option and RSU slots are mutually distinct
- * hues (teal, indigo, orange, pink, lime: every pair at least 18 OKLab units
- * apart), so a typical capitalization never puts two similar hues side by
- * side whatever order its slices take.
- */
-const CLASS_COLOR_SLOTS = [0, 1, 9, 7, 6, 5] as const
-const GROUP_COLOR_SLOTS: Record<string, number> = { option: 3, rsu: 8, warrant: 2 }
-
-export function ownershipColorSlot(slice: { key: string; group: string }, classOrder: readonly string[]): number {
-  if (slice.group === 'pool') return -1
-  if (slice.group === 'class') {
-    const index = classOrder.indexOf(slice.key.replace(/^class:/, ''))
-    return CLASS_COLOR_SLOTS[(index < 0 ? classOrder.length : index) % CLASS_COLOR_SLOTS.length]!
-  }
-  return GROUP_COLOR_SLOTS[slice.group] ?? 2
-}
-
 /** The built-in reports the workspace links to, resolved together once per render. */
 const EQUITY_REPORT_SLUGS = ['equity-cap-table', 'equity-securities-register', 'equity-stock-compensation-schedule'] as const
 
@@ -860,7 +842,7 @@ async function overviewData(
       label: slice.group === 'class' ? `${slice.code ?? ''} · ${slice.name ?? ''}` : slice.group === 'pool' ? t('overview.ownership.pool') : t(`kindPlural.${slice.group}`),
       shares: slice.shares,
       percent: slice.percent,
-      colorSlot: ownershipColorSlot(slice, input.classOrder),
+      color: ownershipSliceColor(slice, input.classOrder),
     })),
     roundPulse: round && roundInFunctional
       ? { postMoney: moneyCompact(round.postMoneyValuation), preMoney: moneyCompact(round.preMoneyValuation), raised: moneyCompact(round.raised) }
@@ -882,7 +864,7 @@ async function waterfallData(
   asOfControl: AsOfControl,
   scope: { orgId: string; actorId: string; subsidiaryId: string; asOf: string },
 ): Promise<WaterfallViewData> {
-  const structure = await loadStructure(scope)
+  const [structure, classOrder] = await Promise.all([loadStructure(scope), classColorOrder(scope.orgId, scope.subsidiaryId)])
   // The default exit is the latest priced round's post-money valuation in the functional currency.
   const anchor = defaultExitAnchor(structure.rounds, scope.asOf, context.currency)
   const decimal = (value: string | undefined) => (value && /^\d+(\.\d{1,4})?$/.test(value) ? value : null)
@@ -907,7 +889,7 @@ async function waterfallData(
       refusal = error.localized(await getLocale())
     }
   }
-  return { context, asOfControl, anchor, presets: exitPresets(anchor?.postMoney ?? null), inputs, scenario, refusal }
+  return { context, asOfControl, anchor, presets: exitPresets(anchor?.postMoney ?? null), inputs, classOrder, scenario, refusal }
 }
 
 async function runsData(

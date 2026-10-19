@@ -261,7 +261,7 @@ export function Waterfall({
    *  exact steps place each bar with ledger arithmetic and project only the
    *  finished coordinates onto the chart, so a cascade that pays out the
    *  whole start lands exactly on zero. */
-  steps: { label: string; amount: number | string; kind: 'start' | 'deduct' | 'subtotal' | 'total' }[]
+  steps: { label: string; amount: number | string; kind: 'start' | 'deduct' | 'subtotal' | 'total'; color?: string }[]
   height?: number
   /** Label each deduction by its size rather than its sign: a payout cascade
    *  reads "$4.0M to Series A", not a negative amount. The value axis keeps
@@ -292,14 +292,15 @@ export function Waterfall({
   return <Chart option={option} height={height} />
 }
 
-type WaterfallStepInput = { amount: number | string; kind: 'start' | 'deduct' | 'subtotal' | 'total' }
+/** A step's own `color` (a series identity the caller keeps stable across charts) wins over the kind's default. */
+type WaterfallStepInput = { amount: number | string; kind: 'start' | 'deduct' | 'subtotal' | 'total'; color?: string }
 
 /** Floating-bar geometry for a bridge: each bar's transparent base, its visible height and its color. */
 export function waterfallBars(steps: readonly WaterfallStepInput[]): { base: number[]; bar: number[]; colors: string[] } {
   const base: number[] = []
   const bar: number[] = []
   const colors: string[] = []
-  const colorOf = (step: WaterfallStepInput, negative: boolean) => (step.kind === 'deduct' ? '#f59e0b' : step.kind === 'total' ? PALETTE[0]! : negative ? NEG : '#14b8a6')
+  const colorOf = (step: WaterfallStepInput, negative: boolean) => step.color ?? (step.kind === 'deduct' ? '#f59e0b' : step.kind === 'total' ? PALETTE[0]! : negative ? NEG : '#14b8a6')
   if (steps.length > 0 && steps.every((s) => typeof s.amount === 'string')) {
     let running = '0'
     for (const s of steps) {
