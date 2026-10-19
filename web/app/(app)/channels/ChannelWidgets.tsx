@@ -8,10 +8,10 @@ import { Button } from '@openbooks/ui'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { useAppAction } from '@/lib/use-app-action'
 import { channelRequest } from './channel-client'
+import type { ChannelTab } from './channel-tabs'
+export type { ChannelTab } from './channel-tabs'
 import { ChannelOrderDrawer } from './ChannelOrderDrawer'
 import type { ChannelOrderDrawerData } from './order-detail'
-
-export type ChannelTab = { href: string; label: string; active: boolean; count?: number }
 
 /** Orders ↔ Exceptions ↔ Posting strip, shared by the three channel pages. */
 export function ChannelTabs({ tabs }: { tabs: ChannelTab[] }) {

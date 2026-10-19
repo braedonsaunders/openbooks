@@ -164,11 +164,15 @@
     }
   },
   "tabs": {
+    "overview": "Aperçu",
     "products": "Produits",
     "locations": "Emplacements",
     "orders": "Commandes",
     "exceptions": "Exceptions",
     "posting": "Comptabilisation"
+  },
+  "kinds": {
+    "shopify": "Shopify"
   },
   "actions": {
     "connect": "Connecter Shopify",

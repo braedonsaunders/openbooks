@@ -214,9 +214,11 @@ export const HOME_WIDGETS = {
   'billing-history-console': () => <BillingHistoryClient />,
 
   /* --- sales channels ------------------------------------------------------------- */
-  /** No props. The console holds the list fetch, tiles, cards, lifecycle
-   *  actions and the connect drawer. */
-  'channels-console': () => <ChannelsConsole />,
+  /** Server-loaded channels and figures feed the console; client state holds
+   *  lifecycle actions and the connect drawer. */
+  'channels-console': (props) => (
+    <ChannelsConsole initialData={props.data as ComponentProps<typeof ChannelsConsole>['initialData']} />
+  ),
   /** Server workspace: channel header, tab strip, overview, activity and the
    *  rehomed settings sections. `sp` carries the tab and drawer URL state. */
   'channel-workspace': (props) => (

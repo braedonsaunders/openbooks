@@ -164,11 +164,15 @@
     }
   },
   "tabs": {
+    "overview": "概览",
     "products": "商品",
     "locations": "地点",
     "orders": "订单",
     "exceptions": "异常",
     "posting": "过账"
+  },
+  "kinds": {
+    "shopify": "Shopify"
   },
   "actions": {
     "connect": "连接 Shopify",

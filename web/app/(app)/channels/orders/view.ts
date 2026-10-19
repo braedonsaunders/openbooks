@@ -10,7 +10,8 @@ import { isUuid } from '../../../../lib/list-params'
 import { loadChannelOrderDrawer } from '../order-detail'
 import { guardChannelOrderScope } from '../../../../lib/channel-scope'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
-import type { ChannelTab } from '../ChannelWidgets'
+import { channelTabs, type ChannelTab } from '../channel-tabs'
+export { channelTabs } from '../channel-tabs'
 
 /**
  * Channel Orders: every storefront order with its posting status badge and
@@ -48,14 +49,6 @@ export async function countChannelExceptions(orgId: string, allowed: ReadonlySet
     ),
   ])
   return Number(orders.rows[0]?.count ?? '0') + Number(events.rows[0]?.count ?? '0')
-}
-
-function channelTabs(t: (key: string) => string, active: 'orders' | 'exceptions' | 'posting', exceptionCount: number): ChannelTab[] {
-  return [
-    { href: '/channels/orders', label: t('tabs.orders'), active: active === 'orders' },
-    { href: '/channels/exceptions', label: t('tabs.exceptions'), active: active === 'exceptions', count: exceptionCount },
-    { href: '/channels/posting', label: t('tabs.posting'), active: active === 'posting' },
-  ]
 }
 
 export async function loadChannelOrders(
@@ -108,4 +101,3 @@ export function channelOrdersSpec(data: ChannelOrdersData): PageSpec {
   })
 }
 
-export { channelTabs }
