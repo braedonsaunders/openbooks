@@ -23,6 +23,7 @@ test("asset lifecycle entries honor the subsidiary assets close on its effective
   const org = await createScratchOrg();
   try {
     const { actorId, assetId } = await seedAsset(org);
+    const postingDate = "2026-07-31";
     const calendarId = randomUUID();
     const periodId = randomUUID();
     await db.execute(sql`insert into fiscal_calendars (id,org_id,name,is_active,is_default)
@@ -35,9 +36,9 @@ test("asset lifecycle entries honor the subsidiary assets close on its effective
       (org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason)
       values (${org.orgId},${org.subsidiaryId},'2026-07-01',${calendarId},'Use the entity asset calendar')`);
     await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-    await runDepreciation(org.orgId, org.date, actorId, assetId);
+    await runDepreciation(org.orgId, postingDate, actorId, assetId);
     const source = await remeasureAsset(org.orgId, assetId, {
-      actorId, date: org.date, newCarryingValue: "800",
+      actorId, date: postingDate, newCarryingValue: "800",
     });
     const sourceEventId = await eventFor(org.orgId, source.entryId);
     await db.execute(sql`insert into period_locks
@@ -47,16 +48,16 @@ test("asset lifecycle entries honor the subsidiary assets close on its effective
     const refusesForAssetClose = (error: unknown) => error instanceof AssetLifecycleError && /closed/i.test(error.message);
     await assert.rejects(
       reverseAssetLifecycleEvent(org.orgId, sourceEventId, {
-        actorId, date: org.date, reason: "Correct the asset valuation",
+        actorId, date: postingDate, reason: "Correct the asset valuation",
       }),
       refusesForAssetClose,
     );
     await assert.rejects(
-      remeasureAsset(org.orgId, assetId, { actorId, date: org.date, newCarryingValue: "700" }),
+      remeasureAsset(org.orgId, assetId, { actorId, date: postingDate, newCarryingValue: "700" }),
       refusesForAssetClose,
     );
     await assert.rejects(
-      disposeAsset(org.orgId, assetId, { actorId, date: org.date, writeOff: true }),
+      disposeAsset(org.orgId, assetId, { actorId, date: postingDate, writeOff: true }),
       refusesForAssetClose,
     );
   } finally {
