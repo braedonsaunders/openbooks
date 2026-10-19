@@ -1,23 +1,38 @@
 #!/usr/bin/env node
 /**
- * Repo-wide refusal: no weak 36-character UUID-shape checks.
+ * Repo-wide refusal: no weak 36-character UUID-shape checks, and no
+ * RFC-versioned UUID checks on record identifiers.
  *
  * A "weak UUID shape" is a regex whose whole claim is "36 characters of hex
  * and dashes" — e.g. `/^[0-9a-f-]{36}$/i`. Thirty-six dashes pass it, as does
  * any ungrouped hex run, so anywhere it guards an id it lets a non-UUID reach
  * a uuid column (Postgres answers with `invalid input syntax for type uuid`)
  * or lets a non-UUID ride an actor/idempotency path that must be attributable.
+ * The opposite defect is a check that is too strict: zod's `.uuid()` /
+ * `z.uuid()` (and `z.guid()`, its looser twin whose JSON Schema format no
+ * provider honours) or a hand-written RFC 9562 variant/version pattern
+ * (`-[1-8]xxx-[89ab]xxx-`). Sandbox and sample organizations derive their ids
+ * deterministically from the source id and a seed, so most of their ids carry
+ * arbitrary version and variant nibbles; an RFC check refuses every legitimate
+ * request in those organizations.
+ *
  * The house rule: the 8-4-4-4-12 hex shape, enforced through exactly one
- * validator — `engine/src/platform/uuid.ts` (`isUuid`, `UUID_RE`), which web
- * imports directly or through the `web/lib/list-params.ts` re-export of
- * `isUuid` — never a local copy.
+ * validator — `UUID_RE`, `isUuid` and the zod schema `uuidString()`, defined
+ * in `packages/forms-core/src/identifiers.ts` and re-exported as the engine
+ * contract `engine/src/platform/uuid.ts` (`@openbooks/engine/platform/identifiers`);
+ * web also reaches them through `web/lib/list-params.ts` (`isUuid`) and
+ * `web/lib/api/json` (`uuidId`, `uuidString`) — never a local copy.
  *
  * The rule, derived from the shape (no file list, no allowlist):
  *   - scan .ts/.tsx/.js/.mjs sources for an ANCHORED full-string pattern
  *     `^[<hex-and-dashes class>]{36}$` — the claim "this string IS a uuid";
  *   - a match is a violation, wherever it appears: prod code, a mock double
  *     (a double mirroring the weak shape re-admits what prod refuses), or a
- *     stub. Test doubles must mirror the house shape, not the weak one.
+ *     stub. Test doubles must mirror the house shape, not the weak one;
+ *   - likewise any zod `uuid`/`guid`/`uuidv<N>` format call (`.uuid(`,
+ *     `z.uuid(`, `z.guid(`) and any RFC variant/version pattern — the
+ *     version nibble pinned (`-[1-8]`, `-4`) next to the variant class
+ *     (`-[89ab]`). Use `uuidString()` / `isUuid` instead.
  *
  * String literals ARE scanned, not just regex literals: mock doubles carry
  * the pattern as text, and a double mirroring the weak shape re-admits what
@@ -33,8 +48,8 @@
  *     published contract and cannot import the TypeScript validators;
  *   - handle-shaped patterns (`prefix:<uuid tail>`, query-param extracts)
  *     claim "contains/extracts", not "is a uuid" — a different defect class;
- *   - this file itself is skipped by name: the detector necessarily spells
- *     the fragments it hunts.
+ *   - this file and its test are skipped by name: the detector and its
+ *     fixtures necessarily spell the fragments it hunts.
  *
  *   node scripts/check-uuid-shapes.mjs
  */
@@ -45,6 +60,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SELF = basename(fileURLToPath(import.meta.url));
+const SELF_FILES = new Set([SELF, SELF.replace(/\.mjs$/, ".test.mjs")]);
 const GLOBS = ["engine", "web", "packages", "scripts", "schema", "e2e", "deploy"]
   .flatMap((root) => ["ts", "tsx", "js", "mjs"].map((ext) => `${root}/**/*.${ext}`));
 
@@ -160,6 +176,10 @@ export function isWeakUuidClass(body) {
 }
 
 const ANCHORED_WEAK = /\(?\^\[([^\]\r\n]*)\]\{36\}\$/g;
+/** zod string-format calls that validate RFC 9562 (or zod's guid) UUIDs. */
+const ZOD_UUID_FORMAT = /(?<![\w$])(?:z\s*\.\s*|\.\s*)(uuid|guid|uuidv[1-8])\s*\(/g;
+/** A pinned version nibble followed by the RFC variant class: `{4}-[1-8]…{3}-[89ab`. */
+const RFC_VARIANT = /\{4\}-(?:\[1-[1-8]\]|[1-8])\[[^\]\r\n]{1,16}\]\{3\}-\[(?:89|8-9)[^\]\r\n]*\]/g;
 
 /** Anchored weak-UUID patterns in one comment-stripped source, by line. */
 export function findWeakUuidShapes(source) {
@@ -170,6 +190,20 @@ export function findWeakUuidShapes(source) {
     hits.push({ line, text: match[0] });
   }
   return hits;
+}
+
+/** Validators that refuse valid non-RFC ids, in one comment-stripped source, by line. */
+export function findRfcUuidValidators(source) {
+  const hits = [];
+  for (const match of source.matchAll(ZOD_UUID_FORMAT)) {
+    const line = source.slice(0, match.index).split("\n").length;
+    hits.push({ line, text: match[0].replace(/\s+/g, ""), kind: "zod" });
+  }
+  for (const match of source.matchAll(RFC_VARIANT)) {
+    const line = source.slice(0, match.index).split("\n").length;
+    hits.push({ line, text: match[0], kind: "rfc" });
+  }
+  return hits.sort((a, b) => a.line - b.line);
 }
 
 /** Git-tracked paths, so local untracked or ignored scratch files never gate CI. */
@@ -188,14 +222,21 @@ export function scanTree(root = ROOT) {
       (file) =>
         (tracked === null || tracked.has(file)) &&
         !file.includes("node_modules") &&
-        basename(file) !== SELF &&
+        !SELF_FILES.has(basename(file)) &&
         !file.startsWith("schema/migrations/generated/"),
     )
     .sort();
   const violations = [];
   for (const file of files) {
-    const hits = findWeakUuidShapes(stripComments(readFileSync(join(root, file), "utf8")));
-    for (const hit of hits) violations.push(`${file}:${hit.line}: weak 36-char UUID shape ${hit.text}`);
+    const source = stripComments(readFileSync(join(root, file), "utf8"));
+    for (const hit of findWeakUuidShapes(source)) violations.push(`${file}:${hit.line}: weak 36-char UUID shape ${hit.text}`);
+    for (const hit of findRfcUuidValidators(source)) {
+      violations.push(
+        hit.kind === "zod"
+          ? `${file}:${hit.line}: zod ${hit.text}) format check is not the house id validator; use uuidString() from @openbooks/engine/platform/identifiers`
+          : `${file}:${hit.line}: RFC variant/version UUID pattern ${hit.text}; use UUID_RE / isUuid from @openbooks/engine/platform/identifiers`,
+      );
+    }
   }
   return violations;
 }
@@ -205,7 +246,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const violation of violations) console.error(violation);
   console.log(
     violations.length === 0
-      ? "checked uuid shapes; no weak 36-char UUID patterns"
+      ? "checked uuid shapes; no weak 36-char or RFC-versioned UUID validators"
       : `checked uuid shapes; violations=${violations.length}`,
   );
   process.exit(violations.length > 0 ? 1 : 0);

@@ -100,7 +100,9 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
         select public.ob_rebase(md5(n::text)::uuid, ${org.orgId}::uuid) as id, n
           from generate_series(1, 32) as series(n)
       ) candidates
-      where id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      -- Keep only ids an RFC 9562 check would refuse: version nibble outside
+      -- 1-8 or variant nibble outside 8-b, as sandbox-derived ids often are.
+      where substr(id::text, 15, 1) not between '1' and '8' or substr(id::text, 20, 1) not in ('8', '9', 'a', 'b')
       order by n limit 3`))
     assert.equal(nativeIds.rows.length, 3)
     const [partyId, scheduleId, componentId] = nativeIds.rows.map(row => row.id) as [string, string, string]

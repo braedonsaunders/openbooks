@@ -1054,7 +1054,7 @@ const consolidatedRows = [
                 // Force the audit insert to fail for THIS org's purge events. Utility
                 // statements cannot take bind parameters, so the org scope is inlined
                 // after asserting its shape.
-                assert.match(orgId, /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+                assert.match(orgId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
                 await db.execute(sql.raw(\`
                   create function openbooks_test_block_purge_audit() returns trigger
                   language plpgsql as $fn$ begin raise exception 'forced audit failure'; end $fn$
