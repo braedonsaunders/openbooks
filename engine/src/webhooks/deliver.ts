@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { guardedFetch } from "../connectors/ssrf-guard.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { unsealSecret } from "../platform/secrets.ts";
 import { recordWebhookAudit } from "./endpoints.ts";
@@ -227,14 +228,15 @@ async function notifyWebhookAdmins(
   orgId: string,
   input: { title: string; body: string; href: string },
 ): Promise<void> {
-  const recipients = (await db.execute<{ id: string }>(sql`
-    select distinct u.id::text as id
-      from users u
-      left join role_assignments a on a.user_id = u.id and a.org_id = u.org_id
-      left join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-     where u.org_id = ${orgId} and u.is_active
-       and (u.is_super_admin or (r.permissions ? 'webhooks.manage'))
+  const candidates = (await db.execute<{ id: string }>(sql`
+    select id::text as id from users where org_id = ${orgId} and is_active
   `)).rows;
+  const recipients: { id: string }[] = [];
+  for (const candidate of candidates) {
+    if (await actorHasPermission(db, orgId, candidate.id, "webhooks.manage")) {
+      recipients.push(candidate);
+    }
+  }
   for (const recipient of recipients) {
     const existing = (await db.execute<{ one: number }>(sql`
       select 1 as one from notifications
@@ -438,7 +440,7 @@ async function attemptClaimedDelivery(
   delivery: ClaimedDelivery,
   now: Date,
   post: PostDelivery = postWebhookDelivery,
-): Promise<void> {
+): Promise<boolean> {
   if (delivery.endpointStatus !== "active") {
     await withOrgContext(delivery.orgId, async () => {
       await db.execute(sql`
@@ -448,7 +450,7 @@ async function attemptClaimedDelivery(
          where org_id = ${delivery.orgId} and id = ${delivery.id}::uuid
       `);
     });
-    return;
+    return false;
   }
   const body = deliveryBody(delivery);
   const timestampUnix = Math.floor(now.getTime() / 1000);
@@ -464,6 +466,7 @@ async function attemptClaimedDelivery(
     outcome = { kind: "retryable", code: null, error: message.slice(0, 1000) };
   }
   await recordAttemptOutcome(delivery, outcome, Date.now() - started, now);
+  return outcome.kind === "delivered";
 }
 
 /**
@@ -522,8 +525,7 @@ export async function runWebhookDeliveryScan(
   const claimed = await claimDueDeliveries(limit, now);
   let delivered = 0;
   for (const delivery of claimed) {
-    await attemptClaimedDelivery(delivery, now, post);
-    delivered += 1;
+    if (await attemptClaimedDelivery(delivery, now, post)) delivered += 1;
   }
   return { attempted: claimed.length, delivered };
 }
