@@ -334,13 +334,12 @@ test("commerce close checks honor subsidiary scope across queues and revenue bal
         values (${childId},${fx.org.orgId},${fx.org.subsidiaryId},'Commerce Child','CAD','CA')`);
       await db.execute(sql`insert into channel_orders
         (org_id,channel_id,external_id,external_number,shop_currency,presentment_currency,
-         subtotal_minor,tax_minor,shipping_minor,total_minor,financial_status,fulfilment_status,ordered_at,posting_status)
+         subtotal_minor,tax_minor,shipping_minor,total_minor,financial_status,fulfilment_status,ordered_at,
+         posting_status,exception_code,exception_reason)
         values (${fx.org.orgId},${fx.channelId},'scoped-pending','#SCOPED-PENDING','CAD','CAD',100,0,0,100,
-                'paid','unfulfilled',${`${DAY}T13:00:00Z`}::timestamptz,'pending'),
+                'paid','unfulfilled',${`${DAY}T13:00:00Z`}::timestamptz,'pending',null,null),
                (${fx.org.orgId},${fx.channelId},'scoped-exception','#SCOPED-EXCEPTION','CAD','CAD',100,0,0,100,
-                'paid','unfulfilled',${`${DAY}T14:00:00Z`}::timestamptz,'exception')`);
-      await db.execute(sql`update channel_orders set exception_code='unmapped_sku',exception_reason='Needs mapping'
-        where org_id=${fx.org.orgId} and external_id='scoped-exception'`);
+                'paid','unfulfilled',${`${DAY}T14:00:00Z`}::timestamptz,'exception','unmapped_sku','Needs mapping')`);
       await db.execute(sql`insert into channel_order_events
         (org_id,channel_id,order_id,kind,external_id,occurred_at,posting_status)
         select org_id,channel_id,id,'fulfilment','scoped-pending-event',${`${DAY}T15:00:00Z`}::timestamptz,'pending'
