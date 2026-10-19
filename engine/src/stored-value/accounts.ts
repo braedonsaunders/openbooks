@@ -522,7 +522,7 @@ export async function priorStoredValueEntry(
  * conflict at this point is a concurrent writer under the same key, so the
  * caller's transaction rolls back instead of keeping a balance move that no
  * entry records. A retry then finds the winner's entry first. */
-function requireFreshEntry(entry: { replayed: boolean }, idempotencyKey: string): void {
+export function requireFreshEntry(entry: { replayed: boolean }, idempotencyKey: string): void {
   if (!entry.replayed) return;
   throw storedValueRefusal({
     message: `Another request recorded idempotency key ${idempotencyKey} while this one was applying it.`,

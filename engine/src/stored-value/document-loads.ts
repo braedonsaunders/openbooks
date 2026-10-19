@@ -14,7 +14,10 @@ import {
   loadStoredValueProgram,
   lockStoredValueAccount,
   programLiabilityAccount,
+  priorStoredValueEntry,
+  requireFreshEntry,
   requireStoredValueFeature,
+  storedValueExpired,
   storedValueAccountOwnedByCustomer,
 } from "./accounts.ts";
 import {
@@ -91,6 +94,12 @@ export async function attachDocumentLoad(input: DocumentLoadInput): Promise<Docu
 
 async function topUpAccount(input: DocumentLoadInput, doc: DocumentFxContext): Promise<DocumentLoadResult> {
   const account = await lockStoredValueAccount(input.orgId, input.accountId!, input.allowedSubsidiaryIds);
+  const prior = await priorStoredValueEntry(
+    input.orgId,
+    `stored-value:load-entry:${input.idempotencyKey}`,
+    { accountId: account.id, kind: "adjust", amountMinor: input.amountMinor },
+  );
+  if (prior) return { accountId: prior.accountId, code: null, entryId: prior.entryId, replayed: true };
   if (doc.subsidiaryId !== account.subsidiaryId) {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} belongs to another legal entity than the refunding document: one entity cannot load another's balance.`,
@@ -107,6 +116,14 @@ async function topUpAccount(input: DocumentLoadInput, doc: DocumentFxContext): P
         account.status === "frozen"
           ? "Unfreeze the account from the Stored value list before loading it."
           : "Issue a new code for the customer instead.",
+      status: 409,
+    });
+  }
+  if (storedValueExpired(account.expiresOn, await businessToday(input.orgId))) {
+    throw storedValueRefusal({
+      message: `Stored-value …${account.codeLast4} expired on ${account.expiresOn} and cannot be loaded.`,
+      code: "stored_value_account_expired",
+      remedy: "Choose an unexpired account or issue a replacement store credit.",
       status: 409,
     });
   }
@@ -164,6 +181,7 @@ async function topUpAccount(input: DocumentLoadInput, doc: DocumentFxContext): P
     reason: "refund to store credit",
     actorId: input.actorId ?? null,
   });
+  requireFreshEntry(entry, input.idempotencyKey);
   return { accountId: account.id, code: null, entryId: entry.entryId, replayed: entry.replayed };
 }
 

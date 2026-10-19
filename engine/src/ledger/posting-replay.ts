@@ -166,6 +166,7 @@ export async function regenerateGlImpactTx(
       deps = {
         ...deps,
         cashTenders: await resolveCashPostingTenders(tx, doc.orgId, doc.id, {
+          kind: doc.kind,
           documentNumber: doc.documentNumber,
           kindLabel: doc.kind === "cash_sale" ? "cash sale" : "cash refund",
           partyId: doc.partyId,
