@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 
-export interface ReceivablePurchaseOrderRow {
+export type ReceivablePurchaseOrderRow = Record<string, unknown> & {
   id: string
   number: string | null
   vendor: string | null

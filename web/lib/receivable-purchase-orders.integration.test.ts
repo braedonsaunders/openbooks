@@ -45,6 +45,7 @@ async function seedOrder(
   actorId: string,
   itemIds: string[],
 ): Promise<string> {
+  const total = String(itemIds.length * 20)
   const order = await withOrg(org.orgId, () =>
     createOrderDraft(org.orgId, actorId, 'purchase_order', randomUUID(), null),
   )
@@ -60,7 +61,7 @@ async function seedOrder(
     }
     await db.execute(sql`
       update documents set status = 'approved', party_id = ${org.vendorId},
-        document_date = ${org.date}, subtotal = '20', total = '20'
+        document_date = ${org.date}, subtotal = ${total}, total = ${total}
        where id = ${order.id} and org_id = ${org.orgId}
     `)
   })
