@@ -7,7 +7,7 @@ import { listPeriodReopenRequests } from '../../../../lib/application/close'
 import { applicationContextFromSession } from '../../../../lib/application/context'
 import { requirePermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { parseReopenRequestListState, REOPEN_REQUEST_FILTERS, REOPEN_REQUEST_PAGE_SIZE } from './list-state'
+import { parseReopenRequestListState, REOPEN_REQUEST_FILTERS } from './list-state'
 
 const BASE = '/accounting/reopen-requests'
 const STATUS_LABEL_VALUES = [...REOPEN_REQUEST_FILTERS, 'withdrawn', 'expired', 'reclosed'] as const

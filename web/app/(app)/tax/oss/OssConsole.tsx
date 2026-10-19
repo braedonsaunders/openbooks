@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { addCalendarDays, addMonthsStart, calendarQuarterBounds, startOfMonth } from '@openbooks/engine/platform/civil-date'
@@ -103,7 +103,7 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
     ioss: schemePeriod('ioss', today),
   }), [today])
   const search = searchParams.toString()
-  const [state, setState] = useState(() => readOssUrlState(new URLSearchParams(search), defaults))
+  const state = useMemo(() => readOssUrlState(new URLSearchParams(search), defaults), [search, defaults])
   const [result, setResult] = useState<OssResult | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [format, setFormat] = useState<ExportFormat>('generic')
@@ -113,14 +113,9 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
   const [evidence, setEvidence] = useState<FxEvidenceRow[] | null>(null)
   const { busy, execute } = useAppAction()
 
-  useEffect(() => {
-    setState(readOssUrlState(new URLSearchParams(search), defaults))
-  }, [search, defaults])
-
   function updateUrl(updates: Partial<{ scheme: Scheme; from: string; to: string; tab: OssEvidenceTab }>) {
     const query = mergeOssUrlState(searchParams.toString(), updates)
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
-    setState((current) => ({ ...current, ...updates }))
   }
 
   async function readJson<T>(url: string): Promise<T> {

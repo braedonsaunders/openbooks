@@ -51,7 +51,7 @@ export async function loadAccountingChanges(
 
 const f = ref<AccountingChangesData>()
 
-export function accountingChangesSpec(data: AccountingChangesData): PageSpec {
+export function accountingChangesSpec(_data: AccountingChangesData): PageSpec {
   const actions: WidgetRef[] = [widget('module-home-tabs', { tabs: f('tabs') })]
   return page({
     route: '/accounting/changes',
