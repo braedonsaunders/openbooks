@@ -181,6 +181,13 @@ test("deleting a release invoice cancels its application with evidence and permi
   assert.equal(progress.applicationNumber, 3);
 }));
 
+test("a later retainage-release period does not block an earlier progress draw", enabled, async () => fixture(async ({ org, actor, project, hold }) => {
+  await hold();
+  await withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, "2026-08-05", "25", null));
+  const progress = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, "2026-07-31", "10", null));
+  assert.equal(progress.applicationNumber, 2);
+}));
+
 test("legacy stranded release applications get an actionable recovery error and can be voided", enabled, async () => fixture(async ({ org, actor, project }) => {
   const app = randomUUID();
   await db.execute(sql`insert into pay_applications(id,org_id,project_id,application_number,period_end,kind,status,retainage_percent)

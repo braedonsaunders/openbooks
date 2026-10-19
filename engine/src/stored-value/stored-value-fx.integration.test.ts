@@ -447,3 +447,40 @@ test("a document-driven issue refuses a card currency the document does not carr
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("concurrent document issue retries leave one funded account for the idempotency key", { skip: !DB }, async () => {
+  const fx = await seedFxOrg();
+  const { org } = fx;
+  try {
+    const { documentId, entryId } = await postUsdGiftInvoice(fx, { amount: "50.0000", rate: "1.36", number: "INV-FX-RACE" });
+    const sourceLineId = (await db.execute<{ id: string }>(sql`
+      select id from document_lines where org_id=${org.orgId} and document_id=${documentId} and line_number=1`)).rows[0]!.id;
+    const idempotencyKey = `document-issue-race-${randomUUID()}`;
+    const input = {
+      orgId: org.orgId,
+      programId: fx.giftProgram,
+      amountMinor: toUnits("5"),
+      currency: "USD",
+      sourceDocumentId: documentId,
+      sourceLineId,
+      journalEntryId: entryId,
+      idempotencyKey,
+      actorId: fx.actorId,
+    };
+    const outcomes = await Promise.allSettled([
+      attachDocumentIssue(input),
+      attachDocumentIssue(input),
+    ]);
+    assert.ok(outcomes.some((outcome) => outcome.status === "fulfilled"));
+
+    const stored = await db.execute<{ entries: string; accounts: string }>(sql`
+      select count(*)::text as entries,
+             count(distinct a.id)::text as accounts
+        from stored_value_entries e
+        join stored_value_accounts a on a.org_id=e.org_id and a.id=e.account_id
+       where e.org_id=${org.orgId} and e.idempotency_key=${`stored-value:issue-entry:${idempotencyKey}`}`);
+    assert.deepEqual(stored.rows[0], { entries: "1", accounts: "1" });
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
