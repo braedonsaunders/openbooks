@@ -1,6 +1,7 @@
 /** Billing history import and Stripe Billing sync for the web layer. */
 export {
   acceptBillingImportRun,
+  listBillingImportMappingOptions,
   listBillingImportRuns,
   runBillingImportById,
   runBillingPreflight,
