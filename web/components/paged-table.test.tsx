@@ -445,3 +445,28 @@ test('a list keeping its page and search in the URL reopens them and writes them
   // The search keeps its own height beside wrapping controls, so its icon stays centred.
   assert.ok(search.parentElement?.className.includes('self-start'));
 });
+
+test('a search that hides every row shows the filtered-empty state, never the empty-list teaching copy', async (t) => {
+  const host = document.createElement('div'); document.body.append(host);
+  const root = createRoot(host);
+  t.after(async () => { await act(async () => root.unmount()); host.remove(); });
+  const rows = [{ id: 'v1', name: 'Acme Supply' }];
+  const render = (props: { emptyFiltered?: string; filtersActive?: boolean; rows?: typeof rows }) => (
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <PagedTable rows={props.rows ?? rows} searchable empty="No vendors yet. Add the first one." emptyFiltered={props.emptyFiltered} filtersActive={props.filtersActive}
+        rowKey={(row) => row.id} emptyAsRow columns={[{ key: 'name', header: 'Name', cell: (row) => row.name, search: (row) => row.name }]} />
+    </NextIntlClientProvider>
+  );
+  await act(async () => { root.render(render({})); await tick(); });
+  const search = host.querySelector('input[aria-label="Search"]') as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(search, 'zzz');
+    search.dispatchEvent(new window.Event('input', { bubbles: true })); await tick();
+  });
+  assert.ok(host.textContent?.includes('No records match the current filters.'), host.textContent ?? '');
+  assert.equal(host.textContent?.includes('No vendors yet'), false);
+  await act(async () => { root.render(render({ emptyFiltered: 'No vendors match.' })); await tick(); });
+  assert.ok(host.textContent?.includes('No vendors match.'), 'the list names what it holds');
+  await act(async () => { root.render(render({ rows: [], filtersActive: true, emptyFiltered: 'No vendors match.' })); await tick(); });
+  assert.ok(host.textContent?.includes('No vendors match.'), "the caller's own filter leaving nothing is a mismatch too");
+});

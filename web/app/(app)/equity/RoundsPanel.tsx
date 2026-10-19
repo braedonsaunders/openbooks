@@ -57,6 +57,7 @@ export function EquityRoundsPanel({ view }: { view: RoundsViewData | null }) {
         rowClassName={(row) => (row.voidedOn ? 'text-slate-400 dark:text-slate-500' : undefined)}
         rowKey={(row) => row.id}
         empty={t('rounds.empty')}
+        emptyFiltered={t('rounds.emptyFiltered')}
         urlState={{ pageKey: 'page', page: view.context.list.page, searchKey: 'q', query: view.context.list.query }}
         {...listSort(view.context)}
         toolbarAfter={

@@ -78,6 +78,8 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
         rows={layout.lines}
         rowKey={(line) => line.key}
         empty={view.dimension === 'class' ? t('capTable.emptyClasses') : t('capTable.emptyHolders')}
+        emptyFiltered={view.dimension === 'class' ? t('capTable.emptyFilteredClasses') : t('capTable.emptyFilteredHolders')}
+        filtersActive={view.query !== ''}
         resetPageKey={`${view.dimension}:${view.instrument}:${view.query}`}
         searchable={false}
         urlState={{ pageKey: 'page', page: context.list.page }}

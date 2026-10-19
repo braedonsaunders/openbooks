@@ -27,7 +27,7 @@ const { capTableExportData } = await import('../../../lib/equity-cap-table-expor
 const { EquityRunsPanel } = await import('./RunsPanel')
 const { EquityWaterfallPanel } = await import('./WaterfallPanel')
 const { EquitySecuritiesPanel } = await import('./SecuritiesPanel')
-const { EquityStakeholdersPanel } = await import('./StructurePanels')
+const { EquityClassesPanel, EquityPlansPanel, EquityStakeholdersPanel } = await import('./StructurePanels')
 const { EquityRoundsPanel } = await import('./RoundsPanel')
 const { PendingActions } = await import('./shared')
 
@@ -494,6 +494,38 @@ test('stakeholder search reads from the URL and writes back as it changes', asyn
   } finally {
     await screen.close()
   }
+})
+
+test('a search or filter that matches nothing says so, while a list with no records teaches how to add one', async () => {
+  const searching = (view: string, query: string) => ({ ...context(), params: { sub: SUB, view, q: query }, list: { page: 1, query, sort: 'default', dir: 'asc' as const } })
+  const parties = { [HOLDER]: { name: 'Founder One', kind: 'person', email: null }, [EMPLOYEE]: { name: 'Employee One', kind: 'person', email: null } }
+  const structure = { entity: { id: SUB, name: 'Northstar Cloud', currency: 'USD' }, classes: [], plans: [], rounds: [], voidedRounds: [] }
+  const bodies: Record<string, string> = {}
+  const read = async (name: string, node: React.ReactNode, url: string) => {
+    const screen = await mount(node, url)
+    try { bodies[name] = text(screen.host) } finally { await screen.close() }
+  }
+  await read('classes', <EquityClassesPanel view={{ context: searching('classes', 'zzz'), asOfControl, structure, classRows: capTable.classes } as never} />, `/equity?view=classes&sub=${SUB}&q=zzz`)
+  await read('plans', <EquityPlansPanel view={{ context: searching('plans', 'zzz'), asOfControl, structure: { ...structure, plans: [{ id: 'p1', code: 'EIP', name: 'Equity Incentive Plan', shareClassId: COMMON, reserved: '1000000', adoptedOn: '2024-01-01' }] }, classRows: capTable.classes } as never} />, `/equity?view=plans&sub=${SUB}&q=zzz`)
+  await read('stakeholders', <EquityStakeholdersPanel view={{ context: searching('stakeholders', 'zzz'), asOfControl, table: capTable, parties }} />, `/equity?view=stakeholders&sub=${SUB}&q=zzz`)
+  const capTableView = (query: string) => ({
+    context: { ...context(), params: { sub: SUB, view: 'captable', by: 'holder', ...(query ? { q: query } : {}) } }, asOfControl,
+    dimension: 'holder' as const, instrument: 'all' as const, query, table: capTable, parties: { [HOLDER]: 'Founder One', [EMPLOYEE]: 'Employee One' },
+    hasAccountPolicy: true, accountsSetupHref: '/admin/setup/equity-account-policies', reportHref: null, asOfReportHref: null,
+  })
+  await read('capTable', <EquityCapTablePanel view={capTableView('zzz') as never} />, `/equity?view=captable&sub=${SUB}&by=holder&q=zzz`)
+  const securities = (filters: { status: string | null }, rows: ReturnType<typeof securityRow>[]) => ({
+    context: { ...context(), params: { sub: SUB, view: 'securities', ...(filters.status ? { status: filters.status } : {}) } }, asOfControl,
+    kind: null, status: filters.status, holderPartyId: null, holders: [], rows, convertibles: [], reportHref: null,
+  })
+  await read('securitiesFiltered', <EquitySecuritiesPanel view={securities({ status: 'void' }, [])} />, `/equity?view=securities&sub=${SUB}&status=void`)
+  await read('securitiesEmpty', <EquitySecuritiesPanel view={securities({ status: null }, [])} />, `/equity?view=securities&sub=${SUB}`)
+  assert.ok(bodies.classes!.includes('No share classes match.') && !bodies.classes!.includes('No share classes yet'), bodies.classes)
+  assert.ok(bodies.plans!.includes('No equity plans match.') && !bodies.plans!.includes('No equity plans yet'), bodies.plans)
+  assert.ok(bodies.stakeholders!.includes('No holders match.') && !bodies.stakeholders!.includes('yet'), bodies.stakeholders)
+  assert.ok(bodies.capTable!.includes('No holders match.') && !bodies.capTable!.includes('No holders yet'), bodies.capTable)
+  assert.ok(bodies.securitiesFiltered!.includes('No securities match.'), bodies.securitiesFiltered)
+  assert.ok(bodies.securitiesEmpty!.includes('No securities yet. Use New security') && !bodies.securitiesEmpty!.includes('match'), 'an empty register teaches instead of claiming a mismatch')
 })
 
 test('the round modeller names its pool top-up and pool share unambiguously, and a refused model shows its refusal instead of stale results', async () => {

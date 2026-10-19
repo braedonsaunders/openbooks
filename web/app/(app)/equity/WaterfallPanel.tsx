@@ -375,6 +375,7 @@ function WaterfallResults({ scenario, pending, payoutsBy, onPayoutsBy }: { scena
           rows={result.holders}
           rowKey={(row) => row.holderPartyId}
           empty={t('waterfall.empty')}
+          emptyFiltered={t('waterfall.holdersEmptyFiltered')}
           toolbarAfter={payoutsFilter}
           columns={[
             { key: 'holder', header: <>{t('capTable.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{scenario.parties[row.holderPartyId] ?? row.holderPartyId}</>, search: (row) => scenario.parties[row.holderPartyId] ?? '' },

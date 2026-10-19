@@ -53,6 +53,8 @@ export function PagedTable<T>({
   pageSize = 10,
   searchable = false,
   empty,
+  emptyFiltered,
+  filtersActive = false,
   rowKey,
   rowClassName,
   toolbarAfter,
@@ -78,6 +80,14 @@ export function PagedTable<T>({
   pageSize?: number
   searchable?: boolean
   empty: ReactNode
+  /**
+   * The filtered-empty state: shown instead of `empty` when the search, or
+   * a filter the caller applied (`filtersActive`), leaves no rows. `empty`
+   * teaches the genuinely-empty list; this says nothing matches.
+   */
+  emptyFiltered?: ReactNode
+  /** The caller's own filters narrowed `rows` (beyond this table's search). */
+  filtersActive?: boolean
   rowKey: (row: T, index: number) => string
   rowClassName?: (row: T) => string | undefined
   /** Controls rendered immediately after the search box on the same toolbar row. */
@@ -136,6 +146,8 @@ export function PagedTable<T>({
     )
   }, [rows, query, columns, external])
 
+  const narrowed = filtersActive || (!external && query.trim() !== '')
+  const emptyState = narrowed ? emptyFiltered ?? t('empty.description') : empty
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
   const clamped = external ? 0 : Math.min(page, pageCount - 1)
   const start = clamped * pageSize
@@ -238,11 +250,11 @@ export function PagedTable<T>({
   ) : toolbarAfter ?? null
 
   if (rows.length === 0) {
-    if (!(emptyAsRow ?? Boolean(source))) return <>{empty}</>
+    if (!(emptyAsRow ?? Boolean(source))) return <>{emptyState}</>
     return (
       <div className={contained ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-3'}>
         {toolbar && contained ? <div className="shrink-0">{toolbar}</div> : toolbar}
-        <ListTable rows={[]} columns={columns} rowKey={rowKey} empty={empty} leading={leading} footer={footer} contained={contained} />
+        <ListTable rows={[]} columns={columns} rowKey={rowKey} empty={emptyState} leading={leading} footer={footer} contained={contained} />
       </div>
     )
   }
@@ -255,7 +267,7 @@ export function PagedTable<T>({
         contained={contained}
         columns={columns}
         rowKey={(row, index) => rowKey(row, start + index)}
-        empty={empty}
+        empty={emptyState}
         rowClassName={rowClassName}
         onRowClick={onRowClick}
         footer={footer}

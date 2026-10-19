@@ -212,6 +212,8 @@
     "report": "Wertpapierregister öffnen",
     "emptyClasses": "Noch keine Anteilsklassen. Erfassen Sie die erste Klasse der Gesellschaft unter Anteilsklassen.",
     "emptyHolders": "Noch keine Inhaber. Geben Sie Anteile oder Zuteilungen aus, um Inhaber in die Kapitaltabelle aufzunehmen.",
+    "emptyFilteredClasses": "Keine Anteilsklassen entsprechen der Suche.",
+    "emptyFilteredHolders": "Keine Inhaber entsprechen der Suche.",
     "amend": "Ändern",
     "columns": {
       "class": "Klasse",
@@ -259,7 +261,8 @@
     "splitAdjusted": "Wandlungspreise angepasst: {classes}"
   },
   "securities": {
-    "empty": "Keine passenden Wertpapiere.",
+    "empty": "Noch keine Wertpapiere. Geben Sie mit „Neues Wertpapier“ das erste Wertpapier der Gesellschaft aus.",
+    "emptyFiltered": "Keine Wertpapiere entsprechen der Suche oder den Filtern.",
     "columns": {
       "number": "Nummer",
       "kind": "Art",
@@ -283,6 +286,7 @@
   },
   "stakeholders": {
     "empty": "Noch keine Inhaber in der Kapitaltabelle.",
+    "emptyFiltered": "Keine Inhaber entsprechen der Suche.",
     "columns": {
       "name": "Name",
       "kind": "Art",
@@ -295,6 +299,7 @@
   },
   "plans": {
     "empty": "Noch keine Beteiligungspläne. Erfassen Sie mit „Neuer Plan“ einen Plan und seine Reserve.",
+    "emptyFiltered": "Keine Beteiligungspläne entsprechen der Suche.",
     "changeReserve": "Reserve ändern",
     "reserveTitle": "Reserve von {code} ändern",
     "reserveDescription": "Eine Änderung der Reserve gilt ab ihrem Datum. Eine Verringerung darf den nicht zugeteilten Pool zu keinem späteren Datum unter null bringen.",
@@ -320,6 +325,7 @@
   },
   "rounds": {
     "empty": "Noch keine Finanzierungsrunden.",
+    "emptyFiltered": "Keine Finanzierungsrunden entsprechen der Suche.",
     "columns": {
       "name": "Runde",
       "class": "Klasse",
@@ -420,6 +426,7 @@
     "converts": "Wandelt in Stammanteile",
     "takesPreference": "Nimmt Präferenz in Anspruch",
     "empty": "Nichts zu verteilen.",
+    "holdersEmptyFiltered": "Keine Inhaber entsprechen der Suche.",
     "columns": {
       "election": "Wahl",
       "preference": "Präferenz",
@@ -515,6 +522,7 @@
     "noRuns": "Noch keine Läufe gebucht",
     "total": "Zu buchende Änderung",
     "empty": "Bis zu diesem Datum tragen keine Options- oder RSU-Zuteilungen Kosten.",
+    "emptyFiltered": "Keine Zuteilungen entsprechen der Suche.",
     "runsEmpty": "Noch keine Läufe der aktienbasierten Vergütung gebucht.",
     "noEntry": "Nichts zu buchen",
     "columns": {
@@ -532,7 +540,8 @@
       "releaseEntry": "Freigabebuchung"
     },
     "releases": "Freigaben gesperrter Anteile",
-    "releasesEmpty": "Bis zu diesem Datum werden keine gesperrten Anteile unverfallbar."
+    "releasesEmpty": "Bis zu diesem Datum werden keine gesperrten Anteile unverfallbar.",
+    "releasesEmptyFiltered": "Keine gesperrten Anteile entsprechen der Suche."
   },
   "drawer": {
     "tabs": "Wertpapierabschnitte",
@@ -690,6 +699,7 @@
     "replayed": "Der Zinslauf bis {date} wurde bereits gebucht",
     "failed": "Der Zinslauf wurde nicht gebucht.",
     "empty": "Bis zu diesem Datum laufen für kein Wandeldarlehen Zinsen auf.",
+    "emptyFiltered": "Keine Wandeldarlehen entsprechen der Suche.",
     "runsEmpty": "Noch keine Zinsläufe gebucht.",
     "columns": {
       "cumulative": "Bisher aufgelaufen",
@@ -776,6 +786,7 @@
   },
   "classes": {
     "empty": "Noch keine Anteilsklassen. Erfassen Sie mit „Neue Anteilsklasse“ die erste Klasse der Gesellschaft.",
+    "emptyFiltered": "Keine Anteilsklassen entsprechen der Suche.",
     "columns": {
       "kind": "Art",
       "seniority": "Rang",

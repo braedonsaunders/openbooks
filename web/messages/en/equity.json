@@ -212,6 +212,8 @@
     "report": "Open the securities register",
     "emptyClasses": "No share classes yet. Record the legal entity's first class under Share classes.",
     "emptyHolders": "No holders yet. Issue shares or awards to put holders on the cap table.",
+    "emptyFilteredClasses": "No share classes match.",
+    "emptyFilteredHolders": "No holders match.",
     "amend": "Amend",
     "columns": {
       "class": "Class",
@@ -259,7 +261,8 @@
     "splitAdjusted": "Conversion prices adjusted: {classes}"
   },
   "securities": {
-    "empty": "No securities match.",
+    "empty": "No securities yet. Use New security to issue the legal entity's first one.",
+    "emptyFiltered": "No securities match.",
     "columns": {
       "number": "Number",
       "kind": "Kind",
@@ -283,6 +286,7 @@
   },
   "stakeholders": {
     "empty": "No holders on the cap table yet.",
+    "emptyFiltered": "No holders match.",
     "columns": {
       "name": "Name",
       "kind": "Kind",
@@ -295,6 +299,7 @@
   },
   "plans": {
     "empty": "No equity plans yet. Use New plan to record a plan and its reserve.",
+    "emptyFiltered": "No equity plans match.",
     "changeReserve": "Change reserve",
     "reserveTitle": "Change the reserve of {code}",
     "reserveDescription": "A reserve change takes effect from its date. A reduction cannot take the unallocated pool below zero on any later date.",
@@ -320,6 +325,7 @@
   },
   "rounds": {
     "empty": "No financing rounds yet.",
+    "emptyFiltered": "No financing rounds match.",
     "columns": {
       "name": "Round",
       "class": "Class",
@@ -420,6 +426,7 @@
     "converts": "Converts to common",
     "takesPreference": "Takes preference",
     "empty": "Nothing to distribute.",
+    "holdersEmptyFiltered": "No holders match.",
     "columns": {
       "election": "Election",
       "preference": "Preference",
@@ -515,6 +522,7 @@
     "noRuns": "No runs posted yet",
     "total": "Change to post",
     "empty": "No option or RSU awards carry cost through this date.",
+    "emptyFiltered": "No awards match.",
     "runsEmpty": "No stock compensation runs posted yet.",
     "noEntry": "Nothing to post",
     "columns": {
@@ -532,7 +540,8 @@
       "releaseEntry": "Release entry"
     },
     "releases": "Restricted stock releases",
-    "releasesEmpty": "No restricted shares vest through this date."
+    "releasesEmpty": "No restricted shares vest through this date.",
+    "releasesEmptyFiltered": "No restricted shares match."
   },
   "drawer": {
     "tabs": "Security sections",
@@ -690,6 +699,7 @@
     "replayed": "The interest run through {date} was already posted",
     "failed": "The interest run was not posted.",
     "empty": "No convertible note accrues interest through this date.",
+    "emptyFiltered": "No convertible notes match.",
     "runsEmpty": "No interest runs posted yet.",
     "columns": {
       "cumulative": "Accrued to date",
@@ -776,6 +786,7 @@
   },
   "classes": {
     "empty": "No share classes yet. Use New share class to record the legal entity's first class.",
+    "emptyFiltered": "No share classes match.",
     "columns": {
       "kind": "Kind",
       "seniority": "Seniority",

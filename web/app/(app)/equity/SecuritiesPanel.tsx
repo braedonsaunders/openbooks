@@ -115,6 +115,8 @@ export function EquitySecuritiesPanel({ view }: { view: SecuritiesViewData | nul
         rows={view.rows}
         rowKey={(row) => row.id}
         empty={t('securities.empty')}
+        emptyFiltered={t('securities.emptyFiltered')}
+        filtersActive={Boolean(view.kind || view.status || view.holderPartyId)}
         resetPageKey={`${view.kind ?? ''}:${view.status ?? ''}:${view.holderPartyId ?? ''}`}
         urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
         {...listSort(context)}

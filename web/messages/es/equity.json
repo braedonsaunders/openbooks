@@ -212,6 +212,8 @@
     "report": "Abrir el registro de valores",
     "emptyClasses": "Aún no hay clases de acciones. Registre la primera clase de la entidad en Clases de acciones.",
     "emptyHolders": "Aún no hay titulares. Emita acciones u otorgamientos para incorporar titulares a la tabla de capitalización.",
+    "emptyFilteredClasses": "Ninguna clase de acciones coincide.",
+    "emptyFilteredHolders": "Ningún titular coincide.",
     "amend": "Modificar",
     "columns": {
       "class": "Clase",
@@ -259,7 +261,8 @@
     "splitAdjusted": "Precios de conversión ajustados: {classes}"
   },
   "securities": {
-    "empty": "Ningún valor coincide.",
+    "empty": "Aún no hay valores. Use Nuevo valor para emitir el primero de la entidad.",
+    "emptyFiltered": "Ningún valor coincide.",
     "columns": {
       "number": "Número",
       "kind": "Tipo",
@@ -283,6 +286,7 @@
   },
   "stakeholders": {
     "empty": "Aún no hay titulares en la tabla de capitalización.",
+    "emptyFiltered": "Ningún titular coincide.",
     "columns": {
       "name": "Nombre",
       "kind": "Tipo",
@@ -295,6 +299,7 @@
   },
   "plans": {
     "empty": "Aún no hay planes de acciones. Use Nuevo plan para registrar un plan y su reserva.",
+    "emptyFiltered": "Ningún plan de acciones coincide.",
     "changeReserve": "Cambiar reserva",
     "reserveTitle": "Cambiar la reserva de {code}",
     "reserveDescription": "Un cambio de reserva surte efecto desde su fecha. Una reducción no puede dejar la reserva sin asignar por debajo de cero en ninguna fecha posterior.",
@@ -320,6 +325,7 @@
   },
   "rounds": {
     "empty": "Aún no hay rondas de financiación.",
+    "emptyFiltered": "Ninguna ronda de financiación coincide.",
     "columns": {
       "name": "Ronda",
       "class": "Clase",
@@ -420,6 +426,7 @@
     "converts": "Se convierte en comunes",
     "takesPreference": "Ejerce la preferencia",
     "empty": "Nada que distribuir.",
+    "holdersEmptyFiltered": "Ningún titular coincide.",
     "columns": {
       "election": "Elección",
       "preference": "Preferencia",
@@ -515,6 +522,7 @@
     "noRuns": "Aún no hay ejecuciones contabilizadas",
     "total": "Variación a contabilizar",
     "empty": "Ningún otorgamiento de opciones o RSU genera costo hasta esta fecha.",
+    "emptyFiltered": "Ninguna concesión coincide.",
     "runsEmpty": "Aún no hay ejecuciones de compensación en acciones contabilizadas.",
     "noEntry": "Nada que contabilizar",
     "columns": {
@@ -532,7 +540,8 @@
       "releaseEntry": "Asiento de liberación"
     },
     "releases": "Liberaciones de acciones restringidas",
-    "releasesEmpty": "Ninguna acción restringida se consolida hasta esta fecha."
+    "releasesEmpty": "Ninguna acción restringida se consolida hasta esta fecha.",
+    "releasesEmptyFiltered": "Ninguna acción restringida coincide."
   },
   "drawer": {
     "tabs": "Secciones del valor",
@@ -690,6 +699,7 @@
     "replayed": "La ejecución de intereses hasta el {date} ya estaba contabilizada",
     "failed": "La ejecución de intereses no se contabilizó.",
     "empty": "Ninguna nota convertible devenga intereses hasta esta fecha.",
+    "emptyFiltered": "Ninguna nota convertible coincide.",
     "runsEmpty": "Aún no hay ejecuciones de intereses contabilizadas.",
     "columns": {
       "cumulative": "Devengado a la fecha",
@@ -776,6 +786,7 @@
   },
   "classes": {
     "empty": "Aún no hay clases de acciones. Use Nueva clase de acciones para registrar la primera clase de la entidad.",
+    "emptyFiltered": "Ninguna clase de acciones coincide.",
     "columns": {
       "kind": "Tipo",
       "seniority": "Prelación",

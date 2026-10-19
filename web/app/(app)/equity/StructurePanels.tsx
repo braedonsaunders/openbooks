@@ -45,6 +45,7 @@ export function EquityClassesPanel({ view }: { view: StructureViewData | null })
         rows={view.classRows}
         rowKey={(row) => row.shareClassId}
         empty={t('classes.empty')}
+        emptyFiltered={t('classes.emptyFiltered')}
         urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
         {...listSort(context)}
         toolbarAfter={<EquityAsOfControl control={view.asOfControl} />}
@@ -223,6 +224,7 @@ export function EquityPlansPanel({ view }: { view: StructureViewData | null }) {
         rows={view.structure.plans}
         rowKey={(row) => row.id}
         empty={t('plans.empty')}
+        emptyFiltered={t('plans.emptyFiltered')}
         urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
         {...listSort(context)}
         toolbarAfter={<EquityAsOfControl control={view.asOfControl} />}
@@ -305,6 +307,7 @@ export function EquityStakeholdersPanel({ view }: { view: StakeholdersViewData |
       rows={view.table.holders}
       rowKey={(row) => row.holderPartyId}
       empty={t('stakeholders.empty')}
+      emptyFiltered={t('stakeholders.emptyFiltered')}
       urlState={{ pageKey: 'page', page: view.context.list.page, searchKey: 'q', query: view.context.list.query }}
       {...listSort(view.context)}
       toolbarAfter={<EquityAsOfControl control={view.asOfControl} />}

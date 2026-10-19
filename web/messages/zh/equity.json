@@ -212,6 +212,8 @@
     "report": "打开证券登记簿",
     "emptyClasses": "尚无股份类别。请在“股份类别”中登记法律实体的首个类别。",
     "emptyHolders": "尚无持有人。发行股份或奖励后，持有人将出现在股权结构表中。",
+    "emptyFilteredClasses": "没有匹配的股份类别。",
+    "emptyFilteredHolders": "没有匹配的持有人。",
     "amend": "修改",
     "columns": {
       "class": "类别",
@@ -259,7 +261,8 @@
     "splitAdjusted": "已调整转换价格：{classes}"
   },
   "securities": {
-    "empty": "没有匹配的证券。",
+    "empty": "尚无证券。请使用“新建证券”为法律实体发行首份证券。",
+    "emptyFiltered": "没有匹配的证券。",
     "columns": {
       "number": "编号",
       "kind": "类型",
@@ -283,6 +286,7 @@
   },
   "stakeholders": {
     "empty": "股权结构表中尚无持有人。",
+    "emptyFiltered": "没有匹配的持有人。",
     "columns": {
       "name": "名称",
       "kind": "类型",
@@ -295,6 +299,7 @@
   },
   "plans": {
     "empty": "尚无股权计划。请使用“新建计划”登记计划及其预留股份。",
+    "emptyFiltered": "没有匹配的股权计划。",
     "changeReserve": "调整预留",
     "reserveTitle": "调整 {code} 的预留股份",
     "reserveDescription": "预留调整自其日期起生效。减少预留不得使任何后续日期的未分配期权池低于零。",
@@ -320,6 +325,7 @@
   },
   "rounds": {
     "empty": "尚无融资轮次。",
+    "emptyFiltered": "没有匹配的融资轮次。",
     "columns": {
       "name": "融资轮次",
       "class": "类别",
@@ -420,6 +426,7 @@
     "converts": "转换为普通股",
     "takesPreference": "行使优先清算权",
     "empty": "没有可分配的金额。",
+    "holdersEmptyFiltered": "没有匹配的持有人。",
     "columns": {
       "election": "选择",
       "preference": "优先清算",
@@ -515,6 +522,7 @@
     "noRuns": "尚无已过账的运行",
     "total": "待过账变动",
     "empty": "截至该日期没有产生成本的期权或 RSU 奖励。",
+    "emptyFiltered": "没有匹配的授予。",
     "runsEmpty": "尚无已过账的股权激励运行。",
     "noEntry": "无需过账",
     "columns": {
@@ -532,7 +540,8 @@
       "releaseEntry": "解禁分录"
     },
     "releases": "限制性股票解禁",
-    "releasesEmpty": "截至该日期没有归属的限制性股票。"
+    "releasesEmpty": "截至该日期没有归属的限制性股票。",
+    "releasesEmptyFiltered": "没有匹配的限制性股票。"
   },
   "drawer": {
     "tabs": "证券分区",
@@ -690,6 +699,7 @@
     "replayed": "截至 {date} 的利息运行已过账",
     "failed": "利息运行未过账。",
     "empty": "截至该日期没有计提利息的可转换票据。",
+    "emptyFiltered": "没有匹配的可转换票据。",
     "runsEmpty": "尚无已过账的利息运行。",
     "columns": {
       "cumulative": "累计已计提",
@@ -776,6 +786,7 @@
   },
   "classes": {
     "empty": "尚无股份类别。请使用“新建股份类别”登记法律实体的首个类别。",
+    "emptyFiltered": "没有匹配的股份类别。",
     "columns": {
       "kind": "种类",
       "seniority": "清偿顺序",

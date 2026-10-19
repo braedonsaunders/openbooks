@@ -141,6 +141,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
               urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
               {...listSort(context)}
               empty={t('compensation.empty')}
+              emptyFiltered={t('compensation.emptyFiltered')}
               toolbarAfter={toolbar}
               columns={[
                 {
@@ -165,6 +166,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
               urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
               {...listSort(context)}
               empty={t('compensation.releasesEmpty')}
+              emptyFiltered={t('compensation.releasesEmptyFiltered')}
               toolbarAfter={toolbar}
               columns={[
                 {
@@ -189,6 +191,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
               urlState={{ pageKey: 'page', page: context.list.page, searchKey: 'q', query: context.list.query }}
               {...listSort(context)}
               empty={t('interest.empty')}
+              emptyFiltered={t('interest.emptyFiltered')}
               toolbarAfter={toolbar}
               columns={[
                 {

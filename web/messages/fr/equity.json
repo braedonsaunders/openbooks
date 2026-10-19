@@ -212,6 +212,8 @@
     "report": "Ouvrir le registre des titres",
     "emptyClasses": "Aucune catégorie d’actions. Enregistrez la première catégorie de l’entité sous Catégories d’actions.",
     "emptyHolders": "Aucun porteur pour l’instant. Émettez des actions ou des attributions pour inscrire des porteurs à la table de capitalisation.",
+    "emptyFilteredClasses": "Aucune catégorie d’actions ne correspond.",
+    "emptyFilteredHolders": "Aucun porteur ne correspond.",
     "amend": "Modifier",
     "columns": {
       "class": "Catégorie",
@@ -259,7 +261,8 @@
     "splitAdjusted": "Prix de conversion ajustés : {classes}"
   },
   "securities": {
-    "empty": "Aucun titre ne correspond.",
+    "empty": "Aucun titre pour l’instant. Utilisez Nouveau titre pour émettre le premier titre de l’entité.",
+    "emptyFiltered": "Aucun titre ne correspond.",
     "columns": {
       "number": "Numéro",
       "kind": "Type",
@@ -283,6 +286,7 @@
   },
   "stakeholders": {
     "empty": "Aucun porteur à la table de capitalisation pour l’instant.",
+    "emptyFiltered": "Aucun porteur ne correspond.",
     "columns": {
       "name": "Nom",
       "kind": "Type",
@@ -295,6 +299,7 @@
   },
   "plans": {
     "empty": "Aucun plan d’actions. Utilisez Nouveau plan pour enregistrer un plan et sa réserve.",
+    "emptyFiltered": "Aucun plan d’actions ne correspond.",
     "changeReserve": "Modifier la réserve",
     "reserveTitle": "Modifier la réserve de {code}",
     "reserveDescription": "Une modification de réserve prend effet à sa date. Une réduction ne peut pas faire passer la réserve non attribuée sous zéro à une date ultérieure.",
@@ -320,6 +325,7 @@
   },
   "rounds": {
     "empty": "Aucune levée de fonds pour l’instant.",
+    "emptyFiltered": "Aucune levée de fonds ne correspond.",
     "columns": {
       "name": "Levée",
       "class": "Catégorie",
@@ -420,6 +426,7 @@
     "converts": "Convertit en actions ordinaires",
     "takesPreference": "Exerce sa préférence",
     "empty": "Rien à répartir.",
+    "holdersEmptyFiltered": "Aucun porteur ne correspond.",
     "columns": {
       "election": "Choix",
       "preference": "Préférence",
@@ -515,6 +522,7 @@
     "noRuns": "Aucun traitement comptabilisé pour l’instant",
     "total": "Variation à comptabiliser",
     "empty": "Aucune attribution d’options ou de RSU ne porte de coût jusqu’à cette date.",
+    "emptyFiltered": "Aucune attribution ne correspond.",
     "runsEmpty": "Aucun traitement de rémunération en actions comptabilisé pour l’instant.",
     "noEntry": "Rien à comptabiliser",
     "columns": {
@@ -532,7 +540,8 @@
       "releaseEntry": "Écriture de libération"
     },
     "releases": "Libérations d’actions restreintes",
-    "releasesEmpty": "Aucune action restreinte n’est acquise jusqu’à cette date."
+    "releasesEmpty": "Aucune action restreinte n’est acquise jusqu’à cette date.",
+    "releasesEmptyFiltered": "Aucune action restreinte ne correspond."
   },
   "drawer": {
     "tabs": "Sections du titre",
@@ -690,6 +699,7 @@
     "replayed": "Le traitement des intérêts jusqu’au {date} était déjà comptabilisé",
     "failed": "Le traitement des intérêts n’a pas été comptabilisé.",
     "empty": "Aucune obligation convertible ne porte d’intérêts courus jusqu’à cette date.",
+    "emptyFiltered": "Aucune obligation convertible ne correspond.",
     "runsEmpty": "Aucun traitement des intérêts comptabilisé pour l’instant.",
     "columns": {
       "cumulative": "Courus à ce jour",
@@ -776,6 +786,7 @@
   },
   "classes": {
     "empty": "Aucune catégorie d’actions. Utilisez Nouvelle catégorie d’actions pour enregistrer la première catégorie de l’entité.",
+    "emptyFiltered": "Aucune catégorie d’actions ne correspond.",
     "columns": {
       "kind": "Nature",
       "seniority": "Rang",

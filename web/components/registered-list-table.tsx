@@ -24,6 +24,8 @@ export function RegisteredListTable<T>({
   columns,
   rowKey,
   empty,
+  emptyFiltered,
+  filtersActive = false,
   leading,
   footer,
   toolbarAfter,
@@ -49,6 +51,10 @@ export function RegisteredListTable<T>({
   columns: RegisteredListColumn<T>[]
   rowKey: (row: T, index: number) => string
   empty: ReactNode
+  /** Shown instead of `empty` when a search or `filtersActive` leaves no rows. */
+  emptyFiltered?: ReactNode
+  /** The domain's own filters (beyond the table search) narrowed `rows`. */
+  filtersActive?: boolean
   leading?: ReactNode
   footer?: ReactNode
   toolbarAfter?: ReactNode
@@ -88,7 +94,7 @@ export function RegisteredListTable<T>({
         rows={rows}
         columns={columns}
         rowKey={rowKey}
-        empty={empty}
+        empty={filtersActive && emptyFiltered !== undefined ? emptyFiltered : empty}
         total={state?.total ?? 0}
         page={state?.page ?? 1}
         perPage={state?.perPage ?? 25}
@@ -156,6 +162,8 @@ export function RegisteredListTable<T>({
         },
       )}
       empty={empty}
+      emptyFiltered={emptyFiltered}
+      filtersActive={filtersActive}
       leading={leading}
       footer={footer}
       searchable={searchable}

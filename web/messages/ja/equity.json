@@ -212,6 +212,8 @@
     "report": "証券台帳を開く",
     "emptyClasses": "株式クラスはまだありません。「株式クラス」で法人の最初のクラスを登録してください。",
     "emptyHolders": "保有者がまだいません。株式またはアワードを発行すると、保有者が資本政策表に追加されます。",
+    "emptyFilteredClasses": "一致する株式クラスはありません。",
+    "emptyFilteredHolders": "一致する保有者はいません。",
     "amend": "変更",
     "columns": {
       "class": "クラス",
@@ -259,7 +261,8 @@
     "splitAdjusted": "転換価格を調整しました：{classes}"
   },
   "securities": {
-    "empty": "一致する証券はありません。",
+    "empty": "証券はまだありません。「新規証券」で法人の最初の証券を発行してください。",
+    "emptyFiltered": "一致する証券はありません。",
     "columns": {
       "number": "番号",
       "kind": "種別",
@@ -283,6 +286,7 @@
   },
   "stakeholders": {
     "empty": "資本政策表にはまだ保有者がいません。",
+    "emptyFiltered": "一致する保有者はいません。",
     "columns": {
       "name": "名称",
       "kind": "種別",
@@ -295,6 +299,7 @@
   },
   "plans": {
     "empty": "株式プランはまだありません。「新規プラン」でプランと留保株式を登録してください。",
+    "emptyFiltered": "一致する株式プランはありません。",
     "changeReserve": "留保株式を変更",
     "reserveTitle": "{code} の留保株式を変更",
     "reserveDescription": "留保株式の変更はその日付から発効します。減少によって、以後のいずれの日付でも未割当プールがゼロを下回ることはできません。",
@@ -320,6 +325,7 @@
   },
   "rounds": {
     "empty": "資金調達ラウンドがまだありません。",
+    "emptyFiltered": "一致する資金調達ラウンドはありません。",
     "columns": {
       "name": "ラウンド",
       "class": "クラス",
@@ -420,6 +426,7 @@
     "converts": "普通株式に転換",
     "takesPreference": "優先分配を受領",
     "empty": "分配する金額はありません。",
+    "holdersEmptyFiltered": "一致する保有者はいません。",
     "columns": {
       "election": "選択",
       "preference": "優先分配",
@@ -515,6 +522,7 @@
     "noRuns": "転記済みの実行はまだありません",
     "total": "転記する変動額",
     "empty": "この日付までに費用が発生するオプションまたは RSU アワードはありません。",
+    "emptyFiltered": "一致する付与はありません。",
     "runsEmpty": "転記済みの株式報酬の実行はまだありません。",
     "noEntry": "転記する内容はありません",
     "columns": {
@@ -532,7 +540,8 @@
       "releaseEntry": "解除仕訳"
     },
     "releases": "譲渡制限株式の解除",
-    "releasesEmpty": "この日付までに権利確定する譲渡制限株式はありません。"
+    "releasesEmpty": "この日付までに権利確定する譲渡制限株式はありません。",
+    "releasesEmptyFiltered": "一致する譲渡制限株式はありません。"
   },
   "drawer": {
     "tabs": "証券のセクション",
@@ -690,6 +699,7 @@
     "replayed": "{date} までの利息の実行はすでに転記されています",
     "failed": "利息の実行は転記されませんでした。",
     "empty": "この日付までに利息が発生するコンバーティブルノートはありません。",
+    "emptyFiltered": "一致するコンバーティブルノートはありません。",
     "runsEmpty": "転記済みの利息の実行はまだありません。",
     "columns": {
       "cumulative": "累計発生額",
@@ -776,6 +786,7 @@
   },
   "classes": {
     "empty": "株式クラスはまだありません。「新規株式クラス」で法人の最初のクラスを登録してください。",
+    "emptyFiltered": "一致する株式クラスはありません。",
     "columns": {
       "kind": "区分",
       "seniority": "優先順位",

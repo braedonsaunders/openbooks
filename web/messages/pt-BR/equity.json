@@ -212,6 +212,8 @@
     "report": "Abrir o registro de valores mobiliários",
     "emptyClasses": "Ainda não há classes de ações. Registre a primeira classe da entidade em Classes de ações.",
     "emptyHolders": "Ainda não há titulares. Emita ações ou outorgas para incluir titulares na tabela de capitalização.",
+    "emptyFilteredClasses": "Nenhuma classe de ações corresponde.",
+    "emptyFilteredHolders": "Nenhum titular corresponde.",
     "amend": "Alterar",
     "columns": {
       "class": "Classe",
@@ -259,7 +261,8 @@
     "splitAdjusted": "Preços de conversão ajustados: {classes}"
   },
   "securities": {
-    "empty": "Nenhum título corresponde.",
+    "empty": "Ainda não há títulos. Use Novo título para emitir o primeiro da entidade.",
+    "emptyFiltered": "Nenhum título corresponde.",
     "columns": {
       "number": "Número",
       "kind": "Tipo",
@@ -283,6 +286,7 @@
   },
   "stakeholders": {
     "empty": "Ainda não há titulares na tabela de capitalização.",
+    "emptyFiltered": "Nenhum titular corresponde.",
     "columns": {
       "name": "Nome",
       "kind": "Tipo",
@@ -295,6 +299,7 @@
   },
   "plans": {
     "empty": "Ainda não há planos de ações. Use Novo plano para registrar um plano e sua reserva.",
+    "emptyFiltered": "Nenhum plano de ações corresponde.",
     "changeReserve": "Alterar reserva",
     "reserveTitle": "Alterar a reserva de {code}",
     "reserveDescription": "Uma alteração de reserva produz efeito a partir de sua data. Uma redução não pode deixar o pool não alocado abaixo de zero em nenhuma data posterior.",
@@ -320,6 +325,7 @@
   },
   "rounds": {
     "empty": "Ainda não há rodadas de investimento.",
+    "emptyFiltered": "Nenhuma rodada de investimento corresponde.",
     "columns": {
       "name": "Rodada",
       "class": "Classe",
@@ -420,6 +426,7 @@
     "converts": "Converte em ordinárias",
     "takesPreference": "Exerce a preferência",
     "empty": "Nada a distribuir.",
+    "holdersEmptyFiltered": "Nenhum titular corresponde.",
     "columns": {
       "election": "Opção",
       "preference": "Preferência",
@@ -515,6 +522,7 @@
     "noRuns": "Nenhuma execução contabilizada ainda",
     "total": "Variação a contabilizar",
     "empty": "Nenhuma outorga de opções ou RSUs gera custo até esta data.",
+    "emptyFiltered": "Nenhuma outorga corresponde.",
     "runsEmpty": "Nenhuma execução de remuneração em ações contabilizada ainda.",
     "noEntry": "Nada a contabilizar",
     "columns": {
@@ -532,7 +540,8 @@
       "releaseEntry": "Lançamento de liberação"
     },
     "releases": "Liberações de ações restritas",
-    "releasesEmpty": "Nenhuma ação restrita é adquirida até esta data."
+    "releasesEmpty": "Nenhuma ação restrita é adquirida até esta data.",
+    "releasesEmptyFiltered": "Nenhuma ação restrita corresponde."
   },
   "drawer": {
     "tabs": "Seções do título",
@@ -690,6 +699,7 @@
     "replayed": "A execução de juros até {date} já foi contabilizada",
     "failed": "A execução de juros não foi contabilizada.",
     "empty": "Nenhuma nota conversível acumula juros até esta data.",
+    "emptyFiltered": "Nenhuma nota conversível corresponde.",
     "runsEmpty": "Nenhuma execução de juros contabilizada ainda.",
     "columns": {
       "cumulative": "Acumulado até a data",
@@ -776,6 +786,7 @@
   },
   "classes": {
     "empty": "Ainda não há classes de ações. Use Nova classe de ações para registrar a primeira classe da entidade.",
+    "emptyFiltered": "Nenhuma classe de ações corresponde.",
     "columns": {
       "kind": "Tipo",
       "seniority": "Prioridade",

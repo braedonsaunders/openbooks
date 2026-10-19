@@ -19,6 +19,8 @@ export function PreparedPagedTable({
   rows,
   columns,
   empty,
+  emptyFiltered,
+  filtersActive,
   leading,
   footer,
   paginationNote,
@@ -32,6 +34,8 @@ export function PreparedPagedTable({
   rows: PreparedTableRow[]
   columns: Omit<ListTableColumn<PreparedTableRow>, 'cell' | 'search'>[]
   empty: ReactNode
+  emptyFiltered?: ReactNode
+  filtersActive?: boolean
   leading?: ReactNode
   footer?: ReactNode
   paginationNote?: ReactNode
@@ -55,6 +59,8 @@ export function PreparedPagedTable({
       }))}
       rowClassName={(row) => row.className}
       empty={empty}
+      emptyFiltered={emptyFiltered}
+      filtersActive={filtersActive}
       emptyAsRow
       searchable={searchable}
       toolbarAfter={toolbarAfter}
