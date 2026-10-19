@@ -2,7 +2,7 @@
 import { sql } from "drizzle-orm";
 import { type db, type SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { add, cmp, fitsLedgerRange, mulPercent, mulRatio, neg, normalizeMoney, sum } from "../money/money.ts";
+import { add, cmp, fitsLedgerRange, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "../money/money.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
@@ -122,6 +122,31 @@ export function overlapDayCount(aStart: string, aEnd: string, bStart: string, bE
   const start = maxDate(aStart, bStart);
   const end = minDate(aEnd, bEnd);
   return end < start ? 0 : inclusiveCalendarDays(start, end);
+}
+/** Allocate an invoiced estimate to the calendar days owned by one CAM pool. */
+export function prorateCamEstimateByDays(
+  amount: string,
+  periodStartsOn: string,
+  periodEndsOn: string,
+  attributedDates: readonly string[],
+): string {
+  const totalDays = BigInt(inclusiveCalendarDays(periodStartsOn, periodEndsOn));
+  if (totalDays <= 0n) throw new PropertyManagementError("CAM estimate period must contain at least one day");
+  const amountUnits = toUnits(amount);
+  if (amountUnits < 0n) throw new PropertyManagementError("CAM estimates cannot be negative");
+  const dailyUnits = amountUnits / totalDays;
+  const residualUnits = amountUnits % totalDays;
+  let allocatedUnits = dailyUnits * BigInt(attributedDates.length);
+  const seenDates = new Set<string>();
+  for (const date of attributedDates) {
+    const dayOffset = BigInt(inclusiveCalendarDays(periodStartsOn, date) - 1);
+    if (dayOffset < 0n || dayOffset >= totalDays || seenDates.has(date)) {
+      throw new PropertyManagementError("CAM estimate allocation dates must be unique dates within the schedule period");
+    }
+    if (dayOffset < residualUnits) allocatedUnits++;
+    seenDates.add(date);
+  }
+  return fromUnits(allocatedUnits);
 }
 export interface SchedulePeriod {
   periodStartsOn: string;

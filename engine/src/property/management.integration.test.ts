@@ -7,6 +7,7 @@ import { reverseProjectGlEntry } from "../projects/recognition.ts";
 import {
   PropertyManagementError,
   billCamReconciliation,
+  billDueLeaseCharges,
   cancelCamPool,
   createCamPool,
   finalizeCamPool,
@@ -91,10 +92,11 @@ async function seedCamProperty(): Promise<CamFixture> {
 async function postLedgerExpense(
   fixture: CamFixture,
   amount: string,
-  options: { postingDate?: string; periodId?: string } = {},
+  options: { postingDate?: string; periodId?: string; accountId?: string } = {},
 ): Promise<void> {
   const postingDate = options.postingDate ?? "2026-07-15";
   const periodId = options.periodId ?? fixture.org.periodId;
+  const accountId = options.accountId ?? fixture.ledgerAccount;
   const entryId = randomUUID();
   await db.execute(sql`
     insert into journal_entries
@@ -105,7 +107,7 @@ async function postLedgerExpense(
   await db.execute(sql`
     insert into journal_lines
       (org_id, entry_id, line_number, account_id, subsidiary_id, location_id, amount, currency, txn_amount, fx_rate)
-    values (${fixture.org.orgId}, ${entryId}, 1, ${fixture.ledgerAccount}, ${fixture.org.subsidiaryId},
+    values (${fixture.org.orgId}, ${entryId}, 1, ${accountId}, ${fixture.org.subsidiaryId},
             ${fixture.org.locationId}, ${amount}, 'CAD', ${amount}, 1),
            (${fixture.org.orgId}, ${entryId}, 2, ${fixture.org.accounts.bank}, ${fixture.org.subsidiaryId},
             null, ${`-${amount}`}, 'CAD', ${`-${amount}`}, 1)`);
@@ -796,6 +798,69 @@ test("rentable-area CAM bills vacancy to occupied tenants only when the pool say
       (error: unknown) => error instanceof PropertyManagementError && /Only a rentable-area CAM pool can leave the vacant share/u.test(error.message));
     await assert.rejects(() => createCamPool({ ...inputs, name: "FY26 EQUAL", allocationBasis: "equal", vacancyTreatment: "total_rentable_area" }),
       (error: unknown) => error instanceof PropertyManagementError && /choose the Rentable area allocation basis/u.test(error.message));
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
+
+test("CAM estimates prorate across pool boundaries and are attributed once to overlapping pools", { skip: !DB }, async () => {
+  const fixture = await seedCamProperty();
+  try {
+    const { org } = fixture;
+    const actor = await createScratchUser(org.orgId, "CAM estimate operator", "admin");
+    const lease = (await db.execute<{ id: string }>(sql`
+      select id from property_leases where org_id=${org.orgId} and property_id=${fixture.propertyId}`)).rows[0]!;
+    await db.execute(sql`update property_leases set starts_on='2026-01-01',ends_on='2026-02-28',auto_invoice=true
+      where org_id=${org.orgId} and id=${lease.id}`);
+    const chargeId = randomUUID();
+    const scheduleId = randomUUID();
+    await db.execute(sql`insert into lease_charges
+      (id,org_id,lease_id,charge_type,description,amount,frequency,effective_from,income_account_id,created_by,updated_by)
+      values(${chargeId},${org.orgId},${lease.id},'cam','Quarterly CAM estimate',3100,'quarterly','2026-01-15',${org.accounts.revenue},${actor},${actor})`);
+    await db.execute(sql`insert into lease_schedule_lines
+      (id,org_id,lease_id,charge_id,period_starts_on,period_ends_on,due_on,amount,status,created_by,updated_by)
+      values(${scheduleId},${org.orgId},${lease.id},${chargeId},'2026-01-15','2026-02-14','2026-01-15',3100,'scheduled',${actor},${actor})`);
+    assert.equal((await billDueLeaseCharges(org.orgId, actor, null, "2026-01-15", lease.id)).billed, 1);
+
+    const january = await createCamPool({
+      orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null, propertyId: fixture.propertyId,
+      name: "FY26 CAM ESTIMATE JAN A", fiscalYear: 2026, periodStartsOn: "2026-01-01", periodEndsOn: "2026-01-31",
+      allocationBasis: "equal", budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
+    });
+    const januaryDisjoint = await createCamPool({
+      orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null, propertyId: fixture.propertyId,
+      name: "FY26 CAM ESTIMATE JAN B", fiscalYear: 2026, periodStartsOn: "2026-01-01", periodEndsOn: "2026-01-31",
+      allocationBasis: "equal", budgetAmount: "300", expenseAccountIds: [fixture.disjointAccount],
+    });
+    const february = await createCamPool({
+      orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null, propertyId: fixture.propertyId,
+      name: "FY26 CAM ESTIMATE FEB", fiscalYear: 2026, periodStartsOn: "2026-02-01", periodEndsOn: "2026-02-28",
+      allocationBasis: "equal", budgetAmount: "800", expenseAccountIds: [fixture.ledgerAccount],
+    });
+    const periods = (await db.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
+      select id,starts_on::text,ends_on::text from accounting_periods where org_id=${org.orgId}
+        and starts_on<='2026-02-28' and ends_on>='2026-01-01' order by starts_on`)).rows;
+    assert.ok(periods.some((period) => period.starts_on <= "2026-01-20" && period.ends_on >= "2026-01-20"));
+    assert.ok(periods.some((period) => period.starts_on <= "2026-02-10" && period.ends_on >= "2026-02-10"));
+    const januaryPeriod = periods.find((period) => period.starts_on <= "2026-01-20" && period.ends_on >= "2026-01-20")!;
+    const februaryPeriod = periods.find((period) => period.starts_on <= "2026-02-10" && period.ends_on >= "2026-02-10")!;
+    await postLedgerExpense(fixture, "1000", { postingDate: "2026-01-20", periodId: januaryPeriod.id });
+    await postLedgerExpense(fixture, "300", { postingDate: "2026-01-20", periodId: januaryPeriod.id, accountId: fixture.disjointAccount });
+    await postLedgerExpense(fixture, "800", { postingDate: "2026-02-10", periodId: februaryPeriod.id });
+    for (const period of periods) await closeGlModule(fixture, actor, period.id);
+
+    await finalizeCamPool(org.orgId, actor, null, january.id);
+    await finalizeCamPool(org.orgId, actor, null, januaryDisjoint.id);
+    await finalizeCamPool(org.orgId, actor, null, february.id);
+    const billed = async (poolId: string) => (await db.execute<{ amount: string }>(sql`
+      select billed_estimate::text as amount from cam_allocations where org_id=${org.orgId} and pool_id=${poolId}`)).rows[0]!.amount;
+    assert.equal(await billed(january.id), "1700.0000");
+    assert.equal(await billed(januaryDisjoint.id), "0.0000");
+    assert.equal(await billed(february.id), "1400.0000");
+    const total = (await db.execute<{ amount: string }>(sql`
+      select sum(billed_estimate)::text as amount from cam_allocations where org_id=${org.orgId}
+        and pool_id in (${january.id},${januaryDisjoint.id},${february.id})`)).rows[0]!.amount;
+    assert.equal(total, "3100.0000");
   } finally {
     await dropScratchOrg(fixture.org.orgId);
   }

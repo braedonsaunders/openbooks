@@ -9,7 +9,7 @@ import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { arePeriodModulesOpen, canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { add, cmp, fromUnits, mulPercent, mulRatio, neg, sum, toUnits } from "../money/money.ts";
-import { assertEnabled, assertLockedSubsidiaryInScope, audit, CAM_VACANCY_TREATMENTS, exactMoney, lockPropertyInScope, PropertyManagementError, validDate, type CamAllocationDbRow, type CamLeaseRow, type CamPoolDbRow, type CamVacancyTreatment } from "./management-foundation.ts";
+import { assertEnabled, assertLockedSubsidiaryInScope, audit, CAM_VACANCY_TREATMENTS, exactMoney, lockPropertyInScope, prorateCamEstimateByDays, PropertyManagementError, validDate, type CamAllocationDbRow, type CamLeaseRow, type CamPoolDbRow, type CamVacancyTreatment } from "./management-foundation.ts";
 import { overlapDayCount } from "./management-foundation.ts";
 import { propertyBillingGeneration } from "./rent-billing.ts";
 
@@ -294,23 +294,77 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
           and coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on})>=${pool.period_starts_on}
           and l.unit_id is not null)
       order by u.id for share`);
-    const leases = (await tx.execute<CamLeaseRow>(sql`select l.id,l.lease_number,l.cam_share_percent,u.rentable_area,
+    const leaseResult = (await tx.execute<{
+      id: string; lease_number: string; cam_share_percent: string | null; rentable_area: string | null;
+      overlap_start: string; overlap_end: string;
+    }>(sql`select l.id,l.lease_number,l.cam_share_percent,u.rentable_area,
       greatest(l.starts_on,coalesce(l.move_in_on,l.starts_on),${pool.period_starts_on}::date)::text as overlap_start,
-      least(coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on}::date),${pool.period_ends_on}::date)::text as overlap_end,
-      coalesce((select sum(s.amount) from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
-        join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id and d.status<>'voided'
-        where s.org_id=l.org_id and s.lease_id=l.id and c.charge_type='cam' and s.status='invoiced'
-          and s.period_starts_on<=${pool.period_ends_on} and s.period_ends_on>=${pool.period_starts_on}),0)::text as billed
+      least(coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on}::date),${pool.period_ends_on}::date)::text as overlap_end
       from property_leases l left join property_units u on u.id=l.unit_id and u.org_id=l.org_id where l.org_id=${orgId} and l.property_id=${pool.property_id}
         and l.cam_method='pro_rata' and l.status not in ('draft','cancelled') and l.starts_on<=${pool.period_ends_on}
         and coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on})>=${pool.period_starts_on}
       order by l.id`));
-    if (!leases.rows.length) throw new PropertyManagementError("No pro-rata CAM leases overlap this period");
+    if (!leaseResult.rows.length) throw new PropertyManagementError("No pro-rata CAM leases overlap this period");
+    // Each estimate day belongs to the first finalized pool covering that
+    // day. Pending pools do not reserve credits, and a later pool cannot
+    // take an estimate away from a finalized pool.
+    const estimateLines = (await tx.execute<{
+      id: string; lease_id: string; amount: string; period_starts_on: string; period_ends_on: string;
+      total_days: number; attributed_dates: string[];
+    }>(sql`
+      select s.id,s.lease_id,s.amount::text,s.period_starts_on::text,s.period_ends_on::text,
+        (s.period_ends_on-s.period_starts_on+1)::int as total_days,
+        coalesce(array_agg(estimate_day.day::date::text order by estimate_day.day) filter (where not exists (
+          select 1 from cam_pools owner
+           where owner.org_id=target_pool.org_id and owner.property_id=target_pool.property_id
+             and owner.id<>target_pool.id and owner.status in ('finalized','invoiced')
+             and owner.period_starts_on<=estimate_day.day::date and owner.period_ends_on>=estimate_day.day::date
+        )),array[]::text[]) as attributed_dates
+      from cam_pools target_pool
+      join lease_schedule_lines s on s.org_id=target_pool.org_id
+      join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
+      join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id and d.status<>'voided'
+      join property_leases l on l.id=s.lease_id and l.org_id=s.org_id and l.property_id=target_pool.property_id
+      cross join lateral generate_series(
+        greatest(s.period_starts_on,target_pool.period_starts_on)::timestamp,
+        least(s.period_ends_on,target_pool.period_ends_on)::timestamp,
+        interval '1 day'
+      ) estimate_day(day)
+      where target_pool.org_id=${orgId} and target_pool.id=${poolId}
+        and c.charge_type='cam' and s.status='invoiced'
+        and s.period_starts_on<=target_pool.period_ends_on and s.period_ends_on>=target_pool.period_starts_on
+        and l.cam_method='pro_rata' and l.status not in ('draft','cancelled')
+        and l.starts_on<=target_pool.period_ends_on
+        and coalesce(l.move_out_on,l.ends_on,target_pool.period_ends_on)>=target_pool.period_starts_on
+      group by s.id,target_pool.id
+      order by s.lease_id,s.id`));
+    const billedByLease = new Map<string, string>();
+    const estimateSourcesByLease = new Map<string, Array<Record<string, unknown>>>();
+    for (const line of estimateLines.rows) {
+      if (line.attributed_dates.length === 0) continue;
+      const billed = prorateCamEstimateByDays(line.amount, line.period_starts_on, line.period_ends_on, line.attributed_dates);
+      billedByLease.set(line.lease_id, add(billedByLease.get(line.lease_id) ?? "0", billed));
+      const evidence = estimateSourcesByLease.get(line.lease_id) ?? [];
+      evidence.push({
+        scheduleLineId: line.id,
+        amount: line.amount,
+        periodStartsOn: line.period_starts_on,
+        periodEndsOn: line.period_ends_on,
+        totalDays: line.total_days,
+        attributedDates: line.attributed_dates,
+        billedEstimate: billed,
+      });
+      estimateSourcesByLease.set(line.lease_id, evidence);
+    }
+    const leases: CamLeaseRow[] = leaseResult.rows.map((lease) => ({
+      ...lease,
+      billed: billedByLease.get(lease.id) ?? "0.0000",
+    }));
     const poolDays = inclusiveCalendarDays(pool.period_starts_on, pool.period_ends_on);
     // Lease-id order everywhere below: the allocation, the rounding residual,
     // and the fingerprint are pure functions of the sources, never of the
     // physical row order the planner happens to return.
-    const measured = leases.rows.map((lease) => {
+    const measured = leases.map((lease) => {
       const days = overlapDayCount(lease.overlap_start, lease.overlap_end, pool.period_starts_on, pool.period_ends_on);
       const basis = pool.allocation_basis === "equal" ? 10_000n
         : pool.allocation_basis === "rentable_area" ? toUnits(lease.rentable_area ?? "0")
@@ -402,7 +456,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
       throw new PropertyManagementError("CAM source ledgers changed while finalizing; resolve the entries and retry");
     }
     const finalizeSourceFingerprint = createHash("sha256").update(canonicalJson({
-      kind: "cam_finalize.v4",
+      kind: "cam_finalize.v5",
       poolId,
       propertyId: pool.property_id,
       bookId,
@@ -422,7 +476,8 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
       // Each share is bound to its lease (v2); a detached share list could
       // match while the residual sat on a different tenant.
       sources: weighted.map((lease, index) => ({
-        leaseId: lease.id, days: lease.days, weight: lease.weight.toString(), billed: lease.billed, share: shares[index]!,
+        leaseId: lease.id, days: lease.days, weight: lease.weight.toString(), billed: lease.billed,
+        billedEstimateLines: estimateSourcesByLease.get(lease.id) ?? [], share: shares[index]!,
       })),
     })).digest("hex");
     await tx.execute(sql`delete from cam_allocations where org_id=${orgId} and pool_id=${poolId}`);
