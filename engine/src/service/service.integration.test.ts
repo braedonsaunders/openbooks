@@ -300,7 +300,7 @@ test("rejecting a completion removes submitted labor from a later invoice", enab
 
   const invoice = await invoiceServiceWork({ ...as(f, f.dispatcher), jobId: job.id, visitId });
   const laborLine = (await withBypassContext(() => db.execute<{ quantity: string; amount: string }>(sql`
-    select quantity::text, amount::text from document_lines where org_id = ${f.org.orgId} and document_id = ${invoice.invoiceId} and item_id = ${f.laborItem}`))).rows[0]!;
+    select quantity::numeric(20, 4)::text, amount::text from document_lines where org_id = ${f.org.orgId} and document_id = ${invoice.invoiceId} and item_id = ${f.laborItem}`))).rows[0]!;
   assert.deepEqual(laborLine, { quantity: "3.0000", amount: "240.0000" });
 }));
 
