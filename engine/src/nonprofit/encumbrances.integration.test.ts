@@ -297,3 +297,63 @@ test("commitments and budget control preserve posting policy and derived balance
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("hard budget control includes later actuals when an expense is backdated", { skip: !DB }, async () => {
+  const scratch = await withBypass(() => createScratchOrg());
+  const org = scratch as ScratchOrg & { fundId: string };
+  clearBalancingLegProviders();
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Budget Controller", "admin"));
+    await withOrgContext(org.orgId, async () => {
+      const changed = await db.execute<{ id: string }>(sql`
+        update orgs set settings = jsonb_set(
+          coalesce(settings, '{}'::jsonb), '{features}',
+          coalesce(settings->'features', '{}'::jsonb) ||
+            '{"nonprofit":true,"fundAccounting":true,"budgets":true,"encumbrances":true}'::jsonb,
+          true
+        ) where id = ${org.orgId} returning id
+      `);
+      assert.equal(changed.rows.length, 1);
+    });
+    const fund = await provisionFundAccounting({
+      orgId: org.orgId,
+      defaultFund: { code: "OPERATING", name: "Operating Fund" },
+      classifications: { OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" } },
+      actorId,
+    });
+    org.fundId = fund.defaultFundId;
+    await seedBudget(org, actorId, "1000.0000");
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update funds set budgetary_control = 'hard' where org_id = ${org.orgId} and id = ${org.fundId}
+    `));
+    const periods = await withBypassContext(async () => {
+      const calendar = (await db.execute<{ id: string }>(sql`
+        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}
+      `)).rows[0]!.id;
+      const marchId = randomUUID();
+      const juneId = randomUUID();
+      await db.execute(sql`
+        insert into accounting_periods
+          (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values
+          (${marchId}, ${org.orgId}, 2026, 3, '2026-03', '2026-03-01', '2026-03-31', false, ${calendar}),
+          (${juneId}, ${org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${calendar})
+      `);
+      return { marchId, juneId };
+    });
+    installEngineSeams();
+    registerBalancingLegProvider("budgetary-control", budgetaryControlProvider);
+
+    await tenantPost({ ...posting(org, "LATER-DATED-BUDGET-ACTUAL", "900.0000"),
+      postingDate: "2026-06-15", periodId: periods.juneId });
+    await assert.rejects(
+      tenantPost({ ...posting(org, "BACKDATED-BUDGET-ACTUAL", "500.0000"),
+        postingDate: "2026-03-01", periodId: periods.marchId }),
+      (error) => error instanceof NonprofitPostingError && error.code === "budget_exceeded",
+      "a backdated expense cannot consume appropriation already used later in its fiscal year",
+    );
+  } finally {
+    clearBalancingLegProviders();
+    await dropScratchOrg(org.orgId);
+  }
+});

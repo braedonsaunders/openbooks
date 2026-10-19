@@ -587,13 +587,12 @@ async function cellFiguresForScenario(input: {
   runner: SqlExecutor;
   orgId: string;
   bookId: string;
-  postingDate: string;
   scenario: Scenario;
   cell: Cell;
   sourceDocumentId?: string | null;
   pendingAmount?: Money;
 }): Promise<BudgetCellFigures | null> {
-  const { runner, orgId, bookId, postingDate, scenario, cell } = input;
+  const { runner, orgId, bookId, scenario, cell } = input;
   const labels = (await runner.execute<{
     accountNumber: string;
     accountName: string;
@@ -642,7 +641,6 @@ async function cellFiguresForScenario(input: {
       join accounting_periods p on p.org_id = je.org_id and p.id = je.period_id
      where jl.org_id = ${orgId} and je.book_id = ${bookId}
        and je.status in ('posted', 'reversed') and p.fiscal_year = ${scenario.fiscalYear}
-       and je.posting_date <= ${postingDate}::date
        and jl.account_id = ${cell.accountId}
        and jl.subsidiary_id = ${cell.subsidiaryId}
        and jl.department_id is not distinct from ${cell.departmentId}::uuid
@@ -746,7 +744,6 @@ export async function readBudgetCellFigures(
     runner,
     orgId: input.orgId,
     bookId,
-    postingDate: input.postingDate,
     scenario,
     cell,
   });
@@ -774,7 +771,6 @@ export const budgetaryControlProvider: BalancingLegProvider = async (
       runner,
       orgId: ctx.orgId,
       bookId: posting.bookId,
-      postingDate: ctx.postingDate,
       scenario: posting.scenario,
       cell: group.cell,
       sourceDocumentId: ctx.sourceDocumentId,
@@ -842,7 +838,6 @@ export async function budgetaryControlWarnings(
       runner,
       orgId,
       bookId: posting.bookId,
-      postingDate: header.postingDate,
       scenario: posting.scenario,
       cell: group.cell,
       sourceDocumentId: header.sourceDocumentId,
