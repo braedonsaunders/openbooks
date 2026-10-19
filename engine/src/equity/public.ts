@@ -42,6 +42,7 @@ export { issueSecurity, type IssueSecurityInput, type ValuationInput } from "./s
 export { recordSecurityEvent, governedEventAction, type RecordEventInput, type RecordEventResult } from "./events.ts";
 export { EQUITY_ACTIONS, locateEquityAction, pendingEquityActions, withdrawEquityAction, type EquityAction, type GovernedStatus, type PendingRequest, type WithdrawnEquityAction } from "./governance.ts";
 export { recordEquityAccountPolicy, type RecordAccountPolicyInput } from "./account-policy.ts";
+export { listRestrictedReleases, type RestrictedReleaseRow } from "./release-history.ts";
 export { syncPositionLedger } from "./positions.ts";
 export { electMfnTerms, mfnCandidates, reverseMfnElection, type ElectMfnInput, type MfnCandidate, type MfnTerm, type ReverseMfnInput } from "./mfn.ts";
 export {
