@@ -120,16 +120,16 @@ async function unpostedCounts(orgId: string, scope: CommerceCloseScope): Promise
   const rows = (
     await db.execute<UnpostedRow>(sql`
       select
-        ((select count(*) from channel_orders o
+        (select count(*)::text from channel_orders o
            join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
            where o.org_id = ${orgId} and o.posting_status = 'pending'
              and (o.ordered_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
-             and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])))::text as pending_orders,
-        ((select count(*) from channel_order_events e
+             and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) as pending_orders,
+        (select count(*)::text from channel_order_events e
            join sales_channels c on c.org_id = e.org_id and c.id = e.channel_id
            where e.org_id = ${orgId} and e.posting_status = 'pending'
              and (e.occurred_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
-             and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])))::text as pending_events`)
+             and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) as pending_events`)
   ).rows;
   return rows[0] ?? { pending_orders: "0", pending_events: "0" };
 }
