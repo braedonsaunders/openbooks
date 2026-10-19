@@ -3,11 +3,8 @@ import test, { type TestContext } from 'node:test'
 import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
 import { stubModules } from '../../../../testing/stub-modules'
 
-// IN9: stock-count action retries duplicated counts. countAction minted a
-// new UUID per call, so a lost create response plus a retry created a SECOND
-// count — and record/submit/post lost their retry identity the same way.
-// Every count action now carries one stable per-attempt key: reused on
-// retry, rotated after success or an input change.
+// Stock-count commands retain one idempotency key for an unchanged retry and
+// rotate it after a successful command or an input change.
 
 await bootJsdomEnvironment({ url: 'http://localhost:4800/inventory?inventoryView=counts' })
 
@@ -21,6 +18,8 @@ const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   postBodies: [] as Array<Record<string, unknown>>,
   postBehavior: [] as Array<'fail' | 'ok' | Response>,
+  detailBehavior: [] as Array<'fail' | 'ok'>,
+  detailCalls: 0,
 }
 Object.assign(globalThis, {
   __countRetryToasts: script.toasts,
@@ -97,6 +96,9 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     counts: [],
     totalCount: 0,
     nextCursor: null,
+    page: 1,
+    perPage: 25,
+    currentParams: { inventoryView: 'counts' },
     locations: [{ id: LOC_MAIN, name: 'Main' }],
     subsidiaries: [{ id: 'sub-1', name: 'Sub' }],
     items: [{ id: ITEM_WIDGET, code: 'W-1', name: 'Widget' }],
@@ -111,7 +113,7 @@ function baseProps(overrides: Record<string, unknown> = {}) {
   }
 }
 
-async function mountCounts(t: TestContext, props: Record<string, unknown>): Promise<void> {
+async function mountCounts(t: TestContext, props: Record<string, unknown>, detailBehavior: Array<'fail' | 'ok'> = []): Promise<void> {
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: unknown }) => {
     const url = String(input)
@@ -131,7 +133,12 @@ async function mountCounts(t: TestContext, props: Record<string, unknown>): Prom
       // that same id, never a second count.
       return Response.json({ ok: true, replayed: script.postBodies.length > 1, id: COUNT_ID })
     }
-    if (url.includes('counts?id=')) return Response.json(detailResponse)
+    if (url.includes('counts?id=')) {
+      script.detailCalls += 1
+      const behavior = script.detailBehavior.shift() ?? 'ok'
+      if (behavior === 'fail') return Response.json({ error: 'Temporary count detail refusal' }, { status: 503 })
+      return Response.json(detailResponse)
+    }
     if (url.includes('/api/inventory/tracking-options')) return Response.json({ tracking: 'none', lots: [], serials: [] })
     return Response.json({ counts: [], totalCount: 0, nextCursor: null })
   }) as typeof fetch
@@ -148,6 +155,8 @@ async function mountCounts(t: TestContext, props: Record<string, unknown>): Prom
   script.toasts.length = 0
   script.postBodies.length = 0
   script.postBehavior.length = 0
+  script.detailBehavior = [...detailBehavior]
+  script.detailCalls = 0
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -213,6 +222,17 @@ async function fillCreate(): Promise<void> {
   await pickOption('Item', 'Widget')
   await pickOption('Stock location', 'BIN-1')
 }
+
+test('a failed count detail keeps its URL drawer open and retries in the same shell', async (t) => {
+  await mountCounts(t, baseProps({ createRequested: false, selectedCountId: COUNT_ID }), ['fail', 'ok'])
+  assert.match(document.body.textContent ?? '', /Temporary count detail refusal/)
+  assert.equal(script.detailCalls, 1)
+
+  await clickButtonNamed('Retry')
+  assert.equal(script.detailCalls, 2)
+  assert.match(document.body.textContent ?? '', /W-1/)
+  assert.doesNotMatch(document.body.textContent ?? '', /Temporary count detail refusal/)
+})
 
 test('a lost create response retried with unchanged fields returns the original count', async (t) => {
   await mountCounts(t, baseProps())

@@ -367,6 +367,8 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'intercompany-unpaired-actions': 'records',
   'internal-billing-drawer': 'records',
   'inventory-action-drawer': 'commerce',
+  'inventory-header-actions': 'commerce',
+  'inventory-workspace': 'commerce',
   'invite-user': 'platform',
   'invoicing-setup-workspace': 'setup',
   'item-drawer': 'commerce',

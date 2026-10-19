@@ -359,6 +359,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'intercompany-unpaired-actions',
   'internal-billing-drawer',
   'inventory-action-drawer',
+  'inventory-header-actions',
+  'inventory-workspace',
   'invite-user',
   'invoicing-setup-workspace',
   'item-drawer',

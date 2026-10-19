@@ -337,6 +337,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'intercompany-unpaired-actions': { props: ['actions'] },
   'internal-billing-drawer': { props: ['drawer'] },
   'inventory-action-drawer': { props: ['accounts', 'items', 'stockLocations', 'subsidiaries'] },
+  'inventory-header-actions': { props: ['newCountLabel', 'setupNewLabel', 'workspace'] },
+  'inventory-workspace': { props: ['workspace'] },
   'invite-user': { props: ['allRoles'] },
   'invoicing-setup-workspace': { props: [], open: true },
   'item-drawer': { props: ['drawer', 'sp'] },

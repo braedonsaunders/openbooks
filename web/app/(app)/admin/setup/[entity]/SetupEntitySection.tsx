@@ -175,6 +175,7 @@ export async function SetupEntitySection({
   searchParams: sp,
   basePath,
   canManage,
+  canViewDetails = false,
   allowedSubsidiaryIds = null,
   hideHeader = false,
   rowParam = 'row',
@@ -213,6 +214,8 @@ export async function SetupEntitySection({
   searchParams: Record<string, string | string[] | undefined>
   basePath: string
   canManage: boolean
+  /** Open existing records in a locked drawer for a read-only host surface. */
+  canViewDetails?: boolean
   // Subsidiary-scoped callers only see their vendors in ref pickers (NULL
   // subsidiary stays org-wide visible) — without this the remittance-vendor
   // listbox cannot scope its options.
@@ -266,6 +269,7 @@ export async function SetupEntitySection({
   const canWriteEntity = commandPermission
     ? Boolean(currentAuthz && can(currentAuthz, commandPermission))
     : canManage && !entity.readOnly && (!entity.writePermission || Boolean(currentAuthz && can(currentAuthz, entity.writePermission)))
+  const canViewRows = canWriteEntity || (canManage && entity.readOnly) || canViewDetails
   const t = await getTranslations('admin.setup')
   const [locale, timeZone] = await Promise.all([getLocale(), getTimeZone()])
   const rawRow = sp[rowParam]
@@ -365,7 +369,7 @@ export async function SetupEntitySection({
 
   const open = openRow
     ? openRow === 'new'
-      ? entity.allowCreate !== false && !entity.readOnly ? { creating: true, row: null } : null
+      ? canWriteEntity && entity.allowCreate !== false && !entity.readOnly ? { creating: true, row: null } : null
       : await (async () => {
           const selected = await db.execute(sql`
             select ${setupReadProjection(entity)} from ${setupReadSource(entity)}
@@ -578,7 +582,7 @@ export async function SetupEntitySection({
             cell: (row) => {
               const content = renderColumn?.(column, row) ??
                 renderCell(column, row, refLabels, t, locale, currencyMinorUnits, timeZone)
-              return (canWriteEntity || (canManage && entity.readOnly)) && (index === 0 || entity.key === 'item-rate-books') ? (
+              return canViewRows && (index === 0 || entity.key === 'item-rate-books') ? (
                 <Link href={mergeHref(basePath, sp, { [rowParam]: String(row[idColumn]) })}
                   className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                   {content}
@@ -623,10 +627,10 @@ export async function SetupEntitySection({
             ),
           }}
         />
-      ) : open && (canWriteEntity || (canManage && entity.readOnly && !open.creating)) ? (
+      ) : open && (canWriteEntity || (canManage && entity.readOnly && !open.creating) || (canViewDetails && !open.creating)) ? (
         <SetupDrawer
           key={`${entity.key}:${String(open.row?.[idColumn] ?? 'new')}`}
-          entity={drawerEntity}
+          entity={!canWriteEntity && canViewDetails ? { ...drawerEntity, readOnly: true } : drawerEntity}
           navigationPrefix={paramPrefix}
           row={open.row}
           members={[]}

@@ -136,7 +136,54 @@ export function BomWorkspace({
       {canManage && (activeKey === 'new' || active) ? (
         <BomDrawer key={activeKey} assembly={active} assemblies={assemblies} items={items} />
       ) : null}
+      {!canManage && active ? (
+        <BomReadOnlyDrawer assembly={active} items={items} />
+      ) : null}
     </>
+  )
+}
+
+function BomReadOnlyDrawer({ assembly, items }: { assembly: BomAssembly; items: ItemOption[] }) {
+  const tSetup = useTranslations('admin.setup')
+  const itemNames = new Map(items.map((item) => [item.id, itemLabel(item)]))
+  const columns: PagedColumn<BomComponent>[] = [
+    {
+      key: 'component',
+      header: tSetup('fields.componentItemId'),
+      cell: (line) => itemNames.get(line.componentItemId) ?? line.componentItemId,
+      search: (line) => itemNames.get(line.componentItemId) ?? line.componentItemId,
+    },
+    {
+      key: 'quantity',
+      header: tSetup('fields.quantityPer'),
+      align: 'right',
+      cell: (line) => <span className="tabular-nums">{line.quantityPer}</span>,
+      search: (line) => line.quantityPer,
+    },
+  ]
+
+  return (
+    <UrlDrawer
+      open
+      closeHref="/inventory?inventoryView=bom"
+      size="xl"
+      title={itemLabel({ id: assembly.assemblyItemId, code: assembly.assemblyCode, name: assembly.assemblyName })}
+      description={tSetup('entities.bom-components.description')}
+    >
+      <div className="space-y-4 p-1">
+        <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+          {tSetup('fields.assemblyItemId')}: {itemLabel({ id: assembly.assemblyItemId, code: assembly.assemblyCode, name: assembly.assemblyName })}
+        </p>
+        <PagedTable
+          rows={assembly.components}
+          columns={columns}
+          searchable
+          empty={tSetup('empty')}
+          rowKey={(line) => line.id}
+          emptyAsRow
+        />
+      </div>
+    </UrlDrawer>
   )
 }
 

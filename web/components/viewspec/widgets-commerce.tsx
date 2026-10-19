@@ -46,6 +46,7 @@ import { ApHeaderActions } from '../../app/(app)/ap/sections'
 import { CollectionsShell } from '../../app/(app)/collections/sections'
 import { ItemDrawer } from '../../app/(app)/items/ItemDrawer'
 import { ItemDrawerSlot } from '../../app/(app)/items/ItemDrawerSlot'
+import { InventoryPageHeaderActions, InventoryWorkspace } from '../../app/(app)/inventory/InventoryWorkspace'
 import { buildListDrawerHref } from '../../lib/list-params'
 import Link from 'next/link'
 import type { ChannelOrderDrawerData } from '../../app/(app)/channels/order-detail'
@@ -270,6 +271,12 @@ export const COMMERCE_WIDGETS = {
       accounts={(props.accounts as ComponentProps<typeof InventoryActionDrawer>['accounts']) ?? []}
       subsidiaries={(props.subsidiaries as ComponentProps<typeof InventoryActionDrawer>['subsidiaries']) ?? []}
     />
+  ),
+  'inventory-header-actions': (props) => (
+    <InventoryPageHeaderActions {...(props as unknown as ComponentProps<typeof InventoryPageHeaderActions>)} />
+  ),
+  'inventory-workspace': (props) => (
+    <InventoryWorkspace workspace={props.workspace as ComponentProps<typeof InventoryWorkspace>['workspace']} />
   ),
 
   /* --- expense reports ------------------------------------------------------ */

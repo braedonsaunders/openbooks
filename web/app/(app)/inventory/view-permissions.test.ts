@@ -28,6 +28,7 @@ stubModules({
     "../../../components/entity-list-view": "export function EntityListView() { return null }",
     "../../../components/page-layout": "export function ListPageLayout(p) { return globalThis.React.createElement('main', null, p.header, p.children) }",
     "../../../components/module-home/ui": "export function ModuleHomeTabs() { return null }",
+    "../../../components/viewspec/module-view": "export async function ModuleView(p) { return null }",
     "../admin/setup/[entity]/SetupEntitySection": "export function SetupEntitySection() { return null }",
     "./BomWorkspace": "export function BomWorkspace() { return null } export function NewBomButton() { return null }",
     "./counts/CountsList": "export function CountsList(p) { globalThis.__inventoryViewPermissions.pickerSubsidiaries = p.subsidiaries; return null } export function NewCountButton() { return null }",
@@ -42,16 +43,17 @@ stubModules({
   },
 });
 
-const { loadInventory } = await import("./view.ts");
-
 const React = await import("react");
 Object.assign(globalThis, { React });
-const { renderToStaticMarkup } = await import("react-dom/server");
 const { default: InventoryPage } = await import("./page.tsx");
+
+async function inventoryPage(searchParams: Record<string, string | string[] | undefined> = {}) {
+  return await InventoryPage({ searchParams: Promise.resolve(searchParams) }) as unknown as { props: { data: { workspace: Record<string, unknown> } } }
+}
 
 async function showsNewMovement(grants: string[]): Promise<unknown> {
   state.grants = new Set(grants);
-  return (await loadInventory({})).showNewMovement;
+  return (await inventoryPage()).props.data.workspace.canPostMovement;
 }
 
 test("the movement editor offers posting and reversal only under their respective grants", async () => {
@@ -65,15 +67,30 @@ test("the movement editor offers posting and reversal only under their respectiv
 });
 
 test("the landed-cost reversal action is visible only with the reversal grant", async () => {
-  async function hasReversalAction(grants: string[]): Promise<boolean> {
+  async function hasReversalGrant(grants: string[]): Promise<boolean> {
     state.grants = new Set(grants);
-    const page = await InventoryPage({ searchParams: Promise.resolve({}) });
-    return renderToStaticMarkup(page).includes("REVERSAL_ACTION");
+    return (await inventoryPage()).props.data.workspace.canReverse === true;
   }
 
-  assert.equal(await hasReversalAction(["items.read", "items.reverse"]), true);
-  assert.equal(await hasReversalAction(["items.read"]), false);
-  state.allowed = new Set(["A"]); state.subsidiaries = [{ id: "A", name: "Visible" }, { id: "B", name: "Hidden" }];
-  renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ inventoryView: "counts" }) })); assert.deepEqual(state.pickerSubsidiaries.map(({ id }) => id), ["A"]);
+  assert.equal(await hasReversalGrant(["items.read", "items.reverse"]), true);
+  assert.equal(await hasReversalGrant(["items.read"]), false);
+})
+
+test("items readers can open the locations and BOM views while setup edits stay gated", async () => {
+  state.grants = new Set(["items.read"])
+  for (const view of ["locations", "bom"]) {
+    const { workspace } = (await inventoryPage({ inventoryView: view })).props.data
+    assert.equal(workspace.view, view)
+    assert.equal(workspace.canSetup, false)
+    assert.ok((workspace.tabs as Array<{ href: string }>).some((tab) => tab.href.endsWith(`inventoryView=${view}`)))
+  }
+})
+
+test("count pickers stay scoped to the reader's allowed subsidiaries", async () => {
+  state.grants = new Set(["items.read"])
+  state.allowed = new Set(["A"])
+  state.subsidiaries = [{ id: "A", name: "Visible" }, { id: "B", name: "Hidden" }]
+  const { workspace } = (await inventoryPage({ inventoryView: "counts" })).props.data
+  assert.deepEqual((workspace.countSubsidiaries as Array<{ id: string }>).map(({ id }) => id), ["A"])
   state.allowed = null;
 });

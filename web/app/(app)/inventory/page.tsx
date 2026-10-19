@@ -1,31 +1,19 @@
-import { StockControls } from './StockControls'
-import { LayerInquiry } from './LayerInquiry'
-import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/platform/db'
 import { listStockCounts } from '@openbooks/engine/inventory/stock-count-queries'
 import { isStockCountReviewRequired } from '@openbooks/engine/inventory/stock-count-gates'
-import { INVENTORY_ACTION_PERMISSIONS } from '@openbooks/engine/inventory/contracts'
-import { Button, PageHeader } from '@openbooks/ui'
-import { Plus } from 'lucide-react'
-import { EntityListView } from '../../../components/entity-list-view'
-import { ListPageLayout } from '../../../components/page-layout'
-import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
-import { pickString } from '../../../lib/list-params'
-import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
-import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
-import { BomWorkspace, NewBomButton, type BomAssembly } from './BomWorkspace'
-import { CountsList, NewCountButton } from './counts/CountsList'
-import { InventoryActionDrawer } from './InventoryActionDrawer'
-import { NewMovementButton } from './NewMovementButton'
-import { ReceiveAgainstPoDrawer, type ReceivablePurchaseOrder } from './ReceiveAgainstPoDrawer'
+import { parseListParams, pickString } from '../../../lib/list-params'
+import type { BomAssembly } from './BomWorkspace'
+import type { ReceivablePurchaseOrder } from './ReceiveAgainstPoDrawer'
+import type { InventoryWorkspaceData } from './InventoryWorkspace'
 import { canPostInventoryMovement } from './movement-permissions'
-import { ReverseLandedVoucherAction } from './ReverseLandedVoucherAction'
+import { ModuleView } from '../../../components/viewspec/module-view'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { inventorySpec, type InventoryPageData } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,9 +57,7 @@ export default async function Inventory({
   const canPost = can(authz, 'items.post')
   const canReverse = can(authz, 'items.reverse')
   const canSetup = can(authz, 'admin.setup.manage')
-  const view = !canSetup && (requestedView === 'locations' || requestedView === 'bom')
-    ? 'onhand'
-    : requestedView
+  const view = requestedView
   if(view==='consignment')await requireFeatureEnabled(orgId,'consignment')
   const showMovementDrawer = pickString(sp.movement) === 'new' && canPostMovement
 
@@ -82,12 +68,8 @@ export default async function Inventory({
     {href:'/inventory?inventoryView=holds',label:t('controls.holds'),active:view==='holds'},
     {href:'/inventory?inventoryView=cycles',label:t('controls.cycles'),active:view==='cycles'},
     ...(consignmentOn?[{href:'/inventory?inventoryView=consignment',label:t('controls.consignment'),active:view==='consignment'}]:[]),
-    ...(canSetup
-      ? [
-          { href: '/inventory?inventoryView=locations', label: t('view.locations'), active: view === 'locations' },
-          { href: '/inventory?inventoryView=bom', label: t('view.bom'), active: view === 'bom' },
-        ]
-      : []),
+    { href: '/inventory?inventoryView=locations', label: t('view.locations'), active: view === 'locations' },
+    { href: '/inventory?inventoryView=bom', label: t('view.bom'), active: view === 'bom' },
   ]
 
   const movementPickers = showMovementDrawer || (view==='consignment'&&canPost)
@@ -127,6 +109,7 @@ export default async function Inventory({
          limit 100`)
     : null
 
+  const countParams = parseListParams(sp, { sort: 'date', dir: 'desc', perPage: 25, allowedSorts: ['date'] as const })
   const countData = view === 'counts'
     ? await Promise.all([
         // The shared list query scopes subsidiaries server-side, exactly as
@@ -134,6 +117,9 @@ export default async function Inventory({
         // entity's counts to filter client-side.
         listStockCounts(orgId, {
           subsidiaryIds: authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null,
+          page: countParams.page,
+          limit: countParams.perPage,
+          search: countParams.q,
         }),
         db.execute<{ id: string; name: string | null }>(sql`
           select id, name from locations where org_id = ${orgId} and is_active order by name`),
@@ -198,107 +184,52 @@ export default async function Inventory({
   const movementHref = `/inventory?inventoryView=${view}&movement=new`
   const closeMovementHref = `/inventory?inventoryView=${view}`
   const receiveHref = `/inventory?inventoryView=${view}&receive=new`
-  const headerAction = view === 'onhand' || view === 'movements' ? (
-    <>{canPostMovement ? <NewMovementButton href={movementHref} /> : null}{canReceive ? (
-      <Button asChild>
-        <Link href={receiveHref}>
-          <Plus size={15} /> {t('receive.action')}
-        </Link>
-      </Button>
-    ) : null}{canReverse ? <ReverseLandedVoucherAction /> : null}</>
-  ) : view === 'counts' ? (
-    canPost ? (
-      <NewCountButton label={t('counts.newButton')} />
-    ) : null
-  ) : view === 'locations' ? (
-    canSetup ? (
-      <Button asChild><Link href="/inventory?inventoryView=locations&row=new"><Plus size={15} /> {tSetup('new')}</Link></Button>
-    ) : null
-  ) : view==='bom' && canSetup ? (
-    <NewBomButton label={tSetup('new')} />
-  ) : null
-
-  return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t('list.title')}
-          description={t('list.description')}
-          actions={<>{headerAction}<ModuleHomeTabs tabs={tabs} /></>}
-        />
-      }
-    >
-      {view === 'onhand' || view === 'movements' ? (
-        <EntityListView
-          recordType={view === 'onhand' ? 'inventory_onhand' : 'inventory_movement'}
-          orgId={orgId}
-          userId={authz.user.id}
-          canManage={canManage}
-          sp={sp}
-          drawer={showMovementDrawer && movementPickers ? (
-            <InventoryActionDrawer
-              items={movementPickers[0].rows}
-              stockLocations={movementPickers[1].rows}
-              accounts={movementPickers[2].rows}
-              subsidiaries={movementPickers[3].rows}
-              canManageTracking={canManage}
-              allowedActions={(Object.keys(INVENTORY_ACTION_PERMISSIONS) as (keyof typeof INVENTORY_ACTION_PERMISSIONS)[]).filter(action => can(authz,INVENTORY_ACTION_PERMISSIONS[action]))}
-              closeHref={closeMovementHref}
-            />
-          ) : undefined}
-        />
-      ) : null}
-
-      {view==='holds'||view==='consignment'||view==='cycles'?<StockControls key={view} view={view==='cycles'?'cycle_due':view} canManage={canManage} canPost={canPost} pickers={movementPickers?{items:movementPickers[0].rows,stockLocations:movementPickers[1].rows,accounts:movementPickers[2].rows,subsidiaries:movementPickers[3].rows}:undefined}/>:null}
-      {showReceivePicker && receivablePos ? (
-        <ReceiveAgainstPoDrawer orders={receivablePos.rows} closeHref={closeMovementHref} />
-      ) : null}
-      {pickString(sp.layerItem)?<LayerInquiry itemId={pickString(sp.layerItem)!} stockLocationId={pickString(sp.layerLocation)}/>:null}
-      {view === 'counts' && countData ? (
-        <CountsList
-          key={pickString(sp.countId) ?? (pickString(sp.count) === 'new' ? 'new' : 'list')}
-          counts={countData[0].counts}
-          totalCount={countData[0].totalCount}
-          nextCursor={countData[0].nextCursor}
-          locations={countData[1].rows}
-          subsidiaries={countData[2].rows.filter(
-            (subsidiary) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id),
-          )}
-          items={countData[3].rows}
-          stockLocations={countData[4].rows}
-          lots={countData[5].rows}
-          canPost={canPost}
-          reviewRequired={reviewRequired}
-          canManageStockLocations={canSetup}
-          canManageItems={canManage}
-          barcodeScanningEnabled={barcodeScanningEnabled}
-          itemsExcludedCount={countData[6].rows[0]?.excluded ?? 0}
-          createRequested={pickString(sp.count) === 'new'}
-          selectedCountId={pickString(sp.countId)}
-        />
-      ) : null}
-
-      {view === 'locations' ? (
-        <SetupEntitySection
-          entity={SETUP_ENTITY_BY_KEY.get('stock-locations')!}
-          orgId={orgId}
-          searchParams={sp}
-          basePath="/inventory"
-          canManage={canSetup}
-          allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
-          hideHeader
-        />
-      ) : null}
-
-      {view === 'bom' && bomData ? (
-        <BomWorkspace
-          key={pickString(sp.bom) ?? 'list'}
-          assemblies={bomData[0].rows}
-          items={bomData[1].rows}
-          selected={pickString(sp.bom)}
-          canManage={canSetup}
-        />
-      ) : null}
-    </ListPageLayout>
-  )
+  const workspace: InventoryWorkspaceData = {
+    view,
+    sp,
+    tabs,
+    receiveLabel: t('receive.action'),
+    canManage,
+    canPostMovement,
+    canReceive,
+    canPost,
+    canReverse,
+    canSetup,
+    barcodeScanningEnabled,
+    showMovementDrawer,
+    showReceivePicker,
+    movementHref,
+    closeMovementHref,
+    receiveHref,
+    movementPickers: movementPickers ? {
+      items: movementPickers[0].rows,
+      stockLocations: movementPickers[1].rows,
+      accounts: movementPickers[2].rows,
+      subsidiaries: movementPickers[3].rows,
+    } : null,
+    receivablePos: receivablePos?.rows ?? null,
+    counts: countData?.[0].counts ?? [],
+    totalCount: countData?.[0].totalCount ?? 0,
+    countPage: countParams.page,
+    countPerPage: countParams.perPage,
+    locations: countData?.[1].rows ?? [],
+    countSubsidiaries: (countData?.[2].rows ?? []).filter(
+      (subsidiary) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id),
+    ),
+    items: countData?.[3].rows ?? [],
+    stockLocations: countData?.[4].rows ?? [],
+    lots: countData?.[5].rows ?? [],
+    reviewRequired,
+    itemsExcludedCount: countData?.[6].rows[0]?.excluded ?? 0,
+    bomAssemblies: bomData?.[0].rows ?? [],
+    bomItems: bomData?.[1].rows ?? [],
+  }
+  const data: InventoryPageData = {
+    title: t('list.title'),
+    description: t('list.description'),
+    newCountLabel: t('counts.newButton'),
+    setupNewLabel: tSetup('new'),
+    workspace,
+  }
+  return <ModuleView spec={inventorySpec(data)} data={data} searchParams={sp} trusted />
 }

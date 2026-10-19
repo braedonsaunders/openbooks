@@ -752,9 +752,15 @@ const SOURCES = {
   },
   inventory_counts: {
     route: '/inventory',
-    rowsField: 'counts',
+    rowsField: 'workspace.counts',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'server',
+    clientSearch: false,
+    paging: {
+      totalField: 'workspace.totalCount',
+      pageField: 'workspace.countPage',
+      perPageField: 'workspace.countPerPage',
+    },
   },
   knowledge_views: {
     showPerPage: false,

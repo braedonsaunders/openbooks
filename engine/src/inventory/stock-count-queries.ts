@@ -48,6 +48,10 @@ export interface StockCountListQuery {
   subsidiaryIds?: readonly string[] | null;
   /** Page size, 1..500 (default 500). */
   limit?: number;
+  /** One-based page for URL-driven list workspaces. Omit to use cursor paging. */
+  page?: number;
+  /** Literal text search across date, location, status, and memo. */
+  search?: string;
   /** Opaque cursor from a previous page's nextCursor. */
   cursor?: string | null;
 }
@@ -89,18 +93,29 @@ function parseListCursor(cursor: string): ListCursor {
 export async function listStockCounts(orgId: string, query: StockCountListQuery = {}): Promise<StockCountListPage> {
   const wanted = Math.floor(Number(query.limit ?? 500));
   const limit = Number.isFinite(wanted) ? Math.min(Math.max(wanted, 1), 500) : 500;
+  const page = query.page == null ? null : Math.min(Math.max(Math.floor(Number(query.page)) || 1, 1), 10_000);
+  const search = query.search?.trim();
   if (query.subsidiaryIds != null && query.subsidiaryIds.length === 0) {
     return { counts: [], totalCount: 0, nextCursor: null };
   }
   const scope = subsidiaryScope(query.subsidiaryIds);
-  const after = query.cursor ? parseListCursor(query.cursor) : null;
+  const after = page == null && query.cursor ? parseListCursor(query.cursor) : null;
   const cursorScope = after
     ? sql`and (c.counted_on < ${after.countedOn}::date
             or (c.counted_on = ${after.countedOn}::date and c.created_at < ${after.createdAt}::timestamptz)
             or (c.counted_on = ${after.countedOn}::date and c.created_at = ${after.createdAt}::timestamptz and c.id > ${after.id}))`
     : sql``;
+  const searchScope = search
+    ? sql`and (
+        position(lower(${search}) in lower(c.counted_on::text)) > 0
+        or position(lower(${search}) in lower(c.status::text)) > 0
+        or position(lower(${search}) in lower(coalesce(c.memo, ''))) > 0
+        or position(lower(${search}) in lower(coalesce(l.name, ''))) > 0
+      )`
+    : sql``;
+  const from = sql`from stock_counts c left join locations l on l.org_id = c.org_id and l.id = c.location_id`;
   const count = (await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from stock_counts c where c.org_id = ${orgId} ${scope}`)).rows[0]!.n;
+    select count(*)::text as n ${from} where c.org_id = ${orgId} ${scope} ${searchScope}`)).rows[0]!.n;
   const r = (await db.execute<{
     id: string;
     status: string;
@@ -113,8 +128,7 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
     uncounted_count: string;
     discrepant_count: string;
   }>(sql`
-    select c.id, c.status, c.location_id,
-           (select name from locations where org_id = ${orgId} and id = c.location_id) as location_name,
+    select c.id, c.status, c.location_id, l.name as location_name,
            c.counted_on::text, c.created_at::text, c.memo,
            (select count(*)::text from stock_count_lines l
              where l.org_id = ${orgId} and l.stock_count_id = c.id) as line_count,
@@ -124,11 +138,12 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
              where l.org_id = ${orgId} and l.stock_count_id = c.id
                and l.counted_quantity is not null
                and l.counted_quantity <> l.expected_quantity and (not c.blind or c.status in ('review','posted'))) as discrepant_count
-      from stock_counts c
-     where c.org_id = ${orgId} ${scope} ${cursorScope}
+      ${from}
+     where c.org_id = ${orgId} ${scope} ${searchScope} ${cursorScope}
      order by ${LIST_ORDER}
-     limit ${limit + 1}`));
-  const hasMore = r.rows.length > limit;
+     limit ${page == null ? limit + 1 : limit}
+     ${page == null ? sql`` : sql`offset ${(page - 1) * limit}`}`));
+  const hasMore = page == null && r.rows.length > limit;
   const rows = hasMore ? r.rows.slice(0, limit) : r.rows;
   const last = rows[rows.length - 1];
   return {
