@@ -16,7 +16,7 @@ import {
 } from '@openbooks/engine/delivery/email-config/module'
 import { deriveEmailDeliveryKey, sendVia, shipmentTrackingEmail, emailDeliveryBlockedParts } from '@openbooks/emails'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
-import { loadKitComponents } from '@openbooks/engine/inventory'
+import { kitComponentMovesStock, loadKitComponents } from '@openbooks/engine/inventory'
 import { fromUnits, toUnits } from '@openbooks/engine/money'
 import { fulfillSalesOrderInTx, type SalesFulfillmentLineInput } from './order-cycle'
 
@@ -149,7 +149,8 @@ async function shipmentFulfillmentLines(
         'Void the shipment and pick the order line again',
       )
     }
-    const components = await loadKitComponents(tx, orgId, first.orderItemId, locked.shipment.document_date)
+    const components = (await loadKitComponents(tx, orgId, first.orderItemId, locked.shipment.document_date))
+      .filter((component) => kitComponentMovesStock(component.componentKind))
     const missing = components.filter(
       (component) => !componentRows.some((row) => row.itemId === component.componentItemId),
     )

@@ -1940,6 +1940,7 @@ async function kitPickComponents(
        and (b.effective_from is null or b.effective_from <= ${scope.orderDate}::date)
        and (b.effective_to is null or ${scope.orderDate}::date < b.effective_to)
       join items component on component.id = b.component_item_id and component.org_id = ${orgId}
+       and component.kind in ('inventory', 'assembly')
       left join held h on h.sales_order_line_id = k.sales_order_line_id and h.item_id = b.component_item_id
      order by k.sales_order_line_id, b.sort_order, b.component_item_id`)).rows;
   for (const row of rows) {

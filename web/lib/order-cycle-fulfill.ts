@@ -5,7 +5,7 @@ import { db } from '@openbooks/engine/platform/db'
 import { nextDocumentNumber } from './bills.ts'
 import { SALES_FULFILLMENT_KIND } from './order-kinds'
 import { cmp } from '@openbooks/engine/money/money'
-import { kitComponentQuantities, loadKitComponents } from '@openbooks/engine/inventory'
+import { kitComponentMovesStock, kitComponentQuantities, loadKitComponents } from '@openbooks/engine/inventory'
 import { fromQuantityUnits, toQuantityUnits } from './order-cycle-math'
 import { isFeatureEnabled } from './features'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
@@ -311,7 +311,8 @@ export async function fulfillSalesOrderInTx(
         `Sales-order line ${line.line_number} is a kit; choose lots and serials per component, not on the kit line`,
       )
     }
-    const components = await loadKitComponents(tx, orgId, line.item_id!, input.fulfillmentDate)
+    const components = (await loadKitComponents(tx, orgId, line.item_id!, input.fulfillmentDate))
+      .filter((component) => kitComponentMovesStock(component.componentKind))
     const seenComponents = new Set<string>()
     for (const pick of picks) {
       if (!isUuid(pick.componentItemId)) {
@@ -327,6 +328,7 @@ export async function fulfillSalesOrderInTx(
         )
       }
     }
+    if (components.length === 0) continue
     const profiles = await tx.execute<{ item_id: string; tracking: string }>(sql`
       select item_id, tracking from item_inventory_profiles
        where org_id = ${orgId}
