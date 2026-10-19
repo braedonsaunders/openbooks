@@ -420,7 +420,8 @@ async function loadEquityPage(sp: Record<string, string | string[] | undefined>)
 
   const [entities, today] = await Promise.all([listEquityEntities(actor), businessToday(orgId)])
   const requestedSub = pickString(sp.sub)
-  const entity = entities.find((row) => row.id === requestedSub) ?? entities[0] ?? null
+  const entity = requestedSub ? entities.find((row) => row.id === requestedSub) ?? null : entities[0] ?? null
+  if (requestedSub && !entity) throw new EquityError('entityOutsideAccess')
   const { asOf, control: asOfControl } = await resolveAsOf(sp, orgId, today)
   const securityParam = pickString(sp.security)
   const requestedView = pickString(sp.view)

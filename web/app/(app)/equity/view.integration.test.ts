@@ -40,6 +40,16 @@ test('every equity view loads from one recorded book and composes its spec', { s
     }
     const sp = (extra: Record<string, string>) => ({ sub: w.org.subsidiaryId, asOf: '2026-12-15', ...extra })
 
+    for (const sub of ['00000000-0000-4000-8000-000000000000', 'invalid-entity']) {
+      await assert.rejects(loadEquity(sp({ sub })), (error: unknown) => {
+        assert.ok(error instanceof Error && 'status' in error && 'code' in error)
+        assert.equal(error.name, 'EquityError')
+        assert.equal(error.status, 404)
+        assert.equal(error.code, 'equity_entity_unknown')
+        return true
+      })
+    }
+
     const overview = await loadEquity(sp({}))
     assert.equal(overview.view, 'overview')
     assert.equal(overview.overview?.tiles.fullyDiluted, '6,000,000')
