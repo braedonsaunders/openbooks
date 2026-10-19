@@ -182,7 +182,12 @@ test(
             weekStart: "2026-07-12",
             allowedSubsidiaryIds: null,
           }),
-          /no accounting period covers/,
+          {
+            name: "LaborPostingPeriodError",
+            status: 409,
+            workedOn: "2026-07-15",
+            message: /No accounting period covers labor worked on 2026-07-15.*Create the accounting period.*Close/,
+          },
         );
         const audit = await db.execute(sql\`
           select count(*)::int as n from audit_log
