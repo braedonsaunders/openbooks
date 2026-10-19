@@ -76,6 +76,8 @@ async function statusOf(id: string): Promise<string> {
 
 interface PostedFixture {
   orgId: string
+  subsidiaryId: string
+  documentDate: string
   actorId: string
   employeeId: string
   cogs: string
@@ -90,11 +92,18 @@ interface PostedFixture {
  * are immutable (posted_document_status_guard), so a test that needs a
  * non-posted report must never get there by rewinding one.
  */
-async function postedFixture(opts: { stopBeforePosting?: boolean } = {}): Promise<PostedFixture> {
+async function postedFixture(opts: { stopBeforePosting?: boolean; nonRootSubsidiary?: boolean } = {}): Promise<PostedFixture> {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   const actorId = await createScratchUser(org.orgId, 'Sammy Sloppy', 'accountant')
   as(actorId)
+  const reportSubsidiaryId = opts.nonRootSubsidiary ? randomUUID() : org.subsidiaryId
+  if (opts.nonRootSubsidiary) {
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${reportSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Expense report entity', 'CAD', 'CA')
+    `)
+  }
   const employeePayable = randomUUID()
   await db.execute(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
@@ -117,7 +126,7 @@ async function postedFixture(opts: { stopBeforePosting?: boolean } = {}): Promis
   const id = randomUUID()
   await db.execute(sql`
     insert into documents (id, org_id, kind, status, document_number, document_date, party_id, subsidiary_id, currency, subtotal, tax_total, total, custom, created_by)
-    values (${id}, ${org.orgId}, 'expense_report', 'draft', 'EXP-POSTED', ${org.date}, ${employeeId}, ${org.subsidiaryId}, 'CAD', '875.50', '0', '875.50', '{}'::jsonb, ${actorId})`)
+    values (${id}, ${org.orgId}, 'expense_report', 'draft', 'EXP-POSTED', ${org.date}, ${employeeId}, ${reportSubsidiaryId}, 'CAD', '875.50', '0', '875.50', '{}'::jsonb, ${actorId})`)
   await db.execute(sql`
     insert into document_lines (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount, tax_amount)
     values (${randomUUID()}, ${org.orgId}, ${id}, 1, ${org.accounts.cogs}, 'Travel', '1', '875.50', '875.50', '0')`)
@@ -132,10 +141,10 @@ async function postedFixture(opts: { stopBeforePosting?: boolean } = {}): Promis
     await db.execute(sql`delete from app_roles where org_id = ${org.orgId}`)
   }
   const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, employeePayable }
-  if (opts.stopBeforePosting) return { orgId: org.orgId, actorId, employeeId, cogs: org.accounts.cogs, id, control, cleanup }
+  if (opts.stopBeforePosting) return { orgId: org.orgId, subsidiaryId: reportSubsidiaryId, documentDate: org.date, actorId, employeeId, cogs: org.accounts.cogs, id, control, cleanup }
   await postDocument(id, { control })
   assert.equal(await statusOf(id), 'posted')
-  return { orgId: org.orgId, actorId, employeeId, cogs: org.accounts.cogs, id, control, cleanup }
+  return { orgId: org.orgId, subsidiaryId: reportSubsidiaryId, documentDate: org.date, actorId, employeeId, cogs: org.accounts.cogs, id, control, cleanup }
 }
 
 const REASON = 'correct the travel total after the final receipts arrived'
@@ -222,6 +231,79 @@ test('correct creates the correcting revision and voids the posted source', asyn
     const byAccount = (rows: { account: string; amount: string }[]) =>
       rows.map((r) => [r.account, r.amount] as [string, string]).sort((a, b) => (a[0] < b[0] ? -1 : 1))
     assert.deepEqual(byAccount(net), byAccount(await entryLines(replacementEntry)))
+  } finally {
+    await cleanup()
+  }
+})
+
+test('correct refuses inactive and out-of-entity employees', async () => {
+  const { actorId, id, orgId, subsidiaryId, cleanup } = await postedFixture()
+  try {
+    as(actorId)
+    const otherSubsidiaryId = randomUUID()
+    const foreignEmployeeId = randomUUID()
+    const inactiveEmployeeId = randomUUID()
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${otherSubsidiaryId}, ${orgId}, ${subsidiaryId}, 'Other expense entity', 'CAD', 'CA')
+    `)
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${foreignEmployeeId}, ${orgId}, 'employee', 'Other entity employee', ${otherSubsidiaryId}, true, '{}'::jsonb),
+             (${inactiveEmployeeId}, ${orgId}, 'employee', 'Inactive employee', ${subsidiaryId}, false, '{}'::jsonb)
+    `)
+
+    for (const partyId of [foreignEmployeeId, inactiveEmployeeId]) {
+      const response = await correct(id, {
+        expectedUpdatedAt: await revision(id),
+        amendmentReason: REASON,
+        partyId,
+      })
+      assert.equal(response.status, 404, JSON.stringify(response.json))
+      assert.equal(await statusOf(id), 'posted', 'a refused employee assignment leaves the source posted')
+    }
+    const corrections = (await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from document_links
+       where org_id = ${orgId} and to_document_id = ${id} and link_type = 'reverses'
+    `)).rows[0]!.count
+    assert.equal(corrections, 0, 'refused assignments create no correction draft')
+  } finally {
+    await cleanup()
+  }
+})
+
+test('correct converts foreign expense lines with the report subsidiary rate type', async () => {
+  const { actorId, cogs, documentDate, id, orgId, subsidiaryId, cleanup } = await postedFixture({ nonRootSubsidiary: true })
+  try {
+    as(actorId)
+    await db.execute(sql`insert into fx_rate_types (org_id, key, name) values (${orgId}, 'corporate', 'Corporate')`)
+    await db.execute(sql`
+      insert into subsidiary_accounting_preferences
+        (org_id, subsidiary_id, effective_from, posting_rate_type, reason, created_by)
+      values (${orgId}, ${subsidiaryId}, ${documentDate}, 'corporate', 'Use the subsidiary corporate rate series', ${actorId})
+    `)
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate, rate_type, source)
+      values (${orgId}, 'EUR', 'CAD', ${documentDate}, '1.2500000000', 'corporate', 'manual')
+    `)
+
+    const response = await correct(id, {
+      expectedUpdatedAt: await revision(id),
+      amendmentReason: REASON,
+      lines: [{
+        accountId: cogs,
+        description: 'Foreign travel',
+        amount: '0',
+        settlementType: 'out_of_pocket',
+        foreignCurrency: { currency: 'EUR', amount: '100', rateDate: documentDate, method: 'rate_table', rate: '1.2500000000' },
+      }],
+    })
+    assert.equal(response.status, 201, JSON.stringify(response.json))
+    const evidence = (await db.execute<{ rateType: string }>(sql`
+      select original_fx_evidence->>'rateType' as "rateType" from document_lines
+       where org_id = ${orgId} and document_id = ${String(response.json?.correctionId)}
+    `)).rows[0]
+    assert.equal(evidence?.rateType, 'corporate')
   } finally {
     await cleanup()
   }
