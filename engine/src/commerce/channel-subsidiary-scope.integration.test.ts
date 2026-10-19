@@ -26,6 +26,7 @@ async function setupChannel() {
     await db.execute(sql`update locations set subsidiary_id = ${subB} where org_id = ${org.orgId}
       and id = (select location_id from stock_locations where org_id = ${org.orgId} and id = ${org.stockLocationId2})`);
     await db.execute(sql`update parties set subsidiary_id = null where org_id = ${org.orgId} and id = ${org.customerId}`);
+    await db.execute(sql`insert into customer_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.customerId}, true)`);
     await db.execute(sql`
       insert into sales_channels (id, org_id, kind, name, status, subsidiary_id, currency, external_account, settings, created_by, updated_by)
       values (${channelId}, ${org.orgId}, 'shopify', 'Home shop', 'active', ${org.subsidiaryId}, 'CAD', 'home.myshopify.com', '{}'::jsonb, ${actor}, ${actor})`);
