@@ -560,16 +560,24 @@ export async function reduceSchedule(input: ScheduleChangeInput & {
     }
     const before = stateOf(schedule, lines);
     const lastPosted = lines.filter((line) => line.status === "posted").at(-1)?.periodStart ?? null;
-    const afterPosted = lastPosted ? addMonthsStart(lastPosted, 1) : creditPeriod;
+    const afterPosted = lastPosted
+      ? addMonthsStart(lastPosted, 1)
+      : lines.find((line) => line.status === "planned")?.periodStart ?? creditPeriod;
     const fromPeriod = creditPeriod > afterPosted ? creditPeriod : afterPosted;
     const planned = balance.planned;
+    const plannedFromCredit = lines
+      .filter((line) => line.status === "planned" && line.periodStart >= fromPeriod)
+      .reduce((sum, line) => sum + line.plannedAmount, 0n);
+    const replanFrom = reduction > plannedFromCredit ? afterPosted : fromPeriod;
+    const replacedPlanned = lines.filter((line) => line.status === "planned" && line.periodStart >= replanFrom);
+    const remainingForReplan = replacedPlanned.reduce((sum, line) => sum + line.plannedAmount, 0n) - reduction;
     let catchUp = 0n;
     let entryId: string | null = null;
     if (reduction <= planned) {
-      if (planned - reduction > 0n) {
-        await replan(db, schedule, lines, { fromPeriod, amount: planned - reduction, destinationAccountId: schedule.destinationAccountId, actorId: input.actorId, fold: true });
+      if (remainingForReplan > 0n) {
+        await replan(db, schedule, lines, { fromPeriod: replanFrom, amount: remainingForReplan, destinationAccountId: schedule.destinationAccountId, actorId: input.actorId, fold: false });
       } else {
-        await closePlannedLines(db, input.orgId, lines.filter((l) => l.status === "planned").map((l) => l.id), "superseded");
+        await closePlannedLines(db, input.orgId, replacedPlanned.map((line) => line.id), "superseded");
       }
     } else if (reduction <= balance.remaining) {
       // The plan always carries the unamortized balance; a gap between them
@@ -624,8 +632,8 @@ export async function reduceSchedule(input: ScheduleChangeInput & {
 async function assertCreditDocument(runner: SqlExecutor, schedule: StoredSchedule, documentId: string): Promise<void> {
   const doc = (await runner.execute<{ kind: string; status: string; subsidiary_id: string | null }>(sql`
     select kind, status, subsidiary_id from documents where org_id = ${schedule.orgId} and id = ${documentId}`)).rows[0];
-  if (!doc || doc.status !== "posted" || !["vendor_credit", "journal"].includes(doc.kind)) {
-    throw new AmortizationError("The credit must be a posted vendor credit or journal of this organization.", {
+  if (!doc || doc.status !== "posted" || doc.subsidiary_id !== schedule.subsidiaryId || !["vendor_credit", "journal"].includes(doc.kind)) {
+    throw new AmortizationError("The credit must be a posted vendor credit or journal for this schedule's legal entity.", {
       code: "amortization_credit_document_invalid",
       remedy: "Post the vendor credit (coded to the prepaid account) first, then reduce the schedule referencing it.",
     });
