@@ -24,14 +24,15 @@ import { str, num, type WidgetRenderer } from './widget-props'
 /** Platform identity, access and administration adapters. Compose native components without changing their props or boundaries. */
 export const PLATFORM_WIDGETS = {
   'new-api-key': () => <NewKeyButton />,
-  'api-key-drawer': (props) => (
-    <KeyDrawer keyRow={(props.keyRow as ComponentProps<typeof KeyDrawer>['keyRow']) ?? null} />
-  ),
+  'api-key-drawer': (props) => {
+    const keyRow = (props.keyRow as ComponentProps<typeof KeyDrawer>['keyRow']) ?? null
+    return <KeyDrawer key={keyRow?.id ?? 'none'} keyRow={keyRow} />
+  },
   'new-webhook-endpoint': () => <NewEndpointButton />,
   'webhook-endpoint-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof WebhookEndpointDrawer> | null
     if (!drawer) return null
-    return <WebhookEndpointDrawer {...drawer} />
+    return <WebhookEndpointDrawer key={drawer.endpoint?.id ?? 'new'} {...drawer} />
   },
 
   /* --- platform user record --------------------------------------------------- */

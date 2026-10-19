@@ -165,7 +165,6 @@ export function WorkItemDrawer({
   // the inventory drawers — and never dismisses an in-flight write.
   const draftGuard = useDirtyClose({
     dirty: reason !== '' ||
-      feedback !== item.feedback ||
       assigneeUser !== (assignment?.assigneeUserId ?? '') ||
       assigneeRole !== (assignment?.assigneeRole ?? '') ||
       dueDate !== (assignment?.dueAt ? assignment.dueAt.slice(0, 10) : '') ||
@@ -195,6 +194,11 @@ export function WorkItemDrawer({
         return
       }
       setRefusal(null)
+      if (clear) {
+        setAssigneeUser('')
+        setAssigneeRole('')
+        setDueDate('')
+      }
       toast.success(ta('drawer.assignment.saved'))
       router.refresh()
     } catch {

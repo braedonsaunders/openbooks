@@ -253,7 +253,7 @@ export const AGENTS_WIDGETS = {
   'work-item-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof WorkItemDrawer> | null
     if (!drawer) return null
-    return <WorkItemDrawer {...drawer} />
+    return <WorkItemDrawer key={drawer.item.id} {...drawer} />
   },
   'narrative-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof NarrativeDrawer> | null
