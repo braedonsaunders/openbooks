@@ -18,7 +18,7 @@ import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, t
 import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-options";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
 import { postedDocumentControlAccount } from "@openbooks/engine/ledger/posting-control-account";
-import { loadFieldDefs } from '../../../../lib/custom-fields'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { contractorWithholdingScheme } from '@openbooks/engine/country-tax-packs'
@@ -135,7 +135,8 @@ export async function loadApBills(
 
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId && docId !== 'new' ? await loadDocument(docId, authz.user.orgId) : null
+  const fieldViewer = customFieldViewerFor(authz)
+  const loadedDoc = docId && docId !== 'new' ? await loadDocument(docId, authz.user.orgId, fieldViewer) : null
   const openDoc =
     loadedDoc &&
     (loadedDoc.doc as Record<string, unknown>).org_id === authz.user.orgId &&
@@ -166,12 +167,14 @@ export async function loadApBills(
   const isCreate = docId === 'new' && !!createKind && canCreate
   const drawerKind = openKind ?? createKind
   const drawerOpen = !!(openDoc && openKind && (AP_KINDS as readonly string[]).includes(openKind)) || isCreate
-  const [headerDefs, lineDefs] = drawerOpen
+  const [loadedHeaderDefs, loadedLineDefs] = drawerOpen
     ? await Promise.all([
         loadFieldDefs('documents', drawerKind!),
         loadFieldDefs('document_lines', drawerKind!),
       ])
     : [[], []]
+  const headerDefs = visibleCustomFieldDefs(loadedHeaderDefs, fieldViewer)
+  const lineDefs = visibleCustomFieldDefs(loadedLineDefs, fieldViewer)
   // The create seed carries no lines, so the keep-existing-items clause
   // matches nothing — the same items list a blank draft would see.
   const existingDocId = openDoc ? docId : null

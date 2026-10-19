@@ -20,7 +20,15 @@ import { PARTY_KINDS, isNaturalPersonPartyKind, EMPLOYEE_PERSON_REFUSAL } from '
 import { assetBankHygieneWarning } from '../accounts-hygiene'
 import { toSnake } from '../setup/registry'
 import { coerceBoolean } from '../setup/coerce'
-import { loadFieldDefs, validateCustomValues, type CustomFieldDef } from '../custom-fields'
+import {
+  hiddenCustomFieldRefusal,
+  loadFieldDefs,
+  UNATTRIBUTED_CUSTOM_FIELD_VIEWER,
+  validateCustomValues,
+  visibleCustomFieldDefs,
+  type CustomFieldDef,
+} from '../custom-fields'
+import type { CustomFieldViewer } from '@openbooks/engine/records/custom-fields'
 import {
   exportCell,
   orgFeatureEnabled,
@@ -206,7 +214,11 @@ export const MASTER_ENTITIES: MasterEntity[] = [
 
 export const MASTER_BY_KEY = new Map(MASTER_ENTITIES.map((m) => [m.key, m]))
 
-async function masterFields(m: MasterEntity, orgId: string): Promise<ResourceField[]> {
+async function masterFields(
+  m: MasterEntity,
+  orgId: string,
+  viewer: CustomFieldViewer,
+): Promise<ResourceField[]> {
   const timeTrackingOn = m.key !== 'items' || (await orgFeatureEnabled(orgId, 'timeTracking'))
   const inventoryOn = m.key !== 'items' || (await orgFeatureEnabled(orgId, 'inventory'))
   const equipmentOn = m.key !== 'items' || (await orgFeatureEnabled(orgId, 'equipment'))
@@ -227,7 +239,7 @@ async function masterFields(m: MasterEntity, orgId: string): Promise<ResourceFie
       ref: c.ref,
     }))
   const defs = await loadFieldDefs(m.customTarget)
-  const custom: ResourceField[] = defs.map((d) => customFieldToResource(d))
+  const custom: ResourceField[] = visibleCustomFieldDefs(defs, viewer).map((d) => customFieldToResource(d))
   return [...core, ...custom]
 }
 
@@ -344,15 +356,20 @@ async function persistMasterMutation(
   })
 }
 
-export function masterResource(m: MasterEntity, orgId: string): DataResource {
+export function masterResource(
+  m: MasterEntity,
+  orgId: string,
+  viewer: CustomFieldViewer = UNATTRIBUTED_CUSTOM_FIELD_VIEWER,
+): DataResource {
   return {
     descriptor: masterDescriptor(m),
-    fields: () => masterFields(m, orgId),
+    fields: () => masterFields(m, orgId, viewer),
     async columns() {
-      return (await masterFields(m, orgId)).map((f) => ({ key: f.key, label: f.label }))
+      return (await masterFields(m, orgId, viewer)).map((f) => ({ key: f.key, label: f.label }))
     },
     async read(readCtx?: ReadCtx) {
-      const fields = await masterFields(m, orgId)
+      const effectiveViewer = readCtx?.customFieldViewer ?? viewer
+      const fields = await masterFields(m, orgId, effectiveViewer)
       const resolver = new RefResolver(orgId)
       const exportCols = m.cols.filter((c) => fields.some((f) => f.key === c.key))
       const storedCols = exportCols.filter((c) => !c.virtual)
@@ -449,6 +466,7 @@ async function writeMaster(
 ): Promise<WriteOutcome> {
   const resolver = new RefResolver(ctx.orgId)
   const defs = await loadFieldDefs(m.customTarget)
+  const viewer = ctx.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER
   const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
   // Earlier validated natural-key rows supply preview identity and partial values.
   const previewRows = new Map<string, Record<string, unknown>>()
@@ -705,6 +723,18 @@ async function writeMaster(
         if (m.key === 'accounts') storedAccount = previewRow
       }
       const exists = existingId !== null || previewRow !== undefined
+
+      const hiddenCustom = hiddenCustomFieldRefusal(
+        defs,
+        viewer,
+        customInput,
+        exists ? existingCustom : null,
+      )
+      if (hiddenCustom) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: hiddenCustom.message })
+        continue
+      }
 
       // Updates are partial: required custom fields omitted from the import
       // row are satisfied by the existing stored values. Supplied fields still

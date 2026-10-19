@@ -12,6 +12,7 @@ import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 // share.
 const { createRecord, updateRecord } = await import("./writers.ts");
 const { loadItem } = await import("../../app/api/items/_lib.ts");
+const { MASTER_BY_KEY, masterResource } = await import("../data-io/master-data-resources.ts");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
@@ -75,8 +76,8 @@ async function seed(orgId: string) {
       insert into role_assignments (org_id, user_id, role_id)
       values (${orgId}, ${userId}, ${roleId})`);
     await db.execute(sql`
-      insert into items (id, org_id, kind, name, created_by, updated_by, custom)
-      values (${itemId}, ${orgId}, 'service', 'Restricted probe', ${userId}, ${userId},
+      insert into items (id, org_id, code, kind, name, created_by, updated_by, custom)
+      values (${itemId}, ${orgId}, 'CF-ITEM', 'service', 'Restricted probe', ${userId}, ${userId},
               ${JSON.stringify({ [FIELD]: STORED })}::jsonb)`);
   });
   return { userId, itemId };
@@ -132,6 +133,39 @@ test(
         updateRecord(clerk, resolved, fields, itemId, { [`cf_${FIELD}`]: null }, { customFieldViewer: CLERK }),
       );
       assert.equal(cleared.status, 403);
+      assert.equal((await storedCustom(org.orgId, itemId))[FIELD], STORED);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "master-data export hides restricted custom columns and import refuses their values",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const { userId, itemId } = await seed(org.orgId);
+      const itemEntity = MASTER_BY_KEY.get("items");
+      assert.ok(itemEntity);
+      const resource = masterResource(itemEntity, org.orgId, CLERK);
+      const read = await withOrgContext(org.orgId, () => resource.read({ allowedSubsidiaryIds: null, customFieldViewer: CLERK }));
+      assert.equal(read.fields.some((field) => field.key === FIELD), false);
+      assert.equal(read.columns.some((column) => column.key === FIELD), false);
+      assert.equal(read.rows[0]![FIELD], undefined);
+
+      const outcome = await withOrgContext(org.orgId, () => resource.write(
+        [{ code: "CF-ITEM", name: "Restricted probe", kind: "service", [FIELD]: "overwritten" }],
+        "upsert",
+        { orgId: org.orgId, actorId: userId, dryRun: false, customFieldViewer: CLERK },
+      ));
+      assert.deepEqual(outcome, {
+        created: 0,
+        updated: 0,
+        failed: 1,
+        errors: [{ row: 1, message: "Cost basis is restricted to other roles and cannot be changed by your role" }],
+      });
       assert.equal((await storedCustom(org.orgId, itemId))[FIELD], STORED);
     } finally {
       await dropScratchOrg(org.orgId);

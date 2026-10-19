@@ -13,6 +13,7 @@ import { toCsv, toJson, toXlsx } from '../../../../lib/data-io/serialize'
 import { csvResponse, safeName, xlsxResponse } from '../../../../lib/export'
 import { EXPORT_FORMATS, requestedExportFormat, type ExportFormat } from '../../../../lib/data-io/types'
 import { selectExportColumns } from '../../../../lib/data-io/export-selection'
+import { customFieldViewerFor } from '../../../../lib/custom-fields'
 
 export const runtime = 'nodejs'
 
@@ -49,7 +50,8 @@ export const POST = defineRoute({
   // Bind the role-derived subsidiary fence before any resource read. The
   // generic registry otherwise defaults to an org-only adapter, which would
   // let a restricted AP/AR/GL reader export another subsidiary's documents.
-  const resource = await getResource(authz.user.orgId, resourceKey, authz.allowedSubsidiaryIds)
+  const viewer = customFieldViewerFor(authz)
+  const resource = await getResource(authz.user.orgId, resourceKey, authz.allowedSubsidiaryIds, viewer)
   if (!resource) return notFound("record")
   if (!can(authz, resource.descriptor.readPermission)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
@@ -64,6 +66,7 @@ export const POST = defineRoute({
     const result = await resource.read({
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       actorId: authz.user.id,
+      customFieldViewer: viewer,
     })
     columns = result.columns
     rows = result.rows

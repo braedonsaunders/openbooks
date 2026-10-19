@@ -7,6 +7,12 @@ import { canonicalDecimal, compareDecimal } from '../money/exact-decimal.ts'
 import { isUuid } from '../platform/uuid.ts'
 import { customFieldVisible, type CustomFieldViewer } from '@openbooks/customization'
 
+/** Used when a service caller has not supplied an authenticated field audience. */
+export const UNATTRIBUTED_CUSTOM_FIELD_VIEWER: CustomFieldViewer = {
+  roleKeys: [],
+  canManageCustomFields: false,
+}
+
 export {
   customFieldAudience,
   customFieldVisible,
