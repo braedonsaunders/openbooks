@@ -18,6 +18,7 @@ import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import {
   billableRemainderUnits,
+  assertCapturePurchaseOrderMatches,
   CaptureMaterializationError,
   lineRequiresReceipt,
   materializeCapture,
@@ -44,6 +45,19 @@ test("normalizeCapturedDecimal handles localized and signed OCR amounts exactly"
   assert.equal(normalizeCapturedDecimal("(45.10)"), "-45.1000");
   assert.equal(normalizeCapturedDecimal("1.25E2"), "125.0000");
   assert.throws(() => normalizeCapturedDecimal("1.00001"), /precision/);
+});
+
+test("capture materialization refuses unresolved and incompletely matched purchase orders", () => {
+  const line = { description: "Part", productCode: null, quantity: "1.0000", unit: null, unitPrice: "10.0000", amount: "10.0000", taxAmount: "0.0000", accountId: "account-1", purchaseOrderLineId: null, confidence: null };
+  assert.throws(
+    () => assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-9999", lines: [line] }, null),
+    (error: unknown) => error instanceof CaptureMaterializationError && error.code === "purchase_order_unresolved" && /select an approved purchase order|clear its reference/i.test(error.message),
+  );
+  assert.throws(
+    () => assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-100", lines: [line] }, "po-1"),
+    (error: unknown) => error instanceof CaptureMaterializationError && error.code === "po_line_unmatched" && error.details?.line === 1 && /match every line/i.test(error.message),
+  );
+  assert.doesNotThrow(() => assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-100", lines: [{ ...line, purchaseOrderLineId: "po-line-1" }] }, "po-1"));
 });
 
 test("normalizeCapturedDecimal refuses ambiguous comma text instead of guessing", () => {

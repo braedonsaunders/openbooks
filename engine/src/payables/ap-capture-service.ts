@@ -649,9 +649,38 @@ async function nextDocumentNumber(tx: SqlExecutor, orgId: string, kind: string):
 }
 
 export class CaptureMaterializationError extends Error {
-  constructor(message: string, readonly status = 422) {
+  constructor(
+    message: string,
+    readonly status = 422,
+    readonly code?: string,
+    readonly details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = "CaptureMaterializationError";
+  }
+}
+
+/** Recheck purchase-order resolution and line coverage at the write boundary. */
+export function assertCapturePurchaseOrderMatches(
+  capture: Pick<NormalizedCapture, "purchaseOrderNumber" | "lines">,
+  purchaseOrderId: string | null,
+): void {
+  if (capture.purchaseOrderNumber && !purchaseOrderId) {
+    throw new CaptureMaterializationError(
+      "The purchase order could not be resolved uniquely — select an approved purchase order or clear its reference in capture review before creating a draft",
+      422,
+      "purchase_order_unresolved",
+    );
+  }
+  if (!purchaseOrderId) return;
+  const unmatchedLine = capture.lines.findIndex((line) => !line.purchaseOrderLineId);
+  if (unmatchedLine >= 0) {
+    throw new CaptureMaterializationError(
+      `Line ${unmatchedLine + 1} could not be matched to a purchase-order line — match every line before creating a draft`,
+      422,
+      "po_line_unmatched",
+      { line: unmatchedLine + 1 },
+    );
   }
 }
 
@@ -830,6 +859,7 @@ export async function materializeCapture(input: {
       throw new CaptureMaterializationError("Capture item is not ready to create a draft");
     }
     const capture = item.normalized;
+    assertCapturePurchaseOrderMatches(capture, item.purchase_order_id);
     const vendorId = item.vendor_candidate_id;
     if (!vendorId || !capture.invoiceNumber || !capture.invoiceDate || !capture.total || capture.lines.length === 0) {
       throw new CaptureMaterializationError("Vendor, invoice number, date, total and lines are required");

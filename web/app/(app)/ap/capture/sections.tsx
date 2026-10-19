@@ -81,7 +81,7 @@ export function CaptureList({
     setBulkResult(null)
     try {
       const ids = [...selected]
-      const aggregated: Array<{ id: string; ok: boolean; error?: string }> = []
+      const aggregated: Array<{ id: string; ok: boolean; error?: string; errorCode?: string; details?: { line?: number } }> = []
       // A failed or lost chunk must not discard the confirmed verdicts of
       // completed chunks: this chunk's ids are marked unknown (kept
       // selected, with the named outcome) instead of replaying blindly.
@@ -100,7 +100,7 @@ export function CaptureList({
               await readApiErrorMessage(response, t('actionFailed')),
             )
           const body = (await response.json()) as {
-            results?: Array<{ id: string; ok: boolean; error?: string }>
+            results?: Array<{ id: string; ok: boolean; error?: string; errorCode?: string; details?: { line?: unknown } }>
           }
           aggregated.push(...(body.results ?? []))
         } catch (e) {
@@ -119,6 +119,12 @@ export function CaptureList({
         aggregated,
         t('notProcessed'),
       )
+      const resultsById = new Map(aggregated.map((result) => [result.id, result] as const))
+      for (const failure of failed) {
+        const result = resultsById.get(failure.id)
+        if (result?.errorCode === 'purchase_order_unresolved') failure.error = t('issues.purchase_order_unresolved')
+        if (result?.errorCode === 'po_line_unmatched') failure.error = t('issues.po_line_unmatched', { line: typeof result.details?.line === 'number' ? result.details.line : 1 })
+      }
       for (const [id, reason] of unknownReasons) {
         failed.push({ id, error: t('bulkUnknown', { reason }) })
       }

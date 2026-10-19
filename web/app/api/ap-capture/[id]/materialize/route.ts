@@ -1,5 +1,6 @@
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
+import { parseJsonBody } from '@/lib/api/json'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -12,6 +13,8 @@ import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = 'nodejs'
+
+const materializeBodySchema = z.strictObject({ priceOverride: z.boolean().optional() }).optional()
 
 /**
  * Same vendor/PO visibility the inbox list and `?capture=` flyout apply
@@ -32,10 +35,15 @@ export const POST = defineRoute({
   permission: 'ap.create',
   feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
   params: z.object({ "id": z.string() }),
-  handler: async ({ request: _request, authz: gate, params: routeParams }) => {
+  handler: async ({ request, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
     try {
       const { id } = await params
+      // Existing callers may omit the body; only an explicit true requests
+      // the AP-approved purchase-order price override.
+      const parsedBody = await parseJsonBody(request, materializeBodySchema)
+      if (!parsedBody.ok) return parsedBody.response
+      const priceOverride = parsedBody.data?.priceOverride === true
       // The engine binds the id into a uuid column without validating it; a
       // malformed id must 404 here instead of escaping as a cast-error 500.
       if (!isUuid(id)) return notFound("record")
@@ -52,6 +60,7 @@ export const POST = defineRoute({
         orgId: gate.user.orgId,
         captureItemId: id,
         actorId: gate.user.id,
+        priceOverride,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       }))
     } catch (error) {
