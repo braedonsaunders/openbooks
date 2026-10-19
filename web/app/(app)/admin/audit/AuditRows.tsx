@@ -3,9 +3,10 @@
 import { PagedTable } from '../../../../components/paged-table'
 import { auditActionLabel } from '../../../../lib/audit-action-label'
 import { useSearchParams } from 'next/navigation'
-import { useFormatter, useTranslations } from 'next-intl'
+import { useFormatter, useLocale, useTranslations } from 'next-intl'
 import { Badge } from '@openbooks/ui'
 import { ChevronRight } from 'lucide-react'
+import { formatCivilDate } from '../../../../lib/format'
 
 export type AuditListRow = {
   id: string
@@ -14,6 +15,8 @@ export type AuditListRow = {
   actorName: string | null
   action: string
   recordType: string
+  /** The record's display label (number, code, name or date), when its family has one. */
+  recordLabel: { label: string | null; on: string | null } | null
   summaryKind: 'snapshot' | 'metadata' | 'fields'
   changeCount: number
 }
@@ -42,6 +45,13 @@ const humanize = (value: string) =>
     )
     .join(' ')
 
+/** A record's display label with the date that identifies it, in the viewer's notation. */
+export function auditRecordText(label: AuditListRow['recordLabel'], locale: string): string | null {
+  if (!label) return null
+  const parts = [label.label, label.on ? formatCivilDate(label.on, locale) : null].filter((part): part is string => Boolean(part))
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
 export function AuditRows({
   rows,
 }: {
@@ -50,6 +60,7 @@ export function AuditRows({
 }) {
   const t = useTranslations('admin.audit')
   const format = useFormatter()
+  const locale = useLocale()
   const searchParams = useSearchParams()
   const actionLabel = (action: string) => auditActionLabel(t as never, action, humanize)
   const when = (row: AuditListRow) =>
@@ -116,8 +127,13 @@ export function AuditRows({
         {
           key: 'rowId',
           header: t('table.row'),
-          className: 'font-mono text-xs text-slate-500 dark:text-slate-400',
-          cell: (row) => `${row.rowId.slice(0, 8)}…`,
+          className: 'max-w-64',
+          cell: (row) => {
+            const shown = auditRecordText(row.recordLabel, locale)
+            return shown
+              ? <span className="block truncate text-sm text-slate-700 dark:text-slate-200" title={shown}>{shown}</span>
+              : <span className="font-mono text-xs text-slate-500 dark:text-slate-400" title={row.rowId}>{`${row.rowId.slice(0, 8)}…`}</span>
+          },
         },
         {
           key: 'details',

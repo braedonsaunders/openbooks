@@ -50,7 +50,7 @@ test('audit event selection fetches only detail, handles refusals and ignores st
   t.after(async () => { await act(async () => root.unmount()); node.remove() })
   await act(async () => {
     root.render(<NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
-      <AuditRows rows={[{ ...event, summaryKind: 'fields', changeCount: 1 }]} />
+      <AuditRows rows={[{ ...event, summaryKind: 'fields', changeCount: 1, recordLabel: null }]} />
       <AuditEventHost event={null} />
     </NextIntlClientProvider>)
   })
@@ -129,4 +129,22 @@ test('explicit snapshot events retain a two-record context collection instead of
   await act(async()=>{for(const details of collections){details.open=true;details.dispatchEvent(new window.Event('toggle'))}await tick()})
   assert.ok(document.body.textContent?.includes('first-selected-entry'))
   assert.ok(document.body.textContent?.includes('second-selected-entry'))
+})
+
+test('the log names each record by its display label and date, keeping the reference only where none exists', async (t) => {
+  const node = document.createElement('div'); document.body.append(node)
+  const root = createRoot(node)
+  t.after(async () => { await act(async () => root.unmount()); node.remove() })
+  const labelled = { ...event, recordType: 'equity_securities', summaryKind: 'fields' as const, changeCount: 1, recordLabel: { label: 'SAFE-0003', on: null } }
+  const dated = { ...event, id: otherId, rowId: otherId, recordType: 'equity_compensation_runs', summaryKind: 'fields' as const, changeCount: 1, recordLabel: { label: 'Northstar Cloud', on: '2026-12-31' } }
+  const bare = { ...event, id: '019f0000-0000-4000-8000-000000000013', rowId: '019f0000-0000-4000-8000-000000000013', recordType: 'audit_label_example', summaryKind: 'fields' as const, changeCount: 1, recordLabel: null }
+  await act(async () => {
+    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><AuditRows rows={[labelled, dated, bare]} /></NextIntlClientProvider>)
+    await tick()
+  })
+  const cells = [...node.querySelectorAll('tbody tr')].map((row) => [...row.querySelectorAll('td')].map((cell) => cell.textContent?.trim()))
+  assert.ok(cells[0]!.includes('SAFE-0003'), JSON.stringify(cells[0]))
+  assert.ok(cells[1]!.includes('Northstar Cloud · Dec 31, 2026'), JSON.stringify(cells[1]))
+  assert.ok(cells[2]!.includes('019f0000…'), 'a record family with no label keeps its shortened reference')
+  assert.ok(!cells.slice(0, 2).some((row) => row.some((text) => text?.endsWith('…'))), 'labelled records show no truncated id')
 })

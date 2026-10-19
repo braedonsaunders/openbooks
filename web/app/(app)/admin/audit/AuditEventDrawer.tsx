@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useFormatter, useTranslations } from 'next-intl'
+import { useFormatter, useLocale, useTranslations } from 'next-intl'
 import { Badge, Drawer, cn } from '@openbooks/ui'
 import { Braces, Clock3, Database, Fingerprint, History, UserRound } from 'lucide-react'
 import { isUuid } from '@openbooks/engine/platform/identifiers'
@@ -9,6 +9,7 @@ import { auditEventDiffs, type AuditDiffRow } from '../../../../lib/audit-diff'
 import { auditActionLabel } from '../../../../lib/audit-action-label'
 import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
 import { AsyncUrlDrawer } from '../../../../components/async-url-drawer'
+import { auditRecordText } from './AuditRows'
 
 export { auditEventDiffs } from '../../../../lib/audit-diff'
 
@@ -19,6 +20,8 @@ export type AuditEvent = {
   actorName: string | null
   action: string
   recordType: string
+  /** The record's display label (number, code, name or date), when its family has one. */
+  recordLabel?: { label: string | null; on: string | null } | null
   requestId: string | null
   changes: unknown
 }
@@ -217,12 +220,14 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
   const { event } = props
   const t = useTranslations('admin.audit')
   const format = useFormatter()
+  const locale = useLocale()
   const changes = useMemo(() => isObject(event?.changes) ? event.changes : {}, [event])
   const hasBefore = Object.hasOwn(changes, 'before')
   const hasAfter = Object.hasOwn(changes, 'after')
   const tabs: DrawerTab[] = ['changes', ...(hasBefore ? ['before' as const] : []), ...(hasAfter ? ['after' as const] : [])]
   const [activeTab, setActiveTab] = useState<DrawerTab>('changes')
   const when = event ? format.dateTime(new Date(event.at), { dateStyle: 'long', timeStyle: 'medium' }) : ''
+  const recordText = event ? auditRecordText(event.recordLabel ?? null, locale) : null
   const actionLabel = event ? auditActionLabel(t as never, event.action, humanize) : ''
   const actor = event?.actorName ?? t('systemActor')
   const context = Object.fromEntries(Object.entries(changes).filter(([key]) => CONTEXT_KEYS.has(key)))
@@ -250,6 +255,7 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
           <MetadataCard icon={<UserRound size={14} aria-hidden />} label={t('drawer.actor')}>{actor}</MetadataCard>
           <MetadataCard icon={<Database size={14} aria-hidden />} label={t('drawer.recordType')}>{humanize(event.recordType)}</MetadataCard>
           <MetadataCard icon={<Fingerprint size={14} aria-hidden />} label={t('drawer.reference')}>
+            {recordText ? <span className="block truncate" title={recordText}>{recordText}</span> : null}
             <span className="font-mono text-xs">{event.rowId}</span>
           </MetadataCard>
         </div>

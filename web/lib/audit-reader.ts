@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/platform/database'
 import type { AuditListRow } from '../app/(app)/admin/audit/AuditRows'
 import type { AuditEvent } from '../app/(app)/admin/audit/AuditEventDrawer'
 import { parseImportJson } from './data-io/import-parse'
+import { auditRecordLabels } from './audit-record-labels'
 
 export interface AuditFilters {
   action?: string
@@ -19,6 +20,7 @@ export interface AuditFilters {
 
 interface AuditMetadata extends Record<string, unknown> {
   id: string
+  table_name: string
   row_id: string
   action: string
   at: string
@@ -63,7 +65,7 @@ const facetRecordType = sql`case when a.table_name = 'documents'
 
 export async function readAuditEvent(orgId: string, eventId: string): Promise<AuditEvent | null> {
   const result = await db.execute<AuditEventSource>(sql`
-    select a.id, a.row_id, a.action, a.at, a.request_id, a.changes::text as changes,
+    select a.id, a.table_name, a.row_id, a.action, a.at, a.request_id, a.changes::text as changes,
            u.name as actor_name, (${recordType}) as rtype
       from audit_log a
       ${documentJoin}
@@ -72,12 +74,14 @@ export async function readAuditEvent(orgId: string, eventId: string): Promise<Au
      limit 1
   `)
   const row = result.rows[0]
-  return row ? {
+  if (!row) return null
+  const labels = await auditRecordLabels(orgId, [{ table: row.table_name, rowId: row.row_id }])
+  return {
     id: row.id, rowId: row.row_id, action: row.action,
     at: new Date(row.at).toISOString(), actorName: row.actor_name,
-    recordType: row.rtype, requestId: row.request_id,
+    recordType: row.rtype, recordLabel: labels.get(`${row.table_name}:${row.row_id}`) ?? null, requestId: row.request_id,
     changes: parseImportJson(row.changes),
-  } : null
+  }
 }
 
 export async function readAuditPage(orgId: string, filters: AuditFilters) {
@@ -113,7 +117,7 @@ export async function readAuditPage(orgId: string, filters: AuditFilters) {
         order by at desc, id desc
         limit ${perPage} offset ${(page - 1) * perPage}
       )
-      select a.id, a.row_id, a.action, a.at, u.name as actor_name, (${recordType}) as rtype,
+      select a.id, a.table_name, a.row_id, a.action, a.at, u.name as actor_name, (${recordType}) as rtype,
         case when a.changes ? 'before' or a.changes ? 'after' then 'snapshot'
              when a.changes ->> 'source' = 'record_metadata' then 'metadata'
              else 'fields' end as summary_kind,
@@ -159,10 +163,12 @@ export async function readAuditPage(orgId: string, filters: AuditFilters) {
   if (!total) throw new Error('The audit query did not return its total.')
   const byCount = (a: AuditFacet, b: AuditFacet) => Number(b.n) - Number(a.n)
     || String(a.action ?? a.rtype ?? a.actor_id ?? '').localeCompare(String(b.action ?? b.rtype ?? b.actor_id ?? ''))
+  const labels = await auditRecordLabels(orgId, list.rows.map((row) => ({ table: row.table_name, rowId: row.row_id })))
   return {
     rows: list.rows.map((row): AuditListRow => ({
       id: row.id, rowId: row.row_id, at: new Date(row.at).toISOString(),
       actorName: row.actor_name, action: row.action, recordType: row.rtype,
+      recordLabel: labels.get(`${row.table_name}:${row.row_id}`) ?? null,
       summaryKind: row.summary_kind, changeCount: Number(row.change_count),
     })),
     total: Number(total.filtered_n),
