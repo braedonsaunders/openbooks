@@ -625,6 +625,12 @@
       "job_number": "Mismo número de trabajo ({key})"
     },
     "chooseSurvivor": "Seleccione el proyecto superviviente. Todas las referencias de los demás se trasladan en una transacción.",
+    "matchKind": "Tipo de coincidencia",
+    "matchKey": "Clave de coincidencia",
+    "candidateCount": "Candidatos",
+    "openGroup": "Revisar grupo",
+    "mergeSource": "Proyecto que se fusionará",
+    "manageRequired": "Puede revisar los proyectos duplicados, pero la vista previa y la fusión requieren el permiso para administrar Proyectos.",
     "survivor": "Superviviente",
     "code": "Código",
     "name": "Nombre",

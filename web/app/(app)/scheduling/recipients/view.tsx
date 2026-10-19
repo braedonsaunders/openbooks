@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { Button, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '@/components/page-layout'
 import { requirePermission } from '@/lib/authz'
@@ -21,6 +22,7 @@ export async function ResourceRecipients({
   const sp = await searchParams,
     authz = await requirePermission('admin.setup.manage'),
     actor = { orgId: authz.user.orgId, actorId: authz.user.id }
+  const t = await getTranslations('scheduling')
   const code = pickString(sp.board)
   if (!code) notFound()
   const board = await withOrgTransaction(actor.orgId, async () => {
@@ -41,14 +43,14 @@ export async function ResourceRecipients({
       contained
       header={
         <PageHeader
-          title="Board resource recipients"
+          title={t('recipients.title')}
           description={board.name}
           actions={
             <Button asChild variant="outline">
               <Link
                 href={`${boardPath}?board=${encodeURIComponent(board.code)}`}
               >
-                Return to board
+                {t('boards.return')}
               </Link>
             </Button>
           }

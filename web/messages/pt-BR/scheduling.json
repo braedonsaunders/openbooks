@@ -358,6 +358,9 @@
     "description": "Listar, configurar e arquivar quadros de agendamento.",
     "return": "Voltar à agenda"
   },
+  "recipients": {
+    "title": "Destinatários de recursos do quadro"
+  },
   "distribution": {
     "title": "Enviar escala por e-mail",
     "close": "Fechar",

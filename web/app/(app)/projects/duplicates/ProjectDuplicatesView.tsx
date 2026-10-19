@@ -1,392 +1,155 @@
-"use client";
+'use client'
 
-import { useCallback, useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
-import { ListPageLayout } from "../../../../components/page-layout";
-import { PagedTable } from "../../../../components/paged-table";
-import { enumLabel } from "@/lib/enum-label";
-import { toast } from "sonner";
-import { GitMerge, Play } from "lucide-react";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  PageHeader,
-} from "@openbooks/ui";
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import { toast } from 'sonner'
+import { Button, Label, Select, UrlDrawer } from '@openbooks/ui'
+import type { DuplicateGroup } from '@openbooks/engine/projects/merge'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
-type DuplicateProject = {
-  id: string;
-  code: string | null;
-  name: string;
-  customerId: string | null;
-  status: string;
-  isActive: boolean;
-};
+type Project = DuplicateGroup['projects'][number]
 
-type DuplicateGroup = {
-  kind: "source_ref" | "name_customer" | "job_number";
-  key: string;
-  projects: DuplicateProject[];
-};
-
-type Preview = {
-  groupKey: string;
-  survivorId: string;
-  duplicateId: string;
-  moved: { table: string; rows: number }[];
-  customRefs: { table: string; key: string; rows: number }[];
-  alreadyMerged: boolean;
-};
-
-function withoutKey(
-  current: Record<string, string>,
-  key: string,
-): Record<string, string> {
-  if (!(key in current)) return current;
-  const next = { ...current };
-  delete next[key];
-  return next;
+type MergePreview = {
+  survivorId: string
+  duplicateId: string
+  moved: { table: string; rows: number }[]
+  customRefs: { table: string; key: string; rows: number }[]
+  alreadyMerged: boolean
 }
 
-function withoutPreview(
-  current: Record<string, Preview>,
-  key: string,
-): Record<string, Preview> {
-  if (!(key in current)) return current;
-  const next = { ...current };
-  delete next[key];
-  return next;
-}
+export function ProjectDuplicatesView({ group, canMerge }: { group: DuplicateGroup; canMerge: boolean }) {
+  const t = useTranslations('projects')
+  const router = useRouter()
+  const [survivorId, setSurvivorId] = useState(group.projects[0]?.id ?? '')
+  const [duplicateId, setDuplicateId] = useState(group.projects[1]?.id ?? '')
+  const [preview, setPreview] = useState<MergePreview | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
-export function ProjectDuplicatesView({ canMerge }: { canMerge: boolean }) {
-  const t = useTranslations("projects");
-  const tCommon = useTranslations("common");
-  // The full project lifecycle, not just the pre-award trio: duplicates can
-  // group active, closed and cancelled projects, and those rendered as an
-  // unknown-value fallback read as a data defect.
-  const projectStatusLabels = {
-    quoted: t("status.quoted"),
-    awarded: t("status.awarded"),
-    active: t("status.active"),
-    substantially_complete: t("status.substantially_complete"),
-    closed: t("status.closed"),
-    cancelled: t("status.cancelled"),
-  } satisfies Record<
-    | "quoted"
-    | "awarded"
-    | "active"
-    | "substantially_complete"
-    | "closed"
-    | "cancelled",
-    string
-  >;
-  const [groups, setGroups] = useState<DuplicateGroup[] | null>(null);
-  const [survivors, setSurvivors] = useState<Record<string, string>>({});
-  // One cached preview per group + duplicate row. The survivor direction is
-  // part of the identity: a count previewed for the other direction must
-  // never render as this direction's impact.
-  const [previews, setPreviews] = useState<Record<string, Preview>>({});
-  // A refused preview/merge pins here, per group, until the next action in
-  // that group — a toast alone left the previous direction's success on
-  // screen as if it were the answer.
-  const [previewErrors, setPreviewErrors] = useState<Record<string, string>>(
-    {},
-  );
-  const [busy, setBusy] = useState<string | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const duplicateCandidates = useMemo(
+    () => group.projects.filter((project) => project.id !== survivorId),
+    [group.projects, survivorId],
+  )
+  const effectiveDuplicateId = duplicateCandidates.some((project) => project.id === duplicateId)
+    ? duplicateId
+    : duplicateCandidates[0]?.id ?? ''
+  const activePreview = preview?.survivorId === survivorId && preview.duplicateId === effectiveDuplicateId
+    ? preview
+    : null
+  const movedCount = activePreview
+    ? [...activePreview.moved, ...activePreview.customRefs].reduce((sum, row) => sum + row.rows, 0)
+    : 0
 
-  const load = useCallback(async () => {
-    // Own catch: merge awaits this after a successful POST, and a reload
-    // failure must toast as a load failure, never as a merge failure.
+  function selectSurvivor(id: string) {
+    setSurvivorId(id)
+    setPreview(null)
+    setError(null)
+  }
+
+  async function previewMerge() {
+    if (!canMerge || !survivorId || !effectiveDuplicateId) return
+    setBusy(true)
+    setError(null)
+    setPreview(null)
     try {
-      const response = await fetch("/api/projects/duplicates");
+      const query = new URLSearchParams({ survivorId, duplicateId: effectiveDuplicateId })
+      const response = await fetch(`/api/projects/merge?${query}`)
       if (!response.ok) {
-        toast.error(t("duplicates.loadFailed"));
-        return;
+        setError(await readApiErrorMessage(response, t('duplicates.previewFailed')))
+        return
       }
-      const payload = (await response.json()) as { groups: DuplicateGroup[] };
-      setGroups(payload.groups);
-      setPreviews({});
-      setPreviewErrors({});
-    } catch {
-      toast.error(t("duplicates.loadFailed"));
-    }
-  }, [t]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetch("/api/projects/duplicates")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((payload: { groups: DuplicateGroup[] } | null) => {
-        if (cancelled) return;
-        if (!payload) {
-          setLoadFailed(true);
-          return;
-        }
-        setGroups(payload.groups);
-        setPreviews({});
-      })
-      .catch(() => {
-        if (!cancelled) setLoadFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function preview(
-    groupKey: string,
-    survivorId: string,
-    duplicateId: string,
-  ) {
-    const key = `${groupKey}:${duplicateId}`;
-    setBusy(duplicateId);
-    setPreviewErrors((current) => withoutKey(current, groupKey));
-    try {
-      const response = await fetch(
-        `/api/projects/merge?survivorId=${encodeURIComponent(survivorId)}&duplicateId=${encodeURIComponent(duplicateId)}`,
-      );
-      // The status is checked before the body parses: a non-JSON error page
-      // must name the translated failure, never throw out of .json() and
-      // leave the previous direction's success on screen.
-      if (!response.ok) {
-        const refused = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        const message = refused?.error ?? t("duplicates.previewFailed");
-        toast.error(message);
-        // The refusal replaces the cached preview for this pair: the last
-        // good direction's counts must not survive as a stale success.
-        setPreviews((current) => withoutPreview(current, key));
-        setPreviewErrors((current) => ({ ...current, [groupKey]: message }));
-        return;
-      }
-      const payload = (await response.json()) as Preview;
-      setPreviews((current) => ({
-        ...current,
-        [key]: { ...payload, groupKey, survivorId, duplicateId },
-      }));
-    } catch {
-      const message = t("duplicates.previewFailed");
-      toast.error(message);
-      setPreviews((current) => withoutPreview(current, key));
-      setPreviewErrors((current) => ({ ...current, [groupKey]: message }));
+      setPreview(await response.json() as MergePreview)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('duplicates.previewFailed'))
     } finally {
-      setBusy(null);
+      setBusy(false)
     }
   }
 
-  async function merge(
-    groupKey: string,
-    survivorId: string,
-    duplicateId: string,
-  ) {
-    setBusy(duplicateId);
-    setPreviewErrors((current) => withoutKey(current, groupKey));
+  async function merge() {
+    if (!canMerge || !activePreview || activePreview.alreadyMerged) return
+    setBusy(true)
+    setError(null)
     try {
-      const response = await fetch("/api/projects/merge", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ survivorId, duplicateId }),
-      });
-      // The status is checked before the body parses, like preview above.
+      const response = await fetch('/api/projects/merge', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ survivorId, duplicateId: effectiveDuplicateId }),
+      })
       if (!response.ok) {
-        const refused = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        const message = refused?.error ?? t("duplicates.mergeFailed");
-        toast.error(message);
-        setPreviewErrors((current) => ({ ...current, [groupKey]: message }));
-        return;
+        setError(await readApiErrorMessage(response, t('duplicates.mergeFailed')))
+        return
       }
-      toast.success(t("duplicates.merged"));
-      setPreviews((current) =>
-        withoutPreview(current, `${groupKey}:${duplicateId}`),
-      );
-      await load();
-    } catch {
-      const message = t("duplicates.mergeFailed");
-      toast.error(message);
-      setPreviewErrors((current) => ({ ...current, [groupKey]: message }));
+      toast.success(t('duplicates.merged'))
+      router.replace('/projects/duplicates')
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('duplicates.mergeFailed'))
     } finally {
-      setBusy(null);
+      setBusy(false)
     }
+  }
+
+  function projectOption(project: Project) {
+    return `${project.name}${project.code ? ` · ${project.code}` : ''}`
   }
 
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t("duplicates.title")}
-          description={t("duplicates.description")}
-        />
-      }
-      className="space-y-4"
+    <UrlDrawer
+      open
+      closeHref="/projects/duplicates"
+      size="xl"
+      title={t(`duplicates.kind.${group.kind}`, { key: group.key })}
+      description={t('duplicates.chooseSurvivor')}
     >
-      {loadFailed ? (
-        <p className="text-sm text-red-600">{t("duplicates.loadFailed")}</p>
-      ) : groups === null ? (
-        <p className="text-sm text-slate-500">{t("duplicates.loading")}</p>
-      ) : groups.length === 0 ? (
-        <p className="text-sm text-slate-500">{t("duplicates.empty")}</p>
-      ) : (
-        groups.map((group, index) => {
-          const groupKey = `${group.kind}:${group.key}:${index}`;
-          const survivorId = survivors[groupKey] ?? group.projects[0]?.id ?? "";
-          return (
-            <Card key={groupKey}>
-              <CardHeader>
-                <CardTitle>
-                  {t(`duplicates.kind.${group.kind}`, { key: group.key })}
-                </CardTitle>
-                <CardDescription>
-                  {t("duplicates.chooseSurvivor")}
-                </CardDescription>
-              </CardHeader>
-              {previewErrors[groupKey] ? (
-                <div className="px-6 pb-2">
-                  <p
-                    role="alert"
-                    className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
-                  >
-                    {previewErrors[groupKey]}
-                  </p>
-                </div>
-              ) : null}
-              <CardContent>
-                <PagedTable
-                  source="projects_duplicate_candidates"
-                  emptyAsRow
-                  rows={group.projects}
-                  rowKey={(project) => project.id}
-                  empty={t("duplicates.empty")}
-                  searchable
-                  columns={[
-                    {
-                      key: "survivor",
-                      header: t("duplicates.survivor"),
-                      cell: (project) => (
-                        <input
-                          type="radio"
-                          name={groupKey}
-                          checked={survivorId === project.id}
-                          onChange={() => {
-                            setSurvivors((current) => ({
-                              ...current,
-                              [groupKey]: project.id,
-                            }));
-                            setPreviewErrors((current) =>
-                              withoutKey(current, groupKey),
-                            );
-                          }}
-                          aria-label={t("duplicates.survivor")}
-                        />
-                      ),
-                    },
-                    {
-                      key: "code",
-                      header: t("duplicates.code"),
-                      cell: (project) => (
-                        <span className="font-mono">{project.code ?? "—"}</span>
-                      ),
-                      search: (project) => project.code ?? "",
-                    },
-                    {
-                      key: "name",
-                      header: t("duplicates.name"),
-                      cell: (project) => project.name,
-                      search: (project) => project.name,
-                    },
-                    {
-                      key: "status",
-                      header: t("duplicates.status"),
-                      cell: (project) => (
-                        <Badge
-                          variant={project.isActive ? "success" : "warning"}
-                        >
-                          {enumLabel(
-                            project.status,
-                            projectStatusLabels,
-                            tCommon("labels.unknownValue"),
-                          )}
-                        </Badge>
-                      ),
-                    },
-                    {
-                      key: "action",
-                      header: t("duplicates.action"),
-                      cell: (project) => {
-                        const cached = previews[`${groupKey}:${project.id}`];
-                        const previewResult =
-                          cached && cached.survivorId === survivorId
-                            ? cached
-                            : null;
-                        const movedTotal = previewResult
-                          ? previewResult.moved.reduce(
-                              (sum, item) => sum + item.rows,
-                              0,
-                            )
-                          : 0;
-                        return project.id === survivorId ? (
-                          <span className="text-xs text-slate-500">
-                            {t("duplicates.kept")}
-                          </span>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            {canMerge ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={busy !== null}
-                                onClick={() =>
-                                  preview(groupKey, survivorId, project.id)
-                                }
-                              >
-                                {t("duplicates.preview")}
-                              </Button>
-                            ) : null}
-                            {canMerge &&
-                            previewResult &&
-                            !previewResult.alreadyMerged ? (
-                              <Button
-                                size="sm"
-                                disabled={busy !== null}
-                                onClick={() =>
-                                  merge(groupKey, survivorId, project.id)
-                                }
-                              >
-                                <GitMerge size={13} />
-                                {t("duplicates.merge", { count: movedTotal })}
-                              </Button>
-                            ) : null}
-                            {previewResult ? (
-                              <span className="text-xs text-slate-500">
-                                {previewResult.alreadyMerged
-                                  ? t("duplicates.alreadyMerged")
-                                  : t("duplicates.moveCount", {
-                                      count: movedTotal,
-                                    })}
-                              </span>
-                            ) : null}
-                          </div>
-                        );
-                      },
-                    },
-                  ]}
-                />
-              </CardContent>
-            </Card>
-          );
-        })
-      )}
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Play size={13} />
-        {t("duplicates.impactNote")}
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="duplicate-project-survivor">{t('duplicates.survivor')}</Label>
+          <Select
+            id="duplicate-project-survivor"
+            value={survivorId}
+            onChange={(event) => selectSurvivor(event.target.value)}
+            disabled={busy || !canMerge}
+          >
+            {group.projects.map((project) => <option key={project.id} value={project.id}>{projectOption(project)}</option>)}
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="duplicate-project-source">{t('duplicates.mergeSource')}</Label>
+          <Select
+            id="duplicate-project-source"
+            value={effectiveDuplicateId}
+            onChange={(event) => {
+              setDuplicateId(event.target.value)
+              setPreview(null)
+              setError(null)
+            }}
+            disabled={busy || !canMerge}
+          >
+            {duplicateCandidates.map((project) => <option key={project.id} value={project.id}>{projectOption(project)}</option>)}
+          </Select>
+        </div>
+        {error ? <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">{error}</p> : null}
+        {activePreview ? (
+          <p role="status" className="text-sm text-slate-600 dark:text-slate-300">
+            {activePreview.alreadyMerged ? t('duplicates.alreadyMerged') : t('duplicates.moveCount', { count: movedCount })}
+          </p>
+        ) : null}
+        {!canMerge ? <p className="text-sm text-slate-600 dark:text-slate-300">{t('duplicates.manageRequired')}</p> : null}
+        {canMerge ? (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={busy || !effectiveDuplicateId} onClick={previewMerge}>
+              {t('duplicates.preview')}
+            </Button>
+            {activePreview && !activePreview.alreadyMerged ? (
+              <Button type="button" disabled={busy} onClick={merge}>
+                {t('duplicates.merge', { count: movedCount })}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-    </ListPageLayout>
-  );
+    </UrlDrawer>
+  )
 }

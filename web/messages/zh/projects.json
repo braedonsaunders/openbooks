@@ -625,6 +625,12 @@
       "job_number": "相同工作编号（{key}）"
     },
     "chooseSurvivor": "选择保留的项目，其他项目上的所有引用将在一个事务中移至该项目。",
+    "matchKind": "匹配类型",
+    "matchKey": "匹配键",
+    "candidateCount": "候选项",
+    "openGroup": "查看分组",
+    "mergeSource": "要合并的项目",
+    "manageRequired": "您可以查看重复项目；预览和合并需要项目管理权限。",
     "survivor": "保留项",
     "code": "编码",
     "name": "名称",

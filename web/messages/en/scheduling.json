@@ -358,6 +358,9 @@
     "description": "List, configure and archive scheduling boards.",
     "return": "Back to schedule"
   },
+  "recipients": {
+    "title": "Board resource recipients"
+  },
   "distribution": {
     "title": "Email schedule",
     "close": "Close",

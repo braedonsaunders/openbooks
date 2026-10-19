@@ -625,6 +625,12 @@
       "job_number": "Gleiche Auftragsnummer ({key})"
     },
     "chooseSurvivor": "Wählen Sie das überlebende Projekt. Alle Verweise der anderen werden in einer Transaktion dorthin verschoben.",
+    "matchKind": "Vergleichsart",
+    "matchKey": "Vergleichsschlüssel",
+    "candidateCount": "Kandidaten",
+    "openGroup": "Gruppe prüfen",
+    "mergeSource": "Zusammenzuführendes Projekt",
+    "manageRequired": "Sie können doppelte Projekte prüfen. Für Vorschau und Zusammenführung ist die Berechtigung Projekte verwalten erforderlich.",
     "survivor": "Überlebender",
     "code": "Code",
     "name": "Name",

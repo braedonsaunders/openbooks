@@ -358,6 +358,9 @@
     "description": "列出、配置和归档排程看板。",
     "return": "返回排程"
   },
+  "recipients": {
+    "title": "看板资源接收人"
+  },
   "distribution": {
     "title": "邮件发送排程",
     "close": "关闭",

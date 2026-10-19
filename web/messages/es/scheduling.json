@@ -358,6 +358,9 @@
     "description": "Listar, configurar y archivar tableros de planificación.",
     "return": "Volver al calendario"
   },
+  "recipients": {
+    "title": "Destinatarios de recursos del tablero"
+  },
   "distribution": {
     "title": "Enviar horario por correo",
     "close": "Cerrar",

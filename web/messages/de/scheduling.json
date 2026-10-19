@@ -358,6 +358,9 @@
     "description": "Planungsboards anzeigen, konfigurieren und archivieren.",
     "return": "Zurück zum Zeitplan"
   },
+  "recipients": {
+    "title": "Empfänger für Board-Ressourcen"
+  },
   "distribution": {
     "title": "Einsatzplan per E-Mail senden",
     "close": "Schließen",

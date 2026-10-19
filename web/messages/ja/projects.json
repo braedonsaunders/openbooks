@@ -625,6 +625,12 @@
       "job_number": "同じジョブ番号（{key}）"
     },
     "chooseSurvivor": "残すプロジェクトを選択してください。他のプロジェクトの参照はすべて1件のトランザクションで移行します。",
+    "matchKind": "一致の種類",
+    "matchKey": "一致キー",
+    "candidateCount": "候補数",
+    "openGroup": "グループを確認",
+    "mergeSource": "統合するプロジェクト",
+    "manageRequired": "重複プロジェクトを確認できます。プレビューと統合にはプロジェクト管理権限が必要です。",
     "survivor": "残すプロジェクト",
     "code": "コード",
     "name": "名前",
