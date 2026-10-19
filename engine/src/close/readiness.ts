@@ -98,14 +98,14 @@ export async function periodFingerprintEvidence(
           -- Live entries only: voided documents carry no activity for the period to close
           and d.status in ('draft','pending_approval','approved','posted')
           and d.posting_period_id is null
-          and d.document_date between ${period.starts_on}::date and ${period.ends_on}::date
+          and coalesce(d.posting_date, d.document_date) between ${period.starts_on}::date and ${period.ends_on}::date
           and ${documentScope}) as unassigned_documents,
       (select coalesce(max(d.updated_at)::text, '') from documents d
         where d.org_id = ${orgId}
           -- Live entries only: the change marker watches the same unassigned set the count above reads.
           and d.status in ('draft','pending_approval','approved','posted')
           and d.posting_period_id is null
-          and d.document_date between ${period.starts_on}::date and ${period.ends_on}::date
+          and coalesce(d.posting_date, d.document_date) between ${period.starts_on}::date and ${period.ends_on}::date
           and ${documentScope}) as unassigned_document_changed,
       (select count(*) from reconciliations r join accounts a on a.org_id=r.org_id and a.id=r.account_id join accounting_periods p on p.id = ${periodId} and p.org_id = r.org_id
         where r.org_id = ${orgId} and r.through_date <= p.ends_on and r.status = 'signed_off'
@@ -238,7 +238,7 @@ export async function readinessChecks(
             -- here instead of vanishing from the gate.
             and (d.posting_period_id = ${ctx.period_id}
               or (d.posting_period_id is null and d.status in ('draft','pending_approval')
-                and d.document_date between ${ctx.starts_on} and ${ctx.ends_on}))
+                and coalesce(d.posting_date, d.document_date) between ${ctx.starts_on} and ${ctx.ends_on}))
             and ${documentScope}) as count`),
       db.execute(sql`
       select count(*) as count
@@ -253,7 +253,7 @@ export async function readinessChecks(
          and d.status = 'approved'
          and d.kind not in (${nonPostingKindList()})
          and d.posting_period_id is null
-         and d.document_date between ${ctx.starts_on} and ${ctx.ends_on}
+         and coalesce(d.posting_date, d.document_date) between ${ctx.starts_on} and ${ctx.ends_on}
          and ${documentScope}`),
       // Bank-unreconciled returns the open accounts themselves (not just a
       // count) with per-account source-evidence coverage, so the close

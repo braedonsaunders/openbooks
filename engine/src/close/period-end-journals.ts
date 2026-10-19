@@ -401,7 +401,7 @@ async function draftsInYear(
           and d.kind not in (${nonPosting})
           and (d.subsidiary_id is null or d.subsidiary_id = ${subsidiaryId})
           and ((p.fiscal_calendar_id = ${year.calendarId} and p.fiscal_year = ${year.fiscalYear})
-            or (d.posting_period_id is null and d.document_date between ${year.startsOn}::date and ${year.endsOn}::date)))
+            or (d.posting_period_id is null and coalesce(d.posting_date, d.document_date) between ${year.startsOn}::date and ${year.endsOn}::date)))
     )::text as count`)).rows[0];
   return Number(row?.count ?? 0);
 }

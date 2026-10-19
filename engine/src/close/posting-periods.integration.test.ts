@@ -13,8 +13,8 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fix
 
 // Admin bulk assignment for the close-readiness `posting-period-missing`
 // population (approved documents without a posting period): preview derives
-// each document's period from its effective date, commit assigns it with
-// audit evidence, closed periods refuse per document, re-runs assign nothing.
+// each document's effective date and entity calendar, commit assigns it with
+// audit evidence, closed periods refuse per document, reruns assign nothing.
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -69,6 +69,34 @@ test("assign-posting-period previews, commits with audit, and is idempotent", { 
 
     const second = await commitPostingPeriodAssignment(org.orgId, { bookId: org.bookId, actorId: actor });
     assert.deepEqual(second, { assigned: [], skipped: [], refused: [] });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("assign-posting-period resolves the document's effective subsidiary calendar", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const calendarId = randomUUID();
+    const entityPeriodId = randomUUID();
+    await db.execute(sql`insert into fiscal_calendars (id,org_id,name,is_active,is_default)
+      values (${calendarId},${org.orgId},'Entity posting calendar',true,false)`);
+    await db.execute(sql`insert into accounting_periods
+      (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on)
+      select ${entityPeriodId},org_id,${calendarId},fiscal_year,period_number,'Entity period',starts_on,ends_on
+        from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`);
+    await db.execute(sql`insert into subsidiary_accounting_preferences
+      (org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason)
+      values (${org.orgId},${org.subsidiaryId},${org.date},${calendarId},'Use entity posting calendar')`);
+    const documentId = await seedOrder(org.orgId, org.subsidiaryId, 'vendor_bill', org.date);
+
+    const preview = await previewPostingPeriodAssignment(org.orgId, { bookId: org.bookId, documentIds: [documentId] });
+    assert.equal(preview.rows[0]?.blocked, false);
+    assert.equal(preview.rows[0]?.periodId, entityPeriodId);
+    const committed = await commitPostingPeriodAssignment(org.orgId, {
+      bookId: org.bookId, documentIds: [documentId], actorId: (await seedFlowActors(org.orgId)).adminId,
+    });
+    assert.deepEqual(committed.assigned, [{ documentId, periodId: entityPeriodId }]);
   } finally {
     await dropScratchOrg(org.orgId);
   }

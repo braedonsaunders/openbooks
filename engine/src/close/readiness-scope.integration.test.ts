@@ -100,31 +100,35 @@ test('close FX checks use entity functional currency and accept inverse spot quo
   } finally {await dropScratchOrg(org.orgId);}
 });
 
-test('posting-period-missing ignores period-less documents dated outside the run period', {skip:!enabled}, async () => {
+test('posting-period-missing uses effective posting dates for period-less documents', {skip:!enabled}, async () => {
   const {org,actor}=await setup();
   try {
-    const outside = randomUUID(), inside = randomUUID();
+    const outside = randomUUID(), inside = randomUUID(), postedInside = randomUUID();
     // The inside document is approved so the date bound is what excludes
     // the outside one: drafts never belong to the assignment row set.
     await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
       values (${outside},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${outside},'2026-01-15','CAD',10,0,10),
-             (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${inside},${org.date},'CAD',10,0,10)`);
+             (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${inside},${org.date},'CAD',10,0,10),
+             (${postedInside},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${postedInside},'2026-01-15','CAD',10,0,10)`);
+    await db.execute(sql`update documents set posting_date=${org.date} where org_id=${org.orgId} and id=${postedInside}`);
     const runId=await run(org,actor);
-    assert.equal((await counts(org.orgId,runId))['posting-period-missing'],1);
+    assert.equal((await counts(org.orgId,runId))['posting-period-missing'],2);
   } finally {await dropScratchOrg(org.orgId);}
 });
 
-test('open drafts without a posting period belong only to their document-date review window', {skip:!enabled}, async () => {
+test('open drafts without a posting period belong to their effective-date review window', {skip:!enabled}, async () => {
   const {org,actor}=await setup();
   try {
     for (const status of ['draft', 'pending_approval']) {
-      const outside=randomUUID(), inside=randomUUID();
+      const outside=randomUUID(), inside=randomUUID(), postedInside=randomUUID();
       await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
         values (${outside},${org.orgId},${org.subsidiaryId},'vendor_bill',${status},${outside},'2026-01-15','CAD',10,0,10),
-               (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill',${status},${inside},${org.date},'CAD',10,0,10)`);
+               (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill',${status},${inside},${org.date},'CAD',10,0,10),
+               (${postedInside},${org.orgId},${org.subsidiaryId},'vendor_bill',${status},${postedInside},'2026-01-15','CAD',10,0,10)`);
+      await db.execute(sql`update documents set posting_date=${org.date} where org_id=${org.orgId} and id=${postedInside}`);
     }
     const got=await counts(org.orgId,await run(org,actor));
-    assert.equal(got['drafts-open'],2,'only the in-period draft and pending approval need review');
+    assert.equal(got['drafts-open'],4,'drafts and pending approvals are reviewed by effective posting date');
     assert.equal(got['posting-period-missing']??0,0,'unapproved documents cannot be assigned a posting period');
   } finally {await dropScratchOrg(org.orgId);}
 });
@@ -152,16 +156,22 @@ test('posting-period-missing counts the assignment row set while drafts-open kee
   } finally {await dropScratchOrg(org.orgId);}
 });
 
-test('the close fingerprint ignores unassigned documents dated outside the run period', {skip:!enabled}, async () => {
+test('the close fingerprint scopes unassigned documents by effective posting date', {skip:!enabled}, async () => {
   const {org}=await setup();
   try {
     const before = await periodFingerprint(org.orgId, org.periodId, org.bookId);
-    const outside = randomUUID(), inside = randomUUID();
+    const outside = randomUUID(), inside = randomUUID(), postedInside = randomUUID();
     await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
-      values (${outside},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${outside},'2026-01-15','CAD',10,0,10)`);
+      values (${outside},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${outside},'2026-01-15','CAD',10,0,10),
+             (${postedInside},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${postedInside},'2026-01-15','CAD',10,0,10)`);
     assert.equal(
       await periodFingerprint(org.orgId, org.periodId, org.bookId), before,
       'a draft dated outside the period is not this review evidence and must not invalidate an attestation',
+    );
+    await db.execute(sql`update documents set posting_date=${org.date} where org_id=${org.orgId} and id=${postedInside}`);
+    assert.notEqual(
+      await periodFingerprint(org.orgId, org.periodId, org.bookId), before,
+      'an in-period posting date is review evidence even when the document date is outside',
     );
     await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
       values (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${inside},${org.date},'CAD',10,0,10)`);
