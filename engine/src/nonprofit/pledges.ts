@@ -432,8 +432,8 @@ async function readPledge(orgId: string, id: string, lock = false): Promise<Pled
 }
 async function hasActiveBookingEntry(orgId: string, bookingEntryId: string | null): Promise<boolean> {
   if (!bookingEntryId) return false;
-  // Live entries only: a reversed booking cannot authorize further pledge postings.
   return Boolean((await db.execute(sql`select 1 from journal_entries
+    -- Live entries only: a reversed booking cannot authorize further pledge postings.
     where org_id = ${orgId} and id = ${bookingEntryId} and status = 'posted'`)).rows[0]);
 }
 async function activity(orgId: string, pledgeId: string, asOfDate?: string): Promise<Activity> {
@@ -1180,9 +1180,9 @@ export async function runPledgeDiscountAmortization(input: {
         pledges.present_value::text as present_value, pledges.allowance_amount::text as allowance_amount,
         pledges.status, pledges.booked_on::text as booked_on, pledges.booking_entry_id
        from pledges
-       -- Live bookings only: a reversed booking earns no further discount amortization.
        join journal_entries book_je
          on book_je.org_id = pledges.org_id and book_je.id = pledges.booking_entry_id
+        -- Live entries only: a reversed booking earns no further discount amortization.
         and book_je.status = 'posted'
       where pledges.org_id = ${input.orgId}
         and pledges.status in ('booked', 'collecting', 'fulfilled', 'written_off')
