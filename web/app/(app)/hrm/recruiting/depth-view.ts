@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { getTranslations } from 'next-intl/server'
+import { getFormatter, type getTranslations } from 'next-intl/server'
 import { listInterviewerPools, listUpcomingInterviews } from '@openbooks/engine/hrm/recruiting/scheduling'
 import {
   listOffersWithSignature,
@@ -99,6 +99,7 @@ export interface InterviewTabRow {
 }
 
 export async function loadInterviewsTab(authz: Authz, t: T, tab: DepthTab): Promise<InterviewTabRow[]> {
+  const format = await getFormatter()
   const sittings = await listUpcomingInterviews({ orgId: authz.user.orgId, actorId: authz.user.id })
   return sittings.map((sitting) => {
     const complete = sitting.scorecardsTotal > 0 && sitting.scorecardsSubmitted === sitting.scorecardsTotal
@@ -107,7 +108,7 @@ export async function loadInterviewsTab(authz: Authz, t: T, tab: DepthTab): Prom
       candidate: sitting.candidateName,
       requisition: sitting.requisitionTitle,
       kind: sitting.kind,
-      when: sitting.scheduledAt.slice(0, 16).replace('T', ' '),
+      when: format.dateTime(new Date(sitting.scheduledAt), { dateStyle: 'medium', timeStyle: 'short' }),
       slots:
         sitting.bookedSlots > 0
           ? t('recruiting.depth.bookedSlots', { count: sitting.bookedSlots })
@@ -270,7 +271,10 @@ export async function loadInterviewDrawer(
       actorId: authz.user.id,
       interviewId,
     })
-    const timeZone = await businessTimeZone(authz.user.orgId)
+    const [timeZone, format] = await Promise.all([
+      businessTimeZone(authz.user.orgId),
+      getFormatter(),
+    ])
     const interview = (
       await db.execute<{ candidate: string; requisition: string; kitId: string | null }>(sql`
         select c.display_name as candidate, r.title as requisition, i.kit_id as "kitId"
@@ -339,17 +343,23 @@ export async function loadInterviewDrawer(
       criteria,
       slots: slotRows.map((row) => ({
         id: row.id,
-        startsAt: row.startsAt.slice(0, 16).replace('T', ' '),
-        endsAt: row.endsAt.slice(0, 16).replace('T', ' '),
+        startsAt: format.dateTime(new Date(row.startsAt), { dateStyle: 'medium', timeStyle: 'short' }),
+        endsAt: format.dateTime(new Date(row.endsAt), { dateStyle: 'medium', timeStyle: 'short' }),
         kind: t(`recruiting.interviewKind.${row.kind}`),
       })),
       mine: cards.mine
-        ? { id: cards.mine.id, overall: translateRating(t, cards.mine.overall), submittedAt: cards.mine.submittedAt }
+        ? {
+            id: cards.mine.id,
+            overall: translateRating(t, cards.mine.overall),
+            submittedAt: cards.mine.submittedAt
+              ? format.dateTime(new Date(cards.mine.submittedAt), { dateStyle: 'medium', timeStyle: 'short' })
+              : null,
+          }
         : null,
       others: cards.others.map((card) => ({
         interviewer: card.interviewerName,
         overall: translateRating(t, card.overall),
-        submittedAt: card.submittedAt,
+        submittedAt: card.submittedAt ? format.dateTime(new Date(card.submittedAt), { dateStyle: 'medium', timeStyle: 'short' }) : null,
       })),
       blinded: cards.blinded,
       summary,
@@ -421,11 +431,15 @@ export async function loadOfferDrawerExtra(
       offerSignatureState({ orgId: authz.user.orgId, actorId: authz.user.id, offerId }),
       listOfferVersions({ orgId: authz.user.orgId, actorId: authz.user.id, offerId }),
     ])
+    const format = await getFormatter()
     return {
       canManage: can(authz, 'hrm.recruiting.manage'),
       signature: t(`recruiting.signature.${state.signatureStatus ?? 'unsigned'}`),
       signatureVariant: signatureVariant(state.signatureStatus),
-      versions: versions.map((version) => ({ version: version.version, createdAt: version.createdAt })),
+      versions: versions.map((version) => ({
+        version: version.version,
+        createdAt: format.dateTime(new Date(version.createdAt), { dateStyle: 'medium', timeStyle: 'short' }),
+      })),
       labels: {
         signature: t('recruiting.depth.signatureState'),
         versions: t('recruiting.depth.versionHistory'),
@@ -469,6 +483,7 @@ export async function loadPostingDrawerExtra(
       listPostings({ orgId: authz.user.orgId, actorId: authz.user.id }),
       listPostingEvents({ orgId: authz.user.orgId, actorId: authz.user.id, postingId }),
     ])
+    const format = await getFormatter()
     const posting = postings.find((row) => row.id === postingId)
     if (!posting) return null
     return {
@@ -482,7 +497,7 @@ export async function loadPostingDrawerExtra(
       },
       events: events.map((event) => ({
         kind: t(`recruiting.postingEvent.${event.kind}`),
-        recordedAt: event.recordedAt.slice(0, 16).replace('T', ' '),
+        recordedAt: format.dateTime(new Date(event.recordedAt), { dateStyle: 'medium', timeStyle: 'short' }),
       })),
       labels: {
         events: t('recruiting.depth.dispositionLog'),

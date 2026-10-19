@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { useViewerFormat } from "../../../../../lib/viewer-format";
 import { Badge, Button, Input, Select, Textarea, UrlDrawer } from "@openbooks/ui";
 import { mergeHref } from "../../../../../lib/list-params";
 import { usePeriodDrawerState } from "./close-setup-period-drawer-state";
@@ -97,6 +98,7 @@ export function BankingReconPanel({
 }
 
 export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
+  const viewerFormat = useViewerFormat();
   const {
     date,
     civilDate,
@@ -446,7 +448,7 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
                   {typeof item.expires_at === "string" ? (
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {t("periods.reopenActiveUntil", {
-                        date: String(item.expires_at).slice(0, 16).replace("T", " "),
+                        date: viewerFormat.dateTime(new Date(item.expires_at)),
                       })}
                     </p>
                   ) : null}

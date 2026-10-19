@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { toast } from 'sonner'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import {
@@ -231,6 +232,7 @@ export function ParallelRunView({
   canManage: boolean
 }) {
   const t = useTranslations('payroll')
+  const viewerFormat = useViewerFormat()
   const router = useRouter()
   const { money } = useMoney()
   const text = (key: string, fallback: string) =>
@@ -514,7 +516,7 @@ export function ParallelRunView({
       align: 'right',
       cell: (row) => (
         <span className="text-xs text-slate-500 dark:text-slate-400">
-          {row.comparedAt.slice(0, 16).replace('T', ' ')}
+          {viewerFormat.dateTime(new Date(row.comparedAt))}
         </span>
       ),
     },

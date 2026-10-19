@@ -2,7 +2,7 @@ import 'server-only'
 
 import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { getFormatter, getTranslations } from 'next-intl/server'
 import {
   badge,
   column,
@@ -203,6 +203,7 @@ export async function loadMeOneOnOnesPage(
   await requireFeatureEnabled(authz.user.orgId, 'hrm')
   await requireFeatureEnabled(authz.user.orgId, 'hrmPerformance')
   const t = await getTranslations('hrm')
+  const format = await getFormatter()
   const tabs = await meTabs(authz, '/me/one-on-ones')
 
   const reportFilter = typeof sp.report === 'string' && sp.report.length > 0 ? sp.report : null
@@ -227,7 +228,7 @@ export async function loadMeOneOnOnesPage(
     : t('me.oneOnOnes.scheduled')
   const toRow = (one: (typeof ones)[number]) => ({
     id: one.id,
-    when: one.scheduledAt.slice(0, 16).replace('T', ' '),
+    when: format.dateTime(new Date(one.scheduledAt), { dateStyle: 'medium', timeStyle: 'short' }),
     other: otherName(one),
     status: one.status,
     statusLabel: statusLabel(one.status),

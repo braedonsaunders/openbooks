@@ -547,7 +547,7 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.myScorecard}</h4>
         {detail.mine?.submittedAt ? (
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            {labels.overall}: {detail.mine.overall} · {detail.mine.submittedAt.slice(0, 16).replace('T', ' ')}
+            {labels.overall}: {detail.mine.overall} · {detail.mine.submittedAt}
           </p>
         ) : (
           <div className="mt-2">
@@ -598,7 +598,7 @@ export function OfferDepthBody({ offerId, extra }: { offerId: string; extra: Off
       <ul className="mt-1 space-y-1 text-sm text-slate-600 dark:text-slate-300">
         {extra.versions.map((version) => (
           <li key={version.version}>
-            v{version.version} · {version.createdAt.slice(0, 16).replace('T', ' ')}
+            v{version.version} · {version.createdAt}
           </li>
         ))}
       </ul>

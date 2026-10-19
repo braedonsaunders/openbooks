@@ -58,6 +58,7 @@ export function ScheduleEditor({
 }) {
   const t = useTranslations('reports.schedule')
   const tc = useTranslations('common')
+  const viewerFormat = useViewerFormat()
   const router = useRouter()
   const [adding, setAdding] = useState(false)
 
@@ -135,7 +136,7 @@ export function ScheduleEditor({
                 ? t('recipientsTo', { emails: s.recipient_emails.join(', ') })
                 : t('noRecipients')}
               {' · '}
-              {t('nextRun', { time: String(s.next_run_at).slice(0, 16).replace('T', ' ') })}
+              {t('nextRun', { time: viewerFormat.dateTime(new Date(s.next_run_at)) })}
             </div>
           </div>
           {canSchedule ? (

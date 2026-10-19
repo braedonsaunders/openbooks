@@ -168,7 +168,7 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
                       <Badge variant="secondary">{h.kind}</Badge>
                     </TableCell>
                     <TableCell>{h.reason ?? '—'}</TableCell>
-                    <TableCell>{h.at.slice(0, 16).replace('T', ' ')}</TableCell>
+                    <TableCell>{h.at}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

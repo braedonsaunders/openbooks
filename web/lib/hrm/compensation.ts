@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getLocale, getTranslations } from 'next-intl/server'
+import { getFormatter, getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { compensationArchitectureSummary, compensationWageSummary, type CompensationWageSummary } from '@openbooks/engine/hrm/compensation'
 import { formatDecimal } from '../money-format'
@@ -728,6 +728,7 @@ export async function loadCompCycleDetail(
   await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   await requireFeatureEnabled(authz.user.orgId, 'payroll')
   const t = await getTranslations('hrm')
+  const format = await getFormatter()
   const orgId = authz.user.orgId
   let cycle: Awaited<ReturnType<typeof getCycle>>
   try {
@@ -856,7 +857,7 @@ export async function loadCompCycleDetail(
       kind: t.has(`compensation.eventKind.${h.kind}`) ? t(`compensation.eventKind.${h.kind}`) : h.kind,
       actor: h.actor,
       reason: h.reason,
-      at: h.at,
+      at: format.dateTime(new Date(h.at), { dateStyle: 'medium', timeStyle: 'short' }),
     })),
     drawerCloseHref: `/hrm/compensation/cycles/${cycleId}${segment ? `?department=${segment}` : ''}`,
     drawerLabels: {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useViewerFormat } from "../../../../../lib/viewer-format";
 import { toast } from "sonner";
 import {
   Badge,
@@ -104,6 +105,7 @@ function RunStatus({ status }: { status: string }) {
  */
 export function StripeBillingImport() {
   const t = useTranslations("admin.setup.paymentProviders");
+  const viewerFormat = useViewerFormat();
   const tc = useTranslations("common");
   const today = useBusinessToday();
   const { busy, execute } = useAppAction();
@@ -353,7 +355,7 @@ export function StripeBillingImport() {
           <SharedTableBody>
             {overview.runs.map((run) => (
               <SharedTableRow key={run.id}>
-                <SharedTableCell>{run.startedAt.slice(0, 16).replace("T", " ")}</SharedTableCell>
+                <SharedTableCell>{viewerFormat.dateTime(new Date(run.startedAt))}</SharedTableCell>
                 <SharedTableCell><RunStatus status={run.status} /></SharedTableCell>
                 <SharedTableCell>
                   {t("billingImport.runCreatedDetail", {

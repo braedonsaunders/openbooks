@@ -97,3 +97,11 @@ test('billing import history is a loaded list with stable run identities', () =>
   assert.equal(source.rowsField, 'runs')
   assert.equal(source.rowKeyField, 'id')
 })
+
+test('report delivery history is a loaded list with stable run identities', () => {
+  const source = preparedListSource('report_delivery_runs')
+  assert.equal(source.mode, 'loaded')
+  assert.equal(source.route, '/reports/custom/run/[id]/delivery')
+  assert.equal(source.rowsField, 'recentRuns')
+  assert.equal(source.rowKeyField, 'id')
+})

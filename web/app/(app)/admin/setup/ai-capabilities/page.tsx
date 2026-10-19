@@ -1,6 +1,6 @@
 import { ListPageLayout } from '@/components/page-layout'
 import Link from 'next/link'
-import { getTranslations } from 'next-intl/server'
+import { getFormatter, getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { db } from '@openbooks/engine/platform/db'
 import { listDecisionsPage } from '@openbooks/engine/hrm/ai/governance'
@@ -25,6 +25,7 @@ export default async function AssistantActionSetup({ searchParams }: {
   await requireFeatureEnabled(authz.user.orgId, 'aiGovernanceLedger')
   const sp = await searchParams
   const t = await getTranslations('admin.aiLedger')
+  const format = await getFormatter()
   const activity = pickString(sp.tab) === 'activity'
   const content = activity ? await activityBody() : <AiGovernanceSection ledger={await loadAiLedger(authz)} />
 
@@ -52,7 +53,7 @@ export default async function AssistantActionSetup({ searchParams }: {
         <a href={`/api/admin/ai-decisions?${exportParams}`} className="text-sm font-medium text-teal-700 dark:text-teal-300">{t('exportPage')}</a>
       </>}
       columns={[
-        { key: 'when', header: t('columns.when'), cell: (row) => row.recordedAt.slice(0, 16).replace('T', ' ') },
+        { key: 'when', header: t('columns.when'), cell: (row) => format.dateTime(new Date(row.recordedAt), { dateStyle: 'medium', timeStyle: 'short' }) },
         { key: 'capability', header: t('columns.capability'), cell: (row) => AI_CAPABILITIES.get(row.capabilityKey)?.name ?? row.capabilityKey },
         { key: 'summary', header: t('columns.summary'), cell: (row) => row.outputSummary },
         { key: 'outcome', header: t('columns.outcome'), cell: (row) => ['shown', 'accepted', 'edited', 'rejected', 'expired'].includes(row.outcome) ? t(`outcomes.${row.outcome}`) : row.outcome },
