@@ -56,14 +56,15 @@ test(
         "100.0000",
       );
 
-      // Mid-August, August's 100.00 plan line still unposted: refuse, naming the period.
+      // Mid-August, August's 100.00 plan line still unposted: refuse, naming the
+      // period by its fiscal label rather than its stored name.
       await assert.rejects(
         disposeAsset(org.orgId, assetId, {
           proceeds: "850", proceedsAccountId: org.accounts.bank, date: "2026-08-15", actorId,
         }),
         (error: unknown) =>
           error instanceof AssetLifecycleError &&
-          /unposted depreciation.*Partial disposal \/ transfer of 100%/i.test(error.message),
+          /unposted depreciation in period P08 FY2026 covering.*Partial disposal \/ transfer of 100%/i.test(error.message),
         "disposal with the stub period unposted is refused",
       );
 

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { add } from "../money/money.ts";
+import { canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { resolveAssetAccounts } from "./depreciation-schedule-math.ts";
 import { previewDepreciationFingerprint, type FingerprintedDepreciationRow } from "./depreciation-run-scope.ts";
 
@@ -27,7 +28,10 @@ export interface DepreciationPreviewRow extends FingerprintedDepreciationRow {
   locationName: string | null;
   bookName: string;
   postsGl: boolean;
+  /** Locale-free label of the line's period (`P05 FY2026`). */
   periodName: string;
+  /** The line period's fiscal position and dates, for display labels. */
+  periodRef: PeriodDisplayInput;
   periodEndsOn: string;
   debitAccountNumber: string | null;
   debitAccountName: string | null;
@@ -60,7 +64,10 @@ export interface DepreciationPreview {
     assetId: string;
     assetNumber: string;
     periodId: string;
+    /** Locale-free label of the line's period (`P05 FY2026`). */
     periodName: string;
+    /** The line period's fiscal position and dates, for display labels. */
+    periodRef: PeriodDisplayInput;
     entryId: string;
     entryNumber: string;
     postedOn: string;
@@ -108,7 +115,9 @@ export async function previewDepreciation(
     book_name: string;
     posts_gl: boolean;
     period_id: string;
-    period_name: string;
+    fiscal_year: number;
+    period_number: number;
+    is_adjustment: boolean;
     period_ends_on: string;
     period_starts_on: string;
     amount: string;
@@ -126,7 +135,8 @@ export async function previewDepreciation(
            a.project_id, prj.name as project_name,
            a.location_id, loc.name as location_name,
            s.book_id, bk.name as book_name, bk.posts_gl,
-           l.period_id, p.name as period_name, p.ends_on::text as period_ends_on,
+           l.period_id, p.fiscal_year, p.period_number, p.is_adjustment,
+           p.ends_on::text as period_ends_on,
            p.starts_on::text as period_starts_on,
            l.planned_amount::text as amount,
            a.asset_account_id as asset_account,
@@ -171,7 +181,14 @@ export async function previewDepreciation(
     );
     accountIds.add(accounts.depreciationExpenseAccountId);
     accountIds.add(accounts.accumulatedDepreciationAccountId);
-    return { row, accounts };
+    const periodRef: PeriodDisplayInput = {
+      fiscalYear: Number(row.fiscal_year),
+      periodNumber: Number(row.period_number),
+      adjustment: row.is_adjustment === true,
+      startsOn: String(row.period_starts_on),
+      endsOn: String(row.period_ends_on),
+    };
+    return { row, accounts, periodRef, periodLabel: canonicalPeriodLabel(periodRef) };
   });
   const accountMeta =
     accountIds.size > 0
@@ -186,7 +203,7 @@ export async function previewDepreciation(
   let totalAmount = "0";
   let totalDebits = "0";
   let totalCredits = "0";
-  const rows: DepreciationPreviewRow[] = resolved.map(({ row, accounts }) => {
+  const rows: DepreciationPreviewRow[] = resolved.map(({ row, accounts, periodRef, periodLabel }) => {
     const debit = metaById.get(accounts.depreciationExpenseAccountId);
     const credit = metaById.get(accounts.accumulatedDepreciationAccountId);
     totalAmount = add(totalAmount, String(row.amount));
@@ -209,7 +226,8 @@ export async function previewDepreciation(
       bookName: String(row.book_name),
       postsGl: row.posts_gl === true,
       periodId: String(row.period_id),
-      periodName: String(row.period_name),
+      periodName: periodLabel,
+      periodRef,
       periodEndsOn: String(row.period_ends_on),
       amount: String(row.amount),
       debitAccountId: accounts.depreciationExpenseAccountId,
@@ -289,12 +307,12 @@ export async function previewDepreciation(
     // A posting date that misses a previewed line's own period is a stable
     // operator-input outcome, not drift: warn now, and Confirm skips those
     // lines by name instead of posting them on a date outside their period.
-    for (const row of due.rows) {
+    for (const { row, periodLabel } of resolved) {
       const startsOn = row.period_starts_on;
       if (!startsOn) continue;
       if (input.postingDate < startsOn || input.postingDate > String(row.period_ends_on)) {
         warnings.push(
-          `posting date ${input.postingDate} falls outside ${row.period_name} (${row.asset_number}); Confirm will skip that line.`,
+          `posting date ${input.postingDate} falls outside ${periodLabel} (${row.asset_number}); Confirm will skip that line.`,
         );
       }
     }
@@ -346,6 +364,7 @@ export async function previewDepreciation(
         assetNumber: line.assetNumber,
         periodId: line.periodId,
         periodName: line.periodName,
+        periodRef: line.periodRef,
         entryId: String(match.entry_id),
         entryNumber: String(match.entry_number),
         postedOn: String(match.posted_on),

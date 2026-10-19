@@ -18,6 +18,8 @@ Object.assign(globalThis, { __deprInputBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
+    // The recorded input's period is labelled in the viewer's locale.
+    if (specifier === "next-intl/server") return virtual("export async function getLocale() { return 'en' }; export async function getTranslations() { return (key) => key }");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
@@ -140,8 +142,19 @@ test("depreciation evidence still records an ordinary amount", async () => {
   const fx = await fixture();
   try {
     const response = await post(fx, fx.date, "100.00");
-    assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
+    const json = (await response.json().catch(() => null)) as {
+      periodName?: string;
+      periodRef?: { fiscalYear: number; periodNumber: number; adjustment: boolean };
+    } | null;
+    assert.equal(response.status, 200, JSON.stringify(json));
     assert.equal(await inputCount(fx.orgId), 1);
+    // The scratch tenant's open period is stored as '2026-07'; the response
+    // names it by fiscal position and month.
+    assert.equal(json?.periodName, "P07 FY2026 · Jul 2026");
+    assert.deepEqual(
+      [json?.periodRef?.fiscalYear, json?.periodRef?.periodNumber, json?.periodRef?.adjustment],
+      [2026, 7, false],
+    );
   } finally {
     await dropScratchOrg(fx.orgId);
   }

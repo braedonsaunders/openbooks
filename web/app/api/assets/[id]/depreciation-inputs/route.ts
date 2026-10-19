@@ -3,6 +3,7 @@ import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
+import { getLocale } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import {
@@ -10,6 +11,7 @@ import {
   recordDepreciationInput,
 } from "@openbooks/engine/assets/depreciation";
 import { normalizeMoney } from "@openbooks/engine/money/money";
+import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
 import { isUuid } from "../../../../../lib/list-params";
 import { canonicalDecimal } from "../../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
@@ -110,7 +112,10 @@ export const POST = defineRoute({
         actorId: gate.user.id,
         allowedSubsidiaryIds: scope,
       });
-      return NextResponse.json(result);
+      return NextResponse.json({
+        ...result,
+        periodName: periodDisplayLabel(result.periodRef, await getLocale()),
+      });
     } catch (error) {
       return apiErrorResponse(error, { safeStatus: 422 });
     }

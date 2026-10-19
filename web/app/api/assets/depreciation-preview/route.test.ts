@@ -38,7 +38,9 @@ interface DueRow {
   book_name: string;
   posts_gl: boolean;
   period_id: string;
-  period_name: string;
+  fiscal_year: number;
+  period_number: number;
+  is_adjustment: boolean;
   period_ends_on: string;
   period_starts_on: string;
   amount: string;
@@ -79,7 +81,9 @@ function dueRow(line: string, asset: string, number: string, amount: string, pos
     book_name: "GAAP",
     posts_gl: postsGl,
     period_id: PERIOD_ID,
-    period_name: "2026-09",
+    fiscal_year: 2026,
+    period_number: 9,
+    is_adjustment: false,
     period_ends_on: "2026-09-30",
     period_starts_on: "2026-09-01",
     amount,
@@ -243,6 +247,8 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../lib/feature-gates", "mock:feature-gates"],
   ["@/lib/feature-gates", "mock:feature-gates"],
+  // The viewer's locale labels the previewed periods.
+  ["next-intl/server", "mock:next-intl-server"],
 ]);
 
 function mockedUrl(specifier: string): string | null {
@@ -262,6 +268,8 @@ const _hooks = registerHooks({
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
+    if (url === "mock:next-intl-server")
+      return { format: "module", source: "export async function getLocale() { return 'en' }\nexport async function getTranslations() { return (key) => key }", shortCircuit: true };
     const source = mockSources.get(url);
     if (source !== undefined)
       return { format: "module", source, shortCircuit: true };
@@ -298,6 +306,8 @@ interface PreviewBody {
   rows: {
     lineId: string;
     assetNumber: string;
+    periodName: string;
+    periodRef: { fiscalYear: number; periodNumber: number; adjustment: boolean; startsOn: string; endsOn: string };
     amount: string;
     debitAccountId: string;
     debitAccountNumber: string;
@@ -323,6 +333,12 @@ test("preview returns the exact balanced impact with a fingerprint", async () =>
   assert.equal(data.rows.length, 2);
   const first = data.rows[0]!;
   assert.equal(first.assetNumber, "FA-0001");
+  // The line's period reads by fiscal position and month in the viewer's
+  // locale, with the position and dates carried beside the label.
+  assert.equal(first.periodName, "P09 FY2026 · Sep 2026");
+  assert.deepEqual(first.periodRef, {
+    fiscalYear: 2026, periodNumber: 9, adjustment: false, startsOn: "2026-09-01", endsOn: "2026-09-30",
+  });
   assert.equal(first.amount, "100.0000");
   assert.equal(first.debitAccountId, EXPENSE_ID);
   assert.equal(first.debitAccountNumber, "6100");
@@ -406,7 +422,7 @@ test("a posting date outside a line's period warns instead of failing", async ()
   assert.ok(
     data.warnings.some(
       (warning) =>
-        warning.includes("posting date 2026-08-15") &&
+        warning.includes("posting date 2026-08-15 falls outside P09 FY2026 (FA-0001)") &&
         warning.includes("Confirm will skip"),
     ),
   );

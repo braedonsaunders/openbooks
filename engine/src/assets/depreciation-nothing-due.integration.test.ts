@@ -60,12 +60,29 @@ test("a mid-period run names the next due line instead of an all-zero silence", 
     assert.equal(mid.nextDue.assetNumber, "NEXTDUE-1");
     assert.equal(mid.nextDue.endsOn, "2026-07-31");
     assert.equal(mid.nextDue.amount, "1000.0000");
+    // The scratch period is stored as '2026-07'; the run names it by fiscal position.
+    assert.equal(mid.nextDue.period, "P07 FY2026");
+    assert.deepEqual(mid.nextDue.periodRef, {
+      fiscalYear: 2026, periodNumber: 7, adjustment: false, startsOn: "2026-07-01", endsOn: "2026-07-31",
+    });
 
     // Control: once the period ends the same line posts, so the engine rule
     // (post only ended periods) is intact — only the silence is fixed.
     const end = await runDepreciation(org.orgId, "2026-07-31", seeded.actorId, seeded.assetId);
     assert.equal(end.posted, 1);
     assert.equal(end.totalAmount, "1000.0000");
+    assert.equal(end.entries[0]!.period, "P07 FY2026");
+    // The entry number keeps the stored period name (it is the journal's
+    // identity); the entry and line memos name the fiscal period.
+    const journal = (await withBypassContext(() => db.execute<{ entry_number: string; memo: string; line_memos: string[] }>(sql`
+      select e.entry_number, e.memo, array_agg(l.memo order by l.line_number) as line_memos
+        from journal_entries e
+        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+       where e.org_id = ${org.orgId} and e.id = ${end.entries[0]!.entryId}
+       group by e.entry_number, e.memo`))).rows[0]!;
+    assert.match(journal.entry_number, /^DEP-NEXTDUE-1-2026-07-/);
+    assert.equal(journal.memo, "Depreciation — Mid-period asset (P07 FY2026)");
+    assert.deepEqual(journal.line_memos, ["Depreciation P07 FY2026", "Depreciation P07 FY2026"]);
 
     // And with nothing left unposted there is no next line to name.
     const done = await runDepreciation(org.orgId, "2026-07-31", seeded.actorId, seeded.assetId);

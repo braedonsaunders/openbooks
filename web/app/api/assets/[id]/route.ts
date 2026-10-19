@@ -3,6 +3,7 @@ import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
+import { getLocale } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import {
@@ -261,6 +262,7 @@ export const GET = defineRoute({
     const page = Number.parseInt(search.get("page") ?? "1", 10);
     const payload = await loadAsset(id, gate.user.orgId, {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      locale: await getLocale(),
       bookId: search.get("bookId"),
       query: search.get("q") ?? "",
       page: Number.isInteger(page) && page > 0 ? page : 1,
@@ -831,6 +833,8 @@ export const PATCH = defineRoute({
           // Partial drafts legitimately have no category/date/life yet.
         }
         // Return the saved revision while still holding the parent lock.
+        // The drawer re-reads the schedule through its page loader after a
+        // save; this payload names schedule periods by their canonical label.
         const saved = await loadAssetWithRunner(tx, id, user.orgId, {
           allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         });

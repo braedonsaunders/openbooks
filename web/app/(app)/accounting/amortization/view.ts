@@ -1,12 +1,13 @@
 import 'server-only'
 import { isFeatureEnabled } from '@/lib/features'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { AmortizationError, listCurrentTemplates, loadScheduleDetail, reconcileDeferralAccounts, type ScheduleDetail } from '@openbooks/engine/amortization'
 import { db } from '@openbooks/engine/platform/database'
 import { businessToday } from '@openbooks/engine/platform/business-date'
+import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
@@ -202,11 +203,23 @@ export async function loadAmortization(sp: Record<string, string | string[] | un
     }
   }
 
-  const periods = (await db.execute<{ id: string; name: string; ends_on: string }>(sql`
-    select id, name, ends_on::text as ends_on from accounting_periods
+  // Run-period options read by fiscal position and month in the viewer's locale.
+  const locale = await getLocale()
+  const periods = (await db.execute<{ id: string; fiscal_year: number; period_number: number; starts_on: string; ends_on: string }>(sql`
+    select id, fiscal_year, period_number, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods
      where org_id = ${orgId} and not is_adjustment
      order by starts_on desc
-     limit 60`)).rows.map((row) => ({ id: row.id, name: row.name, endsOn: row.ends_on }))
+     limit 60`)).rows.map((row) => ({
+      id: row.id,
+      name: periodDisplayLabel({
+        fiscalYear: Number(row.fiscal_year),
+        periodNumber: Number(row.period_number),
+        adjustment: false,
+        startsOn: row.starts_on,
+        endsOn: row.ends_on,
+      }, locale),
+      endsOn: row.ends_on,
+    }))
   const requestedPeriod = pickString(sp.period)
   const selectedPeriod = periods.find((period) => period.id === requestedPeriod)
     ?? periods.find((period) => period.endsOn >= today && period.endsOn.slice(0, 7) === today.slice(0, 7))

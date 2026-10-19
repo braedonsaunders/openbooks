@@ -3,13 +3,13 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withTransactionSavepoint } from "../platform/db.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { postEntry } from "../journal/post-entry.ts";
-import { arePeriodModulesOpen } from "../periods/period-policy.ts";
+import { arePeriodModulesOpen, canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { add, isZero, neg } from "../money/money.ts";
 import { DepreciationRefusalError } from "./depreciation-errors.ts";
 import { resolveAssetAccounts, type AssetAccounts } from "./depreciation-schedule-math.ts";
 import { buildSchedule } from "./depreciation-schedule-build.ts";
-import { ClosedBatchError, StalePreviewError, assertConfirmSetCurrent, reconcileAssetDepreciationStatusWithRunner, type ClaimedDepreciationLine, type ExpectedDepreciationLine, type RunDepreciationResult, type RunDepreciationScope } from "./depreciation-run-scope.ts";
+import { ClosedBatchError, StalePreviewError, assertConfirmSetCurrent, depreciationPeriodRef, reconcileAssetDepreciationStatusWithRunner, type ClaimedDepreciationLine, type DepreciationPeriodColumns, type ExpectedDepreciationLine, type RunDepreciationResult, type RunDepreciationScope } from "./depreciation-run-scope.ts";
 
 /**
  * Recognize every due depreciation line through `asOfDate`. Posting books use
@@ -37,6 +37,9 @@ export async function reloadClaimLine(
            s.book_id,
            bk.posts_gl,
            p.name as period_name,
+           p.fiscal_year,
+           p.period_number,
+           p.is_adjustment,
            p.ends_on as period_ends_on,
            p.starts_on::text as period_starts_on,
            p.ends_on::text as period_ends_text,
@@ -122,6 +125,7 @@ async function runConfirmBatch(
     result.skippedAssets.push({
       assetNumber: line.assetNumber,
       period: line.periodName,
+      periodRef: line.periodRef,
       reason: "line already posted",
     });
   }
@@ -129,14 +133,14 @@ async function runConfirmBatch(
   const lineIds = [...new Set(scope.expectedLines.map((line) => line.lineId))].sort();
   const scopedAssetIds =
     scope.assetIds && scope.assetIds.length > 0 ? [...new Set(scope.assetIds)] : undefined;
-  const due = await outer.execute<{
+  const due = await outer.execute<DepreciationPeriodColumns & {
     line_id: string;
     asset_id: string;
     asset_number: string;
-    period_name: string;
   }>(sql`
     select l.id as line_id, a.id as asset_id,
-           a.asset_number, p.name as period_name
+           a.asset_number, p.fiscal_year, p.period_number, p.is_adjustment,
+           p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_text
       from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
       join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_active
@@ -159,11 +163,14 @@ async function runConfirmBatch(
     lineId: string;
     assetId: string;
     claimed: ClaimedDepreciationLine;
+    periodRef: PeriodDisplayInput;
+    periodLabel: string;
     accounts: AssetAccounts;
     planned: string;
     postDate: string;
   }[] = [];
   for (const row of due.rows) {
+    const rowPeriod = canonicalPeriodLabel(depreciationPeriodRef(row));
     const assetLock = await outer.execute<{ category_id: string; subsidiary_id: string }>(sql`
       select category_id, subsidiary_id
         from fixed_assets
@@ -181,7 +188,7 @@ async function runConfirmBatch(
        for update`);
     if (!categoryLock.rows[0]) {
       throw new StalePreviewError(
-        `${row.asset_number} ${row.period_name}: asset category changed; re-preview before confirming`,
+        `${row.asset_number} ${rowPeriod}: asset category changed; re-preview before confirming`,
       );
     }
     await outer.execute(sql`
@@ -198,9 +205,11 @@ async function runConfirmBatch(
     );
     if (!claimed) {
       throw new StalePreviewError(
-        `${row.asset_number} ${row.period_name}: line is no longer due; re-preview before confirming`,
+        `${row.asset_number} ${rowPeriod}: line is no longer due; re-preview before confirming`,
       );
     }
+    const periodRef = depreciationPeriodRef(claimed);
+    const periodLabel = canonicalPeriodLabel(periodRef);
     try {
       await outer.execute(
         sql`select period_posting_fence(${orgId}, ${claimed.period_id}, ${claimed.book_id})`,
@@ -214,7 +223,7 @@ async function runConfirmBatch(
           modules: ["assets"],
         }))
       ) {
-        throw new ClosedBatchError(claimed.asset_number, claimed.period_name);
+        throw new ClosedBatchError(claimed.asset_number, periodRef);
       }
       const accounts = resolveAssetAccounts(
         {
@@ -233,18 +242,20 @@ async function runConfirmBatch(
         postingDate &&
         (postingDate < claimed.period_starts_on || postingDate > claimed.period_ends_text)
       ) {
-        const reason = `posting date ${postingDate} falls outside ${claimed.period_name}`;
-        const message = `${claimed.asset_number} ${claimed.period_name}: ${reason}`;
+        const reason = `posting date ${postingDate} falls outside ${periodLabel}`;
+        const message = `${claimed.asset_number} ${periodLabel}: ${reason}`;
         result.skipped++;
         result.skippedAssets.push({
           assetNumber: claimed.asset_number,
-          period: claimed.period_name,
+          period: periodLabel,
+          periodRef,
           reason,
         });
         result.problems.push(message);
         result.problemItems.push({
           assetNumber: claimed.asset_number,
-          period: claimed.period_name,
+          period: periodLabel,
+          periodRef,
           message,
           assetId: String(row.asset_id),
           lineId: String(row.line_id),
@@ -301,6 +312,8 @@ async function runConfirmBatch(
         lineId: String(row.line_id),
         assetId: String(row.asset_id),
         claimed,
+        periodRef,
+        periodLabel,
         accounts,
         planned,
         postDate: scope.postingDate ?? String(claimed.period_ends_on),
@@ -309,7 +322,7 @@ async function runConfirmBatch(
       if (e instanceof ClosedBatchError) throw e;
       if (e instanceof SubsidiaryError) {
         throw new StalePreviewError(
-          `${claimed.asset_number} ${claimed.period_name}: ${(e as Error).message}; re-preview before confirming`,
+          `${claimed.asset_number} ${periodLabel}: ${(e as Error).message}; re-preview before confirming`,
         );
       }
       throw e;
@@ -317,7 +330,7 @@ async function runConfirmBatch(
   }
 
   for (const line of validated) {
-    const { claimed, accounts, planned } = line;
+    const { claimed, accounts, planned, periodRef, periodLabel } = line;
     if (!claimed.posts_gl || isZero(planned)) {
       const recorded = await outer.execute<{ id: string }>(sql`
         update depreciation_schedule_lines
@@ -337,7 +350,8 @@ async function runConfirmBatch(
         result.recordedEntries.push({
           assetId: line.assetId,
           assetNumber: claimed.asset_number,
-          period: claimed.period_name,
+          period: periodLabel,
+          periodRef,
           amount: planned,
           lineId: line.lineId,
         });
@@ -345,7 +359,8 @@ async function runConfirmBatch(
         result.skipped++;
         result.skippedAssets.push({
           assetNumber: claimed.asset_number,
-          period: claimed.period_name,
+          period: periodLabel,
+          periodRef,
           reason: "zero planned amount",
         });
       }
@@ -363,7 +378,7 @@ async function runConfirmBatch(
       entryNumber: `DEP-${claimed.asset_number}-${claimed.period_name}-${claimed.line_id}`,
       postingDate: line.postDate,
       periodId: claimed.period_id,
-      memo: `Depreciation — ${claimed.asset_name} (${claimed.period_name})`,
+      memo: `Depreciation — ${claimed.asset_name} (${periodLabel})`,
       origin: "depreciation",
       actorId,
       currency: claimed.base_currency,
@@ -373,7 +388,7 @@ async function runConfirmBatch(
         departmentId: claimed.department_id,
         projectId: claimed.project_id,
         locationId: claimed.location_id,
-        memo: `Depreciation ${claimed.period_name}`,
+        memo: `Depreciation ${periodLabel}`,
       })),
     });
     const eid = postedEntry.entryId;
@@ -386,7 +401,8 @@ async function runConfirmBatch(
     result.entries.push({
       assetId: line.assetId,
       assetNumber: claimed.asset_number,
-      period: claimed.period_name,
+      period: periodLabel,
+      periodRef,
       amount: planned,
       entryId: eid,
       lineId: line.lineId,
@@ -504,14 +520,14 @@ export async function runDepreciation(
 
   // Due, unposted lines are only a candidate list. Account, dimension, and
   // other posting fields are reloaded under locks inside each line transaction.
-  const due = (await db.execute<{
+  const due = (await db.execute<DepreciationPeriodColumns & {
     line_id: string;
     asset_id: string;
     asset_number: string;
-    period_name: string;
   }>(sql`
     select l.id as line_id, a.id as asset_id,
-           a.asset_number, p.name as period_name
+           a.asset_number, p.fiscal_year, p.period_number, p.is_adjustment,
+           p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_text
       from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
       join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_active
@@ -531,6 +547,8 @@ export async function runDepreciation(
      order by a.asset_number, l.sequence`));
 
   for (const row of due.rows) {
+    const rowPeriodRef = depreciationPeriodRef(row);
+    const rowPeriod = canonicalPeriodLabel(rowPeriodRef);
     try {
       const posted = await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
         // Serialize against the authoritative asset edit path before reading
@@ -574,6 +592,8 @@ export async function runDepreciation(
           allowedSubsidiaryIds ? [...allowedSubsidiaryIds] : undefined,
         );
         if (!claimed) return null;
+        const periodRef = depreciationPeriodRef(claimed);
+        const periodLabel = canonicalPeriodLabel(periodRef);
 
         // Use the existing shared posting fence before the close check. A
         // reporting-only recognition must serialize with close even though
@@ -595,7 +615,8 @@ export async function runDepreciation(
             amount: String(claimed.planned_amount),
             periodClosed: true,
             assetNumber: claimed.asset_number,
-            periodName: claimed.period_name,
+            periodName: periodLabel,
+            periodRef,
           };
         }
 
@@ -677,7 +698,8 @@ export async function runDepreciation(
             amount: planned,
             assetId: row.asset_id,
             assetNumber: claimed.asset_number,
-            periodName: claimed.period_name,
+            periodName: periodLabel,
+            periodRef,
             lineId: row.line_id,
           };
         }
@@ -692,7 +714,7 @@ export async function runDepreciation(
           entryNumber: `DEP-${claimed.asset_number}-${claimed.period_name}-${claimed.line_id}`,
           postingDate: scope?.postingDate ?? claimed.period_ends_on,
           periodId: claimed.period_id,
-          memo: `Depreciation — ${claimed.asset_name} (${claimed.period_name})`,
+          memo: `Depreciation — ${claimed.asset_name} (${periodLabel})`,
           origin: "depreciation",
           actorId,
           currency: claimed.base_currency,
@@ -702,7 +724,7 @@ export async function runDepreciation(
             departmentId: claimed.department_id,
             projectId: claimed.project_id,
             locationId: claimed.location_id,
-            memo: `Depreciation ${claimed.period_name}`,
+            memo: `Depreciation ${periodLabel}`,
           })),
         });
         const eid = postedEntry.entryId;
@@ -717,7 +739,8 @@ export async function runDepreciation(
           amount: planned,
           assetId: row.asset_id,
           assetNumber: claimed.asset_number,
-          periodName: claimed.period_name,
+          periodName: periodLabel,
+          periodRef,
           lineId: row.line_id,
         };
       }));
@@ -726,7 +749,8 @@ export async function runDepreciation(
         result.skipped++;
         result.skippedAssets.push({
           assetNumber: row.asset_number,
-          period: row.period_name,
+          period: rowPeriod,
+          periodRef: rowPeriodRef,
           reason: "line already posted or removed",
         });
         continue;
@@ -736,12 +760,14 @@ export async function runDepreciation(
         result.skippedAssets.push({
           assetNumber: posted.assetNumber,
           period: posted.periodName,
+          periodRef: posted.periodRef,
           reason: "GL period closed",
         });
         result.problems.push(`${posted.assetNumber} ${posted.periodName}: GL period closed`);
         result.problemItems.push({
           assetNumber: posted.assetNumber,
           period: posted.periodName,
+          periodRef: posted.periodRef,
           message: "GL period closed",
           assetId: row.asset_id,
           lineId: row.line_id,
@@ -755,6 +781,7 @@ export async function runDepreciation(
           assetId: posted.assetId,
           assetNumber: posted.assetNumber,
           period: posted.periodName,
+          periodRef: posted.periodRef,
           amount: posted.amount,
           lineId: posted.lineId,
         });
@@ -765,6 +792,7 @@ export async function runDepreciation(
         result.skippedAssets.push({
           assetNumber: posted.assetNumber,
           period: posted.periodName,
+          periodRef: posted.periodRef,
           reason: "line vanished before claim",
         });
         continue;
@@ -775,16 +803,18 @@ export async function runDepreciation(
         assetId: posted.assetId,
         assetNumber: posted.assetNumber,
         period: posted.periodName,
+        periodRef: posted.periodRef,
         amount: posted.amount,
         entryId: posted.entryId,
         lineId: posted.lineId,
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      result.problems.push(`${row.asset_number} ${row.period_name}: ${msg.slice(0, 120)}`);
+      result.problems.push(`${row.asset_number} ${rowPeriod}: ${msg.slice(0, 120)}`);
       result.problemItems.push({
         assetNumber: row.asset_number,
-        period: row.period_name,
+        period: rowPeriod,
+        periodRef: rowPeriodRef,
         message: msg.slice(0, 120),
         assetId: row.asset_id,
         lineId: row.line_id,
@@ -798,13 +828,14 @@ export async function runDepreciation(
   // problems list while a planned line waits in the open period.
   // Same scope as the due list above, minus the ended-period filter.
   if (result.posted === 0 && result.recorded === 0) {
-    const next = (await db.execute<{
+    const next = (await db.execute<DepreciationPeriodColumns & {
       asset_number: string;
-      period_name: string;
       ends_on: string;
       amount: string;
     }>(sql`
-      select a.asset_number, p.name as period_name, p.ends_on::text as ends_on,
+      select a.asset_number, p.fiscal_year, p.period_number, p.is_adjustment,
+             p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_text,
+             p.ends_on::text as ends_on,
              l.planned_amount::text as amount
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
@@ -824,9 +855,11 @@ export async function runDepreciation(
        limit 1`));
     const upcoming = next.rows[0];
     if (upcoming) {
+      const periodRef = depreciationPeriodRef(upcoming);
       result.nextDue = {
         assetNumber: upcoming.asset_number,
-        period: upcoming.period_name,
+        period: canonicalPeriodLabel(periodRef),
+        periodRef,
         endsOn: upcoming.ends_on,
         amount: upcoming.amount,
       };

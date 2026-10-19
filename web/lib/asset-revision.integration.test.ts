@@ -30,6 +30,8 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === '@/lib/feature-gates' || (specifier.endsWith('/lib/feature-gates') && context.parentURL?.includes('/api/assets/'))) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardFeaturePermission(){return globalThis.__assetEditControls.gate}' };
   }
+  // The flyout read labels schedule periods in the viewer's locale.
+  if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getLocale(){return 'en'};export async function getTranslations(){return key=>key}" };
   return next(specifier, context);
 } });
 const { PATCH, GET } = await import('../app/api/assets/[id]/route');

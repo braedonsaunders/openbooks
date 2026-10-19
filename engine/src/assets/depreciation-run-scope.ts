@@ -4,7 +4,34 @@ import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
+import { canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { resolveAssetAccounts } from "./depreciation-schedule-math.ts";
+
+/**
+ * Period columns every depreciation query selects beside the stored period
+ * name. Results and refusals name a period by its fiscal position
+ * (`P05 FY2026`) and carry the position and dates as `periodRef`, so the web
+ * boundary can label it in the viewer's locale; the stored name stays only
+ * where it is an identifier (journal entry numbers).
+ */
+export type DepreciationPeriodColumns = {
+  fiscal_year: number;
+  period_number: number;
+  is_adjustment: boolean;
+  period_starts_on: string;
+  period_ends_text: string;
+};
+
+/** The fiscal position and civil dates of a depreciation line's period. */
+export function depreciationPeriodRef(row: DepreciationPeriodColumns): PeriodDisplayInput {
+  return {
+    fiscalYear: Number(row.fiscal_year),
+    periodNumber: Number(row.period_number),
+    adjustment: row.is_adjustment === true,
+    startsOn: String(row.period_starts_on),
+    endsOn: String(row.period_ends_text),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // runDepreciation — recognize due periods in each accounting book
@@ -12,7 +39,9 @@ import { resolveAssetAccounts } from "./depreciation-schedule-math.ts";
 
 export interface NextDueDepreciation {
   assetNumber: string;
+  /** Locale-free period label (`P05 FY2026`). */
   period: string;
+  periodRef: PeriodDisplayInput;
   endsOn: string;
   amount: string;
 }
@@ -25,13 +54,18 @@ export interface RunDepreciationResult {
   recordedAmount: string;
   skipped: number;
   totalAmount: string;
-  entries: { assetId: string; assetNumber: string; period: string; amount: string; entryId: string; lineId: string }[];
+  /**
+   * Every per-line result names its period with a locale-free label
+   * (`period`, `P05 FY2026`) and carries the period's fiscal position and
+   * dates (`periodRef`) for display labels.
+   */
+  entries: { assetId: string; assetNumber: string; period: string; periodRef: PeriodDisplayInput; amount: string; entryId: string; lineId: string }[];
   /** Reporting-only recognitions with their immutable line evidence. */
-  recordedEntries: { assetId: string; assetNumber: string; period: string; amount: string; lineId: string }[];
+  recordedEntries: { assetId: string; assetNumber: string; period: string; periodRef: PeriodDisplayInput; amount: string; lineId: string }[];
   /** Lines examined but not recognized, with the reason named per asset. */
-  skippedAssets: { assetNumber: string; period: string; reason: string }[];
+  skippedAssets: { assetNumber: string; period: string; periodRef: PeriodDisplayInput; reason: string }[];
   /** Structured per-asset problems; `problems` keeps the legacy strings. */
-  problemItems: { assetNumber: string; period: string; message: string; assetId?: string; lineId?: string }[];
+  problemItems: { assetNumber: string; period: string; periodRef: PeriodDisplayInput; message: string; assetId?: string; lineId?: string }[];
   problems: string[];
   /** The as-of date the run evaluated (defaults to the org business day). */
   asOfDate: string;
@@ -127,6 +161,15 @@ export interface RunDepreciationScope {
  *  refusal before any recognition or journal write, never a per-line skip. */
 export class StalePreviewError extends Error {}
 
+/** A confirmed line a concurrent run already recognized. */
+export interface AlreadyPostedDepreciationLine {
+  lineId: string;
+  assetNumber: string;
+  /** Locale-free period label (`P05 FY2026`). */
+  periodName: string;
+  periodRef: PeriodDisplayInput;
+}
+
 /**
  * All-or-nothing gate for a fingerprinted Confirm. In ONE transaction, lock
  * the complete pinned candidate set plus every referenced configuration row
@@ -146,11 +189,11 @@ export async function assertConfirmSetCurrent(
   expectedLines: ExpectedDepreciationLine[],
   allowedSubsidiaryIds?: string[],
   expectedFingerprint?: string,
-): Promise<{ lineId: string; assetNumber: string; periodName: string }[]> {
+): Promise<AlreadyPostedDepreciationLine[]> {
   const byId = new Map(expectedLines.map((line) => [line.lineId, line]));
   const lineIds = [...byId.keys()].sort();
   const assetIds = [...new Set(expectedLines.map((line) => line.assetId))].sort();
-  const alreadyPosted: { lineId: string; assetNumber: string; periodName: string }[] = [];
+  const alreadyPosted: AlreadyPostedDepreciationLine[] = [];
   if (lineIds.length === 0) return alreadyPosted;
 
   const assets = (await tx.execute<{ id: string; category_id: string }>(sql`
@@ -173,14 +216,13 @@ export async function assertConfirmSetCurrent(
      order by id
      for update`);
 
-  const reloaded = (await tx.execute<{
+  const reloaded = (await tx.execute<DepreciationPeriodColumns & {
     line_id: string;
     planned_amount: string;
     posted_amount: string | null;
     period_id: string;
     book_id: string;
     posts_gl: boolean;
-    period_name: string;
     asset_number: string;
     subsidiary_id: string;
     asset_account: string | null;
@@ -199,7 +241,8 @@ export async function assertConfirmSetCurrent(
            l.period_id,
            s.book_id,
            bk.posts_gl,
-           p.name as period_name,
+           p.fiscal_year, p.period_number, p.is_adjustment,
+           p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_text,
            a.asset_number,
            a.subsidiary_id,
            a.asset_account_id as asset_account,
@@ -238,11 +281,12 @@ export async function assertConfirmSetCurrent(
     const id = String(row.line_id);
     seen.add(id);
     const assetNumber = String(row.asset_number);
-    const periodName = String(row.period_name);
+    const periodRef = depreciationPeriodRef(row);
+    const periodName = canonicalPeriodLabel(periodRef);
     // Loose null: real rows read NULL, while a missing key (partial
     // projections) must not misclassify a due line as recognized.
     if (row.posted_amount != null) {
-      alreadyPosted.push({ lineId: id, assetNumber, periodName });
+      alreadyPosted.push({ lineId: id, assetNumber, periodName, periodRef });
       continue;
     }
     const accounts = resolveAssetAccounts(
@@ -351,21 +395,27 @@ export async function assertConfirmSetCurrent(
 
 /** Aborts a fingerprinted Confirm batch on a closed period, naming the row.
  *  The route maps this to 409 period_closed — open the period, then confirm
- *  again. Never a per-line skip: the batch posts every line or none. */
+ *  again. Never a per-line skip: the batch posts every line or none. The
+ *  period is named by its locale-free label; `periodRef` lets the route
+ *  label it in the viewer's locale. */
 export class ClosedBatchError extends Error {
   assetNumber: string;
   periodName: string;
-  constructor(assetNumber: string, periodName: string) {
+  periodRef: PeriodDisplayInput;
+  constructor(assetNumber: string, periodRef: PeriodDisplayInput) {
+    const periodName = canonicalPeriodLabel(periodRef);
     super(
       `${assetNumber} ${periodName}: GL period closed; open the period and confirm again`,
     );
     this.assetNumber = assetNumber;
     this.periodName = periodName;
+    this.periodRef = periodRef;
   }
 }
 
-/** Line state reloaded under FOR UPDATE for posting (claim shape). */
-export type ClaimedDepreciationLine = {
+/** Line state reloaded under FOR UPDATE for posting (claim shape). The
+ *  stored period name builds journal entry numbers only. */
+export type ClaimedDepreciationLine = DepreciationPeriodColumns & {
   line_id: string;
   planned_amount: string;
   period_id: string;

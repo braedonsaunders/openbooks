@@ -4,7 +4,7 @@ import { db } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, neg, normalizeMoney, toUnits } from "../money/money.ts";
 import { assetBasisDelta } from "./asset-basis.ts";
-import { CloseError, assertPeriodModulesOpen } from "../periods/period-policy.ts";
+import { CloseError, assertPeriodModulesOpen, canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { DepreciationRefusalError } from "./depreciation-errors.ts";
 import { computeUnitsOfProductionCharge, type DepreciationMethod } from "./depreciation-schedule-math.ts";
 import { assetDepreciationCalendar, primaryBookId } from "./depreciation-schedule-build.ts";
@@ -39,7 +39,10 @@ export interface RecordDepreciationInputResult {
   inputId: string;
   scheduleLineId: string;
   periodId: string;
+  /** Locale-free label of the period the input landed in (`P05 FY2026`). */
   periodName: string;
+  /** That period's fiscal position and dates, for display labels. */
+  periodRef: PeriodDisplayInput;
   plannedAmount: string;
   replacedInputId: string | null;
 }
@@ -87,13 +90,17 @@ export async function recordDepreciationInput(
       in_service_on: string;
       opening_accumulated_depreciation: string | null;
       period_id: string;
-      period_name: string;
+      fiscal_year: number;
+      period_number: number;
+      period_starts_on: string;
+      period_ends_on: string;
     }>(sql`
       select s.id, s.method, s.units_total, s.book_id,
              a.subsidiary_id,
              a.acquisition_cost, a.salvage_value, a.status, a.in_service_on,
              a.opening_accumulated_depreciation::text as opening_accumulated_depreciation,
-             p.id as period_id, p.name as period_name
+             p.id as period_id, p.fiscal_year, p.period_number,
+             p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_on
         from depreciation_schedules s
         join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
         join accounting_periods p on p.org_id = s.org_id and p.fiscal_calendar_id=${calendarId} and not p.is_adjustment
@@ -313,11 +320,20 @@ export async function recordDepreciationInput(
       scheduleLineId = line.rows[0]!.id;
     }
 
+    // The covering period is always a regular period (the lookup excludes adjustments).
+    const periodRef: PeriodDisplayInput = {
+      fiscalYear: Number(row.fiscal_year),
+      periodNumber: Number(row.period_number),
+      adjustment: false,
+      startsOn: row.period_starts_on,
+      endsOn: row.period_ends_on,
+    };
     return {
       inputId,
       scheduleLineId,
       periodId: row.period_id,
-      periodName: row.period_name,
+      periodName: canonicalPeriodLabel(periodRef),
+      periodRef,
       plannedAmount,
       replacedInputId,
     };

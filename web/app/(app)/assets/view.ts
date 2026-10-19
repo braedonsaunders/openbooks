@@ -1,9 +1,10 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import { listTaxRegimes } from '@openbooks/engine/tax-returns/pool-run'
 import {
   page,
@@ -59,7 +60,23 @@ type AssetTaxRegimeRow = {
 }
 type AssetMethodRow = { id: string; code: string; name: string }
 type DepreciationCandidateRow = { id: string; asset_number: string; name: string; status: string }
-type DepreciationPeriodRow = { id: string; name: string; starts_on: string; ends_on: string }
+type DepreciationPeriodRow = { id: string; fiscal_year: number; period_number: number; starts_on: string; ends_on: string }
+
+/** A regular period as a run/review option, labelled in the viewer's locale. */
+function depreciationPeriodOption(row: DepreciationPeriodRow, locale: string) {
+  return {
+    id: row.id,
+    name: periodDisplayLabel({
+      fiscalYear: Number(row.fiscal_year),
+      periodNumber: Number(row.period_number),
+      adjustment: false,
+      startsOn: row.starts_on,
+      endsOn: row.ends_on,
+    }, locale),
+    startsOn: row.starts_on,
+    endsOn: row.ends_on,
+  }
+}
 
 export interface AssetsData {
   title: string
@@ -139,11 +156,12 @@ export async function loadAssets(
     }
   }
 
-  const [multiSub, allSubsidiaries, depreciationBooks, depreciationPeriods, depreciationCandidates] = await Promise.all([
+  const [locale, multiSub, allSubsidiaries, depreciationBooks, depreciationPeriods, depreciationCandidates] = await Promise.all([
+    getLocale(),
     isMultiSubsidiary(orgId),
     subsidiaryOptions(),
     db.execute<AssetBookRow>(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active order by is_primary desc, code`),
-    db.execute<DepreciationPeriodRow>(sql`select id, name, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods where org_id=${orgId} and not is_adjustment order by starts_on desc`),
+    db.execute<DepreciationPeriodRow>(sql`select id, fiscal_year, period_number, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods where org_id=${orgId} and not is_adjustment order by starts_on desc`),
     // Picker rows for the review drawer: live depreciable register only.
     // Reader-scoped like the drawer payload — never the whole tenant.
     db.execute<DepreciationCandidateRow>(authz.allowedSubsidiaryIds
@@ -270,6 +288,7 @@ export async function loadAssets(
   if (assetId && assetId !== 'new' && isUuid(assetId)) {
     const openAsset = await loadAsset(assetId, orgId, {
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      locale,
       bookId: pickString(sp.deprbook),
       query: pickString(sp.deprq) ?? '',
       page: Math.max(1, Number.parseInt(pickString(sp.deprpage) ?? '1', 10) || 1),
@@ -319,12 +338,7 @@ export async function loadAssets(
         currentFormId: resolvedForm.row?.id ?? null,
         fieldDefs: fieldDefs as AssetDrawerProps['fieldDefs'],
         depreciationMethods: pickers[3].rows,
-        periods: depreciationPeriods.rows.map((row) => ({
-          id: row.id,
-          name: row.name,
-          startsOn: row.starts_on,
-          endsOn: row.ends_on,
-        })),
+        periods: depreciationPeriods.rows.map((row) => depreciationPeriodOption(row, locale)),
         closeHref: editRequestedReturn?.startsWith('/assets') ? editRequestedReturn : '/assets',
         componentsEnabled,
       }
@@ -341,12 +355,7 @@ export async function loadAssets(
       name: row.name,
       status: row.status,
     })),
-    periods: depreciationPeriods.rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      startsOn: row.starts_on,
-      endsOn: row.ends_on,
-    })),
+    periods: depreciationPeriods.rows.map((row) => depreciationPeriodOption(row, locale)),
     drawer,
   }
 }

@@ -64,8 +64,10 @@ test('a hand-posted period warns, links, and never posts twice', { skip: !proces
     const before = await previewDepreciation(org.orgId, { asOfDate: '2026-08-31' });
     assert.equal(before.totalAmount, '95.0000');
     assert.deepEqual(before.manualEntryCandidates, []);
-    const augustLine = before.rows.find((row) => row.periodName === '2026-08')!;
+    // Preview lines name their period by fiscal position, not the stored '2026-08'.
+    const augustLine = before.rows.find((row) => row.periodName === 'P08 FY2026')!;
     assert.ok(augustLine);
+    assert.deepEqual(augustLine.periodRef, { fiscalYear: 2026, periodNumber: 8, adjustment: false, startsOn: '2026-08-01', endsOn: '2026-08-31' });
 
     const entryId = await postManualEntry(org.orgId, org.bookId, august, org.subsidiaryId, actorId, org.accounts.adjustment, org.accounts.clearing, 'JE-MAN-1', '47.50');
     const warned = await previewDepreciation(org.orgId, { asOfDate: '2026-08-31' });
@@ -73,11 +75,14 @@ test('a hand-posted period warns, links, and never posts twice', { skip: !proces
     assert.equal(warned.manualEntryCandidates[0]!.entryNumber, 'JE-MAN-1');
     assert.equal(warned.manualEntryCandidates[0]!.lineId, augustLine.lineId);
     assert.equal(warned.manualEntryCandidates[0]!.amount, '47.5000');
-    assert.ok(warned.warnings.some((warning) => warning.includes('JE-MAN-1') && warning.includes('twice')));
+    assert.equal(warned.manualEntryCandidates[0]!.periodName, 'P08 FY2026');
+    assert.ok(warned.warnings.some((warning) => warning.includes('P08 FY2026: manual entry JE-MAN-1') && warning.includes('twice')));
 
     const linked = await linkManualDepreciationEntry(org.orgId, assetId, { lineId: augustLine.lineId, entryId, actorId });
     assert.equal(linked.entryNumber, 'JE-MAN-1');
     assert.equal(linked.amount, '47.5000');
+    assert.equal(linked.periodName, 'P08 FY2026');
+    assert.equal(linked.periodRef.periodNumber, 8);
 
     const resolved = await previewDepreciation(org.orgId, { asOfDate: '2026-08-31' });
     assert.equal(resolved.totalAmount, '47.5000');
@@ -103,8 +108,8 @@ test('linking refuses implausible evidence by name', { skip: !process.env.OPENBO
   const { org, actorId, assetId, august } = await seedWorld();
   try {
     const preview = await previewDepreciation(org.orgId, { asOfDate: '2026-08-31' });
-    const augustLine = preview.rows.find((row) => row.periodName === '2026-08')!;
-    const julyLine = preview.rows.find((row) => row.periodName === '2026-07')!;
+    const augustLine = preview.rows.find((row) => row.periodName === 'P08 FY2026')!;
+    const julyLine = preview.rows.find((row) => row.periodName === 'P07 FY2026')!;
     const entryId = await postManualEntry(org.orgId, org.bookId, august, org.subsidiaryId, actorId, org.accounts.adjustment, org.accounts.clearing, 'JE-MAN-2', '47.50');
     const draftId = await postManualEntry(org.orgId, org.bookId, august, org.subsidiaryId, actorId, org.accounts.adjustment, org.accounts.clearing, 'JE-MAN-3', '47.50', 'draft');
     const wrongId = await postManualEntry(org.orgId, org.bookId, august, org.subsidiaryId, actorId, org.accounts.adjustment, org.accounts.clearing, 'JE-MAN-4', '10.00');
@@ -115,7 +120,7 @@ test('linking refuses implausible evidence by name', { skip: !process.env.OPENBO
     );
     await assert.rejects(
       linkManualDepreciationEntry(org.orgId, assetId, { lineId: augustLine.lineId, entryId: wrongId, actorId }),
-      /cannot be its depreciation/,
+      /P08 FY2026 plans 47\.5000, so this entry cannot be its depreciation/,
     );
     await linkManualDepreciationEntry(org.orgId, assetId, { lineId: augustLine.lineId, entryId, actorId });
     const julyEntryId = await postManualEntry(org.orgId, org.bookId, august, org.subsidiaryId, actorId, org.accounts.adjustment, org.accounts.clearing, 'JE-MAN-5', '47.50');
@@ -125,11 +130,11 @@ test('linking refuses implausible evidence by name', { skip: !process.env.OPENBO
     );
     await assert.rejects(
       linkManualDepreciationEntry(org.orgId, assetId, { lineId: julyLine.lineId, entryId: julyEntryId, actorId }),
-      /not in this line's book, period, and subsidiary/,
+      /not in this line's book, period, and subsidiary; only the matching entry can evidence .* P07 FY2026$/,
     );
     await assert.rejects(
       linkManualDepreciationEntry(org.orgId, assetId, { lineId: augustLine.lineId, entryId, actorId }),
-      /already posted/,
+      / P08 FY2026 is already posted/,
     );
   } finally {
     await dropScratchOrg(org.orgId);

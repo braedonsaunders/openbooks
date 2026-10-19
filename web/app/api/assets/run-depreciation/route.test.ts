@@ -46,7 +46,11 @@ interface DueRow {
   book_name: string;
   posts_gl: boolean;
   period_id: string;
+  /** Stored name: journal entry numbers only. */
   period_name: string;
+  fiscal_year: number;
+  period_number: number;
+  is_adjustment: boolean;
   period_ends_on: string;
   period_starts_on?: string;
   period_ends_text?: string;
@@ -102,7 +106,12 @@ function dueRow(line: string, asset: string, number: string, amount: string): Du
     posts_gl: true,
     period_id: PERIOD_ID,
     period_name: "2026-09",
+    fiscal_year: 2026,
+    period_number: 9,
+    is_adjustment: false,
     period_ends_on: "2026-09-30",
+    period_starts_on: "2026-09-01",
+    period_ends_text: "2026-09-30",
     amount,
     asset_account: null,
     asset_accum: null,
@@ -255,6 +264,9 @@ const mockDb = `
         book_id: live.book_id,
         posts_gl: live.posts_gl,
         period_name: live.period_name,
+        fiscal_year: live.fiscal_year,
+        period_number: live.period_number,
+        is_adjustment: live.is_adjustment,
         period_ends_on: live.period_ends_on,
         period_starts_on: live.period_starts_on ?? '2026-09-01',
         period_ends_text: live.period_ends_text ?? live.period_ends_on,
@@ -343,6 +355,7 @@ const mockDb = `
 
 const mockSources = new Map<string, string>([
   ["mock:db", mockDb],
+  ["mock:next-intl-server", "export async function getLocale() { return 'en' }\nexport async function getTranslations() { return (key) => key }"],
   [
     "mock:feature-gates",
     `const state = globalThis[Symbol.for('openbooks.depreciation-confirm-route-test')]
@@ -360,6 +373,8 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../lib/feature-gates", "mock:feature-gates"],
   ["@/lib/feature-gates", "mock:feature-gates"],
+  // The viewer's locale labels result and refusal periods.
+  ["next-intl/server", "mock:next-intl-server"],
 ]);
 
 function mockedUrl(specifier: string): string | null {
@@ -634,7 +649,7 @@ test("confirm posts every validated line with linked entries", async () => {
     recorded: number;
     skipped: number;
     totalAmount: string;
-    entries: { assetId: string; assetNumber: string; entryId: string; lineId: string }[];
+    entries: { assetId: string; assetNumber: string; entryId: string; lineId: string; period: string }[];
   };
   assert.equal(data.posted, 2);
   assert.equal(data.recorded, 0);
@@ -649,6 +664,14 @@ test("confirm posts every validated line with linked entries", async () => {
       ["FA-0002", "00000000-0000-4000-8000-00000000e102", ASSET_B],
     ],
   );
+  // Results label the period in the viewer's locale; the generated journal
+  // keeps the stored name in its entry number and names the period by its
+  // fiscal label in the memos.
+  assert.deepEqual(data.entries.map((entry) => entry.period), ["P09 FY2026 · Sep 2026", "P09 FY2026 · Sep 2026"]);
+  const journalInsert = state.queries.find((text) => text.includes("insert into journal_entries") && text.includes("FA-0001"));
+  assert.ok(journalInsert, "the first line posts a journal entry");
+  assert.ok(journalInsert.includes(`DEP-FA-0001-2026-09-${LINE_A}`), "entry number keeps the stored period name");
+  assert.ok(journalInsert.includes("Depreciation — Mill FA-0001 (P09 FY2026)"), "entry memo names the fiscal period");
 });
 
 test("a reporting-only line is recognized with asset evidence, not a journal", async () => {
@@ -672,7 +695,14 @@ test("a reporting-only line is recognized with asset evidence, not a journal", a
     // The posted line is pinned without naming it: the recorded-entries
     // evidence below names FA-0002 as recorded, so the posted line is LINE_A.
     assert.deepEqual(data.recordedEntries, [
-      { assetId: ASSET_B, assetNumber: "FA-0002", period: "2026-09", amount: "250.5000", lineId: LINE_B },
+      {
+        assetId: ASSET_B,
+        assetNumber: "FA-0002",
+        period: "P09 FY2026 · Sep 2026",
+        periodRef: { fiscalYear: 2026, periodNumber: 9, adjustment: false, startsOn: "2026-09-01", endsOn: "2026-09-30" },
+        amount: "250.5000",
+        lineId: LINE_B,
+      },
     ]);
   } finally {
     state.due[1]!.posts_gl = true;
@@ -708,7 +738,7 @@ test("a posting date outside a line's period skips that line by name", async () 
     assert.ok(
       data.problems.some(
         (problem) =>
-          problem.includes("FA-0002") && problem.includes("posting date 2026-09-15"),
+          problem === "FA-0002 P09 FY2026: posting date 2026-09-15 falls outside P09 FY2026",
       ),
     );
   } finally {
@@ -723,6 +753,7 @@ test("a closed period on a later line aborts the batch before any write", async 
   // first line, then refuses the batch — no write may precede that refusal.
   state.due[1]!.period_id = PERIOD_C;
   state.due[1]!.period_name = "2026-10";
+  state.due[1]!.period_number = 10;
   state.due[1]!.period_starts_on = "2026-10-01";
   state.due[1]!.period_ends_text = "2026-10-31";
   state.closedPeriods = [PERIOD_C];
@@ -733,7 +764,7 @@ test("a closed period on a later line aborts the batch before any write", async 
     const data = (await res.json()) as { error: string; asset: string; period: string };
     assert.equal(data.error, "period_closed");
     assert.equal(data.asset, "FA-0002");
-    assert.equal(data.period, "2026-10");
+    assert.equal(data.period, "P10 FY2026 · Oct 2026");
     // All-or-nothing at the issue level: pass 1 validates every line before
     // pass 2 issues its first write, so the abort leaves zero writes behind
     // (and the outer transaction rolls back whatever a crash could leave).
@@ -742,6 +773,7 @@ test("a closed period on a later line aborts the batch before any write", async 
   } finally {
     state.due[1]!.period_id = PERIOD_ID;
     state.due[1]!.period_name = "2026-09";
+    state.due[1]!.period_number = 9;
     delete state.due[1]!.period_starts_on;
     delete state.due[1]!.period_ends_text;
   }

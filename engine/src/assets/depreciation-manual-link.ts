@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { cmp } from "../money/money.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
+import { canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { assertPostableDepreciationStatus, DepreciationRefusalError } from "./depreciation-errors.ts";
 import { resolveAssetAccounts } from "./depreciation-schedule-math.ts";
 
@@ -10,7 +11,10 @@ export interface LinkManualDepreciationEntryResult {
   assetId: string;
   assetNumber: string;
   periodId: string;
+  /** Locale-free label of the line's period (`P05 FY2026`). */
   periodName: string;
+  /** The line period's fiscal position and dates, for display labels. */
+  periodRef: PeriodDisplayInput;
   entryId: string;
   entryNumber: string;
   amount: string;
@@ -49,7 +53,11 @@ export async function linkManualDepreciationEntry(
       asset_status: string;
       asset_subsidiary_id: string;
       period_id: string;
-      period_name: string;
+      fiscal_year: number;
+      period_number: number;
+      is_adjustment: boolean;
+      period_starts_on: string;
+      period_ends_on: string;
       planned_amount: string;
       posted_amount: string | null;
       journal_entry_id: string | null;
@@ -62,7 +70,9 @@ export async function linkManualDepreciationEntry(
       book_id: string;
     }>(sql`
       select l.id, s.asset_id::text as asset_id, a.asset_number, a.name as asset_name, a.status as asset_status,
-             a.subsidiary_id::text as asset_subsidiary_id, l.period_id::text as period_id, p.name as period_name,
+             a.subsidiary_id::text as asset_subsidiary_id, l.period_id::text as period_id,
+             p.fiscal_year, p.period_number, p.is_adjustment,
+             p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_on,
              l.planned_amount::text as planned_amount, l.posted_amount::text as posted_amount,
              l.journal_entry_id::text as journal_entry_id,
              a.asset_account_id::text as asset_account, a.accumulated_depreciation_account_id::text as asset_accum,
@@ -81,9 +91,17 @@ export async function linkManualDepreciationEntry(
     if (!line) {
       throw new DepreciationRefusalError("that schedule line does not belong to this asset");
     }
+    const periodRef: PeriodDisplayInput = {
+      fiscalYear: Number(line.fiscal_year),
+      periodNumber: Number(line.period_number),
+      adjustment: line.is_adjustment,
+      startsOn: line.period_starts_on,
+      endsOn: line.period_ends_on,
+    };
+    const periodLabel = canonicalPeriodLabel(periodRef);
     if (line.posted_amount !== null || line.journal_entry_id !== null) {
       throw new DepreciationRefusalError(
-        `${line.asset_number} ${line.period_name} is already posted; a posted line cannot take manual evidence`,
+        `${line.asset_number} ${periodLabel} is already posted; a posted line cannot take manual evidence`,
       );
     }
     assertPostableDepreciationStatus(line.asset_status, line.asset_number);
@@ -150,7 +168,7 @@ export async function linkManualDepreciationEntry(
     }
     if (entry.book_id !== line.book_id || entry.period_id !== line.period_id || entry.subsidiary_id !== line.asset_subsidiary_id) {
       throw new DepreciationRefusalError(
-        `journal entry ${entry.entry_number} is not in this line's book, period, and subsidiary; only the matching entry can evidence ${line.asset_number} ${line.period_name}`,
+        `journal entry ${entry.entry_number} is not in this line's book, period, and subsidiary; only the matching entry can evidence ${line.asset_number} ${periodLabel}`,
       );
     }
     const legs = (await db.execute<{ debit_total: string; credit_total: string }>(sql`
@@ -162,7 +180,7 @@ export async function linkManualDepreciationEntry(
     const creditTotal = legs.rows[0]!.credit_total;
     if (cmp(debitTotal, line.planned_amount) !== 0 || cmp(creditTotal, `-${line.planned_amount}`) !== 0) {
       throw new DepreciationRefusalError(
-        `journal entry ${entry.entry_number} posts ${debitTotal} / ${creditTotal} to the depreciation accounts; ${line.asset_number} ${line.period_name} plans ${line.planned_amount}, so this entry cannot be its depreciation`,
+        `journal entry ${entry.entry_number} posts ${debitTotal} / ${creditTotal} to the depreciation accounts; ${line.asset_number} ${periodLabel} plans ${line.planned_amount}, so this entry cannot be its depreciation`,
       );
     }
 
@@ -186,7 +204,8 @@ export async function linkManualDepreciationEntry(
       assetId: line.asset_id,
       assetNumber: line.asset_number,
       periodId: line.period_id,
-      periodName: line.period_name,
+      periodName: periodLabel,
+      periodRef,
       entryId: entry.id,
       entryNumber: entry.entry_number,
       amount: line.planned_amount,

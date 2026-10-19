@@ -1,6 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody, isoDate } from "@/lib/api/json";
 import { NextResponse } from "next/server";
+import { getLocale } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
@@ -11,6 +12,7 @@ import {
   isIsoCalendarDate,
 } from "@openbooks/engine/platform/business-date/module";
 import { isUuid } from "../../../../lib/list-params";
+import { labelDepreciationPreview } from "../../../../lib/assets/period-labels";
 
 export const runtime = "nodejs";
 
@@ -119,7 +121,7 @@ export const POST = defineRoute({
           ? [...gate.allowedSubsidiaryIds]
           : undefined,
       });
-      return NextResponse.json(preview);
+      return NextResponse.json(labelDepreciationPreview(preview, await getLocale()));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       return NextResponse.json({ error: msg }, { status: 500 });

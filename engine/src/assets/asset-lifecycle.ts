@@ -2,7 +2,7 @@ import { assetBasisDelta } from "./asset-basis.ts";import { randomUUID } from "n
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, canonicalPeriodLabelSql, CloseError } from "../periods/period-policy.ts";
 import { buildScheduleWithRunner, reconcileAssetDepreciationStatusWithRunner, resolveAssetAccounts, unimpairedAssetCarryingValue } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
@@ -578,8 +578,8 @@ export async function disposeAsset(
     // first day of a period precedes any holding in it, so the boundary itself
     // stays open. The runner posts periods that have ENDED by its as-of date,
     // so the remedy names the end of the latest period the asset was held in.
-    const stub = await tx.execute<{ period_name: string; ends_on: string }>(sql`
-      select p.name as period_name, p.ends_on::text as ends_on
+    const stub = await tx.execute<{ period_label: string; ends_on: string }>(sql`
+      select ${canonicalPeriodLabelSql("p")} as period_label, p.ends_on::text as ends_on
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
         join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
@@ -589,11 +589,11 @@ export async function disposeAsset(
     if (stub.rows[0]) {
       if (stub.rows[0].ends_on > opts.date) {
         throw new AssetLifecycleError(
-          `asset ${asset.asset_number} has unposted depreciation in period ${stub.rows[0].period_name} covering the disposal date — record an approved Partial disposal / transfer of 100% to recognize elapsed depreciation on the disposal date (zero proceeds for a write-off)`,
+          `asset ${asset.asset_number} has unposted depreciation in period ${stub.rows[0].period_label} covering the disposal date — record an approved Partial disposal / transfer of 100% to recognize elapsed depreciation on the disposal date (zero proceeds for a write-off)`,
         );
       }
       throw new AssetLifecycleError(
-        `asset ${asset.asset_number} has unposted depreciation through period ${stub.rows[0].period_name} covering the disposal date — run depreciation through ${stub.rows[0].ends_on} before disposing so the gain or loss ties to the schedule`,
+        `asset ${asset.asset_number} has unposted depreciation through period ${stub.rows[0].period_label} covering the disposal date — run depreciation through ${stub.rows[0].ends_on} before disposing so the gain or loss ties to the schedule`,
       );
     }
 

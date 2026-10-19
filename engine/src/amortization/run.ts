@@ -15,7 +15,7 @@ import { sql } from "drizzle-orm";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
-import { arePeriodModulesOpen } from "../periods/period-policy.ts";
+import { arePeriodModulesOpen, canonicalPeriodLabel } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
@@ -160,10 +160,12 @@ async function postDueLine(
     subsidiaryIds: [schedule.subsidiaryId],
     modules: ["gl"],
   }))) {
+    // The covering period is always a regular period (the resolver excludes adjustments).
+    const periodLabel = canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false });
     return problem(
       "amortization_period_closed",
-      `Period ${period.name} is closed for this schedule's entity and book.`,
-      `Reopen ${period.name} through a reopen request, or move the unposted amount into an open period by changing the schedule's remaining term.`,
+      `Period ${periodLabel} is closed for this schedule's entity and book.`,
+      `Reopen ${periodLabel} through a reopen request, or move the unposted amount into an open period by changing the schedule's remaining term.`,
     );
   }
   const amount = (await runner.execute<{ planned_amount: string }>(sql`

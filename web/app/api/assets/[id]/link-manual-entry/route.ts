@@ -3,6 +3,8 @@ import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
+import { getLocale } from "next-intl/server";
+import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
 import { linkManualDepreciationEntry } from "@openbooks/engine/assets/depreciation";
 import { isUuid } from "../../../../../lib/list-params";
 
@@ -38,7 +40,10 @@ export const POST = defineRoute({
           ? { allowedSubsidiaryIds: [...gate.allowedSubsidiaryIds] }
           : {}),
       });
-      return NextResponse.json(result);
+      return NextResponse.json({
+        ...result,
+        periodName: periodDisplayLabel(result.periodRef, await getLocale()),
+      });
     } catch (e: unknown) {
       return apiErrorResponse(e, { safeStatus: 422 });
     }

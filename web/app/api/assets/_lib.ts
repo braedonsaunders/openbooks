@@ -8,6 +8,7 @@ import {
   type AssetPlacementField,
 } from '@openbooks/engine/assets/depreciation'
 import { fromUnits, toUnits } from '@openbooks/engine/money/money'
+import { canonicalPeriodLabelSql, periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
 import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 
 /**
@@ -80,6 +81,7 @@ interface AssetScheduleLineRow extends Record<string, unknown> {
   book_code: string
   book_name: string
   period_name: string
+  period_label: string
   period_ends_on: string
   planned_amount: string
   posted_amount: string | null
@@ -136,6 +138,7 @@ export interface AssetPayload {
     bookId: string
     bookCode: string
     bookName: string
+    /** The line's period as the viewer reads it (`P05 FY2026 · May 2026`). */
     periodName: string
     periodEndsOn: string
     plannedAmount: string
@@ -193,6 +196,12 @@ function lifecycleValue(rows: LifecycleValueRow[], bookId?: string, through?: st
 
 type AssetReadOptions = {
   allowedSubsidiaryIds: ReadonlySet<string> | null
+  /**
+   * Viewer locale for schedule period labels (`P05 FY2026 · May 2026`).
+   * Omitted by locale-free consumers, which receive the canonical fiscal
+   * label (`P05 FY2026`).
+   */
+  locale?: string
   bookId?: string | null
   query?: string
   page?: number
@@ -282,6 +291,11 @@ export async function loadAssetWithRunner(
       : 25;
   const query = (options.query ?? "").trim();
   const bookId = options.bookId ?? null;
+  // Schedule periods read by fiscal position and month span; a search matches
+  // the label shown as well as the period's stored name.
+  const periodLabel = options.locale
+    ? periodDisplayLabelSql(options.locale, "p")
+    : canonicalPeriodLabelSql("p");
   const bookRows = await tx.execute<AssetBookRow>(sql`
       select b.id, b.code, b.name, b.is_primary, b.posts_gl,
              s.method, s.depreciation_method_id, m.name as method_name
@@ -298,7 +312,7 @@ export async function loadAssetWithRunner(
         join accounting_periods p on p.id=l.period_id and p.org_id=l.org_id
        where s.asset_id=${id} and l.org_id=${orgId}
          ${bookId ? sql`and s.book_id=${bookId}` : sql``}
-         ${query ? sql`and (p.name ilike ${`%${query}%`} or b.name ilike ${`%${query}%`} or l.source ilike ${`%${query}%`})` : sql``}`);
+         ${query ? sql`and (p.name ilike ${`%${query}%`} or ${periodLabel} ilike ${`%${query}%`} or b.name ilike ${`%${query}%`} or l.source ilike ${`%${query}%`})` : sql``}`);
   const primaryTotals = await tx.execute<{
     posted: string;
     planned: string;
@@ -357,7 +371,8 @@ export async function loadAssetWithRunner(
              s.book_id, b.code as book_code, b.name as book_name,
              i.id as input_id, i.kind as input_kind, i.production_units, i.memo as input_memo,
              i.evidence_file_id, ef.name as evidence_file_name,
-             p.name as period_name, p.ends_on as period_ends_on, p.starts_on as period_starts_on,
+             p.name as period_name, ${periodLabel} as period_label,
+             p.ends_on as period_ends_on, p.starts_on as period_starts_on,
              sum(coalesce(l.posted_amount, l.planned_amount)) over (
                partition by l.schedule_id order by p.starts_on, l.sequence
                rows between unbounded preceding and current row
@@ -373,7 +388,7 @@ export async function loadAssetWithRunner(
     select * from schedule_rows
      where true
        ${bookId ? sql`and book_id=${bookId}` : sql``}
-       ${query ? sql`and (period_name ilike ${`%${query}%`} or book_name ilike ${`%${query}%`} or source ilike ${`%${query}%`})` : sql``}
+       ${query ? sql`and (period_name ilike ${`%${query}%`} or period_label ilike ${`%${query}%`} or book_name ilike ${`%${query}%`} or source ilike ${`%${query}%`})` : sql``}
      order by book_code, period_starts_on, sequence
      limit ${perPage} offset ${(page - 1) * perPage}
   `);
@@ -401,7 +416,7 @@ export async function loadAssetWithRunner(
       bookId: String(l.book_id),
       bookCode: String(l.book_code),
       bookName: String(l.book_name),
-      periodName: l.period_name as string,
+      periodName: String(l.period_label),
       periodEndsOn: l.period_ends_on as string,
       plannedAmount: String(l.planned_amount),
       postedAmount: l.posted_amount != null ? String(l.posted_amount) : null,

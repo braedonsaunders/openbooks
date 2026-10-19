@@ -36,6 +36,10 @@ const hooks = registerHooks({
     ) {
       return { url: "mock:asset-opening-feature-gates", shortCircuit: true };
     }
+    // The flyout labels schedule periods in the viewer's locale.
+    if (specifier === "next-intl/server") {
+      return { url: "data:text/javascript,export async function getLocale(){return 'en'};export async function getTranslations(){return (key)=>key}", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -132,16 +136,17 @@ async function patchRequest(fixture: Fixture, body: Record<string, unknown>): Pr
 interface OpeningDrawerPayload {
   asset: { opening_accumulated_depreciation: string | null; opening_accumulated_as_of: string | null };
   totals: { accumulated: string; netBookValue: string };
-  schedule: { plannedAmount: string }[];
+  schedule: { plannedAmount: string; periodName: string }[];
   scheduleBuild?: { scheduleId: string; lineCount: number; skippedMonths: string[] }[];
 }
 
-async function getPayload(fixture: Fixture): Promise<{ status: number; body: OpeningDrawerPayload }> {
+async function getPayload(fixture: Fixture, query?: string): Promise<{ status: number; body: OpeningDrawerPayload }> {
   routeState.authz = {
     user: { orgId: fixture.orgId, id: fixture.actorId },
     allowedSubsidiaryIds: null,
   };
-  const response = await GET(new Request(`http://openbooks.test/api/assets/${fixture.assetId}`), {
+  const search = query === undefined ? "" : `?q=${encodeURIComponent(query)}`;
+  const response = await GET(new Request(`http://openbooks.test/api/assets/${fixture.assetId}${search}`), {
     params: Promise.resolve({ id: fixture.assetId }),
   });
   return { status: response.status, body: (await response.json()) as OpeningDrawerPayload };
@@ -183,10 +188,26 @@ test("PATCH places a mid-life asset in service with opening figures and the draw
       `first scheduled month is a single month, not a catch-up (got ${saved.schedule[0]?.plannedAmount})`,
     );
 
+    // The saved payload names the period by its canonical fiscal label; the
+    // flyout read labels it in the viewer's locale.
+    assert.equal(saved.schedule[0]?.periodName, "P01 FY2026");
+
     const fetched = await getPayload(fixture);
     assert.equal(fetched.status, 200);
     assert.equal(fetched.body.totals.accumulated, "55000.0000");
     assert.equal(fetched.body.totals.netBookValue, "65000.0000");
+    assert.equal(fetched.body.schedule[0]?.periodName, "P01 FY2026 · Jan 2026");
+
+    // Schedule search matches the label shown and the period's stored name.
+    for (const query of ["Jan 2026", "P01 FY2026", "2026-01"]) {
+      const found = await getPayload(fixture, query);
+      assert.equal(found.status, 200);
+      assert.deepEqual(
+        found.body.schedule.map((line) => line.periodName),
+        ["P01 FY2026 · Jan 2026"],
+        `schedule search for ${query}`,
+      );
+    }
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(fixture.orgId);

@@ -2,6 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { isoDate, parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from "next/server";
+import { getLocale } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import {
@@ -13,6 +14,7 @@ import {
   isIsoCalendarDate,
 } from "@openbooks/engine/platform/business-date/module";
 import { depreciationFailure } from "../../../../lib/assets/depreciation-error-response";
+import { labelDepreciationRun } from "../../../../lib/assets/period-labels";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -57,6 +59,7 @@ export const POST = defineRoute({
     const parsedBody = await parseJsonBody(req, runBody, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data;
+    const locale = await getLocale();
     const asOfDate = body.asOfDate ?? (await businessToday(user.orgId));
     if (!isIsoCalendarDate(asOfDate)) {
       return bad("invalid_through_date", "asOfDate");
@@ -78,9 +81,9 @@ export const POST = defineRoute({
             : undefined,
           body.bookId,
         );
-        return NextResponse.json(result);
+        return NextResponse.json(labelDepreciationRun(result, locale));
       } catch (e: unknown) {
-        return depreciationFailure(e);
+        return depreciationFailure(e, locale);
       }
     }
 
@@ -143,7 +146,7 @@ export const POST = defineRoute({
           : undefined,
       });
     } catch (e: unknown) {
-      return depreciationFailure(e);
+      return depreciationFailure(e, locale);
     }
     if (preview.fingerprint !== fingerprint) {
       return NextResponse.json({ error: "stale_preview" }, { status: 409 });
@@ -198,12 +201,12 @@ export const POST = defineRoute({
           })),
         },
       );
-      return NextResponse.json({ ...result, fingerprint });
+      return NextResponse.json({ ...labelDepreciationRun(result, locale), fingerprint });
     } catch (e: unknown) {
       // The all-or-nothing batch refuses as a whole: a domain refusal (drift, a
       // closed period, missing configuration) names its remedy and is a 409; an
       // unexpected fault is logged and returned as a generic 500.
-      return depreciationFailure(e);
+      return depreciationFailure(e, locale);
     }
   },
 });

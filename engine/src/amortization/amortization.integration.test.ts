@@ -285,7 +285,9 @@ test("a closed period is skipped with its remedy and holds back the schedule's l
     assert.equal(run.posted, 1, "July posts");
     assert.equal(run.problems.length, 1);
     assert.equal(run.problems[0]!.code, "amortization_period_closed");
-    assert.match(run.problems[0]!.remedy, /reopen request|remaining term/);
+    assert.equal(run.problems[0]!.message, "Period P08 FY2026 is closed for this schedule's entity and book.");
+    assert.match(run.problems[0]!.remedy, /^Reopen P08 FY2026 through a reopen request/);
+    assert.match(run.problems[0]!.remedy, /remaining term/);
     const schedule = await scheduleFor(w.org.orgId, bill.lineId);
     assert.deepEqual((await plan(w.org.orgId, schedule.id)).map((line) => line.status), ["posted", "planned", "planned"]);
     // Changing the remaining term moves the closed month's amount forward.

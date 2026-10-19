@@ -54,7 +54,7 @@ test('periods past the last depreciable month never block Confirm', { skip: !pro
     const preview = await previewDepreciation(org.orgId, { asOfDate: '2026-08-31' });
     assert.deepEqual(
       preview.rows.map((row) => `${row.assetNumber} ${row.periodName} ${row.amount}`),
-      ['FA-0001 2026-07 47.5000', 'FA-0001 2026-08 47.5000'],
+      ['FA-0001 P07 FY2026 47.5000', 'FA-0001 P08 FY2026 47.5000'],
     );
     assert.deepEqual(preview.staleAssets, []);
     assert.equal(preview.totalAmount, '95.0000');
