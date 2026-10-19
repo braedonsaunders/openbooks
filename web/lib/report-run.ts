@@ -73,7 +73,7 @@ import { can } from './authz'
 import { requireReportAuthz, canAccessReportDefinition, artifactExpenseRows, type ReportAuthorization, type ReportArtifactExpenseRows } from './report-execution-context'
 import { resolveSubsidiaryView } from './consolidation'
 import { resolvePeriod } from './periods'
-import { reportEntityPermission, statementKindPermission, STATEMENT_KIND_FEATURE } from './report-authz'
+import { reportEntityPermission, reportStatementFeatureKeys, statementKindPermission } from './report-authz'
 import { reportBookSelection } from './report-books'
 import { AvailabilityRefusal } from '@openbooks/engine/inventory/availability'
 import { availabilityExportData, availabilityRefusalText, replenishmentExportData } from './availability-report'
@@ -272,9 +272,12 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   const period = AS_OF_STATEMENT_KINDS.includes(kind) && !p.get('period') && !p.get('asOf')
     ? await resolvePeriod(AS_OF_DEFAULT_PERIOD_PRESET, { orgId })
     : ctx.period
-  const featureKey = STATEMENT_KIND_FEATURE[kind] ?? (kind.startsWith('resourcing-') ? 'resourcing' : undefined)
-  if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
-    throw new ReportResolutionError(`${featureKey} feature is disabled`)
+  const featureKeys = reportStatementFeatureKeys(kind)
+  if (featureKeys.length === 0 && kind.startsWith('resourcing-')) featureKeys.push('resourcing')
+  for (const featureKey of featureKeys) {
+    if (!(await isFeatureEnabled(orgId, featureKey))) {
+      throw new ReportResolutionError(`${featureKey} feature is disabled`)
+    }
   }
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).

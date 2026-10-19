@@ -113,9 +113,9 @@ export const GET = defineRoute({
         entryId: id,
         // Currency/entity boundaries must survive confidentiality grouping
         // when the native journal drawer displays functional-currency totals.
-        accountId: journalDrawer ? `${row.account_id}:${row.subsidiary_id}:${row.functional_currency}` : row.account_id as string,
+        accountId: `${row.account_id}:${row.subsidiary_id}:${row.functional_currency}`,
         partyId: (row.party_id ?? null) as string | null,
-        payrollOrigin: row.doc_kind === 'pay_run' || row.entry_origin === 'payroll',
+        payrollOrigin: entry.doc_kind === 'pay_run' || row.doc_kind === 'pay_run' || row.entry_origin === 'payroll',
       }))
     const confidential = canSeePayroll ? mapped : collapseRestrictedPayrollLines(
         mapped,

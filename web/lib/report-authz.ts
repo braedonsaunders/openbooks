@@ -53,7 +53,7 @@ export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
   'project-budget-vs-actual': 'projects',
   'true-cost': 'projects',
   'earned-value': 'projectProgress',
-  'attendance-exceptions': 'hrmAttendance',
+  'attendance-exceptions': 'hrm',
   'book-differences': 'multiBookAccounting',
   budget: 'budgets',
   availability: 'warehousing',
@@ -63,6 +63,11 @@ export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
   'resourcing-capacity-demand': 'resourcing',
   'resourcing-engagement': 'resourcing',
   'intercompany-reconciliation': 'multiSubsidiary',
+}
+
+/** Additional child Features switches required by seeded statement kinds. */
+const STATEMENT_KIND_ADDITIONAL_FEATURES: Partial<Record<string, readonly string[]>> = {
+  'attendance-exceptions': ['hrmShiftPlanning', 'hrmAttendance'],
 }
 
 /**
@@ -190,6 +195,16 @@ export function reportStatementFeatureKey(kind: string | null | undefined): stri
   return STATEMENT_KIND_FEATURE[kind] ?? null
 }
 
+/** All parent and child Features switches required to expose or execute a statement. */
+export function reportStatementFeatureKeys(kind: string | null | undefined): string[] {
+  if (!kind) return []
+  const keys = [
+    ...(reportStatementFeatureKey(kind) ? [reportStatementFeatureKey(kind)!] : []),
+    ...(STATEMENT_KIND_ADDITIONAL_FEATURES[kind] ?? []),
+  ]
+  return [...new Set(keys)]
+}
+
 /**
  * Page boundary for a stored plan (custom report, saved view) whose entity
  * belongs to a switched-off feature. A reader who otherwise holds the entity's
@@ -225,9 +240,10 @@ export async function canRunReportStatement(
   params?: StatementParams,
 ): Promise<boolean> {
   if (!kind || !canAccessStatement(authz, kind, params)) return false
-  const featureKey = reportStatementFeatureKey(kind)
-  if (!featureKey) return true
-  return isFeatureEnabled(authz.user.orgId, featureKey)
+  for (const featureKey of reportStatementFeatureKeys(kind)) {
+    if (!(await isFeatureEnabled(authz.user.orgId, featureKey))) return false
+  }
+  return true
 }
 
 export type ReportDefinitionGateRow = {
@@ -310,8 +326,8 @@ export async function hiddenReportEntityKeys(authz: Authz): Promise<string[]> {
  */
 export async function hiddenReportStatementKinds(authz: Authz): Promise<string[]> {
   const out = new Set<string>()
-  for (const [kind, featureKey] of Object.entries(STATEMENT_KIND_FEATURE)) {
-    if (featureKey && !(await isFeatureEnabled(authz.user.orgId, featureKey))) out.add(kind)
+  for (const kind of Object.keys(STATEMENT_KIND_FEATURE)) {
+    if (!(await canRunReportStatement(authz, kind))) out.add(kind)
   }
   for (const kind of Object.keys(STATEMENT_KIND_PERMISSION)) {
     if (!canAccessStatement(authz, kind)) out.add(kind)
