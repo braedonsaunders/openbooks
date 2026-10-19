@@ -154,7 +154,6 @@ export function RuleDrawer({
   departments,
   locations,
   classes,
-  taxCodes,
   parties,
   seedFromLine,
 }: {
@@ -164,7 +163,6 @@ export function RuleDrawer({
   departments: Opt[]
   locations: Opt[]
   classes: Opt[]
-  taxCodes: Opt[]
   parties: Opt[]
   seedFromLine?: { description?: string | null; amount?: string | null } | null
 }) {
@@ -242,9 +240,8 @@ export function RuleDrawer({
     if (departments.length) c.push({ key: 'department', label: t('coding.department'), options: departments })
     if (locations.length) c.push({ key: 'location', label: t('coding.location'), options: locations })
     if (classes.length) c.push({ key: 'class', label: t('coding.class'), options: classes })
-    if (taxCodes.length) c.push({ key: 'tax', label: t('coding.tax'), options: taxCodes })
     return c
-  }, [departments, locations, classes, taxCodes, t])
+  }, [departments, locations, classes, t])
 
   const accountName = (id: string) => accounts.find((a) => a.value === id)?.label ?? id
 
@@ -600,7 +597,6 @@ export function serializeLines(lines: AllocationLine[]) {
       projectId: l.projectId ?? undefined,
       locationId: l.locationId ?? undefined,
       classId: l.classId ?? undefined,
-      taxCodeId: l.taxCodeId ?? undefined,
       partyId: l.partyId ?? undefined,
       description: l.description ?? undefined,
     }))
@@ -661,7 +657,6 @@ function initialRuleState(rule: BankRuleView | null, seed?: { description?: stri
         projectId: l.projectId ?? null,
         locationId: l.locationId ?? null,
         classId: l.classId ?? null,
-        taxCodeId: l.taxCodeId ?? null,
         partyId: l.partyId ?? null,
         description: l.description ?? null,
       }))

@@ -190,6 +190,12 @@ export function validateCriteria(raw: unknown): ValidationResult<RuleCriteria> {
 
 function validateSplitLine(raw: Record<string, unknown>): ValidationResult<RuleSplitLine> {
   if (!isUuidLike(raw.accountId)) return { ok: false, error: 'each split line needs an account' }
+  if (raw.taxCodeId !== undefined && raw.taxCodeId !== null && raw.taxCodeId !== '') {
+    return {
+      ok: false,
+      error: 'bank-rule journals cannot calculate tax; clear tax codes from split lines, or create a tax-aware journal in Journals and match it in Match Bank Data',
+    }
+  }
   const p = (raw.portion ?? {}) as Record<string, unknown>
   let portion: RuleSplitLine['portion']
   if (p.kind === 'percent') {
@@ -217,7 +223,7 @@ function validateSplitLine(raw: Record<string, unknown>): ValidationResult<RuleS
     return { ok: false, error: 'portion kind must be remainder, percent, or fixed' }
   }
   const line: RuleSplitLine = { accountId: raw.accountId, portion }
-  for (const k of ['partyId', 'departmentId', 'projectId', 'locationId', 'classId', 'taxCodeId'] as const) {
+  for (const k of ['partyId', 'departmentId', 'projectId', 'locationId', 'classId'] as const) {
     if (raw[k] !== undefined && raw[k] !== null && !isUuidLike(raw[k])) {
       return { ok: false, error: `${k} must be a valid ID` }
     }

@@ -68,7 +68,6 @@ test('bank rule name, priority, payee, and memo are associated with their labels
             departments={[]}
             locations={[]}
             classes={[]}
-            taxCodes={[]}
             parties={[{ value: 'party-1', label: 'Supplier' }]}
           />
         </MoneyProvider>
