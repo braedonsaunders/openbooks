@@ -864,10 +864,21 @@ test("a foreign-currency credit settles its currency's invoice at carrying amoun
 
     const released = await withBypass(() => unapplyCreditSettlement(org.orgId, userId, result.applicationIds[0]!));
     assert.equal(released.amount, "100.0000", "release returns the source transaction amount");
-    const audit = (await withBypass(async () => (await db.execute<{ changes: { before: { amount: string; targetCarryingAmount: string } } }>(sql`
+    const audit = (await withBypass(async () => (await db.execute<{ changes: { before: {
+      amount: string; appliedOn: string; creditDocument: string; fromLineId: string;
+      targetCarryingAmount: string; settledDocument: string; toLineId: string;
+    } } }>(sql`
       select changes from audit_log where org_id = ${org.orgId} and row_id = ${result.applicationIds[0]!}
         and action = 'delete' order by at desc, id desc limit 1`)).rows[0]))!;
-    assert.deepEqual(audit.changes.before, { amount: "100.0000", targetCarryingAmount: "130.0000" });
+    assert.deepEqual(audit.changes.before, {
+      amount: "100.0000",
+      appliedOn: org.date,
+      creditDocument: "CM-USD-1",
+      fromLineId: creditLine,
+      targetCarryingAmount: "130.0000",
+      settledDocument: "INV-USD-1",
+      toLineId: invoiceLine,
+    });
     const fxStatus = (await withBypass(async () => (await db.execute<{ status: string }>(sql`
       select status from journal_entries where org_id = ${org.orgId} and id = ${application.fx_gain_loss_entry_id}`)).rows[0]))!.status;
     assert.equal(fxStatus, "reversed");
