@@ -5,12 +5,16 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { CloseError } from "../periods/period-policy.ts";
 import {
+  applySourceLineEvidence,
   createMatch,
   excludeStatementLine,
   importStatement,
   markReconciled,
+  refreshSourceReconciliationState,
+  signOffFromSourceEvidence,
   startReconciliation,
 } from "../banking/banking.ts";
+import { ensureCloseDefaults } from "./defaults.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -318,6 +322,36 @@ test(
     }
   },
 );
+
+test("source-evidenced sign-offs stop covering close when their policy is disabled", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+    const { endsOn } = await periodEndsOn(org);
+    await makeReconcilable(org);
+    const lineIds = await postBankJournal(org, actor, ["100"], "source-policy", org.date);
+    const entryId = (await db.execute<{ entry_id: string }>(sql`
+      select entry_id from journal_lines where org_id=${org.orgId} and id=${lineIds[0]}`)).rows[0]!.entry_id;
+    await applySourceLineEvidence(org.orgId, "test-connector", [{
+      entryId,
+      lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: endsOn }],
+    }]);
+    await refreshSourceReconciliationState(org.orgId, "test-connector");
+    const signed = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
+    assert.equal(signed.signed, true);
+    const before = await bankingCloseStatus(org.orgId, { periodId: org.periodId, bookId: org.bookId, actorId: actor });
+    assert.equal(before[0]?.status, "signed_off");
+
+    await ensureCloseDefaults(org.orgId, actor);
+    await db.execute(sql`update close_policies set is_active=false
+      where org_id=${org.orgId} and code='source-reconciliation-evidence'`);
+    const after = await bankingCloseStatus(org.orgId, { periodId: org.periodId, bookId: org.bookId, actorId: actor });
+    assert.equal(after[0]?.status, "none");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "an account with activity but no reconciliation reports none and requires acknowledgement",

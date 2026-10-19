@@ -51,6 +51,7 @@ export const BOOK_MEASURED_ORIGINS = [
   "expense_amortization",
   "account_merge",
   "book_opening",
+  "net_investment_oci",
 ] as const;
 
 /** Origins that remeasure the functional ledger (left out of translated subsidiaries). */
@@ -305,7 +306,7 @@ export async function replicateEntryToBooks(
       closeModules,
       amountBasis: mirrored ? "book" : "functional",
       accountBasis: mirrored ? "book" : "source",
-      allowInactiveAccounts: mirrored !== null,
+      allowInactiveAccounts: true,
       auditAction: "replicate",
       requestId: args.requestId ?? null,
       auditChanges: { bookReplicaOf: source.id, omittedSubsidiaryIds: [...omitted] },

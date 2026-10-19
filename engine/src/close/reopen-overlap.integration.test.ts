@@ -235,3 +235,37 @@ test('concurrent expiry ticks count each re-closed window once', {skip:!process.
     assert.deepEqual(statuses,['reclosed','reclosed']);
   } finally { await dropScratchOrg(org.orgId); }
 });
+
+test('an expired reopen blocked by an open subledger does not stop other expiries', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  const org=await createScratchOrg();
+  try {
+    const actors=await seedFlowActors(org.orgId);
+    const other=randomUUID();
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+      values (${other},${org.orgId},${org.subsidiaryId},'Second entity','CAD','CA')`);
+    const ids=new Map<string,string>();
+    for (const subsidiaryId of [org.subsidiaryId,other]) {
+      await setPeriodLockState({orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,subsidiaryId,
+        module:'gl',state:'closed',actorId:actors.adminId,reason:'Close for review'});
+      const id=await requestPeriodReopen({orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,subsidiaryId,
+        modules:['gl'],actorId:actors.adminId,reason:'Approved correction window'});
+      await decidePeriodReopen({orgId:org.orgId,requestId:id,actorId:actors.approver1Id,approve:true,hours:2});
+      ids.set(subsidiaryId,id);
+    }
+    await setPeriodLockState({orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,subsidiaryId:org.subsidiaryId,
+      module:'ap',state:'open',actorId:actors.adminId,reason:'AP remains open for review'});
+    await db.execute(sql`update close_reopen_requests set expires_at=now()-interval '1 hour'
+      where org_id=${org.orgId} and id=any(${`{${[...ids.values()].join(',')}}`}::uuid[])`);
+
+    assert.equal(await recloseExpiredReopens(),1);
+    const states=(await db.execute<{id:string;status:string}>(sql`select id,status from close_reopen_requests
+      where org_id=${org.orgId} and id=any(${`{${[...ids.values()].join(',')}}`}::uuid[])`)).rows;
+    assert.equal(states.find(row=>row.id===ids.get(org.subsidiaryId))?.status,'approved');
+    assert.equal(states.find(row=>row.id===ids.get(other))?.status,'reclosed');
+    const blocked=(await db.execute<{payload:{requestId:string;reason:string}}>(sql`select payload from close_events
+      where org_id=${org.orgId} and event_type='period.reopen_expiry_blocked'`)).rows;
+    assert.equal(blocked.length,1);
+    assert.equal(blocked[0]!.payload.requestId,ids.get(org.subsidiaryId));
+    assert.match(blocked[0]!.payload.reason,/AP remains open/);
+  } finally { await dropScratchOrg(org.orgId); }
+});

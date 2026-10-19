@@ -318,6 +318,27 @@ test("generation refuses an unready year by name and posts nothing", { skip: !DB
   }
 });
 
+test("period-end readiness scopes unassigned documents by effective posting date", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { actors, december } = await readyYear(org);
+    const decemberEnd = (await db.execute<{ ends_on: string }>(sql`
+      select ends_on::text as ends_on from accounting_periods
+       where org_id = ${org.orgId} and id = ${december}`)).rows[0]?.ends_on;
+    assert.ok(decemberEnd);
+    const id = randomUUID();
+    await db.execute(sql`
+      insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,posting_date,currency,subtotal,tax_total,total)
+      values (${id},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${id},
+              '2025-12-31',${decemberEnd},'CAD',10,0,10)`);
+
+    const result = await generatePeriodEndJournals(org.orgId, actors.adminId, { periodId: december, reason: REASON });
+    assert.deepEqual(result.refused[0]!.problems.map((problem) => problem.code), ["drafts_open"]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("policy versions cannot reach back into a closed year and must name postable equity accounts", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

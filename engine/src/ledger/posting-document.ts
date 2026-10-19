@@ -1,5 +1,5 @@
 import { createObligationsFromInvoice } from '../revenue/recognition-obligations.ts';
-import { accrueRebatesForDocument, settleRebateForPostedDocument } from '../revenue/rebates.ts';
+import { accrueRebatesForDocument, assertRebateSettlementTaxBeforePosting, settleRebateForPostedDocument } from '../revenue/rebates.ts';
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { queueJournalReversal } from "./journal-reversals.ts";
 import { recordPaymentWithholdings } from "../contractor-withholding/service.ts";
@@ -108,6 +108,7 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
       await lockLedgerSetupFence(db,identity.org_id,identity.journal_mode==='currency_adjustment' ? 'exclusive' : 'shared');
       const locked=(await db.execute<{journal_mode:string}>(sql`select journal_mode from documents where org_id=${identity.org_id} and id=${documentId} for share`)).rows[0];
       if (locked?.journal_mode==='currency_adjustment' && identity.journal_mode!=='currency_adjustment') throw new PostingError("The journal mode changed before posting. Reload the journal and post again.");
+      await assertRebateSettlementTaxBeforePosting(identity.org_id, documentId);
     }
     const prepared = await prepareDocumentPosting(documentId, deps, options);
     if (prepared.doc.kind === "customer_invoice" && !deps.migration) {

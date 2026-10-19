@@ -2931,7 +2931,7 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
   // an omitted currency must stay omitted (the row default it keeps is this
   // same resolved value).
   const today = await businessToday(orgId)
-  const seedCurrency = await resolveCreateCurrency(orgId, body.currency)
+  const seedCurrency = await resolveCreateCurrency(orgId, subsidiaryId, body.currency)
   const effectiveBody: DocumentEditInput = {
     ...body,
     documentDate: body.documentDate ?? today,
@@ -3074,7 +3074,11 @@ async function resolveCreateReplay(
  * precompute. Shape-invalid and unknown codes refuse here with zero writes;
  * the multi-currency feature gate stays in the shared writer.
  */
-async function resolveCreateCurrency(orgId: string, currency: unknown): Promise<string> {
+async function resolveCreateCurrency(
+  orgId: string,
+  subsidiaryId: string | null,
+  currency: unknown,
+): Promise<string> {
   if (currency !== undefined) {
     const code = String(currency).trim().toUpperCase()
     if (!/^[A-Z]{3}$/.test(code)) throw new DocumentEditError(422, 'invalid currency')
@@ -3082,7 +3086,14 @@ async function resolveCreateCurrency(orgId: string, currency: unknown): Promise<
     if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
     return code
   }
-  const base = (await db.execute<{ base_currency: string }>(sql`
-    select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency
-  return base ?? 'CAD'
+  if (!subsidiaryId)
+    throw new DocumentEditError(422, 'select a legal entity or enter a document currency')
+  const entity = (await db.execute<{ base_currency: string | null }>(sql`
+    select base_currency from subsidiaries
+     where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`)).rows[0]
+  if (!entity)
+    throw new DocumentEditError(422, 'select an active legal entity before creating the document')
+  if (!entity.base_currency)
+    throw new DocumentEditError(422, 'set the functional currency for this legal entity before creating the document')
+  return entity.base_currency
 }

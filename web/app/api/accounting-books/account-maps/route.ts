@@ -20,7 +20,7 @@ const createBody = z.object({
 export const GET = defineRoute({
   permission: 'gl.read',
   feature: 'multiBookAccounting',
-  handler: async ({ authz }) => NextResponse.json({ maps: await listBookAccountMaps(authz.user.orgId) }),
+  handler: async ({ authz }) => NextResponse.json({ maps: await listBookAccountMaps(authz.user.orgId, undefined, authz.allowedSubsidiaryIds) }),
 })
 
 /**

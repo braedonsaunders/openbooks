@@ -49,15 +49,16 @@ async function seedPostedInvoice(
   projectId: string,
   documentNumber: string,
   amount: string,
+  options: { departmentId?: string | null; documentDate?: string; postingDate?: string } = {},
 ): Promise<string> {
   const invoice = randomUUID();
   await withBypassContext(() => db.execute(sql`
     insert into documents
-      (id, org_id, kind, status, document_number, party_id, document_date, subsidiary_id,
-       currency, subtotal, tax_total, total, project_id, created_by)
+      (id, org_id, kind, status, document_number, party_id, document_date, posting_date, subsidiary_id,
+       currency, subtotal, tax_total, total, department_id, project_id, created_by)
     values (${invoice}, ${org.orgId}, 'customer_invoice', 'draft', ${documentNumber},
-            ${org.customerId}, ${org.date}, ${org.subsidiaryId},
-            'CAD', ${amount}, '0', ${amount}, ${projectId}, ${actorId})`));
+            ${org.customerId}, ${options.documentDate ?? org.date}, ${options.postingDate ?? org.date}, ${org.subsidiaryId},
+            'CAD', ${amount}, '0', ${amount}, ${options.departmentId ?? null}, ${projectId}, ${actorId})`));
   await withBypassContext(() => db.execute(sql`
     insert into document_lines
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
@@ -102,9 +103,9 @@ async function closeAR(org: ScratchOrg, actorId: string): Promise<void> {
 
 async function docState(orgId: string, id: string) {
   return (await withBypassContext(() => db.execute<{
-    status: string; projectId: string | null; memo: string | null; voidRequested: string | null;
+    status: string; departmentId: string | null; projectId: string | null; memo: string | null; voidRequested: string | null;
   }>(sql`
-    select status, project_id as "projectId", memo,
+    select status, department_id as "departmentId", project_id as "projectId", memo,
            void_requested_at::text as "voidRequested"
       from documents where id = ${id} and org_id = ${orgId}`))).rows[0]!;
 }
@@ -153,16 +154,26 @@ test("a locked-period project amendment refuses with the reopen remedy and chang
   }
 });
 
-test("an open-period project change reclasses without voiding and invoiced-to-date follows it", { skip: !DB }, async () => {
+test("a multi-dimension correction moves balances once and stays in the source posting period", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await seedClerk(org);
     const projectA = await seedProject(org, "OPEN-A");
     const projectB = await seedProject(org, "OPEN-B");
-    const invoice = await seedPostedInvoice(org, actor, projectA, "INV-OPEN", "4200");
+    const departmentA = randomUUID();
+    const departmentB = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into departments (id, org_id, name) values (${departmentA}, ${org.orgId}, 'Open A')`);
+      await db.execute(sql`insert into departments (id, org_id, name) values (${departmentB}, ${org.orgId}, 'Open B')`);
+    });
+    const invoice = await seedPostedInvoice(org, actor, projectA, "INV-OPEN", "4200", {
+      departmentId: departmentA,
+      documentDate: "2026-06-15",
+      postingDate: org.date,
+    });
     const token = await revision(org.orgId, invoice);
     const outcome = await correctPostedDocument(invoice, {
-      projectId: projectB, expectedUpdatedAt: token, amendmentReason: REASON,
+      projectId: projectB, departmentId: departmentB, expectedUpdatedAt: token, amendmentReason: REASON,
     }, { orgId: org.orgId, userId: actor, source: "api" }, writerFor(org.orgId, actor));
     assert.equal(outcome.kind, "reclass");
     assert.equal(outcome.voidResult, null);
@@ -170,6 +181,7 @@ test("an open-period project change reclasses without voiding and invoiced-to-da
     const kept = await docState(org.orgId, invoice);
     assert.equal(kept.status, "posted");
     assert.equal(kept.voidRequested, null);
+    assert.equal(kept.departmentId, departmentB);
     assert.equal(kept.projectId, projectB);
     assert.equal(outcome.reclassEntryIds.length, 1);
     const reclass = (await withBypassContext(() => db.execute<{
@@ -180,17 +192,15 @@ test("an open-period project change reclasses without voiding and invoiced-to-da
     assert.equal(reclass.postingDate, org.date);
     assert.equal(reclass.periodId, org.periodId);
     assert.equal(reclass.origin, "correction");
-    // Every leg that carried the old project nets to zero there and reappears
-    // in full under the new one, per account — the entry stays balanced while
-    // each dimension attribution moves exactly once.
+    // Every leg moves once from the old combination to the new combination.
     const dimensions = (await withBypassContext(() => db.execute<{
-      project: string | null; account: string; total: string;
+      department: string | null; project: string | null; account: string; total: string;
     }>(sql`
-      select l.project_id as project, l.account_id as account, sum(l.amount)::text as total
+      select l.department_id as department, l.project_id as project, l.account_id as account, sum(l.amount)::text as total
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${org.orgId} and e.source_document_id = ${invoice}
-       group by l.project_id, l.account_id`))).rows;
+       group by l.department_id, l.project_id, l.account_id`))).rows;
     const original = (await withBypassContext(() => db.execute<{
       account: string; total: string;
     }>(sql`
@@ -202,16 +212,24 @@ test("an open-period project change reclasses without voiding and invoiced-to-da
        group by l.account_id`))).rows;
     const moved = new Map(original.map((row) => [row.account, row.total]));
     for (const row of dimensions) {
-      if (row.project === projectA) assert.equal(row.total, "0.0000");
-      if (row.project === projectB) assert.equal(row.total, moved.get(row.account));
+      if (row.department === departmentA && row.project === projectA) assert.equal(row.total, "0.0000");
+      else if (row.department === departmentB && row.project === projectB) assert.equal(row.total, moved.get(row.account));
+      else assert.equal(row.total, "0.0000", "no partial dimension combination remains");
     }
-    assert.ok(dimensions.some((row) => row.project === projectB));
+    assert.ok(dimensions.some((row) => row.department === departmentB && row.project === projectB));
     const before = await resolveProjectFinancials(org.orgId, projectA, fixedPrice);
     const after = await resolveProjectFinancials(org.orgId, projectB, fixedPrice);
     assert.equal(before.measures.invoiced_to_date, "0.0000");
     assert.equal(after.measures.invoiced_to_date, "4200.0000");
+    for (const [departmentId, projectId] of [[departmentA, projectA], [departmentB, projectB], [departmentA, projectA]] as const) {
+      const nextToken = await revision(org.orgId, invoice);
+      const repeated = await correctPostedDocument(invoice, {
+        departmentId, projectId, expectedUpdatedAt: nextToken, amendmentReason: REASON,
+      }, { orgId: org.orgId, userId: actor, source: "api" }, writerFor(org.orgId, actor));
+      assert.equal(repeated.kind, "reclass");
+    }
     const audits = await correctionAudits(org.orgId, invoice);
-    assert.equal(audits.length, 1);
+    assert.equal(audits.length, 4);
     assert.match(JSON.stringify(audits[0]!.changes), /posted_dimension_reclass/);
     assert.match(JSON.stringify(audits[0]!.changes), new RegExp(projectB));
   } finally {

@@ -765,29 +765,44 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
   // the two ticks.
   let reclosed = 0;
   for (const row of expired.rows) {
-    const didReclose = await withOrgContext(row.org_id, () =>
-      db.transaction(async (tx) => {
-      await periodScopeAdvisoryLock(tx, row.org_id, row.period_id, row.book_id);
-      const locked = (await tx.execute<CloseReopenRequestRow>(sql`
-        select *
-          from close_reopen_requests
-         where id = ${row.id}
-           and org_id = ${row.org_id}
-           and status = 'approved'
-           and expires_at <= now()
-         for update`));
-      const lockedRow = locked.rows[0];
-      if (!lockedRow) return false;
-      await recloseApprovedReopenRow({
-        tx,
-        row: lockedRow,
-        actorId,
-        reason: lockedRow.reason,
-        automatic: true,
-      });
-      return true;
-    }));
-    if (didReclose) reclosed += 1;
+    try {
+      const didReclose = await withOrgContext(row.org_id, () =>
+        db.transaction(async (tx) => {
+          await periodScopeAdvisoryLock(tx, row.org_id, row.period_id, row.book_id);
+          const locked = (await tx.execute<CloseReopenRequestRow>(sql`
+            select *
+              from close_reopen_requests
+             where id = ${row.id}
+               and org_id = ${row.org_id}
+               and status = 'approved'
+               and expires_at <= now()
+             for update`));
+          const lockedRow = locked.rows[0];
+          if (!lockedRow) return false;
+          await recloseApprovedReopenRow({
+            tx,
+            row: lockedRow,
+            actorId,
+            reason: lockedRow.reason,
+            automatic: true,
+          });
+          return true;
+        }));
+      if (didReclose) reclosed += 1;
+    } catch (error) {
+      if (!(error instanceof CloseError)) throw error;
+      await withOrgContext(row.org_id, () => db.execute(sql`
+        insert into close_events (org_id, event_type, actor_id, payload)
+        values (${row.org_id}, 'period.reopen_expiry_blocked', ${actorId ?? null},
+          ${JSON.stringify({
+            requestId: row.id,
+            periodId: row.period_id,
+            bookId: row.book_id,
+            subsidiaryId: row.subsidiary_id,
+            modules: row.modules,
+            reason: error.message,
+          })}::jsonb)`));
+    }
   }
   return reclosed;
 }

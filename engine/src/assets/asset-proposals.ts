@@ -486,14 +486,20 @@ export async function acceptAssetProposals(
       feature: "assetProposals",
       subsidiaryIds: [...new Set(proposals.map((proposal) => proposal.subsidiary_id))],
     });
-    const prior = (await tx.execute<{ id: string; request_hash: string; reclass_entry_id: string | null }>(sql`
-      select id, request_hash, reclass_entry_id from asset_proposal_acceptances
+    const prior = (await tx.execute<{ id: string; request_hash: string; reclass_entry_id: string | null; status: string }>(sql`
+      select id, request_hash, reclass_entry_id, status from asset_proposal_acceptances
        where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];
     if (prior) {
       if (prior.request_hash !== hash) {
         refuse("idempotency_conflict", "this request key was already used for a different acceptance", {
           status: 409,
           remedy: "Reopen the proposal to start a fresh acceptance.",
+        });
+      }
+      if (prior.status === "reversed") {
+        refuse("acceptance_reversed", "this acceptance has already been reversed", {
+          status: 409,
+          remedy: "Refresh the proposal queue and use a new request key for a new acceptance.",
         });
       }
       return acceptanceResult(tx, orgId, prior.id, prior.reclass_entry_id);

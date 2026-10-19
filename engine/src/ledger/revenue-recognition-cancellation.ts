@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import { neg } from "../money/money.ts";
 import { db, withOrg } from "../platform/db.ts";
 import { CloseError, assertPeriodModulesOpen, periodClosedDetailsOf } from "../periods/period-policy.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { lockRevenueContract } from "../revenue/recognition.ts";
@@ -145,13 +146,25 @@ export async function cancelRevenueRecognitionForInvoice(input: {
         }
       }
 
-      const affectedContracts=(await tx.execute<{contract_id:string}>(sql`select distinct o.contract_id from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id where o.org_id=${input.orgId} and dl.document_id=${input.documentId} order by o.contract_id`)).rows;
-      for(const c of affectedContracts)await lockRevenueContract(tx,input.orgId,c.contract_id);
+      const affectedContracts = (await tx.execute<{ contract_id: string }>(sql`
+        select contract_id from (
+          select distinct obligation.contract_id
+            from performance_obligations obligation
+            join document_lines line on line.id = obligation.document_line_id and line.org_id = obligation.org_id
+           where obligation.org_id = ${input.orgId} and line.document_id = ${input.documentId}
+          union
+          select billing.contract_id from revenue_contract_billings billing
+           where billing.org_id = ${input.orgId} and billing.document_id = ${input.documentId}
+        ) contracts
+        order by contract_id`)).rows;
+      for (const contract of affectedContracts) await lockRevenueContract(tx, input.orgId, contract.contract_id);
       const obligations = (await tx.execute<{ id: string; contract_id: string; status: string }>(sql`
         select obligation.id, obligation.contract_id, obligation.status
           from performance_obligations obligation
+          join document_lines line
+            on line.id = obligation.document_line_id and line.org_id = obligation.org_id
          where obligation.org_id = ${input.orgId}
-           and obligation.contract_id in(select jsonb_array_elements_text(${JSON.stringify(affectedContracts.map(c=>c.contract_id))}::jsonb)::uuid)
+           and line.document_id = ${input.documentId}
          order by obligation.id
          for update of obligation
       `));
@@ -160,6 +173,70 @@ export async function cancelRevenueRecognitionForInvoice(input: {
           "invoice has no revenue-recognition obligations",
         );
       }
+
+      const adjustVoidedBillings = async (): Promise<void> => {
+        const billings = (await tx.execute<{
+          contract_id: string;
+          amount: string;
+          total_transaction_price: string;
+          total_consideration: string;
+        }>(sql`
+          select billing.contract_id, billing.amount::text as amount,
+                 contract.total_transaction_price::text as total_transaction_price,
+                 contract.total_consideration::text as total_consideration
+            from revenue_contract_billings billing
+            join revenue_contracts contract
+              on contract.id = billing.contract_id and contract.org_id = billing.org_id
+           where billing.org_id = ${input.orgId} and billing.document_id = ${input.documentId}
+           order by billing.contract_id
+           for update of billing, contract`)).rows;
+        if (billings.length === 0) return;
+        const evidence = (await tx.execute<{ id: string }>(sql`
+          select id from audit_log
+           where org_id = ${input.orgId} and table_name = 'revenue_contract_billings'
+             and row_id = ${input.documentId} and action = 'reverse'
+             and request_id = 'revenue_recognition_cancellation'
+             and changes->>'mode' = 'revenue_contract_billing_cancellation'
+           limit 1`)).rows[0];
+        if (evidence) return;
+
+        const adjustments: Array<Record<string, string>> = [];
+        for (const billing of billings) {
+          const updated = (await tx.execute<{
+            id: string;
+            total_transaction_price: string;
+            total_consideration: string;
+          }>(sql`
+            update revenue_contracts
+               set total_transaction_price = total_transaction_price - ${billing.amount},
+                   total_consideration = total_consideration - ${billing.amount},
+                   modification_seq = modification_seq + 1,
+                   updated_at = now(), updated_by = ${input.actorId}
+             where org_id = ${input.orgId} and id = ${billing.contract_id}
+               and total_transaction_price >= ${billing.amount}
+               and total_consideration >= ${billing.amount}
+            returning id, total_transaction_price::text, total_consideration::text`)).rows[0];
+          if (!updated) {
+            throw new RevenueRecognitionCancellationError(
+              "the contract consideration no longer covers this invoice; reconcile the contract before cancelling recognition",
+            );
+          }
+          adjustments.push({
+            contractId: billing.contract_id,
+            amount: billing.amount,
+            totalTransactionPriceBefore: billing.total_transaction_price,
+            totalTransactionPriceAfter: updated.total_transaction_price,
+            totalConsiderationBefore: billing.total_consideration,
+            totalConsiderationAfter: updated.total_consideration,
+          });
+        }
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+          values (${input.orgId}, 'revenue_contract_billings', ${input.documentId}, 'reverse',
+                  ${JSON.stringify({ mode: "revenue_contract_billing_cancellation", reason, adjustments })}::jsonb,
+                  ${input.actorId}, 'revenue_recognition_cancellation')
+        `);
+      };
 
       const obligationIds = obligations.rows.map((row) => row.id);
       const sources = (await tx.execute<{
@@ -203,18 +280,10 @@ export async function cancelRevenueRecognitionForInvoice(input: {
             `${source.entry_number} is ${source.entry_status} without recorded cancellation lineage`,
           );
         }
-        const period = (await tx.execute<{ id: string }>(sql`
-          select period.id
-            from accounting_periods period
-           where period.org_id = ${input.orgId}
-             and period.starts_on <= ${reversalDate}
-             and period.ends_on >= ${reversalDate}
-           order by period.is_adjustment, period.starts_on
-           limit 1
-        `));
-        if (!period.rows[0]) {
+        const period = await resolveCoveringPeriod(tx, input.orgId, reversalDate, source.subsidiary_id);
+        if (!period) {
           throw new RevenueRecognitionCancellationError(
-            `no accounting period covers ${reversalDate}`,
+            `no active entity accounting period covers ${reversalDate}`,
           );
         }
         // One period gate: the shared GL check replaces the raw
@@ -224,7 +293,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
         try {
           await assertPeriodModulesOpen(tx, {
             orgId: input.orgId,
-            periodId: period.rows[0].id,
+            periodId: period.id,
             bookId: source.book_id,
             subsidiaryIds: [source.subsidiary_id],
             modules: ["gl"],
@@ -277,7 +346,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
           subsidiaryId: source.subsidiary_id,
           entryNumber: `${source.entry_number}-CANCEL`,
           postingDate: reversalDate,
-          periodId: period.rows[0].id,
+          periodId: period.id,
           memo: `Revenue recognition cancellation — ${reason}`,
           origin: "revenue_recognition",
           reversesEntryId: source.journal_entry_id,
@@ -369,6 +438,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
         `);
       }
       if (doc.status === "voided") {
+        await adjustVoidedBillings();
         return {
           status: "cancelled" as const,
           recognitionReversalEntryIds: reversalIds,
@@ -434,6 +504,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
         }
         const invoiceReversalEntryId =
           await completeRequestedDocumentVoid(input.documentId, input.orgId);
+        await adjustVoidedBillings();
         return {
           status: "cancelled" as const,
           recognitionReversalEntryIds: reversalIds,
@@ -449,6 +520,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
         reversalDate,
         source: "api",
       });
+      if (requested.status === "voided") await adjustVoidedBillings();
       return {
         status:
           requested.status === "voided" ? "cancelled" : "pending_approval",

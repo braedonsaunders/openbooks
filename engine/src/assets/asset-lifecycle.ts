@@ -9,6 +9,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { orgReportingFramework } from "../platform/reporting-framework.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 
 /**
  * Fixed-asset lifecycle posting — disposal by sale and write-off.
@@ -639,14 +640,12 @@ export async function disposeAsset(
     // A disposal dated into a GL-closed period must refuse here — resolving
     // the period once also turns a dateless insert (null period_id) into a
     // named error instead of a raw constraint failure.
-    const period = await tx.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${orgId} and not is_adjustment
-       and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1`);
-    if (!period.rows[0])
+    const period = await resolveCoveringPeriod(tx, orgId, opts.date, asset.subsidiary_id);
+    if (!period)
       throw new AssetLifecycleError(`no accounting period covers ${opts.date}`);
     await assertAssetPeriodOpen(tx, {
       orgId,
-      periodId: period.rows[0].id,
+      periodId: period.id,
       bookId,
       subsidiaryIds: [asset.subsidiary_id],
     });
@@ -660,7 +659,8 @@ export async function disposeAsset(
       subsidiaryId: asset.subsidiary_id,
       entryNumber: `DISP-${asset.asset_number}-${randomUUID()}`,
       postingDate: opts.date,
-      periodId: period.rows[0].id,
+      periodId: period.id,
+      closeModules: ["assets"],
       memo: `${status === "written_off" ? "Write-off" : "Disposal"} — ${asset.asset_number}`,
       origin: "disposal",
       actorId: opts.actorId,
@@ -869,13 +869,8 @@ export async function reverseAssetLifecycleEvent(
         `reverse the later ${later.rows[0].kind} asset event first`,
       );
     }
-    const period = await tx.execute<{ id: string }>(sql`
-      select id from accounting_periods
-       where org_id = ${orgId} and not is_adjustment
-         and starts_on <= ${opts.date} and ends_on >= ${opts.date}
-       limit 1
-    `);
-    if (!period.rows[0]) {
+    const period = await resolveCoveringPeriod(tx, orgId, opts.date, source.subsidiary_id);
+    if (!period) {
       throw new AssetLifecycleError(`no accounting period covers ${opts.date}`);
     }
 
@@ -924,7 +919,7 @@ export async function reverseAssetLifecycleEvent(
     // je_guard trigger would judge (header plus mirrored line subsidiaries).
     await assertAssetPeriodOpen(tx, {
       orgId,
-      periodId: period.rows[0].id,
+      periodId: period.id,
       bookId: source.book_id,
       subsidiaryIds: [
         ...new Set([
@@ -972,7 +967,8 @@ export async function reverseAssetLifecycleEvent(
       subsidiaryId: source.subsidiary_id,
       entryNumber: `${source.entry_number}-REV`,
       postingDate: opts.date,
-      periodId: period.rows[0].id,
+      periodId: period.id,
+      closeModules: ["assets"],
       memo: `Reversal — ${reason}`,
       origin: source.origin,
       reversesEntryId: source.journal_entry_id,
@@ -1237,14 +1233,12 @@ export async function remeasureAsset(
     await assertLifecyclePostingPolicy(tx, orgId, asset, lines);
     // Same companion as disposals: a remeasurement dated into a GL-closed
     // period refuses here, and a dateless insert becomes a named error.
-    const remeasurePeriod = await tx.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${orgId} and not is_adjustment
-       and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1`);
-    if (!remeasurePeriod.rows[0])
+    const remeasurePeriod = await resolveCoveringPeriod(tx, orgId, opts.date, asset.subsidiary_id);
+    if (!remeasurePeriod)
       throw new AssetLifecycleError(`no accounting period covers ${opts.date}`);
     await assertAssetPeriodOpen(tx, {
       orgId,
-      periodId: remeasurePeriod.rows[0].id,
+      periodId: remeasurePeriod.id,
       bookId,
       subsidiaryIds: [asset.subsidiary_id],
     });
@@ -1261,7 +1255,8 @@ export async function remeasureAsset(
       subsidiaryId: asset.subsidiary_id,
       entryNumber,
       postingDate: opts.date,
-      periodId: remeasurePeriod.rows[0].id,
+      periodId: remeasurePeriod.id,
+      closeModules: ["assets"],
       memo: `${kind === "impaired" ? "Impairment" : "Revaluation"} — ${asset.asset_number}`,
       origin: "revaluation",
       actorId: opts.actorId,
@@ -1314,8 +1309,6 @@ export async function postAssetLifecycleEntry(
     orgId: string;
     actorId: string;
     bookId: string;
-    calendarId?: string;
-    periodId?: string;
     date: string;
     number: string;
     memo: string;
@@ -1336,19 +1329,15 @@ export async function postAssetLifecycleEntry(
   if (!isZero(lines.reduce((a, l) => add(a, l.amount), "0")))
     throw new AssetLifecycleError("asset change journal is unbalanced");
   await assertLifecyclePostingPolicy(tx, args.orgId, args.asset, lines);
-  const periods = (
-    await tx.execute<{ id: string }>(
-      sql`select p.id from accounting_periods p join fiscal_calendars c on c.org_id=p.org_id and c.id=p.fiscal_calendar_id where p.org_id=${args.orgId} and c.is_active ${args.periodId ? sql`and p.id=${args.periodId}` : args.calendarId ? sql`and c.id=${args.calendarId}` : sql`and c.is_default`} and not p.is_adjustment and p.starts_on<=${args.date} and p.ends_on>=${args.date} for share of p,c`,
-    )
-  ).rows;
-  if (periods.length !== 1)
+  const period = await resolveCoveringPeriod(tx, args.orgId, args.date, args.asset.subsidiary_id);
+  if (!period)
     throw new AssetLifecycleError(
       `configure one accounting period in the asset book calendar covering ${args.date}`,
     );
   await assertAssetPeriodOpen(tx, {
     orgId: args.orgId,
     bookId: args.bookId,
-    periodId: periods[0]!.id,
+    periodId: period.id,
     subsidiaryIds: [args.asset.subsidiary_id],
   });
   // Every journal write routes through the ONE ledger API: the pre-checks
@@ -1361,10 +1350,11 @@ export async function postAssetLifecycleEntry(
     subsidiaryId: args.asset.subsidiary_id,
     entryNumber: args.number,
     postingDate: args.date,
-    periodId: periods[0]!.id,
+    periodId: period.id,
     memo: args.memo,
     origin: args.origin ?? "disposal",
     reversesEntryId: args.reversesEntryId,
+    closeModules: ["assets"],
     actorId: args.actorId,
     currency: args.currency,
     // Asset changes post each book's own measurement; full books never

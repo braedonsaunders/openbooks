@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { postEntry } from "../journal/post-entry.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import {
   createScratchOrg,
@@ -51,21 +52,26 @@ async function enableMerges(orgId: string, enabled = true): Promise<void> {
      where id = ${orgId}`));
 }
 
-async function post(org: ScratchOrg, lines: { accountId: string; amount: string; departmentId?: string | null }[], postingDate = org.date) {
+async function post(
+  org: ScratchOrg,
+  lines: { accountId: string; amount: string; departmentId?: string | null }[],
+  postingDate = org.date,
+  periodId = org.periodId,
+) {
   return withOrgContext(org.orgId, () => postEntry(db, {
     orgId: org.orgId,
     bookId: org.bookId,
     subsidiaryId: org.subsidiaryId,
     entryNumber: `T-${randomUUID().slice(0, 8)}`,
     postingDate,
-    periodId: org.periodId,
+    periodId,
     origin: "manual",
     currency: "CAD",
     lines,
   }));
 }
 
-async function scenario(): Promise<Scenario> {
+async function scenario(options: { seedBalances?: boolean } = {}): Promise<Scenario> {
   installEngineSeams();
   const org = await createScratchOrg();
   const actors = await seedFlowActors(org.orgId);
@@ -78,14 +84,16 @@ async function scenario(): Promise<Scenario> {
     const vendorRole = randomUUID();
     await db.execute(sql`insert into vendor_roles (id, org_id, party_id, default_expense_account_id)
       values (${vendorRole}, ${org.orgId}, ${org.vendorId}, ${source})`);
-    await post(org, [
-      { accountId: source, amount: "120.0000", departmentId: department },
-      { accountId: org.accounts.bank, amount: "-120.0000" },
-    ]);
-    await post(org, [
-      { accountId: source, amount: "30.0000" },
-      { accountId: org.accounts.bank, amount: "-30.0000" },
-    ]);
+    if (options.seedBalances !== false) {
+      await post(org, [
+        { accountId: source, amount: "120.0000", departmentId: department },
+        { accountId: org.accounts.bank, amount: "-120.0000" },
+      ]);
+      await post(org, [
+        { accountId: source, amount: "30.0000" },
+        { accountId: org.accounts.bank, amount: "-30.0000" },
+      ]);
+    }
     return { org, actorId: actors.adminId, source, target, department, vendorRole };
   });
 }
@@ -110,6 +118,113 @@ function request(s: Pick<Scenario, "source" | "target" | "actorId">, overrides: 
     ...overrides,
   };
 }
+
+async function camPool(s: Scenario, status: "open" | "finalized" | "invoiced", expenseAccountIds: string[]): Promise<string> {
+  const propertyId = randomUUID();
+  const poolId = randomUUID();
+  await withOrgContext(s.org.orgId, async () => {
+    await db.execute(sql`insert into managed_properties(id,org_id,subsidiary_id,code,name,property_type,currency)
+      values(${propertyId},${s.org.orgId},${s.org.subsidiaryId},${`MERGE-${propertyId.slice(0, 8)}`},'Merge test property','commercial','CAD')`);
+    await db.execute(sql`insert into cam_pools(id,org_id,property_id,name,fiscal_year,period_starts_on,period_ends_on,
+      expense_account_ids,status,actual_amount)
+      values(${poolId},${s.org.orgId},${propertyId},'Merge test pool',2026,'2026-07-01','2026-07-31',
+        ${JSON.stringify(expenseAccountIds)}::jsonb,${status},${status === "open" ? null : "100.0000"})`);
+  });
+  return poolId;
+}
+
+test("P&L merge balances and period locks follow each subsidiary's fiscal calendar", { skip: !DB }, async () => {
+  const s = await scenario({ seedBalances: false });
+  try {
+    const januaryPeriod = randomUUID();
+    const marchPeriod = randomUUID();
+    const entityCalendar = randomUUID();
+    const entityPeriods = [
+      { id: randomUUID(), month: 4, name: "2026-04", start: "2026-04-01", end: "2026-04-30" },
+      { id: randomUUID(), month: 5, name: "2026-05", start: "2026-05-01", end: "2026-05-31" },
+      { id: randomUUID(), month: 6, name: "2026-06", start: "2026-06-01", end: "2026-06-30" },
+      { id: randomUUID(), month: 7, name: "2026-07", start: "2026-07-01", end: "2026-07-31" },
+    ];
+    const defaultCalendar = (await db.execute<{ id: string }>(sql`
+      select fiscal_calendar_id as id from accounting_periods where org_id=${s.org.orgId} and id=${s.org.periodId}`)).rows[0]!.id;
+    await withOrgContext(s.org.orgId, async () => {
+      await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on)
+        values(${januaryPeriod},${s.org.orgId},${defaultCalendar},2026,1,'2026-01','2026-01-01','2026-01-31'),
+              (${marchPeriod},${s.org.orgId},${defaultCalendar},2026,3,'2026-03','2026-03-01','2026-03-31')`);
+      await postEntry(db,{orgId:s.org.orgId,bookId:s.org.bookId,subsidiaryId:s.org.subsidiaryId,
+        entryNumber:`PRE-FY-${randomUUID().slice(0,8)}`,postingDate:'2026-01-15',periodId:januaryPeriod,origin:'manual',
+        currency:'CAD',
+        lines:[{accountId:s.source,amount:'500'},{accountId:s.org.accounts.bank,amount:'-500'}]});
+      await postEntry(db,{orgId:s.org.orgId,bookId:s.org.bookId,subsidiaryId:s.org.subsidiaryId,
+        entryNumber:`PRE-FY-${randomUUID().slice(0,8)}`,postingDate:'2026-03-15',periodId:marchPeriod,origin:'manual',
+        currency:'CAD',
+        lines:[{accountId:s.source,amount:'300'},{accountId:s.org.accounts.bank,amount:'-300'}]});
+      await db.execute(sql`insert into fiscal_calendars(id,org_id,name,year_start_month,is_default,is_active)
+        values(${entityCalendar},${s.org.orgId},'April fiscal year',4,false,true)`);
+      for (const period of entityPeriods) {
+        await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on)
+          values(${period.id},${s.org.orgId},${entityCalendar},2027,${period.month - 3},${period.name},${period.start},${period.end})`);
+      }
+      await db.execute(sql`insert into subsidiary_accounting_preferences
+        (org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason,created_by)
+        values(${s.org.orgId},${s.org.subsidiaryId},'2026-04-01',${entityCalendar},'April fiscal-year calendar',${s.actorId})`);
+    });
+
+    await post(s.org, [
+      { accountId: s.source, amount: "120.0000", departmentId: s.department },
+      { accountId: s.org.accounts.bank, amount: "-120.0000" },
+    ], "2026-07-15", entityPeriods[3]!.id);
+    await post(s.org, [
+      { accountId: s.source, amount: "30.0000" },
+      { accountId: s.org.accounts.bank, amount: "-30.0000" },
+    ], "2026-07-15", entityPeriods[3]!.id);
+
+    const requestInput = { sourceAccountId:s.source,targetAccountId:s.target,effectiveDate:EFFECTIVE };
+    const open = await previewAccountMerge(s.org.orgId,requestInput,null);
+    assert.deepEqual(open.refusals,[]);
+    assert.equal(open.balanceFrom,'2026-04-01');
+    assert.deepEqual(open.balances.map(row=>row.amount).sort(),['120.0000','30.0000']);
+
+    await setPeriodLockState({orgId:s.org.orgId,periodId:entityPeriods[3]!.id,bookId:s.org.bookId,
+      subsidiaryId:s.org.subsidiaryId,module:'gl',state:'closed',actorId:s.actorId,reason:'Close the entity fiscal period'});
+    const closed = await previewAccountMerge(s.org.orgId,requestInput,null);
+    assert.ok(closed.refusals.some(refusal=>refusal.code==='period_closed'));
+    assert.deepEqual(closed.balances.map(row=>row.amount).sort(),['120.0000','30.0000']);
+  } finally {
+    await dropScratchOrg(s.org.orgId);
+  }
+});
+
+test("account merge deduplicates editable CAM account arrays and blocks sealed pools", { skip: !DB }, async () => {
+  const editable = await scenario();
+  const sealed = await scenario();
+  try {
+    const editablePoolId = await camPool(editable,'open',[editable.source,editable.target]);
+    const preview = await previewAccountMerge(editable.org.orgId,
+      {sourceAccountId:editable.source,targetAccountId:editable.target,effectiveDate:EFFECTIVE},null);
+    assert.deepEqual(preview.refusals,[]);
+    assert.ok(preview.references.some(ref=>ref.key==='cam_pools.expense_account_ids' && ref.redirect===1));
+    const outcome=await requestAccountMerge(editable.org.orgId,request(editable,{expectedDigest:preview.digest}));
+    assert.equal(outcome.status,'completed');
+    const saved=(await db.execute<{expense_account_ids:string[]}>(sql`
+      select expense_account_ids from cam_pools where org_id=${editable.org.orgId} and id=${editablePoolId}`)).rows[0];
+    assert.deepEqual(saved?.expense_account_ids,[editable.target]);
+
+    const finalizedPool=await camPool(sealed,'finalized',[sealed.source]);
+    const invoicedPool=await camPool(sealed,'invoiced',[sealed.source]);
+    const blocked=await previewAccountMerge(sealed.org.orgId,
+      {sourceAccountId:sealed.source,targetAccountId:sealed.target,effectiveDate:EFFECTIVE},null);
+    assert.ok(blocked.refusals.some(refusal=>refusal.code==='reference_in_flight'));
+    assert.ok(blocked.references.some(ref=>ref.key==='cam_pools.expense_account_ids' && ref.blocked===2 && ref.redirect===0));
+    const preserved=(await db.execute<{id:string;expense_account_ids:string[]}>(sql`
+      select id,expense_account_ids from cam_pools where org_id=${sealed.org.orgId}
+        and id in (${finalizedPool},${invoicedPool}) order by id`)).rows;
+    assert.deepEqual(preserved.map(row=>row.expense_account_ids),[[sealed.source],[sealed.source]]);
+  } finally {
+    await dropScratchOrg(editable.org.orgId);
+    await dropScratchOrg(sealed.org.orgId);
+  }
+});
 
 test("a merge moves the balance by a balanced reclass, moves configuration, and marks the source merged", { skip: !DB }, async () => {
   const s = await scenario();
@@ -154,6 +269,27 @@ test("a merge moves the balance by a balanced reclass, moves configuration, and 
     const history = await listAccountMerges(s.org.orgId, { limit: 10, offset: 0, accountId: s.target });
     assert.equal(history.total, 1);
     assert.equal(history.rows[0]!.status, "completed");
+
+    const outOfScopeSubsidiary = randomUUID();
+    await withOrgContext(s.org.orgId, async () => {
+      await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${outOfScopeSubsidiary}, ${s.org.orgId}, ${s.org.subsidiaryId}, 'Merge history entity', 'CAD', 'CA')`);
+      await db.execute(sql`update accounts set subsidiary_id = ${outOfScopeSubsidiary}
+        where org_id = ${s.org.orgId} and id in (${s.source}, ${s.target})`);
+    });
+    const restrictedHistory = await listAccountMerges(
+      s.org.orgId,
+      { limit: 10, offset: 0 },
+      new Set([s.org.subsidiaryId]),
+    );
+    assert.equal(restrictedHistory.total, 0, "a merge is hidden when either account is outside the caller's scope");
+    assert.deepEqual(restrictedHistory.rows, []);
+    const visibleHistory = await listAccountMerges(
+      s.org.orgId,
+      { limit: 10, offset: 0 },
+      new Set([outOfScopeSubsidiary]),
+    );
+    assert.equal(visibleHistory.total, 1);
   } finally {
     await dropScratchOrg(s.org.orgId);
   }

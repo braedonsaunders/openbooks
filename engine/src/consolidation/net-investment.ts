@@ -165,6 +165,7 @@ export async function applyNetInvestmentAssessment(orgId:string,id:string,actorI
     const delta=sum(beforeState.sources.map(source=>source.translated))
     const entry=isZero(delta) ? null : await postEntry(db,{orgId,bookId:input.bookId,subsidiaryId:input.eliminationSubsidiaryId,
       entryNumber:`NETINV-${change.id}`,postingDate:change.effective_on,periodId:beforeState.periodId,origin:'net_investment_oci',actorId,
+      replicate:false,
       currency:beforeState.elimination.base_currency,idempotencyKey:`net-investment:${change.id}`,memo:'Qualifying net-investment exchange differences — consolidated OCI',
       lines:[{accountId:input.profitLossAccountId,amount:delta},{accountId:input.ociAccountId,amount:neg(delta)}],auditChanges:{changeId:change.id,interestId:change.subject_id,sources:beforeState.sources}})
     const recorded=await db.execute(sql`insert into net_investment_entries(org_id,change_id,interest_id,journal_entry_id,book_id,period_id,elimination_subsidiary_id)
@@ -238,6 +239,7 @@ export async function applyNetInvestmentReversal(orgId:string,id:string,actorId:
     catch(error){if(error instanceof CloseError)throw new NetInvestmentError(`${error.message} — use the controlled reopen workflow in Accounting → Close or an open correction date`,{details:periodClosedDetailsOf(error)});throw error}
     const entry=beforeState.record.journal_entry_id ? await postEntry(db,{orgId,bookId:beforeState.record.book_id,subsidiaryId:beforeState.subsidiaryId,
       entryNumber:`NETINV-REV-${change.id}`,postingDate:change.effective_on,periodId:period.id,origin:'net_investment_oci',actorId,
+      replicate:false,
       reversesEntryId:beforeState.record.journal_entry_id,idempotencyKey:`net-investment-reversal:${change.id}`,
       lines:beforeState.lines.map(line=>({accountId:line.account_id,amount:neg(line.amount),currency:line.currency})),auditChanges:{changeId:id,sourceChangeId:beforeState.sourceChangeId}}) : null
     if(beforeState.record.journal_entry_id)await markEntryReversed(db,{orgId,entryId:beforeState.record.journal_entry_id,actorId})

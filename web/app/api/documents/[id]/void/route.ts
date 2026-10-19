@@ -12,6 +12,7 @@ import {
   DocumentVoidError,
   requestDocumentVoid,
   requestReceiptVoidWithDependents,
+  resolveVoidCalendarSubsidiaryId,
   suggestVoidReversalDate,
 } from '@openbooks/engine/ledger/document-void'
 import { periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
@@ -58,7 +59,7 @@ function voidPermission(kind: string): string | null {
 type VoidGuard = {
   authz: NonNullable<Awaited<ReturnType<typeof getAuthz>>>
   id: string
-  doc: { kind: string; subsidiaryId: string | null; documentDate: string }
+  doc: { kind: string; subsidiaryId: string | null; documentDate: string; postingDate: string | null }
 }
 
 /** The caller may drive this document's void — shared by GET and POST. */
@@ -66,8 +67,11 @@ async function guardVoidDocument(id: string): Promise<VoidGuard | NextResponse> 
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   if (!isUuid(id)) return notFound("record")
-  const found = (await db.execute<{ kind: string; subsidiaryId: string | null; documentDate: string }>(sql`
-    select kind, subsidiary_id as "subsidiaryId", document_date::text as "documentDate"
+  const found = (await db.execute<{
+    kind: string; subsidiaryId: string | null; documentDate: string; postingDate: string | null;
+  }>(sql`
+    select kind, subsidiary_id as "subsidiaryId", document_date::text as "documentDate",
+           posting_date::text as "postingDate"
       from documents
      where id = ${id} and org_id = ${authz.user.orgId}
   `))
@@ -121,26 +125,38 @@ export const GET = defineRoute({
     const { id } = await params
     const gate = await guardVoidDocument(id)
     if (gate instanceof NextResponse) return gate
-    // Each adjustment period is named by its fiscal label in the viewer's locale.
+    // Adjustment periods use fiscal labels in the viewer's locale.
     const locale = await getLocale()
-    const periods = (await db.execute<{ id: string; name: string; startsOn: string; endsOn: string }>(sql`
-        select p.id, ${periodDisplayLabelSql(locale, 'p')} as name,
-               p.starts_on::text as "startsOn", p.ends_on::text as "endsOn"
-          from accounting_periods p
-          join fiscal_calendars fc
-            on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-           and fc.is_default and fc.is_active
-         where p.org_id = ${gate.authz.user.orgId} and p.is_adjustment
-         order by p.starts_on, p.ends_on, p.id
-      `))
     // The reversal default the dialog confirms: the entry's own date, moved
     // forward to the first open period only when the entry's period closed.
     const suggestion = await suggestVoidReversalDate(db, gate.authz.user.orgId, {
       id,
       kind: gate.doc.kind,
       documentDate: gate.doc.documentDate,
+      postingDate: gate.doc.postingDate,
       subsidiaryId: gate.doc.subsidiaryId,
     })
+    const calendarSubsidiaryId = await resolveVoidCalendarSubsidiaryId(
+      db,
+      gate.authz.user.orgId,
+      id,
+      gate.doc.subsidiaryId,
+    )
+    const periods = calendarSubsidiaryId
+      ? (await db.execute<{ id: string; name: string; startsOn: string; endsOn: string }>(sql`
+          select p.id, ${periodDisplayLabelSql(locale, 'p')} as name,
+                 p.starts_on::text as "startsOn", p.ends_on::text as "endsOn"
+            from accounting_periods p
+            join fiscal_calendars fc
+              on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+             and fc.is_active
+             and fc.id = public.subsidiary_posting_calendar(
+               ${gate.authz.user.orgId}::uuid, ${calendarSubsidiaryId}::uuid, ${suggestion.suggestedDate}::date
+             )
+           where p.org_id = ${gate.authz.user.orgId} and p.is_adjustment
+           order by p.starts_on, p.ends_on, p.id
+        `)).rows
+      : []
     // The revision token the void POST fences on: linked documents (a goods
     // receipt from its purchase order) have no drawer holding it, so the
     // suggestion carries it to the confirmation dialog.
@@ -148,7 +164,7 @@ export const GET = defineRoute({
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
         from documents where id = ${id} and org_id = ${gate.authz.user.orgId}
     `)).rows[0]?.revision ?? null
-    return NextResponse.json({ adjustmentPeriods: periods.rows, ...suggestion, revision })
+    return NextResponse.json({ adjustmentPeriods: periods, ...suggestion, revision })
   },
 });
 

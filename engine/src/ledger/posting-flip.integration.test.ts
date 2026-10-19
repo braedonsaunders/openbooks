@@ -9,9 +9,10 @@ import { postDocument } from "./posting-document.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function setup(org: ScratchOrg): Promise<{ documentId: string; secondaryBookId: string; actorId: string }> {
+async function setup(org: ScratchOrg): Promise<{ documentId: string; secondaryBookId: string; actorId: string; mappedAccountId: string }> {
   const actorId = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Accounting poster", "accounting-poster"));
   const secondaryBookId = randomUUID();
+  const mappedAccountId = randomUUID();
   const sourceDepartment = randomUUID();
   const targetDepartment = randomUUID();
   const ruleId = randomUUID();
@@ -24,6 +25,12 @@ async function setup(org: ScratchOrg): Promise<{ documentId: string; secondaryBo
       where id=${org.orgId} returning id`)).rows.length, 1);
     assert.equal((await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
       values(${secondaryBookId},${org.orgId},'ALLOC','Allocation book',false,true,true) returning id`)).rows.length, 1);
+    assert.equal((await db.execute(sql`insert into accounts(id,org_id,number,name,type,subsidiary_id,subsidiary_include_children)
+      values(${mappedAccountId},${org.orgId},'ALLOC-EXP','Entity allocation expense','expense',${org.subsidiaryId},false) returning id`)).rows.length, 1);
+    assert.equal((await db.execute(sql`insert into accounting_book_account_maps
+      (org_id,book_id,subsidiary_id,source_account_id,target_account_id,effective_from,reason,created_by,updated_by)
+      values(${org.orgId},${secondaryBookId},${org.subsidiaryId},${org.accounts.cogs},${mappedAccountId},
+        '2026-01-01','Carry allocations in the entity account',${actorId},${actorId}) returning id`)).rows.length, 1);
     assert.equal((await db.execute(sql`insert into departments(id,org_id,name,is_active)
       values(${sourceDepartment},${org.orgId},'Source department',true),
         (${targetDepartment},${org.orgId},'Target department',true) returning id`)).rows.length, 2);
@@ -46,7 +53,7 @@ async function setup(org: ScratchOrg): Promise<{ documentId: string; secondaryBo
       where org_id=${org.orgId} and id=${ruleId} returning id`)).rows.length, 1);
     assert.equal((await db.execute(sql`insert into documents
       (id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,posting_date,currency,fx_rate,subtotal,tax_total,total)
-      values(${documentId},${org.orgId},'vendor_bill','draft',${`BILL-${documentId}`},${org.subsidiaryId},${org.vendorId},
+      values(${documentId},${org.orgId},'vendor_bill','draft',${`BILL-${documentId}`},null,${org.vendorId},
         ${org.date},${org.date},'CAD','1','100','0','100') returning id`)).rows.length, 1);
     assert.equal((await db.execute(sql`insert into document_lines
       (org_id,document_id,line_number,account_id,department_id,amount,tax_input_amount,tax_amount,quantity,unit_price)
@@ -54,7 +61,7 @@ async function setup(org: ScratchOrg): Promise<{ documentId: string; secondaryBo
     assert.equal((await db.execute(sql`update documents set status='approved'
       where org_id=${org.orgId} and id=${documentId} and status='draft' returning id`)).rows.length, 1);
   });
-  return { documentId, secondaryBookId, actorId };
+  return { documentId, secondaryBookId, actorId, mappedAccountId };
 }
 
 function post(org: ScratchOrg, documentId: string, actorId: string): Promise<string> {
@@ -63,7 +70,7 @@ function post(org: ScratchOrg, documentId: string, actorId: string): Promise<str
     { audit: { actorId, source: "test" } });
 }
 
-async function assertPostedBooks(org: ScratchOrg, documentId: string, primaryEntryId: string, secondaryBookId: string): Promise<void> {
+async function assertPostedBooks(org: ScratchOrg, documentId: string, primaryEntryId: string, secondaryBookId: string, mappedAccountId: string): Promise<void> {
   const entries = (await db.execute<{ id: string; book_id: string; status: string; posted_at: string | null; legs: number; balance: string }>(sql`
     select e.id,e.book_id,e.status,e.posted_at::text,count(l.id)::int as legs,sum(l.amount)::text as balance
     from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id
@@ -72,6 +79,12 @@ async function assertPostedBooks(org: ScratchOrg, documentId: string, primaryEnt
   assert.equal(entries.find(entry => entry.book_id === org.bookId)!.id, primaryEntryId);
   assert.equal(entries.find(entry => entry.book_id === secondaryBookId)!.legs, 2);
   assert.ok(entries.every(entry => entry.status === "posted" && entry.posted_at !== null && entry.balance === "0.0000"));
+  const allocatedAccounts = (await db.execute<{ account_id: string }>(sql`
+    select l.account_id from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
+     where e.org_id=${org.orgId} and e.source_document_id=${documentId} and e.book_id=${secondaryBookId}
+     order by l.line_number`)).rows.map(row => row.account_id);
+  assert.deepEqual(allocatedAccounts, [mappedAccountId, mappedAccountId],
+    "book mappings use the root subsidiary when the document header omits it");
   const document = (await db.execute<{ status: string; posted_entry_id: string }>(sql`
     select status,posted_entry_id from documents where org_id=${org.orgId} and id=${documentId}`)).rows[0]!;
   assert.deepEqual(document, { status: "posted", posted_entry_id: primaryEntryId });
@@ -91,11 +104,11 @@ async function assertPostedBooks(org: ScratchOrg, documentId: string, primaryEnt
 test("primary and allocation-book posting transitions roll back with their caller's transaction", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const { documentId, actorId, secondaryBookId } = await setup(org);
+    const { documentId, actorId, secondaryBookId, mappedAccountId } = await setup(org);
     const cancelled = new Error("Cancel the wider accounting operation");
     await assert.rejects(() => withOrgTransaction(org.orgId, async () => {
       const entryId = await post(org, documentId, actorId);
-      await assertPostedBooks(org, documentId, entryId, secondaryBookId);
+      await assertPostedBooks(org, documentId, entryId, secondaryBookId, mappedAccountId);
       throw cancelled;
     }), error => error === cancelled);
     await withOrgContext(org.orgId, async () => {
@@ -108,7 +121,7 @@ test("primary and allocation-book posting transitions roll back with their calle
       assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId}
         and row_id=${documentId} and action='post'`)).rows.length, 0);
       const entryId = await post(org, documentId, actorId);
-      await assertPostedBooks(org, documentId, entryId, secondaryBookId);
+      await assertPostedBooks(org, documentId, entryId, secondaryBookId, mappedAccountId);
     });
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -116,7 +129,7 @@ test("primary and allocation-book posting transitions roll back with their calle
 test("racing document posts retain one posted primary and one posted allocation entry", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const { documentId, actorId, secondaryBookId } = await setup(org);
+    const { documentId, actorId, secondaryBookId, mappedAccountId } = await setup(org);
     const outcomes = await Promise.allSettled([0, 1].map(() =>
       withOrgContext(org.orgId, () => post(org, documentId, actorId))));
     const successful = outcomes.filter(result => result.status === "fulfilled") as PromiseFulfilledResult<string>[];
@@ -124,7 +137,7 @@ test("racing document posts retain one posted primary and one posted allocation 
     const refused = outcomes.find(result => result.status === "rejected") as PromiseRejectedResult;
     assert.ok(refused.reason instanceof PostingError);
     await withOrgContext(org.orgId, async () => {
-      await assertPostedBooks(org, documentId, successful[0]!.value, secondaryBookId);
+      await assertPostedBooks(org, documentId, successful[0]!.value, secondaryBookId, mappedAccountId);
       assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and status='draft'`)).rows.length, 0);
     });
   } finally { await dropScratchOrg(org.orgId); }

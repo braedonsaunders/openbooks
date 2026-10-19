@@ -18,7 +18,11 @@ export const GET = defineRoute({
       return NextResponse.json({ error: "Choose a valid account." }, { status: 422 });
     }
     return NextResponse.json(
-      await listAccountMerges(authz.user.orgId, { limit: perPage, offset: (page - 1) * perPage, accountId: account || null }),
+      await listAccountMerges(
+        authz.user.orgId,
+        { limit: perPage, offset: (page - 1) * perPage, accountId: account || null },
+        authz.allowedSubsidiaryIds,
+      ),
     );
   },
 });

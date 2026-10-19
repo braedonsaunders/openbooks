@@ -18,6 +18,7 @@ import { mergeHref, pickString } from '../../../lib/list-params'
 import { can, requirePermission } from '../../../lib/authz'
 import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { loadJournalDoc, redactJournalHeaderCustom } from '../../../lib/journals'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { JOURNAL_ENTRY_TABLE, journalScopeWhere, journalDraftScopeWhere } from '../../../lib/customization/entity-list-query/journal-entries'
@@ -78,10 +79,10 @@ export async function loadJournal(
     }) : null,
     entryParam || creating
       ? Promise.all([
-          db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name`) as unknown as PickerResult<PartyPickerRow>,
-          db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as unknown as PickerResult<AccountPickerRow>,
-          db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as unknown as PickerResult<NamePickerRow>,
-          db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name`) as unknown as PickerResult<NamePickerRow>,
+          db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaries, { orgWideNull: true })} order by display_name`) as unknown as PickerResult<PartyPickerRow>,
+          db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaries, { orgWideNull: true })} order by number nulls last`) as unknown as PickerResult<AccountPickerRow>,
+          db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaries, { orgWideNull: true })} order by name`) as unknown as PickerResult<NamePickerRow>,
+          db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaries, { orgWideNull: true })} order by name`) as unknown as PickerResult<NamePickerRow>,
           loadFieldDefs('documents', 'journal'),
           loadFieldDefs('document_lines', 'journal'),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.

@@ -22,7 +22,7 @@ import { uuidArray } from "../organization/subsidiaries.ts";
  * document posts fine — but the close checklist cannot attest attribution it
  * cannot see. This action makes the derivation explicit ahead of posting:
  * each candidate resolves through the shared covering-period resolver
- * (default calendar, regular periods, deterministic under overlaps),
+ * (effective subsidiary calendar, regular periods, deterministic under overlaps),
  * exactly as `resolvePostingPeriod` would at post time.
  * A candidate whose period is closed for its kind's close module on the
  * target book is refused, never force-assigned. Preview first, commit after;
@@ -177,7 +177,7 @@ async function openAdjustmentAlternative(
       orgId,
       periodId: adjustment.id,
       bookId,
-      subsidiaryIds: [subsidiaryId as string],
+      subsidiaryIds: subsidiaryId ? [subsidiaryId] : [],
       modules: [module],
     });
   } catch (error) {
@@ -227,10 +227,9 @@ async function resolveCandidate(
       blockReason: error instanceof Error ? error.message : String(error),
     };
   }
-  // Through the shared covering-period resolver: the default calendar wins
-  // and overlaps resolve deterministically, so assignment no longer blocks
-  // on "multiple periods cover" when a second calendar overlaps the date.
-  const period = await resolveCoveringPeriod(runner, orgId, row.effective_date);
+  // Resolve on the document's effective subsidiary calendar, matching the
+  // posting kernel. Overlapping calendars cannot redirect the assignment.
+  const period = await resolveCoveringPeriod(runner, orgId, row.effective_date, row.subsidiary_id);
   if (!period) {
     return {
       ...base,
@@ -252,7 +251,7 @@ async function resolveCandidate(
       orgId,
       periodId: period.id,
       bookId,
-      subsidiaryIds: [row.subsidiary_id as string],
+      subsidiaryIds: row.subsidiary_id ? [row.subsidiary_id] : [],
       modules: [module],
     });
   } catch (error) {

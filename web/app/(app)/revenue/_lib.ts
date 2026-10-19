@@ -62,6 +62,7 @@ export type ContractBillingRow = {
   document_number: string;
   amount: string;
   billed_on: string;
+  status: string;
 };
 
 export interface ContractPayload {
@@ -81,17 +82,15 @@ export interface ContractPayload {
     /** The billed agreement for scoped contracts; null for invoice scope. */
     source: ContractSource | null;
     /**
-     * The source customer invoice for invoice-sourced contracts (one contract
-     * per invoice by construction). Null for project percent-complete
-     * contracts, which have no invoice and nothing voidable. Carries the
-     * cancellation target: the drawer offers Cancel recognition only when
-     * this names a live invoice on an active contract.
+    * The source customer invoice for invoice-scoped contracts. Shared
+    * order/subscription contracts expose their individual billings instead;
+    * project contracts have no invoice and nothing voidable.
      */
     sourceInvoiceId: string | null;
     sourceInvoiceNumber: string | null;
   };
   obligations: ObligationRow[];
-  /** Every posted billing of this contract, oldest first. */
+  /** Every billing of this contract, oldest first, including void history. */
   billings: ContractBillingRow[];
   /** Net billed-against-recognized position on the primary posting book. */
   position: ContractPosition;
@@ -162,19 +161,21 @@ export async function loadContract(
     }
   }
 
-  // One contract per invoice by construction (revenueContractPostingEffectKey),
-  // so at most one source invoice exists; project contracts have none.
-  const invRes = await db.execute<{ id: string; document_number: string }>(sql`
-    select inv.id, inv.document_number
-      from performance_obligations o
-      join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
-      join documents inv on inv.id = dl.document_id and inv.org_id = dl.org_id
-       and inv.kind = 'customer_invoice'
-     where o.contract_id = ${id} and o.org_id = ${orgId}
-     order by inv.document_number
-     limit 1`);
-  contract.sourceInvoiceId = invRes.rows[0]?.id ?? null;
-  contract.sourceInvoiceNumber = invRes.rows[0]?.document_number ?? null;
+  // Invoice-scoped contracts have one source invoice by construction;
+  // order/subscription contracts expose their individual billings below.
+  const invoice = contract.scope === "invoice"
+    ? (await db.execute<{ id: string; document_number: string }>(sql`
+        select distinct inv.id, inv.document_number
+          from performance_obligations o
+          join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
+          join documents inv on inv.id = dl.document_id and inv.org_id = dl.org_id
+           and inv.kind = 'customer_invoice'
+         where o.contract_id = ${id} and o.org_id = ${orgId}
+         order by inv.document_number
+         limit 1`)).rows[0] ?? null
+    : null;
+  contract.sourceInvoiceId = invoice?.id ?? null;
+  contract.sourceInvoiceNumber = invoice?.document_number ?? null;
 
   const oRes = await db.execute<{
     id: string;
@@ -257,7 +258,7 @@ export async function loadContract(
 
   const billings = (await db.execute<ContractBillingRow>(sql`
     select b.document_id as id, d.document_number, b.amount::text as amount,
-           b.billed_on::text as billed_on
+           b.billed_on::text as billed_on, d.status
       from revenue_contract_billings b
       join documents d on d.id = b.document_id and d.org_id = b.org_id
      where b.contract_id = ${id} and b.org_id = ${orgId}
@@ -266,6 +267,7 @@ export async function loadContract(
     document_number: row.document_number,
     amount: row.amount,
     billed_on: row.billed_on,
+    status: row.status,
   }));
 
   return {

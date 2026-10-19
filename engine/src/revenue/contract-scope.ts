@@ -295,7 +295,8 @@ export async function recordContractBilling(
   const updated = (await runner.execute<{ id: string }>(sql`
     update revenue_contracts
        set total_consideration = total_consideration + ${amount},
-           total_transaction_price = total_transaction_price + ${amount},
+           total_transaction_price = case when scope = 'invoice'
+             then total_transaction_price else total_transaction_price + ${amount} end,
            modification_seq = modification_seq + 1,
            status = 'active',
            updated_by = ${actorId}, updated_at = now()
@@ -308,7 +309,7 @@ export async function recordContractBilling(
 }
 
 export interface ContractPosition {
-  /** Billed consideration to date (billings ledger, else accumulated consideration). */
+  /** Posted billed consideration to date (else accumulated consideration when no billings exist). */
   billed: string;
   /** Revenue recognized to date on the primary posting book. */
   recognized: string;
@@ -331,8 +332,12 @@ export async function contractPosition(
   contractId: string,
 ): Promise<ContractPosition> {
   const billedRes = (await runner.execute<{ billed: string; consideration: string }>(sql`
-    select coalesce((select sum(amount) from revenue_contract_billings
-                      where org_id = ${orgId} and contract_id = ${contractId}), 0)::text as billed,
+    select coalesce((select sum(billing.amount)
+                       from revenue_contract_billings billing
+                       join documents document
+                         on document.id = billing.document_id and document.org_id = billing.org_id
+                      where billing.org_id = ${orgId} and billing.contract_id = ${contractId}
+                        and document.status = 'posted'), 0)::text as billed,
            coalesce((select total_consideration from revenue_contracts
                       where id = ${contractId} and org_id = ${orgId}), 0)::text as consideration`)).rows[0];
   const billed = cmp(billedRes?.billed ?? "0", "0") !== 0
@@ -349,7 +354,8 @@ export async function contractPosition(
       join recognition_schedules s on s.obligation_id = o.id and s.org_id = o.org_id
       join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_primary
       join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
-     where o.contract_id = ${contractId} and o.org_id = ${orgId}`)).rows[0];
+     where o.contract_id = ${contractId} and o.org_id = ${orgId}
+       and o.status <> 'cancelled'`)).rows[0];
   const recognized = scheduleRes?.recognized ?? "0";
   const planned = scheduleRes?.planned ?? "0";
   const netPosition = add(billed, neg(recognized));

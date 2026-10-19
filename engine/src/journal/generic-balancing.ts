@@ -37,26 +37,40 @@ const dimension = (line: BalancingLineView, key: string, storage: string | null)
 
 /** Domain-specific providers run first; generic policies balance only the remaining segment obligations. */
 export const genericSegmentBalancingProvider: BalancingLegProvider = async (runner, ctx, lines) => {
-  const definitions = (await runner.execute<{ key: string; storage_column: string | null; account_id: string | null; priority: number | null }>(sql`
-    select d.key,d.storage_column,p.clearing_account_id as account_id,p.priority from segment_definitions d
+  const definitions = (await runner.execute<{
+    key: string; storage_column: string | null; default_value_id: string | null; account_id: string | null; priority: number | null;
+  }>(sql`
+    select d.key,d.storage_column,d.default_value_id::text as default_value_id,
+           p.clearing_account_id as account_id,p.priority from segment_definitions d
     left join lateral (select clearing_account_id,priority from segment_balancing_policies
       where org_id=d.org_id and segment_key=d.key and effective_from<=${ctx.postingDate}::date order by effective_from desc limit 1) p on true
     where d.org_id=${ctx.orgId} and d.is_active and d.is_balancing order by p.priority nulls last,d.key`)).rows;
+  const effectiveLines = lines.map((line) => {
+    const extraDims: Record<string, unknown> = { ...line.extraDims };
+    for (const definition of definitions) {
+      if (!definition.storage_column && definition.default_value_id !== null
+          && !Object.prototype.hasOwnProperty.call(extraDims, definition.key)) {
+        extraDims[definition.key] = definition.default_value_id;
+      }
+    }
+    return { ...line, extraDims };
+  });
   const unbalanced = definitions.filter(definition => {
     const totals = new Map<string, bigint>();
-    for (const line of lines) {
+    for (const line of effectiveLines) {
       const key = canonicalJson([line.subsidiaryId, dimension(line, definition.key, definition.storage_column)]);
       totals.set(key, (totals.get(key) ?? 0n) + toUnits(line.amount));
     }
     return [...totals.values()].some(amount => amount !== 0n);
   });
   if (unbalanced.length === 0) return [];
-  const policy = unbalanced.find(definition => definition.account_id);
-  if (!policy) throw new PostingError(`Balancing segment ${unbalanced[0]!.key} has no clearing policy for ${ctx.postingDate}. Configure a policy in Setup → Segment balancing policies.`);
+  const missing = unbalanced.find(definition => !definition.account_id);
+  if (missing) throw new PostingError(`Balancing segment ${missing.key} has no clearing policy for ${ctx.postingDate}. Configure a policy in Setup → Segment balancing policies.`);
+  const policy = unbalanced[0]!;
   const bookId = ctx.bookId ?? await activePostingPrimaryBookId(ctx.orgId, runner);
   const book = bookId ? await loadBookProfile(runner, ctx.orgId, bookId) : null;
   if (!book) throw new PostingError("Segment balancing requires an active posting book.");
-  const groups = genericBalancingGroups(lines);
+  const groups = genericBalancingGroups(effectiveLines);
   const bases = await resolveBookBases(runner, { orgId: ctx.orgId, book, postingDate: ctx.postingDate, subsidiaryIds: groups.map(group => group.subsidiaryId) });
   const legs: BalancingLeg[] = [];
   for (const group of groups) {

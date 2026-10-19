@@ -22,7 +22,7 @@ import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { db, orgContext, withBypass, withOrg, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
 import { AMORTIZATION_FEATURE_KEY, AmortizationError } from "./errors.ts";
 import { assertAmortizationFeature, recordScheduleEvent, requireAmortizationAuthority, writeAmortizationAudit } from "./internal.ts";
-import { livePlanLines, loadSchedule, postScheduleEntry, scheduleBalance, updateSchedule } from "./schedule-store.ts";
+import { closePlannedLines, livePlanLines, loadSchedule, postScheduleEntry, scheduleBalance, updateSchedule } from "./schedule-store.ts";
 
 export interface AmortizationRunProblem {
   scheduleId: string;
@@ -172,6 +172,11 @@ async function postDueLine(
     select planned_amount::text as planned_amount from expense_amortization_schedule_lines
      where org_id = ${orgId} and id = ${due.line_id}`)).rows[0]!.planned_amount;
   const units = toUnits(amount);
+  if (units === 0n) {
+    // A rounded-to-zero line has no ledger entry and cannot enter posted history.
+    await closePlannedLines(runner, orgId, [due.line_id], "superseded");
+    return null;
+  }
   const entryId = await postScheduleEntry(runner, {
     schedule,
     postingDate: due.period_end,

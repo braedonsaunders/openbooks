@@ -3,6 +3,7 @@ import { db } from "../platform/db.ts";
 import { MATCHABLE_SETTLEMENT_LINE_KINDS } from "../payments/psp-settlement.ts";
 import { fetchChannelDayTotals } from "../commerce/shopify/day-totals.ts";
 import { addCloseEvidence } from "./tasks.ts";
+import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 
 /**
  * Commerce close completeness: the proof that every storefront sale reached
@@ -72,12 +73,13 @@ function eachDay(startsOn: string, endsOn: string): string[] {
 async function activeChannels(
   orgId: string,
   subsidiaryIds: string[],
+  fallbackSubsidiaryId: string,
 ): Promise<ChannelRow[]> {
   const rows = (
     await db.execute<ChannelRow & { subsidiary_id: string | null }>(sql`
-      select id, name, kind, currency from sales_channels
-       where org_id = ${orgId} and status = 'active'
-         and (${subsidiaryIds.length === 0} or subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))`)
+      select c.id, c.name, c.kind, c.currency from sales_channels c
+       where c.org_id = ${orgId} and c.status = 'active'
+         and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))`)
   ).rows;
   return rows.map((row) => ({ id: row.id, name: row.name, kind: row.kind, currency: row.currency }));
 }
@@ -90,7 +92,12 @@ type IngestedDayRow = {
   gross_minor: string;
 };
 
-async function ingestedDayTotals(orgId: string, scope: CommerceCloseScope): Promise<IngestedDayRow[]> {
+async function ingestedDayTotals(
+  orgId: string,
+  scope: CommerceCloseScope,
+  fallbackSubsidiaryId: string,
+): Promise<IngestedDayRow[]> {
+  const subsidiaryIds = scope.subsidiaryIds ?? [];
   return (
     await db.execute<IngestedDayRow>(sql`
       select o.channel_id,
@@ -99,9 +106,11 @@ async function ingestedDayTotals(orgId: string, scope: CommerceCloseScope): Prom
              count(*)::text as order_count,
              coalesce(sum(o.total_minor), 0)::text as gross_minor
         from channel_orders o
+        join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
        where o.org_id = ${orgId}
          and (o.ordered_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
          and o.posting_status <> 'excluded'
+         and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
        group by o.channel_id, ((o.ordered_at at time zone 'UTC')::date), o.shop_currency`)
   ).rows;
 }
@@ -111,16 +120,25 @@ type UnpostedRow = {
   pending_events: string;
 };
 
-async function unpostedCounts(orgId: string, scope: CommerceCloseScope): Promise<UnpostedRow> {
+async function unpostedCounts(
+  orgId: string,
+  scope: CommerceCloseScope,
+  fallbackSubsidiaryId: string,
+): Promise<UnpostedRow> {
+  const subsidiaryIds = scope.subsidiaryIds ?? [];
   const rows = (
     await db.execute<UnpostedRow>(sql`
       select
-        ((select count(*) from channel_orders o
+        (select count(*)::text from channel_orders o
+           join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
            where o.org_id = ${orgId} and o.posting_status = 'pending'
-             and (o.ordered_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date))::text as pending_orders,
-        ((select count(*) from channel_order_events e
+             and (o.ordered_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
+             and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) as pending_orders,
+        (select count(*)::text from channel_order_events e
+           join sales_channels c on c.org_id = e.org_id and c.id = e.channel_id
            where e.org_id = ${orgId} and e.posting_status = 'pending'
-             and (e.occurred_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date))::text as pending_events`)
+             and (e.occurred_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
+             and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) as pending_events`)
   ).rows;
   return rows[0] ?? { pending_orders: "0", pending_events: "0" };
 }
@@ -144,9 +162,10 @@ async function orderCompletenessCheck(
   scope: CommerceCloseScope,
   provider: StorefrontTotalsProvider,
 ): Promise<{ check: CommerceCloseCheck; unreachable: CommerceCloseCheck }> {
-  const channels = await activeChannels(orgId, scope.subsidiaryIds ?? []);
-  const ingested = await ingestedDayTotals(orgId, scope);
-  const unposted = await unpostedCounts(orgId, scope);
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
+  const channels = await activeChannels(orgId, scope.subsidiaryIds ?? [], fallbackSubsidiaryId);
+  const ingested = await ingestedDayTotals(orgId, scope, fallbackSubsidiaryId);
+  const unposted = await unpostedCounts(orgId, scope, fallbackSubsidiaryId);
   const byChannelDay = new Map<string, { count: number; gross: bigint; currency: string }>();
   for (const row of ingested) {
     const key = `${row.channel_id}|${row.day}|${row.shop_currency}`;
@@ -371,6 +390,7 @@ type OpenPayoutRow = {
  */
 async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
   const subsidiaryFilter = subsidiaryIds.length === 0
     ? sql`true`
     : sql`l.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`;
@@ -404,7 +424,7 @@ async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<
          where m.org_id = ${orgId} and m.role in ('gateway_clearing', 'refund_clearing')
            and m.effective_from <= ${scope.endsOn}::date
            and (m.effective_to is null or m.effective_to >= ${scope.startsOn}::date)
-           and (${subsidiaryIds.length === 0} or c.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+           and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
         union
         select distinct b.clearing_account_id as account_id
           from psp_settlement_batches b
@@ -672,21 +692,40 @@ type DeferredTieRow = {
  * never post. Deferred is a credit balance, so ledger plus plan is zero.
  */
 async function deferredCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
+  const subsidiaryIds = scope.subsidiaryIds ?? [];
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
   const rows = (
     await db.execute<DeferredTieRow>(sql`
-      with plan as (
-        select coalesce(o.deferred_account_id, r.deferred_account_id) as account_id,
+      with scoped_obligations as (
+        select o.id, coalesce(o.deferred_account_id, r.deferred_account_id) as account_id
+          from performance_obligations o
+          join recognition_rules r on r.org_id = o.org_id and r.id = o.recognition_rule_id
+          left join document_lines dl on dl.org_id = o.org_id and dl.id = o.document_line_id
+          left join documents doc on doc.org_id = dl.org_id and doc.id = dl.document_id
+          left join revenue_contracts rc on rc.org_id = o.org_id and rc.id = o.contract_id
+          left join projects prj on prj.org_id = rc.org_id and prj.id = rc.project_id
+         where o.org_id = ${orgId} and o.status <> 'cancelled' and not r.is_forecast
+           and o.created_at < (${scope.endsOn}::date + interval '1 day')
+           and coalesce(o.deferred_account_id, r.deferred_account_id) is not null
+           and (${subsidiaryIds.length === 0} or
+             coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, rc.subsidiary_id, ${fallbackSubsidiaryId})
+               = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+      ), deferred_accounts as (
+        select distinct account_id
+          from scoped_obligations
+      ), plan as (
+        select o.account_id,
                coalesce(sum(l.planned_amount), 0)::numeric as plan,
                count(distinct o.id)::integer as obligations
           from recognition_schedule_lines l
           join recognition_schedules s on s.org_id = l.org_id and s.id = l.schedule_id
-          join performance_obligations o on o.org_id = l.org_id and o.id = s.obligation_id
-          join recognition_rules r on r.org_id = l.org_id and r.id = o.recognition_rule_id
+          join scoped_obligations o on o.id = s.obligation_id
+          left join journal_entries recognition_entry
+            on recognition_entry.org_id = l.org_id and recognition_entry.id = l.journal_entry_id
          where l.org_id = ${orgId} and s.book_id = ${scope.bookId}
-           and l.journal_entry_id is null and l.planned_amount <> 0
-           and o.status <> 'cancelled' and s.status <> 'cancelled' and not r.is_forecast
-           and coalesce(o.deferred_account_id, r.deferred_account_id) is not null
-         group by coalesce(o.deferred_account_id, r.deferred_account_id)
+           and (l.journal_entry_id is null or recognition_entry.posting_date > ${scope.endsOn}::date)
+           and l.planned_amount <> 0 and s.status <> 'cancelled'
+         group by o.account_id
       ),
       ledger as (
         select l.account_id, coalesce(sum(l.amount), 0)::numeric as ledger_sum
@@ -694,17 +733,19 @@ async function deferredCheck(orgId: string, scope: CommerceCloseScope): Promise<
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
          where l.org_id = ${orgId} and e.book_id = ${scope.bookId} and e.status in ('posted', 'reversed')
            and l.posting_date <= ${scope.endsOn}::date
+           and l.account_id in (select account_id from deferred_accounts)
+           and (${subsidiaryIds.length === 0} or l.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
          group by l.account_id
       )
-      select p.account_id::text as account_id, a.number, a.name,
-             p.plan::text as plan,
+      select coalesce(p.account_id, g.account_id)::text as account_id, a.number, a.name,
+             coalesce(p.plan, 0)::text as plan,
              coalesce(g.ledger_sum, 0)::text as ledger,
-             (coalesce(g.ledger_sum, 0) + p.plan)::text as gap,
-             p.obligations::text as obligations
+             (coalesce(g.ledger_sum, 0) + coalesce(p.plan, 0))::text as gap,
+             coalesce(p.obligations, 0)::text as obligations
         from plan p
-        join accounts a on a.org_id = ${orgId} and a.id = p.account_id
-        left join ledger g on g.account_id = p.account_id
-       where (coalesce(g.ledger_sum, 0) + p.plan) <> 0
+        full outer join ledger g on g.account_id = p.account_id
+        join accounts a on a.org_id = ${orgId} and a.id = coalesce(p.account_id, g.account_id)
+       where (coalesce(g.ledger_sum, 0) + coalesce(p.plan, 0)) <> 0
        order by a.number nulls last, a.name`)
   ).rows;
   return {
@@ -750,12 +791,25 @@ type ContractCostTieRow = {
  * reported, not tied.
  */
 async function contractCostCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
+  const subsidiaryIds = scope.subsidiaryIds ?? [];
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
   const rows = (
     await db.execute<ContractCostTieRow>(sql`
-      with amortized as (
+      with scoped_assets as (
+        select c.*
+          from contract_cost_assets c
+          left join revenue_contracts rc on rc.org_id = c.org_id and rc.id = c.revenue_contract_id
+          left join projects prj on prj.org_id = rc.org_id and prj.id = rc.project_id
+         where c.org_id = ${orgId} and c.capitalized_on <= ${scope.endsOn}::date
+           and c.status in ('active', 'fully_amortized', 'impaired')
+           and (${subsidiaryIds.length === 0} or
+             coalesce(rc.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId})
+               = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+      ), amortized as (
         select m.asset_id, coalesce(sum(m.amount_minor), 0)::numeric as amort_minor
           from contract_cost_amortization m
           join accounting_periods p on p.org_id = m.org_id and p.id = m.period_id
+          join scoped_assets c on c.org_id = m.org_id and c.id = m.asset_id
          where m.org_id = ${orgId} and p.ends_on <= ${scope.endsOn}::date
          group by m.asset_id
       ),
@@ -764,9 +818,11 @@ async function contractCostCheck(orgId: string, scope: CommerceCloseScope): Prom
                coalesce(sum(l.txn_amount), 0)::numeric as ledger_sum
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+          join scoped_assets c on c.org_id = l.org_id and c.id = l.contributor_ref
          where l.org_id = ${orgId} and e.book_id = ${scope.bookId} and e.status in ('posted', 'reversed')
            and l.posting_date <= ${scope.endsOn}::date
            and l.contributor_kind = 'contract_cost_asset'
+           and (${subsidiaryIds.length === 0} or l.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
          group by l.contributor_ref, l.currency
       )
       select c.id::text as asset_id, c.currency as currency, c.status as status,
@@ -775,12 +831,10 @@ async function contractCostCheck(orgId: string, scope: CommerceCloseScope): Prom
              round(coalesce(g.ledger_sum, 0), 4)::text as ledger,
              round(coalesce(g.ledger_sum, 0)
                 - (c.amount_minor - coalesce(a.amort_minor, 0)) / power(10::numeric, cur.minor_units), 4)::text as gap
-        from contract_cost_assets c
+        from scoped_assets c
         left join amortized a on a.asset_id = c.id
         left join ledger g on g.asset_id = c.id and g.currency = c.currency
         left join currencies cur on cur.code = c.currency
-       where c.org_id = ${orgId} and c.capitalized_on <= ${scope.endsOn}::date
-         and c.status in ('active', 'fully_amortized', 'impaired')
        order by c.currency, c.capitalized_on`)
   ).rows;
   const gaps = rows.filter((row) => {
@@ -789,9 +843,14 @@ async function contractCostCheck(orgId: string, scope: CommerceCloseScope): Prom
   });
   const expensed = (
     await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from contract_cost_assets
-       where org_id = ${orgId} and status = 'expensed'
-         and capitalized_on <= ${scope.endsOn}::date`)
+      select count(*)::text as count from contract_cost_assets c
+        left join revenue_contracts rc on rc.org_id = c.org_id and rc.id = c.revenue_contract_id
+        left join projects prj on prj.org_id = rc.org_id and prj.id = rc.project_id
+       where c.org_id = ${orgId} and c.status = 'expensed'
+         and c.capitalized_on <= ${scope.endsOn}::date
+         and (${subsidiaryIds.length === 0} or
+           coalesce(rc.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId})
+             = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))`)
   ).rows[0];
   return {
     code: "commerce-contract-cost-gap",
@@ -834,6 +893,8 @@ type ExceptionQueueRow = {
  * still parked blocks the close until it posts or is scoped out.
  */
 async function exceptionCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
+  const subsidiaryIds = scope.subsidiaryIds ?? [];
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
   const rows = (
     await db.execute<ExceptionQueueRow>(sql`
       (select 'order' as kind, o.channel_id, c.name as channel_name,
@@ -843,7 +904,8 @@ async function exceptionCheck(orgId: string, scope: CommerceCloseScope): Promise
          from channel_orders o
          join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
         where o.org_id = ${orgId} and o.posting_status = 'exception'
-          and (o.ordered_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date)
+          and (o.ordered_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
+          and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])))
       union all
       (select e.kind as kind, e.channel_id, c.name as channel_name,
               o.external_number as reference, e.exception_code as code,
@@ -853,7 +915,8 @@ async function exceptionCheck(orgId: string, scope: CommerceCloseScope): Promise
          join channel_orders o on o.org_id = e.org_id and o.id = e.order_id
          join sales_channels c on c.org_id = e.org_id and c.id = e.channel_id
         where e.org_id = ${orgId} and e.posting_status = 'exception'
-          and (e.occurred_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date)
+          and (e.occurred_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
+          and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])))
       order by occurred_on, reference`)
   ).rows;
   return {

@@ -623,6 +623,8 @@ export async function regenerateGlImpactTx(
     closeModules: [module],
     allowImportedLocks: true,
     allowInactiveAccounts: true,
+    amountBasis: "book",
+    accountBasis: "book",
     lines: kernelLines.map((line) => ({
       accountId: line.accountId,
       subsidiaryId: line.subsidiaryId,

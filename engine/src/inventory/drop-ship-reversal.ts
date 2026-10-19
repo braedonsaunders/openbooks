@@ -6,6 +6,7 @@ import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
+import { reversalPostEntryLine } from "../journal/reversal-posting-lines.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
 
@@ -218,30 +219,7 @@ export async function reverseDropShipConfirmationPair(
       reversesEntryId: entry.id,
       actorId: input.actorId,
       closeModules: [],
-      lines: mirror.map((line) => ({
-        accountId: line.accountId,
-        subsidiaryId: line.subsidiaryId,
-        amount: line.amount,
-        currency: line.currency,
-        txnAmount: line.txnAmount,
-        fxRate: line.fxRate,
-        memo: line.memo,
-        partyId: line.partyId,
-        departmentId: line.departmentId,
-        projectId: line.projectId,
-        locationId: line.locationId,
-        classId: line.classId,
-        equipmentUnitId: line.equipmentUnitId,
-        extraDims: (line.extraDims ?? {}) as Record<string, unknown>,
-        paymentCardId: line.paymentCardId,
-        taxCodeId: line.taxCodeId,
-        quantity: line.quantity,
-        unit: line.unit,
-        custom: (line.custom ?? {}) as Record<string, unknown>,
-        contributorKind: line.contributorKind,
-        contributorRef: line.contributorRef,
-        lineNumber: line.lineNumber,
-      })),
+      lines: mirror.map(reversalPostEntryLine),
     });
     await markEntryReversed(tx, { orgId: input.orgId, entryId: entry.id, actorId: input.actorId });
     reversalIds.push(posted.entryId);

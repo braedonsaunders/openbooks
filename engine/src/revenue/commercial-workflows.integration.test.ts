@@ -89,6 +89,9 @@ test('retrospective tiers append balanced catch-up facts and claims enforce inde
   assert.deepEqual(mirrored.filter(line=>line.entry_id===reversed.entryId).map(({entry_id,...line})=>line),originalLines.map(({entry_id,...line})=>({...line,amount:neg(line.amount),txn_amount:neg(line.txn_amount)})));
   assert.equal((await withOrg(org.orgId,()=>db.execute<{status:string}>(sql`select status from rebate_claims where org_id=${org.orgId} and id=${claim.id}`))).rows[0]!.status,'approved');
   await assert.rejects(()=>generateRebateClaim(org.orgId,actors.adminId,agreementId,org.customerId,org.date,'Duplicate earned claim refusal'),/No unclaimed/);
+  const resettled=await settleRebatePayment(org.orgId,actors.adminId,claim.id,input);
+  assert.notEqual(resettled.entryId,settlement.entryId,'a reversed claim receives a fresh settlement journal');
+  assert.equal((await withOrg(org.orgId,()=>db.execute<{status:string}>(sql`select status from journal_entries where org_id=${org.orgId} and id=${resettled.entryId}`))).rows[0]!.status,'posted');
  } finally {await dropScratchOrg(org.orgId);}
 });
 
@@ -103,6 +106,38 @@ test('native credit settlement links the approved claim to the posted credit onc
   await withBypassContext(()=>db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${document.documentId}`));
   const entryId=await withOrg(org.orgId,()=>postDocument(document.documentId,{control:{ar:org.accounts.ar,ap:org.accounts.ap,bank:org.accounts.bank}},{deferEffects:true,suppressAutomation:true,audit:{actorId:actors.adminId,source:'api'}}));
   const row=(await withOrg(org.orgId,()=>db.execute<{status:string;settlement_entry_id:string}>(sql`select status,settlement_entry_id from rebate_claims where org_id=${org.orgId} and id=${claim.id}`))).rows[0]!;assert.equal(row.status,'settled');assert.equal(row.settlement_entry_id,entryId);
+ } finally {await dropScratchOrg(org.orgId);}
+});
+
+test('taxable rebate settlement refuses a posted document after its agreement tax code is removed',{skip:!enabled},async()=>{
+ const org=await createScratchOrg();
+ try {
+  const actors=await commercialActors(org),taxCodeId=randomUUID(),agreementId=randomUUID();
+  await withBypassContext(async()=>{
+   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,rebateManagement}','true'::jsonb,true) where id=${org.orgId}`);
+   await db.execute(sql`insert into tax_codes(id,org_id,code,name,applies_to,calculation_type,collected_account_id,paid_account_id,is_active)
+    values(${taxCodeId},${org.orgId},'REBATE-TAX','Rebate settlement tax','both','standard',${org.accounts.taxOutput},${org.accounts.taxInput},true)`);
+   await db.execute(sql`insert into tax_rates(org_id,tax_code_id,rate_percent,effective_from) values(${org.orgId},${taxCodeId},'13',${org.date})`);
+   await db.execute(sql`insert into rebate_agreements(id,org_id,code,name,subsidiary_id,side,activity,party_id,currency,effective_from,effective_to,method,tier_basis,tiers,stacking,selection_group,accrual_account_id,offset_account_id,fx_account_id,tax_treatment,settlement_tax_code_id,reason,created_by,updated_by)
+    values(${agreementId},${org.orgId},'TAXABLE','Taxable customer rebate',${org.subsidiaryId},'customer','sale',${org.customerId},'CAD',${org.date},${org.date},'percent','amount','[{"threshold":"0","rate":"10"}]'::jsonb,'best','taxable-rebate',${org.accounts.deferred},${org.accounts.revenue},${org.accounts.fxGainLoss},'taxable',${taxCodeId},'Reviewed taxable commercial agreement',${actors.submitterId},${actors.submitterId})`);
+  });
+  await approveRebateAgreement(org.orgId,actors.adminId,agreementId,'Approved taxable rebate agreement');
+  await invoice(org,actors.adminId,'100');
+  const claim=await generateRebateClaim(org.orgId,actors.submitterId,agreementId,org.customerId,org.date,'Reconciled taxable rebate claim');
+  await approveRebateClaim(org.orgId,actors.adminId,claim.id,'Approved taxable settlement');
+  const document=await createRebateSettlement(org.orgId,actors.adminId,claim.id,org.date);
+  await withBypassContext(async()=>{
+   await db.execute(sql`update document_lines set tax_code_id=null,tax_amount=0,tax_overridden=false
+    where org_id=${org.orgId} and document_id=${document.documentId}`);
+   await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${document.documentId}`);
+  });
+  await assert.rejects(
+   ()=>withOrg(org.orgId,()=>postDocument(document.documentId,{control:{ar:org.accounts.ar,ap:org.accounts.ap,bank:org.accounts.bank}},{deferEffects:true,suppressAutomation:true,audit:{actorId:actors.adminId,source:'api'}})),
+   /agreement tax treatment/i,
+   'a taxable settlement cannot post after its required tax code is removed',
+  );
+  const claimStatus=(await withOrg(org.orgId,()=>db.execute<{status:string}>(sql`select status from rebate_claims where org_id=${org.orgId} and id=${claim.id}`))).rows[0]!.status;
+  assert.equal(claimStatus,'document_pending','the failed posting leaves the claim available for correction');
  } finally {await dropScratchOrg(org.orgId);}
 });
 

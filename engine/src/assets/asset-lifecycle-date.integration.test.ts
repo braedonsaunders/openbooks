@@ -4,7 +4,7 @@ import test from 'node:test';
 import {buildSchedule,runDepreciation} from './depreciation.ts';
 import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
-import { disposeAsset, remeasureAsset, reverseAssetLifecycleEvent } from './asset-lifecycle.ts';
+import { AssetLifecycleError, disposeAsset, remeasureAsset, reverseAssetLifecycleEvent } from './asset-lifecycle.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '../testing/fixtures.ts';
 
 async function seedAsset(org: ScratchOrg) {
@@ -18,6 +18,52 @@ async function seedAsset(org: ScratchOrg) {
     values (${assetId},${org.orgId},${org.subsidiaryId},${categoryId},'REVERSE-CHAIN','Reversal asset','in_service',${org.date},${org.date},1000,0,'straight_line',10,'full_month')`);
   return { actorId, assetId };
 }
+
+test("asset lifecycle entries honor the subsidiary assets close on its effective calendar", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { actorId, assetId } = await seedAsset(org);
+    const postingDate = "2026-07-31";
+    const calendarId = randomUUID();
+    const periodId = randomUUID();
+    await db.execute(sql`insert into fiscal_calendars (id,org_id,name,is_active,is_default)
+      values (${calendarId},${org.orgId},'Entity asset calendar',true,false)`);
+    await db.execute(sql`insert into accounting_periods
+      (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on)
+      select ${periodId},org_id,${calendarId},fiscal_year,period_number,'Entity July',starts_on,ends_on
+        from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`);
+    await db.execute(sql`insert into subsidiary_accounting_preferences
+      (org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason)
+      values (${org.orgId},${org.subsidiaryId},'2026-07-01',${calendarId},'Use the entity asset calendar')`);
+    await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+    await runDepreciation(org.orgId, postingDate, actorId, assetId);
+    const source = await remeasureAsset(org.orgId, assetId, {
+      actorId, date: postingDate, newCarryingValue: "800",
+    });
+    const sourceEventId = await eventFor(org.orgId, source.entryId);
+    await db.execute(sql`insert into period_locks
+      (org_id,period_id,book_id,subsidiary_id,module,state,reason)
+      values (${org.orgId},${periodId},${org.bookId},${org.subsidiaryId},'assets','closed','Asset period close')`);
+
+    const refusesForAssetClose = (error: unknown) => error instanceof AssetLifecycleError && /closed/i.test(error.message);
+    await assert.rejects(
+      reverseAssetLifecycleEvent(org.orgId, sourceEventId, {
+        actorId, date: postingDate, reason: "Correct the asset valuation",
+      }),
+      refusesForAssetClose,
+    );
+    await assert.rejects(
+      remeasureAsset(org.orgId, assetId, { actorId, date: postingDate, newCarryingValue: "700" }),
+      refusesForAssetClose,
+    );
+    await assert.rejects(
+      disposeAsset(org.orgId, assetId, { actorId, date: postingDate, writeOff: true }),
+      refusesForAssetClose,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 async function eventFor(orgId: string, entryId: string) {
   return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`)).rows[0]!.id;

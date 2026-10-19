@@ -130,3 +130,58 @@ test("an unmapped worker or a missing policy is refused with its remedy, and dev
     await dropScratchOrgReporting(other.orgId);
   }
 }));
+
+test("attendance identity requires a person and explicit employment in the device legal entity", enabled, async () => fixture(async (f) => {
+  const device = await saveAttendanceDevice(actor(f), { subsidiaryId: f.subsidiaryId, code: "ENTITY-CLOCK", name: "Entity clock", timeZone: "UTC", isActive: true, reason: "Install" });
+  const branchId = randomUUID();
+  await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${branchId}, ${f.orgId}, ${f.subsidiaryId}, 'Attendance Branch', 'CAD', 'CA')`);
+  const branchEmploymentId = randomUUID();
+  await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+    values (${branchEmploymentId}, ${f.orgId}, ${f.ana}, ${branchId}, 1)`);
+  await assert.rejects(saveAttendanceIdentity(actor(f), {
+    deviceId: device.id,
+    sourceWorkerId: "BRANCH-EMPLOYMENT",
+    workerPartyId: f.ana,
+    employmentId: branchEmploymentId,
+    effectiveFrom: f.day,
+    effectiveTo: null,
+    reason: "Check entity assignment",
+  }), (error: unknown) => error instanceof ScheduleError && error.code === "schedule_employment_unavailable");
+
+  const branchPersonId = randomUUID();
+  await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+    values (${branchPersonId}, ${f.orgId}, 'person', 'Branch Nurse', ${branchId}, true, '{}'::jsonb)`);
+  await db.execute(sql`insert into employee_roles (org_id, party_id, job_title, hired_on, is_active)
+    values (${f.orgId}, ${branchPersonId}, 'Nurse', '2026-01-01', true)`);
+  await assert.rejects(saveAttendanceIdentity(actor(f), {
+    deviceId: device.id,
+    sourceWorkerId: "BRANCH-PERSON",
+    workerPartyId: branchPersonId,
+    employmentId: null,
+    effectiveFrom: f.day,
+    effectiveTo: null,
+    reason: "Check employee entity",
+  }), (error: unknown) => error instanceof ScheduleError && error.code === "schedule_person_unavailable");
+  const saved = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_attendance_identities where org_id = ${f.orgId}`));
+  assert.equal(saved.rows[0]!.n, 0, "incompatible identity references are never stored");
+}));
+
+test("a subsidiary-restricted caller cannot change an organization-wide attendance policy", enabled, async () => fixture(async (f) => {
+  await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction = ${JSON.stringify({
+    mode: "list",
+    subsidiaryIds: [f.subsidiaryId],
+  })}::jsonb where org_id = ${f.orgId} and key = 'supervisor'`));
+  await assert.rejects(addAttendancePolicy(actor(f), {
+    boardId: f.board,
+    effectiveFrom: f.day,
+    captureBeforeMinutes: 60,
+    captureAfterMinutes: 60,
+    lateGraceMinutes: 5,
+    earlyGraceMinutes: 5,
+    breakGraceMinutes: 10,
+    reason: "Entity-scoped policy test",
+  }), (error: unknown) => error instanceof ScheduleError && error.status === 403 && error.code === "schedule_scope");
+  const policies = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_attendance_policies where org_id = ${f.orgId}`));
+  assert.equal(policies.rows[0]!.n, 0);
+}));

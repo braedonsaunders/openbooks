@@ -29,6 +29,9 @@ test('net-investment OCI preserves standalone FX, attributes each native source 
       assert.equal(lineage,'-500.0000')
       await assert.rejects(proposeNetInvestmentAssessment(ledger.orgId,change.subject_id,change.submitted_by,{...change.payload,idempotencyKey:randomUUID()}),/already has an approved OCI attribution/)
       await assert.rejects(proposeNetInvestmentAssessment(ledger.orgId,change.subject_id,change.submitted_by,{...change.payload,nonTrade:false,idempotencyKey:randomUUID()}),/non-trade monetary loan/)
+      const fullBookId=randomUUID()
+      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,posts_gl,replication_mode,replication_from)
+        values(${fullBookId},${ledger.orgId},'FULL','Full statutory book',false,true,'full','2026-01-01')`)
       const reverseId=await proposeNetInvestmentReversal(ledger.orgId,change.id,change.submitted_by,{effectiveOn:'2026-07-31',reason:'Correct the qualification after a revised treasury settlement decision',idempotencyKey:randomUUID()})
       await assert.rejects(applyNetInvestmentReversal(ledger.orgId,reverseId,change.submitted_by),/independent approval/)
       await submitFinancialChange(ledger.orgId,reverseId,change.submitted_by)
@@ -36,6 +39,7 @@ test('net-investment OCI preserves standalone FX, attributes each native source 
       await decideGate({gateId:gate.id,userId:change.approved_by,decision:'approved'})
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,multiCurrency}','false'::jsonb) where id=${ledger.orgId}`)
       await applyNetInvestmentReversal(ledger.orgId,reverseId,change.submitted_by)
+      assert.equal((await db.execute(sql`select 1 from journal_entries where org_id=${ledger.orgId} and book_id=${fullBookId} and origin='net_investment_oci'`)).rows.length,0)
       assert.deepEqual(await applyNetInvestmentReversal(ledger.orgId,reverseId,change.submitted_by),(await db.execute<{result:Record<string,unknown>}>(sql`select result from financial_changes where org_id=${ledger.orgId} and id=${reverseId}`)).rows[0]!.result)
       assert.equal((await db.execute(sql`select 1 from net_investment_sources where org_id=${ledger.orgId} and reversed_by_change_id is null`)).rows.length,0)
       const reversed=(await db.execute<{amount:string}>(sql`${consolidationHistory(ledger.orgId)} select sum(line.amount)::text as amount from history h join journal_lines line on line.org_id=${ledger.orgId} and line.entry_id=h.id where h.interest_id=${change.subject_id} and line.account_id=${org.roles.netInvestmentOci}`)).rows[0]!.amount
@@ -48,6 +52,7 @@ test('net-investment OCI preserves standalone FX, attributes each native source 
         await decideGate({gateId:gate.id,userId:change.approved_by,decision:'approved'})
       }
       await approve(replacementId);await applyNetInvestmentAssessment(ledger.orgId,replacementId,change.submitted_by)
+      assert.equal((await db.execute(sql`select 1 from journal_entries where org_id=${ledger.orgId} and book_id=${fullBookId} and origin='net_investment_oci'`)).rows.length,0)
       const interest=(await db.execute<{subsidiary_id:string}>(sql`select subsidiary_id from subsidiary_ownership_interests where org_id=${ledger.orgId} and id=${change.subject_id}`)).rows[0]!
       const periodId=(await db.execute<{id:string}>(sql`select id from accounting_periods where org_id=${ledger.orgId} and name='2026-07'`)).rows[0]!.id
       await db.execute(sql`insert into consolidated_fx_rates(org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)

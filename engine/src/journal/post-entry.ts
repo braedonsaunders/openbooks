@@ -694,6 +694,10 @@ async function writeEntry(
       ${line.custom === undefined ? "{}" : JSON.stringify(line.custom)}::jsonb,
       ${line.contributorKind ?? null}, ${line.contributorRef ?? null})`,
   );
+  if (input.allowInactiveAccounts) {
+    // The storage guard admits inactive accounts only for this transaction-local historical posting.
+    await executor.execute(sql`select set_config('openbooks.migration', 'on', true)`);
+  }
   const insertedLines = (await executor.execute<{ id: string; line_number: number }>(sql`
     insert into journal_lines
       (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
@@ -701,6 +705,9 @@ async function writeEntry(
        extra_dims, quantity, unit, eliminate, is_currency_adjustment, due_date, is_open_item, tax_code_id, custom, contributor_kind, contributor_ref)
     values ${sql.join(tuples, sql`, `)}
     returning id, line_number`)).rows;
+  if (input.allowInactiveAccounts) {
+    await executor.execute(sql`select set_config('openbooks.migration', 'off', true)`);
+  }
   if (insertedLines.length !== lines.length)
     fail(`journal entry ${input.entryNumber}: posted ${insertedLines.length} of ${lines.length} lines`);
   const lineIdByNumber = new Map(insertedLines.map((row) => [row.line_number, row.id]));

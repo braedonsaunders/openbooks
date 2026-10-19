@@ -12,7 +12,7 @@ import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
-import { assertUnrestrictedScope } from "../organization/subsidiary-scope.ts";
+import { assertUnrestrictedScope, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import {
   bookAccountMapRefusal,
@@ -121,16 +121,28 @@ async function dayBefore(runner: SqlExecutor, date: string): Promise<string> {
   return (await runner.execute<{ d: string }>(sql`select (${date}::date - 1)::text as d`)).rows[0]!.d;
 }
 
-export async function listBookCurrencies(orgId: string, runner: SqlExecutor = db): Promise<BookCurrencyRow[]> {
+export async function listBookCurrencies(
+  orgId: string,
+  runner: SqlExecutor = db,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<BookCurrencyRow[]> {
   return (await runner.execute<BookCurrencyRow & Record<string, unknown>>(sql`
     select ${CURRENCY_COLUMNS} from accounting_book_currencies
-     where org_id = ${orgId} order by book_id, subsidiary_id, effective_from desc`)).rows;
+     where org_id = ${orgId}
+       ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
+     order by book_id, subsidiary_id, effective_from desc`)).rows;
 }
 
-export async function listBookAccountMaps(orgId: string, runner: SqlExecutor = db): Promise<BookAccountMapRow[]> {
+export async function listBookAccountMaps(
+  orgId: string,
+  runner: SqlExecutor = db,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<BookAccountMapRow[]> {
   return (await runner.execute<BookAccountMapRow & Record<string, unknown>>(sql`
     select ${MAP_COLUMNS} from accounting_book_account_maps
-     where org_id = ${orgId} order by book_id, source_account_id, effective_from desc`)).rows;
+     where org_id = ${orgId}
+       ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+     order by book_id, source_account_id, effective_from desc`)).rows;
 }
 
 /**

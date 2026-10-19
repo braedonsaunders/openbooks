@@ -92,7 +92,7 @@ function payload(): Payload {
       },
     ],
     billings: [
-      { id: "bill-1", document_number: "INV-1", amount: "1200.0000", billed_on: "2026-01-05" },
+      { id: "bill-1", document_number: "INV-1", amount: "1200.0000", billed_on: "2026-01-05", status: "posted" },
     ],
     position: {
       billed: "1200.0000",

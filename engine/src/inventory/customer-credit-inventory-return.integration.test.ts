@@ -13,7 +13,8 @@ import { PostingError } from "../journal/posting-contracts.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { issueInventory, receiveInventory } from "./movements.ts";
 import { ensureLot, ensureSerial } from "./tracking.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { reverseInventoryMovement } from "./reversal.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -183,6 +184,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
+      const actorId = await createScratchUser(org.orgId, "Inventory Controller", "admin");
       const { receiveInventory } = await import("./movements.ts");
       await receiveInventory(org.orgId, null, {
         itemId: org.items.fifo,
@@ -226,6 +228,17 @@ test(
          where org_id = ${org.orgId} and document_line_id = ${credit.lineId} and kind = 'receipt'`)).rows[0];
       assert.equal(movement!.quantity, "4.0000");
       assert.equal(movement!.total_value, "16.0000");
+
+      await assert.rejects(
+        reverseInventoryMovement(org.orgId, actorId, {
+          movementId: shipment.issueMovementId,
+          reversalDate: org.date,
+          reason: "Reverse shipment after its customer return",
+        }),
+        /customer-credit returns; reverse those credits before voiding the shipment/,
+      );
+      assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "4.0000",
+        "a refused shipment reversal leaves the customer-return stock unchanged");
     } finally {
       await dropScratchOrg(org.orgId);
     }

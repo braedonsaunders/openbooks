@@ -8,7 +8,7 @@ interface RouteState {
   allowedSubsidiaryIds: Set<string> | null
   projectsEnabled: boolean
   syncCalls: { scope: Scope; syncedProjectIds: string[] }[]
-  runCalls: { scope: Scope; postedProjectIds: string[] }[]
+  runCalls: { scope: Scope; postedProjectIds: string[]; fingerprint: string | null }[]
   runError: { kind: 'domain' | 'stale' | 'unexpected'; message: string } | null
   syncSkipped: string | null
   runEntries: unknown[]
@@ -92,7 +92,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.recognition-route-test')]
       const projects = ${JSON.stringify(projects)}
       export class RevenueRecognitionError extends Error {}
-      export async function runRevenueRecognition(_orgId, _asOfDate, _actorId, _obligationId, allowedSubsidiaryIds) {
+      export async function runRevenueRecognition(_orgId, _asOfDate, _actorId, _obligationId, allowedSubsidiaryIds, confirm) {
         if (state.runError) {
           if (state.runError.kind === 'domain') throw new RevenueRecognitionError(state.runError.message)
           if (state.runError.kind === 'stale') throw new StaleRecognitionPreviewError(state.runError.message)
@@ -101,7 +101,7 @@ const mockSources = new Map<string, string>([
         const visible = allowedSubsidiaryIds == null
           ? projects
           : projects.filter((project) => allowedSubsidiaryIds.includes(project.subsidiaryId))
-        state.runCalls.push({ scope: allowedSubsidiaryIds == null ? undefined : [...allowedSubsidiaryIds], postedProjectIds: visible.map((project) => project.id) })
+        state.runCalls.push({ scope: allowedSubsidiaryIds == null ? undefined : [...allowedSubsidiaryIds], postedProjectIds: visible.map((project) => project.id), fingerprint: confirm?.fingerprint ?? null })
         return { posted: visible.length, skipped: 0, totalAmount: '0', entries: state.runEntries, problems: [] }
       }
       // The route maps the stale-confirmation class to 409; the double
@@ -141,7 +141,7 @@ registerHooks({
   },
 })
 
-const routeUrl = new URL('./route.ts?recognition-subsidiary-scope-test', import.meta.url).href
+const routeUrl = new URL('./route.ts', import.meta.url).href
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
@@ -154,12 +154,12 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   state.runEntries = []
 }
 
-function post(): Promise<Response> {
+function post(fingerprint?: string): Promise<Response> {
   return POST(
     new Request('http://openbooks.test/api/revenue/run-recognition', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ asOfDate: '2026-08-31' }),
+      body: JSON.stringify({ asOfDate: '2026-08-31', ...(fingerprint ? { fingerprint } : {}) }),
     }),
   )
 }
@@ -177,6 +177,7 @@ test('mixed subsidiary scope synchronizes and posts only the permitted project s
   assert.deepEqual(state.runCalls, [{
     scope: ['subsidiary-visible'],
     postedProjectIds: ['project-visible'],
+    fingerprint: null,
   }])
 })
 
@@ -227,6 +228,20 @@ test('a stale confirmation stays a 409 naming the remedy', async () => {
   assert.deepEqual(await response.json(), { error: 'stale_preview' })
 })
 
+test('a reviewed confirmation checks the fingerprint before syncing project schedules', async () => {
+  reset(new Set(['subsidiary-visible']))
+
+  const response = await post('reviewed-fingerprint')
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(state.syncCalls, [])
+  assert.deepEqual(state.runCalls, [{
+    scope: ['subsidiary-visible'],
+    postedProjectIds: ['project-visible'],
+    fingerprint: 'reviewed-fingerprint',
+  }])
+})
+
 test('a skipped project sync surfaces as a named warning on the run result', async () => {
   reset(null)
   state.syncSkipped = 'project revenue sync skipped: control accounts unmapped: unbilled receivable, project revenue — map them in Company & Accounting'
@@ -261,6 +276,7 @@ test('unrestricted access preserves organization-wide synchronization and postin
   assert.deepEqual(state.runCalls, [{
     scope: undefined,
     postedProjectIds: ['project-visible', 'project-hidden'],
+    fingerprint: null,
   }])
 })
 

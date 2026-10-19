@@ -276,6 +276,31 @@ test(
         // the balance as of that date.
         assert.equal(sameEnd.sourceTotal, "500.0000");
       }
+
+      const dept = await seedDepartment(org.orgId, "Adjustment allocation target");
+      const { ruleId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        impact: "reclass",
+        targets: [{ departmentId: dept, fixedPercent: "100.0000", label: "Adjustment target" }],
+      });
+      const run = await previewAllocationRun({
+        orgId: org.orgId, ruleId, periodId: adjustmentId, bookId: org.bookId, actorId, trigger: "manual",
+      });
+      assert.equal(run.sourceTotal, "500.0000");
+      const posted = await postAllocationRun(run.id, actorId, "Post adjustment allocation");
+      const allocationEntry = (await db.execute<{ period_id: string; posting_date: string }>(sql`
+        select period_id, posting_date::text as posting_date from journal_entries
+         where org_id = ${org.orgId} and id = ${posted.journalEntryId}`)).rows[0];
+      assert.equal(allocationEntry?.period_id, adjustmentId);
+      assert.equal(allocationEntry?.posting_date, "2026-07-31");
+
+      const reversed = await reverseAllocationRun(run.id, actorId, "Reverse adjustment allocation");
+      const reversalEntry = (await db.execute<{ period_id: string; posting_date: string }>(sql`
+        select period_id, posting_date::text as posting_date from journal_entries
+         where org_id = ${org.orgId} and id = ${reversed.reversalEntryId}`)).rows[0];
+      assert.equal(reversalEntry?.period_id, adjustmentId);
+      assert.equal(reversalEntry?.posting_date, "2026-07-31");
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -381,6 +406,43 @@ test(
       const run = await getRun(org.orgId, preview.id);
       assert.equal((run.computation as RunComputation).targets.length, 2);
       assert.equal(run.status, "posted");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "posting omits target legs whose apportioned amount rounds to zero",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await newAllocationOrg();
+    try {
+      const departments = await Promise.all([
+        seedDepartment(org.orgId, "Small Share A"),
+        seedDepartment(org.orgId, "Small Share B"),
+        seedDepartment(org.orgId, "Small Share C"),
+      ]);
+      await seedSourceEntry(org, actorId, "0.0002");
+      const { ruleId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        targets: departments.map((departmentId, index) => ({
+          departmentId,
+          fixedPercent: ["33.3334", "33.3333", "33.3333"][index],
+          label: `Small share ${index + 1}`,
+        })),
+      });
+
+      const preview = await previewRule(org, actorId, ruleId);
+      assert.equal(preview.computation.targets.length, 3);
+      assert.equal(preview.computation.targets.filter((target) => isZero(target.amount)).length, 2);
+      assert.ok(preview.computation.lines.every((line) => !isZero(line.amount)));
+      assert.equal(preview.computation.lines.filter((line) => line.contributorKind === "rule").length, 2);
+
+      const posted = await postAllocationRun(preview.id, actorId, "Post rounded allocation shares");
+      assert.equal(posted.status, "posted");
+      assert.ok(posted.journalEntryId);
     } finally {
       await dropScratchOrg(org.orgId);
     }

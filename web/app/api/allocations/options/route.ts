@@ -50,7 +50,9 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       : sql`name`;
     const rows = await db.execute<{ id: string; label: string }>(sql`
       select id::text as id, ${label} as label from ${sql.raw(table)}
-       where org_id = ${orgId} and is_active order by ${sql.raw(order)}`);
+       where org_id = ${orgId} and is_active
+         ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+       order by ${sql.raw(order)}`);
     return rows.rows;
   };
 
@@ -59,6 +61,7 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       select id::text as id, number || ' · ' || name as label, number as extra
         from accounts
        where org_id = ${orgId} and is_active and not is_summary
+         ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
        order by number, name`),
     named("departments", "name"),
     named("locations", "name"),
@@ -79,6 +82,12 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       select id::text as id, name as label, key as extra
         from allocation_rules
        where org_id = ${orgId} and mode = 'period' and is_active
+         and (${gate.allowedSubsidiaryIds === null ? sql`true` : sql`exists (
+           select 1 from allocation_rule_targets target
+            where target.org_id = allocation_rules.org_id
+              and target.version_id = allocation_rules.current_version_id
+              ${subsidiaryVisibleFilter(sql`target.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         )`})
        order by sort_order, name`),
     db.execute<{ id: string; label: string; extra: string }>(sql`
       select id::text as id, name as label, slug as extra
@@ -154,7 +163,7 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       .map((row) => ({ id: row.id, label: row.label, ...(row.extra === null ? {} : { extra: row.extra }) })),
   }));
 
-  const expenseAccounts = (await db.execute<Option>(sql`select id::text, number || ' · ' || name as label from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense', 'cogs', 'expense_other') order by number, name`)).rows;
+  const expenseAccounts = (await db.execute<Option>(sql`select id::text, number || ' · ' || name as label from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense', 'cogs', 'expense_other') ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })} order by number, name`)).rows;
   const payComponents = (await db.execute<Option>(sql`select id::text, code || ' · ' || name as label from pay_components where org_id = ${orgId} and is_active and kind in ('earning', 'employer_contribution') order by sequence, code`)).rows;
   return NextResponse.json({
     expenseAccounts,

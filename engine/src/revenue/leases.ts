@@ -1,7 +1,11 @@
 import { assertFinancialChangeAccess } from "../organization/financial-change-access.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import {
   db,
   withOrg,
@@ -10,6 +14,8 @@ import {
 } from "../platform/db.ts";
 import {
   loadSubsidiaryContext,
+  restrictionAdmits,
+  SubsidiaryError,
   validateSubsidiaryRestrictions,
   uuidArray,
 } from "../organization/subsidiaries.ts";
@@ -76,6 +82,27 @@ export function withLeaseTransaction<T>(
 
 export class LeaseError extends Error {
   readonly name = "LeaseError";
+
+  constructor(message: string, options: { cause?: unknown } = {}) {
+    super(message, { cause: options.cause });
+  }
+}
+
+function databaseErrorDetail(error: unknown): { code?: string; constraint?: string } {
+  const seen = new Set<object>();
+  let current = error;
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    const detail = current as { code?: unknown; constraint?: unknown; cause?: unknown };
+    if (typeof detail.code === "string") {
+      return {
+        code: detail.code,
+        ...(typeof detail.constraint === "string" ? { constraint: detail.constraint } : {}),
+      };
+    }
+    current = detail.cause;
+  }
+  return {};
 }
 
 function exactMoney(value: unknown, label: string): string {
@@ -755,6 +782,20 @@ export function assertLeaseTermWithinHorizon(
   return frequencyMonths;
 }
 
+/** The contractual schedule is authoritative for the lease classification term. */
+export function leaseClassificationInputsForTerm(
+  inputs: LeaseClassificationInputs | null | undefined,
+  leaseTermMonths: number,
+): LeaseClassificationInputs {
+  if (!Number.isSafeInteger(leaseTermMonths) || leaseTermMonths < 1)
+    throw new LeaseError("lease term must be a positive whole number of months");
+  assertClassificationInputs(inputs ?? {});
+  return {
+    ...inputs,
+    leaseTermMonths,
+  };
+}
+
 /**
  * Cutover-date gate for continue-from-opening onboarding. The first
  * scheduled period must begin on or after the balances' as-of date: a
@@ -845,6 +886,80 @@ export interface CreateLeaseInput {
   locationId?: string | null;
 }
 
+async function validateLeaseReferences(
+  tx: SqlExecutor,
+  orgId: string,
+  input: CreateLeaseInput,
+): Promise<void> {
+  const accountIds = [
+    ...Object.values(input.accounts),
+    ...(input.costClearingAccountId ? [input.costClearingAccountId] : []),
+  ];
+  let context: Awaited<ReturnType<typeof loadSubsidiaryContext>>;
+  try {
+    await assertLeaseAccountsPostable(tx, orgId, accountIds);
+    await tx.execute(sql`select id from subsidiaries where org_id = ${orgId} order by id for share`);
+    context = await loadSubsidiaryContext(tx, orgId);
+    const subsidiary = context.byId.get(input.subsidiaryId);
+    if (!subsidiary || !subsidiary.isActive || subsidiary.isElimination) {
+      throw new LeaseError("Select an active operating legal entity for the lease.");
+    }
+  } catch (error) {
+    if (error instanceof LeaseError) throw error;
+    if (error instanceof SubsidiaryError) throw new LeaseError(error.message, { cause: error });
+    throw error;
+  }
+
+  const dimensions = [
+    { table: "departments", id: input.departmentId ?? null, label: "department" },
+    { table: "projects", id: input.projectId ?? null, label: "project" },
+    { table: "locations", id: input.locationId ?? null, label: "location" },
+  ] as const;
+  for (const dimension of dimensions) {
+    if (!dimension.id) continue;
+    const row = (await tx.execute<{
+      id: string;
+      is_active: boolean;
+      subsidiary_id: string | null;
+      subsidiary_include_children: boolean;
+    }>(sql`
+      select id, is_active, subsidiary_id, subsidiary_include_children
+        from ${sql.raw(dimension.table)}
+       where org_id = ${orgId} and id = ${dimension.id}
+       for share`)).rows[0];
+    if (!row || !row.is_active) {
+      throw new LeaseError(`Choose an active ${dimension.label} from this organization.`);
+    }
+    if (row.subsidiary_id && !restrictionAdmits(
+      context,
+      row.subsidiary_id,
+      row.subsidiary_include_children,
+      input.subsidiaryId,
+    )) {
+      throw new LeaseError(`The selected ${dimension.label} is restricted to another legal entity.`);
+    }
+  }
+
+  try {
+    await validateSubsidiaryRestrictions(tx, {
+      orgId,
+      ctx: context,
+      docSubsidiaryId: input.subsidiaryId,
+      lines: accountIds.map((accountId) => ({
+        accountId,
+        amount: "0",
+        subsidiaryId: input.subsidiaryId,
+        departmentId: input.departmentId ?? null,
+        projectId: input.projectId ?? null,
+        locationId: input.locationId ?? null,
+      })),
+    });
+  } catch (error) {
+    if (error instanceof SubsidiaryError) throw new LeaseError(error.message, { cause: error });
+    throw error;
+  }
+}
+
 /** Create a draft lease agreement with its framework-resolved classification. */
 export async function createLeaseAgreement(
   orgId: string,
@@ -885,11 +1000,10 @@ export async function createLeaseAgreement(
     // month persisting as operating instead of finance. Malformed caller
     // input still fails closed first: derivation corrects a wrong but
     // well-formed term, it does not launder junk.
-    assertClassificationInputs(input.classificationInputs ?? {});
-    const classificationInputs = {
-      ...input.classificationInputs,
-      leaseTermMonths: input.termPeriods * frequencyMonths,
-    };
+    const classificationInputs = leaseClassificationInputsForTerm(
+      input.classificationInputs,
+      input.termPeriods * frequencyMonths,
+    );
     const classification = classifyLease(classificationInputs, framework);
 
     if (input.exemption === "short_term") {
@@ -1027,8 +1141,10 @@ export async function createLeaseAgreement(
       throw new LeaseError(
         "lease requires an active legal entity and an active primary posting book",
       );
+    await validateLeaseReferences(db, orgId, input);
     const leaseId = randomUUID();
-    await db.execute(sql`
+    try {
+      const inserted = (await db.execute<{ id: string }>(sql`
     insert into lease_agreements
       (id, org_id, subsidiary_id, book_id, currency, lease_number, description, status, commencement_on, term_periods,
        payment_frequency, payment_timing, payment_amount, annual_discount_rate_percent,
@@ -1049,7 +1165,21 @@ export async function createLeaseAgreement(
             ${input.accounts.rouAsset}, ${input.accounts.leaseLiability}, ${input.accounts.interestExpense},
             ${input.accounts.amortizationExpense}, ${input.accounts.leaseExpense}, ${input.accounts.payment},
             ${input.departmentId ?? null}, ${input.projectId ?? null}, ${input.locationId ?? null},
-            '{}'::jsonb, ${actorId}, ${actorId})`);
+            '{}'::jsonb, ${actorId}, ${actorId})
+    returning id`)).rows;
+      if (inserted.length !== 1 || inserted[0]?.id !== leaseId) {
+        throw new LeaseError("The lease agreement was not saved; no lease was created.");
+      }
+    } catch (error) {
+      const detail = databaseErrorDetail(error);
+      if (detail.code === "23505" && detail.constraint === "lease_agreements_org_number") {
+        throw new LeaseError("This lease number is already used in this organization; choose a different lease number.", { cause: error });
+      }
+      if (detail.code === "23503") {
+        throw new LeaseError("A referenced lease account or dimension is no longer available; refresh and select it again.", { cause: error });
+      }
+      throw error;
+    }
     return { leaseId, classification };
   });
 }
@@ -1113,7 +1243,7 @@ export async function leaseRow(
            cost_clearing_account_id, last_change_id
       from lease_agreements where org_id = ${orgId} and id = ${leaseId} for update`);
   const row = r.rows[0];
-  if (!row) throw new LeaseError("lease not found");
+  if (!row) throw new ScopeNotFoundError();
   return row;
 }
 
@@ -1128,16 +1258,12 @@ async function postingContext(
     throw new LeaseError(
       "the lease has no originating posting book; reconcile its commencement or imported balances before scheduling changes",
     );
+  const period = await resolveCoveringPeriod(runner, orgId, date, subsidiaryId);
   const r = await runner.execute<{
     book_id: string | null;
-    period_id: string | null;
     currency: string | null;
   }>(sql`
     select (select id from accounting_books where org_id = ${orgId} and id=${bookId} and is_active and posts_gl for share) as book_id,
-           (select id from accounting_periods p where p.org_id = ${orgId} and not p.is_adjustment
-              and starts_on <= ${date} and ends_on >= ${date}
-              and exists (select 1 from fiscal_calendars c where c.id=p.fiscal_calendar_id and c.org_id=p.org_id and c.is_default and c.is_active)
-              for share) as period_id,
            (select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}) as currency
   `);
   const row = r.rows[0];
@@ -1145,12 +1271,12 @@ async function postingContext(
     throw new LeaseError(
       "the lease posting book is no longer active or GL-posting; ask an authorized administrator to restore the originating book's posting configuration in Accounting books before posting this lease",
     );
-  if (!row.period_id)
+  if (!period)
     throw new LeaseError(`no accounting period covers ${date}`);
   if (!row.currency) throw new LeaseError("subsidiary not found");
   return {
     bookId: row.book_id,
-    periodId: row.period_id,
+    periodId: period.id,
     currency: row.currency,
   };
 }
@@ -1329,15 +1455,14 @@ export async function commenceLease(
   actorId: string | null,
 ): Promise<CommenceResult> {
   return withLeaseTransaction(orgId, async (tx) => {
+    if (actorId) {
+      await lockActorCommandAuthority(tx, orgId, actorId, null, "assets.manage");
+      if (!(await lockAndCheckOrgFeature(tx, orgId, "fixedAssets"))) {
+        throw new LeaseError("Fixed assets is disabled; enable it in Company Settings → Features before commencing this lease.");
+      }
+    }
     const lease = await leaseRow(orgId, leaseId, tx);
-    if (actorId)
-      await assertFinancialChangeAccess(tx, {
-        orgId,
-        actorId,
-        subsidiaryIds: [lease.subsidiary_id],
-        permission: "assets.manage",
-        feature: "fixedAssets",
-      });
+    if (actorId) await lockActorCommandAuthority(tx, orgId, actorId, lease.subsidiary_id, "assets.manage");
     if (lease.status === "active") {
       return {
         leaseId,

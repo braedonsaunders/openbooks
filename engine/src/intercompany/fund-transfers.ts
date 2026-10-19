@@ -125,11 +125,11 @@ export async function postIntercompanyFundTransfer(
     if (input.idempotencyKey) {
       await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`intercompany-transfer:${orgId}:${input.idempotencyKey}`}, 0))`);
       const prior = (await db.execute<{
-        id: string; from_bank_account_id: string; to_bank_account_id: string; amount: string; transfer_date: string;
+        id: string; status: "posted" | "reversed"; from_bank_account_id: string; to_bank_account_id: string; amount: string; transfer_date: string;
         from_subsidiary_id: string; to_subsidiary_id: string;
         currency: string; memo: string | null; reason: string;
       }>(sql`
-        select id, from_bank_account_id, to_bank_account_id, amount::text as amount, transfer_date::text as transfer_date,
+        select id, status, from_bank_account_id, to_bank_account_id, amount::text as amount, transfer_date::text as transfer_date,
                from_subsidiary_id, to_subsidiary_id, currency, memo, reason
           from intercompany_fund_transfers
          where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];
@@ -144,6 +144,9 @@ export async function postIntercompanyFundTransfer(
           && prior.memo === (input.memo ?? null)
           && prior.reason === input.reason;
         if (!same) refuse("this request key already recorded a different transfer; use a new key for a new transfer", 409);
+        if (prior.status === "reversed") {
+          refuse("this transfer has already been reversed; use a new request key to record a new transfer", 409);
+        }
         return prior.id;
       }
     }

@@ -20,7 +20,7 @@ const createBody = z.object({
 export const GET = defineRoute({
   permission: 'gl.read',
   feature: 'multiBookAccounting',
-  handler: async ({ authz }) => NextResponse.json({ currencies: await listBookCurrencies(authz.user.orgId) }),
+  handler: async ({ authz }) => NextResponse.json({ currencies: await listBookCurrencies(authz.user.orgId, undefined, authz.allowedSubsidiaryIds) }),
 })
 
 /** Add a book currency version; the version in effect before it closes the day before it starts. */

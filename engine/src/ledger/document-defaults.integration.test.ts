@@ -197,6 +197,40 @@ test("creating an invoice without a due date derives it from terms; an explicit 
   }
 });
 
+test("an omitted document currency uses the selected legal entity's functional currency", { skip: !DB }, async () => {
+  const s = await seed();
+  try {
+    await withBypass(() => db.execute(sql`
+      insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2)
+      on conflict (code) do nothing`));
+    await withBypass(() => db.execute(sql`
+      update orgs set base_currency = 'CAD' where id = ${s.org.orgId}`));
+    await withBypass(() => db.execute(sql`
+      update subsidiaries set base_currency = 'USD'
+       where org_id = ${s.org.orgId} and id = ${s.org.subsidiaryId}`));
+    const userId = await withBypass(() => createScratchUser(s.org.orgId, "Entity Billing Clerk", "admin"));
+    const body = {
+      partyId: s.org.vendorId,
+      documentDate: s.org.date,
+      lines: [{ accountId: s.officeExpense, amount: "100.0000" }],
+    };
+    const created = await withBypass(() => createDocument({
+      orgId: s.org.orgId,
+      userId: String(userId),
+      kind: "vendor_bill",
+      key: randomUUID(),
+      subsidiaryId: s.org.subsidiaryId,
+      body,
+      requestBody: body,
+    }));
+    const currency = (await withBypass(() => db.execute<{ currency: string }>(sql`
+      select currency from documents where org_id = ${s.org.orgId} and id = ${created.id}`))).rows[0]?.currency;
+    assert.equal(currency, "USD");
+  } finally {
+    await dropScratchOrg(s.org.orgId);
+  }
+});
+
 test("purchase lines propose the company clearing account when the profile names none", { skip: !DB }, async () => {
   const s = await seed();
   try {

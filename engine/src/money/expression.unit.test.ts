@@ -54,6 +54,13 @@ test("a literal inherits the surrounding amount or hours unit", () => {
   refuses(() => compileExpression("base + factor", definitions), "TYPE_MISMATCH", /money \(CAD\).*scalar/);
 });
 
+test("min, max, and clamp preserve units around negated literals", () => {
+  refuses(() => compileExpression("min(-1, factor, base)", definitions), "TYPE_MISMATCH", /scalar.*money \(CAD\)/);
+  for (const source of ["min(0, -1, base)", "max(0, -1, base)", "clamp(0, -1, base)"]) {
+    assert.deepEqual(compileExpression(source, definitions).resultType, { kind: "money", currency: "CAD" }, source);
+  }
+});
+
 test("cross-currency arithmetic and incompatible units refuse before values are supplied", () => {
   for (const source of ["base + usd", "base / usd", "base < usd", "min(base, usd)", "if(eligible, base, usd)"]) {
     refuses(() => compileExpression(source, definitions), "TYPE_MISMATCH", /CAD.*USD/);

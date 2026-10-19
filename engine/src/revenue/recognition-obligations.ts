@@ -157,15 +157,14 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
   const obligationIds: string[] = [];
   const contractId = await db.transaction(async (tx) => {
     let cId: string | null = null;
-    if (lines.length > 0) {
+    if (lines.length > 0 || scopedEnabled) {
       // A concurrent disable must not interleave scoped writes: recheck the
       // gate on the writer's transaction and fall back to the invoice's own
       // contract when it is off. The fallback is today's shape — no scoped
       // row is written while the surface is off.
-      const scoped = billingSource
-        && (await lockAndCheckOrgFeature(tx, orgId, "revenueContracts"))
-        ? billingSource
-        : null;
+      const contractFeatureActive = scopedEnabled
+        && await lockAndCheckOrgFeature(tx, orgId, "revenueContracts");
+      const scoped = contractFeatureActive ? billingSource : null;
       if (scoped) {
         // The agreement's contract accumulates this billing: shared across
         // every invoice of the order or subscription (created on first
@@ -182,15 +181,15 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
         // One contract per invoice. The unique storage key is the concurrency
         // authority; contract_number remains business display data, not a mutex.
         const contractKey = revenueContractPostingEffectKey(documentId);
-        // Consideration mirrors the billing rows written in this same commit:
-        // a contract created while scoped writes are off carries none, so a
-        // later replay that records its billing accumulates exactly once.
+        // Invoice price is already fixed by this document. Billed
+        // consideration is accumulated from the billing ledger below, both
+        // on a first post and when a legacy invoice is replayed after enablement.
         const insertedContract = await tx.execute<{ id: string }>(sql`
           insert into revenue_contracts
             (org_id, subsidiary_id, customer_id, contract_number, idempotency_key, status, starts_on,
              currency, total_transaction_price, total_consideration, created_by, updated_by)
           values (${orgId}, ${doc.subsidiary_id}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
-                  ${doc.document_date}, ${doc.currency}, ${contractTotal}, ${scopedEnabled ? contractTotal : "0"}, ${actorId}, ${actorId})
+                  ${doc.document_date}, ${doc.currency}, ${contractTotal}, '0', ${actorId}, ${actorId})
           -- Repeated posting reuses the existing source-document contract selected below.
           on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
           returning id
@@ -206,7 +205,7 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
         if (existingContract?.rows[0] && cmp(existingContract.rows[0].total_transaction_price, contractTotal) !== 0) {
           throw new RevenueRecognitionError("Partial revenue allocation conflicts with the existing contract total; reconcile the contract before retrying");
         }
-        if (scopedEnabled) {
+        if (contractFeatureActive) {
           await recordContractBilling(
             tx, orgId, cId, documentId, contractTotal, doc.document_date, actorId,
           );

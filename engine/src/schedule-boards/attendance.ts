@@ -157,15 +157,30 @@ export async function saveAttendanceIdentity(actor: ScheduleActor, input: {
     const effectiveFrom = requireDate(input.effectiveFrom, "Start date");
     const effectiveTo = input.effectiveTo === null ? null : requireDate(input.effectiveTo, "End date");
     if (effectiveTo !== null && effectiveTo <= effectiveFrom) throw new ScheduleError("The mapping must end after it starts.", { code: "schedule_invalid_range", remedy: "Choose a later end date or leave it open." });
-    const person = (await db.execute<{ id: string }>(sql`select p.id from parties p join employee_roles er on er.org_id = p.org_id and er.party_id = p.id
+    const person = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`select p.id, p.subsidiary_id from parties p join employee_roles er on er.org_id = p.org_id and er.party_id = p.id
       where p.org_id = ${actor.orgId} and p.id = ${requireId(input.workerPartyId, "Person")} and p.is_active and er.is_active for share of p`)).rows[0];
     if (!person) throw new ScheduleError("This person cannot be mapped.", { code: "schedule_person_unavailable", remedy: "Pick an active employee." });
+    const root = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${actor.orgId} and parent_id is null for share`)).rows[0];
+    if (!root) throw new ScheduleError("This organization has no root legal entity.", { code: "schedule_entity_missing", remedy: "Complete organization legal-entity setup before mapping attendance identities." });
+    const personSubsidiaryId = person.subsidiary_id ?? root.id;
+    if (personSubsidiaryId !== device.subsidiaryId) {
+      throw new ScheduleError("This person is not available for the device's legal entity.", { status: 404, code: "schedule_person_unavailable", remedy: "Choose an active employee assigned to the device's legal entity." });
+    }
     let employmentId: string | null = input.employmentId ?? null;
     if (input.employmentId === undefined) {
       const employments = (await db.execute<{ id: string }>(sql`select id from worker_employments where org_id = ${actor.orgId} and worker_party_id = ${person.id}
         and employer_subsidiary_id = ${device.subsidiaryId} order by id for share`)).rows;
       if (employments.length > 1) throw new ScheduleError("This person has more than one employment with the device's legal entity.", { code: "schedule_employment_ambiguous", remedy: "Choose the employment the identifier belongs to." });
       employmentId = employments[0]?.id ?? null;
+    } else if (input.employmentId !== null) {
+      const requestedEmploymentId = requireId(input.employmentId, "Employment");
+      const employment = (await db.execute<{ id: string }>(sql`select id from worker_employments
+        where org_id = ${actor.orgId} and id = ${requestedEmploymentId} and worker_party_id = ${person.id}
+          and employer_subsidiary_id = ${device.subsidiaryId} for share`)).rows[0];
+      if (!employment) {
+        throw new ScheduleError("The employment is not available for this person and device's legal entity.", { status: 404, code: "schedule_employment_unavailable", remedy: "Choose an employment belonging to this employee in the device's legal entity." });
+      }
+      employmentId = employment.id;
     }
     const id = crypto.randomUUID();
     const saved = (await db.execute<AttendanceIdentity>(sql`insert into schedule_attendance_identities (id, org_id, device_id, source_worker_id, subsidiary_id, worker_party_id, employment_id,
@@ -189,7 +204,14 @@ export async function addAttendancePolicy(actor: ScheduleActor, input: Attendanc
   return withOrgTransaction(actor.orgId, async () => {
     const board = await peopleBoard(actor, input.boardId);
     await boardAuthority(actor, board, "read");
-    await attendanceAuthority(actor, "hrm.attendance.manage", board.subsidiaryId);
+    const allowed = await attendanceAuthority(actor, "hrm.attendance.manage", board.subsidiaryId);
+    if (board.subsidiaryId === null && allowed !== null) {
+      throw new ScheduleError("Organization-wide attendance policies are managed by people with access to every legal entity.", {
+        status: 403,
+        code: "schedule_scope",
+        remedy: "Choose a people board assigned to a legal entity you are authorized to manage.",
+      });
+    }
     await db.execute(sql`select id from schedule_boards where org_id = ${actor.orgId} and id = ${board.id} for update`);
     const id = crypto.randomUUID();
     const saved = (await db.execute<AttendancePolicyVersion>(sql`insert into schedule_attendance_policies (id, org_id, board_id, effective_from, capture_before_minutes, capture_after_minutes,

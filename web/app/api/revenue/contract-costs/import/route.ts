@@ -55,7 +55,7 @@ export const POST = defineRoute({
           method: row.method,
           originalExpenseAccountId: row.originalExpenseAccountId,
           renewalCommissionMinor: row.renewalCommission
-            ? await parseCostAmountMinor(user.orgId, row.renewalCommission, row.currency)
+            ? await parseCostAmountMinor(user.orgId, row.renewalCommission, row.currency, { allowZero: true })
             : undefined,
           ref: row.ref,
         })

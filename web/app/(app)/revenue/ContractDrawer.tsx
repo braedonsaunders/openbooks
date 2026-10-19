@@ -104,6 +104,7 @@ export function ContractDrawer({
   const t = useTranslations("revenue");
   const tCommon = useTranslations("common");
   const c = payload.contract;
+  const showBillingCancellation = canRun && c.status === "active" && c.scope !== "invoice";
   const totals = contractSummaryTotals(payload.obligations);
   // Billings, obligations+schedules, and accounting events are separate
   // concepts with separate bodies. Client-local like the drawer rail:
@@ -204,6 +205,7 @@ export function ContractDrawer({
                   <TableHead className="text-right">
                     {t("drawer.billedAmount")}
                   </TableHead>
+                  {showBillingCancellation ? <TableHead /> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -221,6 +223,16 @@ export function ContractDrawer({
                     <TableCell className="text-right tabular-nums">
                       {money(b.amount)}
                     </TableCell>
+                    {showBillingCancellation ? (
+                      <TableCell className="text-right">
+                        {b.status === "posted" ? (
+                          <CancelRecognitionButton
+                            documentId={b.id}
+                            invoiceNumber={b.document_number}
+                          />
+                        ) : null}
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>
@@ -228,10 +240,8 @@ export function ContractDrawer({
           </section>
         ) : null}
 
-        {/* -- cancellation: the dedicated workflow the invoice-void refusal
-            points at. Only an active invoice-sourced contract names a live
-            invoice to cancel; project contracts and finished contracts offer
-            nothing here. */}
+        {/* -- cancellation: invoice-scoped contracts use their single source
+            invoice; shared contracts expose the action beside each billing. */}
         {canRun && c.status === "active" && c.sourceInvoiceId ? (
           <section className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             <p className="text-xs text-slate-500 dark:text-slate-400">

@@ -11,7 +11,7 @@ export async function closeApprovedRun(
   runId: string,
   actorId: string,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
+  const refusal = await db.transaction(async (tx) => {
     const target = (await tx.execute<{ period_id: string; book_id: string }>(sql`
       select period_id, book_id from close_runs where id = ${runId} and org_id = ${orgId}`));
     if (!target.rows[0]) throw new CloseError("close run not found");
@@ -36,16 +36,17 @@ export async function closeApprovedRun(
     const row = run.rows[0];
     if (!row) throw new CloseError("close run not found");
     if (row.status !== "approved")
-      throw new CloseError(
-        "the close run requires approval or an owner attestation before locking",
-      );
+      return "the close run changed after approval; review its updated readiness and obtain approval again before locking";
     const blockers = (await tx.execute<{ count: string }>(sql`
       select count(*) as count from close_exceptions
        where run_id = ${runId} and org_id = ${orgId} and status = 'open' and severity in ('error','critical')`));
-    if (Number(blockers.rows[0]!.count) > 0)
-      throw new CloseError(
-        "critical exceptions reappeared after approval; review the run again",
-      );
+    if (Number(blockers.rows[0]!.count) > 0) {
+      await tx.execute(sql`
+        update close_runs set status = 'in_progress', current_stage = 'readiness',
+               approved_at = null, approved_by = null, updated_at = now(), updated_by = ${actorId}
+         where id = ${runId} and org_id = ${orgId} and status = 'approved'`);
+      return "critical exceptions reappeared after approval; review the updated run and obtain approval again before locking";
+    }
 
     const scopes = row.scope?.subsidiaryIds?.length
       ? row.scope.subsidiaryIds
@@ -101,7 +102,9 @@ export async function closeApprovedRun(
     await tx.execute(sql`
       insert into close_events (org_id, run_id, event_type, actor_id, payload)
       values (${orgId}, ${runId}, 'run.closed', ${actorId}, ${JSON.stringify({ modules: CLOSE_MODULES })}::jsonb)`);
+    return null;
   });
+  if (refusal) throw new CloseError(refusal);
   await runCloseAutomations({
     orgId,
     runId,

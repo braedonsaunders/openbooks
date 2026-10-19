@@ -153,6 +153,7 @@ test(
       assert.equal(await balance(org, cip), "10000.0000");
       assert.equal(await balance(org, buildings), "0.0000");
       assert.deepEqual(await cipRow(org, record.id), { status: "construction", acquisition_cost: "10000.0000" });
+      await refusedWith("capitalization_reversed", () => capitalizeCip(org.orgId, request, { actorId: actors.adminId }));
 
       const full = await capitalizeCip(org.orgId, {
         idempotencyKey: randomUUID(), cipAssetId: record.id, capitalizedOn: org.date, reason: "Complete",

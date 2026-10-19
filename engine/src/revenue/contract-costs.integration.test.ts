@@ -16,13 +16,44 @@ import {
   assetCarryingMinor,
   capitalizeContractCost,
   contractCostAttentionItems,
+  ContractCostError,
+  importCommissionCosts,
+  linkContractCostAsset,
   projectAmortizationSchedule,
   recognizeContractCostImpairment,
   runContractCostAmortization,
+  scheduleForAsset,
 } from "./contract-costs.ts";
 import type { FlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test("contract-cost attention respects the caller's subsidiary visibility", { skip: !DB }, async () => {
+  const world = await setupCostWorld();
+  try {
+    const asset = await capitalizeContractCost({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      revenueContractId: null,
+      repPartyId: world.repPartyId,
+      customerPartyId: world.org.customerId,
+      costType: "commission",
+      amountMinor: 10000n,
+      currency: "CAD",
+      capitalizedOn: world.org.date,
+      method: "straight_line",
+      originalExpenseAccountId: world.commissionExpenseAccountId,
+      source: { kind: "import" },
+    });
+
+    const unrestricted = await contractCostAttentionItems(db, world.org.orgId);
+    const restricted = await contractCostAttentionItems(db, world.org.orgId, new Set());
+    assert.ok(unrestricted.some((item) => item.assetId === asset.assetId));
+    assert.ok(!restricted.some((item) => item.assetId === asset.assetId));
+  } finally {
+    await dropScratchOrgReporting(world.org.orgId);
+  }
+});
 
 interface CostWorld {
   org: ScratchOrg;
@@ -133,6 +164,80 @@ async function entryBalance(entryId: string): Promise<{ lines: number; balanced:
        and je.status in ('posted', 'reversed')`)).rows[0]!;
   return { lines: Number(rows.lines), balanced: rows.balanced };
 }
+
+test("contract-cost capitalization and amortization authorize and post in the contract subsidiary", { skip: !DB }, async () => {
+  const world = await setupCostWorld();
+  try {
+    const subsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${subsidiaryId}, ${world.org.orgId}, ${world.org.subsidiaryId}, 'Contract Cost Branch', 'CAD', 'CA')
+    `);
+    const contractId = await seedContract(world, {
+      number: "C-ENTITY-COST",
+      startsOn: "2026-07-01",
+      endsOn: "2026-09-30",
+    });
+    await db.execute(sql`
+      update revenue_contracts set subsidiary_id = ${subsidiaryId}
+       where org_id = ${world.org.orgId} and id = ${contractId}
+    `);
+    await db.execute(sql`
+      update app_roles
+         set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [world.org.subsidiaryId] })}::jsonb
+       where org_id = ${world.org.orgId} and key = 'cc_manager'
+    `);
+
+    const input = {
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      revenueContractId: contractId,
+      repPartyId: world.repPartyId,
+      customerPartyId: world.org.customerId,
+      costType: "commission" as const,
+      amountMinor: 90000n,
+      currency: "CAD",
+      capitalizedOn: "2026-07-15",
+      method: "straight_line" as const,
+      originalExpenseAccountId: world.commissionExpenseAccountId,
+      source: { kind: "manual" as const },
+    };
+    await assert.rejects(capitalizeContractCost(input), (error: unknown) => {
+      assert.ok(error instanceof ContractCostError);
+      assert.equal(error.status, 403);
+      assert.equal(error.code, "contract_cost_forbidden");
+      return true;
+    });
+
+    await db.execute(sql`
+      update app_roles
+         set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [subsidiaryId] })}::jsonb
+       where org_id = ${world.org.orgId} and key = 'cc_manager'
+    `);
+    const capitalized = await capitalizeContractCost(input);
+    assert.ok(capitalized.capitalizeEntryId);
+    const capitalization = (await db.execute<{ subsidiary_id: string }>(sql`
+      select subsidiary_id from journal_entries where org_id = ${world.org.orgId} and id = ${capitalized.capitalizeEntryId}
+    `)).rows[0];
+    assert.equal(capitalization?.subsidiary_id, subsidiaryId);
+
+    const periods = await seedPeriods(world.org.orgId, ["2026-07"]);
+    const amortization = await runContractCostAmortization({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      periodId: periods.get("2026-07")!,
+    });
+    assert.equal(amortization.posted, 1);
+    const posted = (await db.execute<{ subsidiary_id: string }>(sql`
+      select subsidiary_id
+        from journal_entries
+       where org_id = ${world.org.orgId} and id = ${amortization.entries[0]!.entryId}
+    `)).rows[0];
+    assert.equal(posted?.subsidiary_id, subsidiaryId);
+  } finally {
+    await dropScratchOrgReporting(world.org.orgId);
+  }
+});
 
 test(
   "contract cost carrying uses the primary book and unlinked assets retain their source amount",
@@ -423,6 +528,7 @@ test(
         startsOn: "2026-07-01",
         endsOn: "2028-06-30",
       });
+      const periods = await seedPeriods(world.org.orgId, ["2026-08-01"]);
       const cap = await capitalizeContractCost({
         orgId: world.org.orgId,
         actorId: world.managerId,
@@ -476,7 +582,191 @@ test(
       const status = (await db.execute<{ status: string }>(sql`
         select status from contract_cost_assets
          where org_id = ${world.org.orgId} and id = ${cap.assetId}`)).rows[0]!;
-      assert.equal(status.status, "impaired");
+      assert.equal(status.status, "active", "a remaining carrying balance stays amortizable");
+      const schedule = await scheduleForAsset(db, world.org.orgId, cap.assetId);
+      assert.equal(
+        schedule.find((line) => line.month === "2026-08")?.amountMinor,
+        4348n,
+        "the recoverable balance is re-spread over the remaining unposted months",
+      );
+      const nextMonth = await runContractCostAmortization({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        periodId: periods.get("2026-08")!,
+      });
+      assert.equal(nextMonth.posted, 1);
+      assert.equal(nextMonth.entries[0]?.amountMinor, "4348");
+      assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 95652n);
+    } finally {
+      await dropScratchOrgReporting(world.org.orgId);
+    }
+  },
+);
+
+test(
+  "late links honor cost capitalization policy and the one-year expedient",
+  { skip: !DB },
+  async () => {
+    const world = await setupCostWorld();
+    try {
+      const longContract = await seedContract(world, {
+        number: "C-LINK-EXCLUDED",
+        startsOn: "2026-07-01",
+        endsOn: "2028-06-30",
+      });
+      const excluded = await capitalizeContractCost({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        revenueContractId: null,
+        repPartyId: world.repPartyId,
+        customerPartyId: world.org.customerId,
+        costType: "commission",
+        amountMinor: 10000n,
+        currency: "CAD",
+        capitalizedOn: "2026-07-15",
+        method: "straight_line",
+        originalExpenseAccountId: world.commissionExpenseAccountId,
+        source: { kind: "import" },
+      });
+      await db.execute(sql`
+        update contract_cost_policies set capitalize_commissions = false
+         where org_id = ${world.org.orgId}`);
+      await linkContractCostAsset({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        assetId: excluded.assetId,
+        revenueContractId: longContract,
+      });
+      const excludedRow = (await db.execute<{ status: string; revenue_contract_id: string | null }>(sql`
+        select status, revenue_contract_id from contract_cost_assets
+         where org_id = ${world.org.orgId} and id = ${excluded.assetId}`)).rows[0]!;
+      assert.equal(excludedRow.status, "expensed");
+      assert.equal(excludedRow.revenue_contract_id, longContract);
+
+      const shortContract = await seedContract(world, {
+        number: "C-LINK-EXPEDIENT",
+        startsOn: "2026-07-01",
+        endsOn: "2026-12-31",
+      });
+      const expedientAsset = await capitalizeContractCost({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        revenueContractId: null,
+        repPartyId: world.repPartyId,
+        customerPartyId: world.org.customerId,
+        costType: "commission",
+        amountMinor: 10000n,
+        currency: "CAD",
+        capitalizedOn: "2026-07-15",
+        method: "straight_line",
+        originalExpenseAccountId: world.commissionExpenseAccountId,
+        source: { kind: "import" },
+      });
+      await db.execute(sql`
+        update contract_cost_policies
+           set capitalize_commissions = true, practical_expedient = true
+         where org_id = ${world.org.orgId}`);
+      await linkContractCostAsset({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        assetId: expedientAsset.assetId,
+        revenueContractId: shortContract,
+      });
+      const expedientRow = (await db.execute<{ status: string }>(sql`
+        select status from contract_cost_assets
+         where org_id = ${world.org.orgId} and id = ${expedientAsset.assetId}`)).rows[0]!;
+      assert.equal(expedientRow.status, "expensed");
+      const journals = (await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from journal_entries
+         where org_id = ${world.org.orgId} and origin = 'contract_cost_capitalize'`)).rows[0]!;
+      assert.equal(journals.count, "0", "policy and expedient refusals do not post capitalization journals");
+    } finally {
+      await dropScratchOrgReporting(world.org.orgId);
+    }
+  },
+);
+
+test(
+  "a failed imported commission row rolls back without poisoning its siblings",
+  { skip: !DB },
+  async () => {
+    const world = await setupCostWorld();
+    try {
+      const contractId = await seedContract(world, {
+        number: "C-IMPORT-SAVEPOINT",
+        startsOn: "2026-07-01",
+        endsOn: "2028-06-30",
+      });
+      const result = await importCommissionCosts({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        rows: [
+          {
+            repPartyId: randomUUID(),
+            contractNumber: "C-IMPORT-SAVEPOINT",
+            amountMinor: 10000n,
+            currency: "CAD",
+            date: "2026-07-15",
+            originalExpenseAccountId: world.commissionExpenseAccountId,
+            ref: "batch row 1",
+          },
+          {
+            repPartyId: world.repPartyId,
+            contractNumber: "C-IMPORT-SAVEPOINT",
+            amountMinor: 12000n,
+            currency: "CAD",
+            date: "2026-07-15",
+            originalExpenseAccountId: world.commissionExpenseAccountId,
+            ref: "batch row 2",
+          },
+        ],
+      });
+      assert.equal(result[0]?.ok, false);
+      assert.equal(result[1]?.ok, true);
+      const assets = (await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from contract_cost_assets
+         where org_id = ${world.org.orgId} and revenue_contract_id = ${contractId}`)).rows[0]!;
+      assert.equal(assets.count, "1", "the failed row leaves no asset and the valid sibling commits");
+    } finally {
+      await dropScratchOrgReporting(world.org.orgId);
+    }
+  },
+);
+
+test(
+  "ledger carrying uses the currency minor-unit exponent",
+  { skip: !DB },
+  async () => {
+    const world = await setupCostWorld();
+    try {
+      await db.execute(sql`
+        insert into currencies (code, name, minor_units)
+        values ('JPY', 'Japanese Yen', 0) on conflict (code) do nothing`);
+      await db.execute(sql`update orgs set base_currency = 'JPY' where id = ${world.org.orgId}`);
+      await db.execute(sql`update subsidiaries set base_currency = 'JPY' where org_id = ${world.org.orgId}`);
+      const contractId = await seedContract(world, {
+        number: "C-JPY-CARRYING",
+        startsOn: "2026-07-01",
+        endsOn: "2028-06-30",
+      });
+      await db.execute(sql`
+        update revenue_contracts set currency = 'JPY'
+         where org_id = ${world.org.orgId} and id = ${contractId}`);
+      const cap = await capitalizeContractCost({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        revenueContractId: contractId,
+        repPartyId: world.repPartyId,
+        customerPartyId: world.org.customerId,
+        costType: "commission",
+        amountMinor: 100000n,
+        currency: "JPY",
+        capitalizedOn: "2026-07-15",
+        method: "straight_line",
+        originalExpenseAccountId: world.commissionExpenseAccountId,
+        source: { kind: "manual" },
+      });
+      assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 100000n);
     } finally {
       await dropScratchOrgReporting(world.org.orgId);
     }

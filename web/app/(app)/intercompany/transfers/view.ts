@@ -25,6 +25,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
 import { getMoneyFormatter } from '@/lib/money-server'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 
 /**
  * Bank transfers between entities: each moves cash from one entity's bank
@@ -71,12 +72,14 @@ export async function loadTransfersPage(sp: Record<string, string | string[] | u
   const transfers = await listIntercompanyFundTransfers(orgId, authz.allowedSubsidiaryIds)
   const subsidiaries = (await db.execute<{ id: string; name: string; baseCurrency: string }>(sql`
     select id, name, base_currency as "baseCurrency" from subsidiaries
-     where org_id = ${orgId} and is_active and not is_elimination order by name`)).rows
+     where org_id = ${orgId} and is_active and not is_elimination
+       ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)} order by name`)).rows
   const names = new Map(subsidiaries.map((sub) => [sub.id, sub.name]))
   const accounts = (await db.execute<{ id: string; label: string; subsidiaryId: string | null; currency: string | null }>(sql`
     select id, concat_ws(' · ', number, name) as label, subsidiary_id as "subsidiaryId", currency_restriction as currency
       from accounts
      where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
+       ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
      order by number nulls last, name`)).rows
   const accountLabels = new Map(accounts.map((account) => [account.id, account.label]))
   const param = pickString(sp.transfer)

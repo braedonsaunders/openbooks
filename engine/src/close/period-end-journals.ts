@@ -24,6 +24,7 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions, type SubsidiaryContext } from "../organization/subsidiaries.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
+import { reversalPostEntryLine } from "../journal/reversal-posting-lines.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { PNL_TYPES } from "../records/account-types.ts";
@@ -400,7 +401,7 @@ async function draftsInYear(
           and d.kind not in (${nonPosting})
           and (d.subsidiary_id is null or d.subsidiary_id = ${subsidiaryId})
           and ((p.fiscal_calendar_id = ${year.calendarId} and p.fiscal_year = ${year.fiscalYear})
-            or (d.posting_period_id is null and d.document_date between ${year.startsOn}::date and ${year.endsOn}::date)))
+            or (d.posting_period_id is null and coalesce(d.posting_date, d.document_date) between ${year.startsOn}::date and ${year.endsOn}::date)))
     )::text as count`)).rows[0];
   return Number(row?.count ?? 0);
 }
@@ -1373,6 +1374,7 @@ async function reverseSet(
              party_id as "partyId", department_id as "departmentId", project_id as "projectId",
              location_id as "locationId", class_id as "classId", equipment_unit_id as "equipmentUnitId",
              extra_dims as "extraDims", payment_card_id as "paymentCardId", tax_code_id as "taxCodeId",
+             eliminate, is_currency_adjustment as "isCurrencyAdjustment",
              memo, quantity::text as quantity, unit, custom, contributor_kind as "contributorKind",
              contributor_ref as "contributorRef"
         from journal_lines where org_id = ${orgId} and entry_id = ${link.entry_id}
@@ -1396,30 +1398,7 @@ async function reverseSet(
       auditAction: "update",
       requestId: "period_end_journals",
       auditChanges: { mode: "period_end_journal_reversal", setId, kind: link.kind, reversedEntryId: link.entry_id, reason: args.reason },
-      lines: mirror.map((line) => ({
-        accountId: line.accountId,
-        subsidiaryId: line.subsidiaryId,
-        amount: String(line.amount),
-        currency: line.currency,
-        txnAmount: line.txnAmount == null ? null : String(line.txnAmount),
-        fxRate: line.fxRate == null ? null : String(line.fxRate),
-        memo: line.memo,
-        partyId: line.partyId,
-        departmentId: line.departmentId,
-        projectId: line.projectId,
-        locationId: line.locationId,
-        classId: line.classId,
-        equipmentUnitId: line.equipmentUnitId,
-        extraDims: (line.extraDims ?? {}) as Record<string, unknown>,
-        paymentCardId: line.paymentCardId,
-        taxCodeId: line.taxCodeId,
-        quantity: line.quantity == null ? null : String(line.quantity),
-        unit: line.unit,
-        custom: (line.custom ?? {}) as Record<string, unknown>,
-        contributorKind: line.contributorKind,
-        contributorRef: line.contributorRef,
-        lineNumber: line.lineNumber,
-      })),
+      lines: mirror.map(reversalPostEntryLine),
     });
     await markEntryReversed(executor, { orgId, entryId: link.entry_id, actorId: args.actorId });
     const linked = (await executor.execute<{ id: string }>(sql`

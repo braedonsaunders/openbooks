@@ -31,6 +31,7 @@ async function seedPostedJournal(
   actorId: string,
   documentNumber: string,
   documentDate: string,
+  postingDate = documentDate,
 ): Promise<{ documentId: string; entryId: string }> {
   const documentId = randomUUID();
   await db.execute(sql`
@@ -39,7 +40,7 @@ async function seedPostedJournal(
        posting_date, currency, status, subtotal, tax_total, total, created_by)
     values (
       ${documentId}, ${org.orgId}, 'journal', ${documentNumber},
-      ${org.subsidiaryId}, ${documentDate}, ${documentDate}, 'CAD', 'draft',
+      ${org.subsidiaryId}, ${documentDate}, ${postingDate}, 'CAD', 'draft',
       '25', '0', '25', ${actorId}
     )
   `);
@@ -124,24 +125,125 @@ test("a void without a reversal date reverses in the entry's own period", { skip
   }
 });
 
+test("a void suggestion starts from the effective posting date", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Void Posting Date Controller", "admin");
+    const documentDate = "2026-06-30";
+    const postingDate = "2026-07-15";
+    const { documentId } = await seedPostedJournal(
+      org,
+      actorId,
+      "JE-VOID-POSTING-DATE-1",
+      documentDate,
+      postingDate,
+    );
+
+    const suggestion = await suggestVoidReversalDate(db, org.orgId, {
+      id: documentId,
+      kind: "journal",
+      documentDate,
+      postingDate,
+      subsidiaryId: org.subsidiaryId,
+    });
+    assert.equal(suggestion.originalDate, postingDate);
+    assert.equal(suggestion.suggestedDate, postingDate);
+    assert.equal(suggestion.suggestedOpen, true);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("adjustment-period voids accept dates in the fiscal posting window", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Void Adjustment Controller", "admin");
+    const calendarId = randomUUID();
+    const regularPeriodId = randomUUID();
+    const adjustmentPeriodId = randomUUID();
+    await db.execute(sql`
+      insert into fiscal_calendars (id, org_id, name, is_active, is_default)
+      values (${calendarId}, ${org.orgId}, 'Entity void calendar', true, false)
+    `);
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
+      select ${regularPeriodId}, org_id, ${calendarId}, fiscal_year, period_number,
+             'Entity July 2026', starts_on, ends_on, false
+        from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}
+    `);
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
+      select ${adjustmentPeriodId}, org_id, ${calendarId}, fiscal_year, 13,
+             'Entity FY2026 adjustment', ends_on, ends_on, true
+        from accounting_periods where org_id = ${org.orgId} and id = ${regularPeriodId}
+    `);
+    await db.execute(sql`
+      insert into subsidiary_accounting_preferences
+        (org_id, subsidiary_id, effective_from, fiscal_calendar_id, reason, created_by)
+      select ${org.orgId}, ${org.subsidiaryId}, starts_on, ${calendarId}, 'Entity void calendar assignment', ${actorId}
+        from accounting_periods where org_id = ${org.orgId} and id = ${regularPeriodId}
+    `);
+    const { documentId } = await seedPostedJournal(org, actorId, "JE-VOID-ADJUSTMENT-1", org.date);
+
+    const outcome = await requestDocumentVoid({
+      documentId,
+      orgId: org.orgId,
+      actorId,
+      reason: "Post the void in the fiscal adjustment window",
+      reversalDate: "2026-07-15",
+      reversalPeriodId: adjustmentPeriodId,
+      source: "api",
+    });
+    assert.equal(outcome.status, "voided");
+    const reversal = (await db.execute<{ periodId: string; postingDate: string }>(sql`
+      select period_id as "periodId", posting_date::text as "postingDate"
+        from journal_entries where org_id = ${org.orgId} and id = ${outcome.reversalEntryId}
+    `)).rows[0];
+    assert.deepEqual(reversal, { periodId: adjustmentPeriodId, postingDate: "2026-07-15" });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a closed entry period moves the default to the first open period", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Void Fallback Controller", "admin");
+    const calendarId = randomUUID();
+    const julyPeriodId = randomUUID();
+    const augustPeriodId = randomUUID();
+    await db.execute(sql`
+      insert into fiscal_calendars (id, org_id, name, is_active, is_default)
+      values (${calendarId}, ${org.orgId}, 'Entity void fallback calendar', true, false)
+    `);
     await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
          starts_on, ends_on, is_adjustment, custom)
-      select ${randomUUID()}, ${org.orgId}, fiscal_calendar_id,
-             2026, 8, '2026-08', '2026-08-01', '2026-08-31', false,
-             '{}'::jsonb
+      select ${julyPeriodId}, ${org.orgId}, ${calendarId},
+             fiscal_year, period_number, 'Entity July 2026', starts_on, ends_on, false, '{}'::jsonb
         from accounting_periods
-       where id = ${org.periodId}
+       where org_id = ${org.orgId} and id = ${org.periodId}
+    `);
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+         starts_on, ends_on, is_adjustment, custom)
+      values (${augustPeriodId}, ${org.orgId}, ${calendarId}, 2026, 8, 'Entity August 2026',
+              '2026-08-01', '2026-08-31', false, '{}'::jsonb)
+    `);
+    await db.execute(sql`
+      insert into subsidiary_accounting_preferences
+        (org_id, subsidiary_id, effective_from, fiscal_calendar_id, reason, created_by)
+      select ${org.orgId}, ${org.subsidiaryId}, starts_on, ${calendarId}, 'Entity void fallback calendar', ${actorId}
+        from accounting_periods where org_id = ${org.orgId} and id = ${julyPeriodId}
     `);
     const { documentId } = await seedPostedJournal(org, actorId, "JE-VOID-FALLBACK-1", org.date);
     await setPeriodLockState({
       orgId: org.orgId,
-      periodId: org.periodId,
+      periodId: julyPeriodId,
       bookId: org.bookId,
       module: "gl",
       state: "closed",
@@ -170,8 +272,9 @@ test("a closed entry period moves the default to the first open period", { skip:
       source: "api",
     });
     assert.equal(outcome.status, "voided");
-    const stored = (await db.execute<{ reversalDate: string; postingDate: string }>(sql`
-      select d.void_reversal_date::text as "reversalDate", e.posting_date::text as "postingDate"
+    const stored = (await db.execute<{ reversalDate: string; postingDate: string; periodId: string }>(sql`
+      select d.void_reversal_date::text as "reversalDate", e.posting_date::text as "postingDate",
+             e.period_id as "periodId"
         from documents d
         join journal_entries e on e.id = ${outcome.reversalEntryId} and e.org_id = d.org_id
        where d.id = ${documentId} and d.org_id = ${org.orgId}
@@ -182,6 +285,7 @@ test("a closed entry period moves the default to the first open period", { skip:
       "completion clears the void-request staging date (documents_void_request_evidence); the reversal entry below is the durable record",
     );
     assert.equal(stored?.postingDate, "2026-08-01", "the reversal posts in the first open period");
+    assert.equal(stored?.periodId, augustPeriodId, "the fallback stays on the subsidiary's fiscal calendar");
     assert.equal(
       Number(await reversalSum(documentId, org.orgId, outcome.reversalEntryId!)),
       0,

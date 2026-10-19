@@ -63,18 +63,22 @@ export const POST = defineRoute({
   }
 
   try {
-    // Refresh fixed-price project contracts first (percent complete → catch-up
-    // schedule lines), so the run below posts current project progress too.
-    // The engine owns the Projects gate and names its skip: a run with
-    // project work waiting but no sync must warn, never post zero project
+    // A reviewed confirmation must validate the exact schedule lines the
+    // operator saw. Project synchronization rebuilds those lines, so defer it
+    // to the next unreviewed run; the preview already warns about catch-up
+    // lines waiting for that run.
+    // The engine owns the Projects gate and names its skip: an unreviewed run
+    // with project work waiting but no sync must warn, never post zero project
     // progress in silence.
-    const projectSync = await syncProjectRevenueContracts(
-      user.orgId,
-      user.id,
-      asOfDate,
-      undefined,
-      allowedSubsidiaryIds,
-    )
+    const projectSync = body.fingerprint
+      ? null
+      : await syncProjectRevenueContracts(
+          user.orgId,
+          user.id,
+          asOfDate,
+          undefined,
+          allowedSubsidiaryIds,
+        )
     const result = await runRevenueRecognition(
       user.orgId,
       asOfDate,
@@ -98,8 +102,10 @@ export const POST = defineRoute({
           }
         : undefined,
     )
-    result.problems.push(...projectSync.problems)
-    if (projectSync.skipped) result.problems.push(projectSync.skipped)
+    if (projectSync) {
+      result.problems.push(...projectSync.problems)
+      if (projectSync.skipped) result.problems.push(projectSync.skipped)
+    }
     // Posted entries reach the drawer with their period labelled in the viewer's locale.
     const locale = await getLocale()
     return NextResponse.json({

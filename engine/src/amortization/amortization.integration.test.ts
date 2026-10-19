@@ -123,6 +123,7 @@ async function postSourceDocument(
     kind?: "vendor_bill" | "vendor_credit";
     number: string;
     amount: string;
+    subsidiaryId?: string;
     accountId?: string;
     templateId?: string | null;
     start?: string | null;
@@ -137,7 +138,7 @@ async function postSourceDocument(
       (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
        currency, fx_rate, status, subtotal, tax_total, total, created_by)
     values (${documentId}, ${w.org.orgId}, ${opts.kind ?? "vendor_bill"}, ${opts.number}, ${w.org.vendorId},
-      ${w.org.subsidiaryId}, ${w.org.date}, ${w.org.date}, 'CAD', '1', 'draft',
+      ${opts.subsidiaryId ?? w.org.subsidiaryId}, ${w.org.date}, ${w.org.date}, 'CAD', '1', 'draft',
       ${opts.amount}, '0', ${opts.amount}, ${w.actorId})`);
   await db.execute(sql`
     insert into document_lines
@@ -268,6 +269,124 @@ test("concurrent runs never post a period twice", { skip: !DB }, async () => {
       select count(*)::text as n from journal_entries where org_id = ${w.org.orgId} and origin = 'expense_amortization'`)).rows[0]!;
     assert.equal(entries.n, "6");
     assert.equal(await accountBalance(w.org.orgId, w.prepaidId), "0.0000");
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
+
+test("zero plan lines are retired without posting empty journal entries", { skip: !DB }, async () => {
+  const w = await setupWorld();
+  try {
+    const bill = await postSourceDocument(w, { number: "B-AM-ZERO", amount: "0.01" });
+    const schedule = await scheduleFor(w.org.orgId, bill.lineId);
+    assert.equal((await plan(w.org.orgId, schedule.id))[0]?.amount, "0.0000");
+
+    const run = await runExpenseAmortization({ orgId: w.org.orgId, actorId: w.actorId, periodId: w.org.periodId });
+
+    assert.equal(run.posted, 0, "a zero line is not counted as a posted journal");
+    assert.deepEqual(run.entries, [], "a zero line has no journal entry");
+    assert.deepEqual(run.problems, []);
+    const closed = (await db.execute<{ status: string; closed_at: Date | null }>(sql`
+      select status, closed_at from expense_amortization_schedule_lines
+       where org_id = ${w.org.orgId} and schedule_id = ${schedule.id}
+         and planned_amount = 0 and status = 'superseded'`)).rows;
+    assert.equal(closed.length, 1);
+    assert.equal(closed[0]?.status, "superseded");
+    assert.ok(closed[0]?.closed_at, "the zero line is retained in closed schedule history");
+    const entries = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from journal_entries where org_id = ${w.org.orgId} and origin = 'expense_amortization'`)).rows[0]!;
+    assert.equal(entries.n, "0");
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
+
+test("a credit preserves pre-credit plan periods and must belong to the schedule's legal entity", { skip: !DB }, async () => {
+  const w = await setupWorld();
+  try {
+    const templateId = await seedTemplate(w.org.orgId, w.actorId, w.prepaidId, {
+      code: "AM9",
+      termSource: "service_dates",
+      periodCount: null,
+    });
+    const bill = await postSourceDocument(w, {
+      number: "B-AM-CREDIT-DATE",
+      amount: "900.00",
+      start: "2026-06-01",
+      end: "2027-02-28",
+      templateId,
+    });
+    const schedule = await scheduleFor(w.org.orgId, bill.lineId);
+    const credit = await postSourceDocument(w, {
+      kind: "vendor_credit",
+      number: "VC-AM-CREDIT-DATE",
+      amount: "100.00",
+      accountId: w.prepaidId,
+      templateId: null,
+    });
+
+    await reduceSchedule({
+      orgId: w.org.orgId,
+      actorId: w.actorId,
+      scheduleId: schedule.id,
+      reason: "Credit received for future service",
+      amount: "100.00",
+      effectiveDate: "2026-08-10",
+      relatedDocumentId: credit.documentId,
+    });
+
+    const revised = await plan(w.org.orgId, schedule.id);
+    assert.equal(revised.length, 9, "the full service window remains scheduled");
+    assert.deepEqual(revised.slice(0, 2), [
+      { period: "2026-06", amount: "100.0000", status: "planned" },
+      { period: "2026-07", amount: "100.0000", status: "planned" },
+    ], "periods before the credit date keep their original planned amounts");
+    assert.equal(revised.reduce((sum, line) => sum + BigInt(line.amount.replace(".", "")), 0n), 8_000_000n);
+
+    const largerCredit = await postSourceDocument(w, {
+      kind: "vendor_credit",
+      number: "VC-AM-CREDIT-LARGER",
+      amount: "650.00",
+      accountId: w.prepaidId,
+      templateId: null,
+    });
+    await reduceSchedule({
+      orgId: w.org.orgId,
+      actorId: w.actorId,
+      scheduleId: schedule.id,
+      reason: "Credit exceeds the remaining periods after its date",
+      amount: "650.00",
+      effectiveDate: "2026-08-11",
+      relatedDocumentId: largerCredit.documentId,
+    });
+    const folded = await plan(w.org.orgId, schedule.id);
+    assert.equal(folded.length, 9, "when a credit exceeds later periods, earlier unposted periods stay scheduled");
+    assert.equal(folded.reduce((sum, line) => sum + BigInt(line.amount.replace(".", "")), 0n), 1_500_000n);
+
+    const otherSubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${otherSubsidiaryId}, ${w.org.orgId}, ${w.org.subsidiaryId}, 'Second entity', 'CAD', 'CA')`);
+    await db.execute(sql`
+      insert into party_subsidiaries (org_id, party_id, subsidiary_id)
+      values (${w.org.orgId}, ${w.org.vendorId}, ${otherSubsidiaryId})`);
+    const otherEntityCredit = await postSourceDocument(w, {
+      kind: "vendor_credit",
+      number: "VC-AM-OTHER-ENTITY",
+      amount: "100.00",
+      subsidiaryId: otherSubsidiaryId,
+      accountId: w.prepaidId,
+      templateId: null,
+    });
+    await assert.rejects(reduceSchedule({
+      orgId: w.org.orgId,
+      actorId: w.actorId,
+      scheduleId: schedule.id,
+      reason: "Credit belongs to another entity",
+      amount: "100.00",
+      effectiveDate: "2026-08-10",
+      relatedDocumentId: otherEntityCredit.documentId,
+    }), refusal("amortization_credit_document_invalid"));
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
   }

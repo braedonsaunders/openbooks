@@ -1079,6 +1079,8 @@ async function generateFromTemplate(
   const tplRes = (await db.execute<{
     kind: string;
     document_date: string | null;
+    journal_mode: string;
+    accounting_book_id: string | null;
     due_date: string | null;
     party_id: string | null;
     subsidiary_id: string | null;
@@ -1184,7 +1186,9 @@ async function generateFromTemplate(
   const dueDate = termDays != null ? addCalendarDays(documentDate, termDays) : (termsDue?.dueDate ?? null);
 
   const documentNumber = await nextNumber(orgId, tpl.kind);
+  const { controlAccountId, ...templateCustom } = tpl.custom ?? {};
   const provenance = {
+    ...templateCustom,
     recurringScheduleId: context.scheduleId,
     recurringOccurrenceOn: context.occurrenceOn,
     recurringRunSource: context.runSource,
@@ -1193,19 +1197,20 @@ async function generateFromTemplate(
       : {}),
     // The template's receivable/payable account choice is part of what the
     // schedule bills: each occurrence posts to the same account.
-    ...(typeof tpl.custom?.controlAccountId === "string" && tpl.custom.controlAccountId
-      ? { controlAccountId: tpl.custom.controlAccountId }
+    ...(typeof controlAccountId === "string" && controlAccountId
+      ? { controlAccountId }
       : {}),
   };
   // 0171: an expense report's funding card lives on the header — carry it so
   // company-paid lines keep their card liability instead of mis-posting.
   const created = (await db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
+                           journal_mode, accounting_book_id,
                            due_date, currency, status, project_id, department_id, location_id, class_id,
                            billing_method, reference_number, memo, subtotal, tax_total, total, extra_dims, custom, created_by,
                            payment_card_id)
     values (${orgId}, ${tpl.kind}, ${documentNumber}, ${tpl.party_id}, ${tpl.subsidiary_id},
-            ${documentDate}, ${dueDate}, ${tpl.currency}, 'draft', ${tpl.project_id},
+            ${documentDate}, ${tpl.journal_mode}, ${tpl.accounting_book_id}, ${dueDate}, ${tpl.currency}, 'draft', ${tpl.project_id},
             ${tpl.department_id}, ${tpl.location_id}, ${tpl.class_id}, ${tpl.billing_method},
             ${tpl.reference_number}, ${typeof tpl.memo === "string" ? resolvePeriodTokens(tpl.memo, tokenCtx) : tpl.memo}, '0', '0', '0',
             ${JSON.stringify(tpl.extra_dims ?? {})}::jsonb, ${JSON.stringify(provenance)}::jsonb, ${context.actorId},
@@ -1241,11 +1246,11 @@ async function generateFromTemplate(
     const inserted = await db.execute<{ id: string }>(sql`
       insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
             quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount, tax_overridden, tax_amount, department_id, project_id,
-            location_id, class_id, subsidiary_id, extra_dims, party_id, is_billable, custom, created_by, settlement_type)
+            location_id, class_id, subsidiary_id, extra_dims, party_id, is_billable, custom, created_by, settlement_type, journal_eliminate)
       values (${orgId}, ${newId}, ${l.line_number}, ${l.item_id}, ${l.account_id}, ${typeof l.description === "string" ? resolvePeriodTokens(l.description, tokenCtx) : l.description},
             ${l.quantity}, ${l.unit}, ${l.unit_price}, ${amount}, ${l.tax_code_id}, ${l.tax_group_id}, ${tax?.inputAmount ?? l.tax_input_amount}, ${tax?.overridden ?? l.tax_overridden},
             ${taxAmount}, ${l.department_id}, ${l.project_id}, ${l.location_id}, ${l.class_id},
-            ${l.subsidiary_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${context.actorId}, ${l.settlement_type})
+            ${l.subsidiary_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${context.actorId}, ${l.settlement_type}, ${l.journal_eliminate ?? false})
       returning id
     `);
     if (tax) await persistLineTaxComponents(orgId, inserted.rows[0]!.id, tax.components, context.actorId);

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { ContractCostError } from '@openbooks/engine/revenue'
 import { db } from '@openbooks/engine/platform/database'
-import { toUnits } from '@openbooks/engine/money'
+import { canonicalDecimal, toUnits } from '@openbooks/engine/money'
 
 /**
  * Named contract-cost refusals (feature off, no policy, unconfigured
@@ -27,10 +27,53 @@ export function contractCostErrorResponse(error: unknown, fallback: string): Nex
  * through the currency's ISO exponent. Refuses unknown currencies and
  * non-positive amounts by name instead of coercing them.
  */
+export function costAmountMinor(
+  amount: string,
+  currency: string,
+  minorUnits: number,
+  options: { allowZero?: boolean } = {},
+): bigint {
+  if (!Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+    throw new ContractCostError(`Currency ${currency} has an unsupported precision.`, {
+      code: 'contract_cost_currency_precision_invalid',
+      remedy: 'Use a currency from the ISO registry with a supported minor-unit precision.',
+    })
+  }
+  const exact = canonicalDecimal(amount, 4)
+  if (exact === null) {
+    throw new ContractCostError('Enter a valid decimal cost amount with no more than four fractional digits.', {
+      code: 'contract_cost_amount_invalid',
+      remedy: 'Enter a plain decimal amount with up to four fractional digits.',
+    })
+  }
+  const units = toUnits(exact)
+  const divisor = 10n ** BigInt(4 - minorUnits)
+  if (units % divisor !== 0n) {
+    throw new ContractCostError(`Amount ${amount} includes a fraction of a ${currency} minor unit.`, {
+      code: 'contract_cost_amount_precision',
+      remedy: `Enter an amount in whole ${currency} minor units.`,
+    })
+  }
+  const minor = units / divisor
+  if (minor < 0n || (!options.allowZero && minor === 0n)) {
+    throw new ContractCostError(
+      options.allowZero ? 'The cost amount cannot be negative.' : 'Capitalize a positive cost amount.',
+      {
+        code: 'contract_cost_amount_non_positive',
+        remedy: options.allowZero
+          ? 'Enter zero or a positive cost amount.'
+          : 'Enter the commission or fulfilment cost above zero.',
+      },
+    )
+  }
+  return minor
+}
+
 export async function parseCostAmountMinor(
   orgId: string,
   amount: string,
   currency: string,
+  options: { allowZero?: boolean } = {},
 ): Promise<bigint> {
   if (!/^[A-Z]{3}$/.test(currency)) {
     throw new ContractCostError(`Currency ${currency} is not an ISO 4217 code.`, {
@@ -46,12 +89,5 @@ export async function parseCostAmountMinor(
       remedy: 'Record the cost in a currency from the ISO registry.',
     })
   }
-  const units = toUnits(amount)
-  const minor = units / 10n ** BigInt(4 - Math.min(4, Math.max(0, row.minor_units)))
-  if (minor <= 0n) {
-    throw new ContractCostError('Capitalize a positive cost amount.', {
-      remedy: 'Enter the commission or fulfilment cost above zero.',
-    })
-  }
-  return minor
+  return costAmountMinor(amount, currency, row.minor_units, options)
 }
