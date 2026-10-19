@@ -4,6 +4,7 @@ import { RecordTabs } from "@/components/module-home/record-tabs";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from "sonner";
 import {
   Badge,
@@ -22,7 +23,11 @@ import {
   TableHeader,
   TableRow,
   Textarea,
+  UrlDrawer,
 } from "@openbooks/ui";
+import { AsyncUrlDrawer } from '@/components/async-url-drawer'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
+import { useDirtyClose } from '@/lib/use-dirty-close'
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
 import { useTranslations } from "next-intl";
@@ -182,76 +187,79 @@ export function SubcontractsWorkspace({
   multiCurrency?: boolean;
 }) {
   const { money: localizedMoney } = useMoney();
+  const router = useRouter()
+  const params = useSearchParams()
+  const search = params.toString()
   const t = useTranslations("subcontracts");
+  const common = useTranslations('common')
   const money = useCallback(
     (value: string | number, currency?: string) =>
       localizedMoney(value, currency ? { currency } : undefined),
     [localizedMoney],
   );
-  const [rows, setRows] = useState<Summary[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<Detail | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const rawRecord = params.get('subcontract')
+  const selectedId = rawRecord && rawRecord !== 'new' ? rawRecord : null
+  const createOpen = rawRecord === 'new' && permissions.create
+  const requestedTab = params.get('tab')
+  const tab = (['overview', 'sov', 'changes', 'applications', 'retainage', 'controls'] as string[]).includes(requestedTab ?? '')
+    ? requestedTab as Tab
+    : 'overview'
+  const closeParams = new URLSearchParams(search)
+  closeParams.delete('subcontract')
+  closeParams.delete('tab')
+  const closeQuery = closeParams.toString()
+  const closeHref = closeQuery ? `/subcontracts?${closeQuery}` : '/subcontracts'
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [loadedDetail, setLoadedDetail] = useState<{ id: string; detail: Detail } | null>(null)
+  const [detailFailure, setDetailFailure] = useState<{ id: string; message: string } | null>(null)
+  const [retry, setRetry] = useState(0)
+  const [dirtyDetail, setDirtyDetail] = useState<{ id: string; dirty: boolean } | null>(null)
+  const detail = selectedId && loadedDetail?.id === selectedId ? loadedDetail.detail : null
+  const detailError = selectedId && detailFailure?.id === selectedId ? detailFailure.message : null
+  const invalidRecord = !!selectedId && !isUuid(selectedId)
+  const detailDirty = !!selectedId && dirtyDetail?.id === selectedId && dirtyDetail.dirty
+  const reportDetailDirty = useCallback((dirty: boolean) => {
+    if (selectedId) setDirtyDetail({ id: selectedId, dirty })
+  }, [selectedId])
 
-  // Fetch chain: every state update sits in a promise continuation (the fetch
-  // response), never synchronously in the effect body. The loading reset lives
-  // with the triggers (the mount initializer above, and the mutation reload)
-  // instead of a mount effect.
-  const loadList = useCallback(() => {
-    return fetch("/api/subcontracts", { cache: "no-store" })
-      .then(async (response) => {
-        // The status is checked before the body parses: a non-JSON 502 page
-        // must toast the translated fallback, never a SyntaxError.
-        if (!response.ok)
-          throw new Error(
-            await readApiErrorMessage(response, t("errors.listFailed")),
-          );
-        setRows((await response.json()).subcontracts);
-      })
-      .catch((error: unknown) => {
-        toast.error(
-          error instanceof Error ? error.message : t("errors.listFailed"),
-        );
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [t]);
-
-  // Fetch chain: every state update sits in a promise continuation (the fetch
-  // response), never synchronously in the effect body.
   const loadDetail = useCallback(
-    (id: string) => {
-      return fetch(`/api/subcontracts?id=${encodeURIComponent(id)}`, {
-        cache: "no-store",
-      }).then(async (response) => {
-        if (!response.ok)
-          throw new Error(
-            await readApiErrorMessage(response, t("errors.detailFailed")),
-          );
-        setDetail(await response.json());
-      });
+    async (id: string, signal?: AbortSignal) => {
+      const response = await fetch(`/api/subcontracts?id=${encodeURIComponent(id)}`, {
+        cache: 'no-store',
+        ...(signal ? { signal } : {}),
+      })
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.detailFailed')))
+      const loaded = await response.json() as Detail
+      setLoadedDetail({ id, detail: loaded })
+      setDetailFailure(null)
+      setDirtyDetail(null)
+      return loaded
     },
     [t],
   );
 
   useEffect(() => {
-    void loadList();
-  }, [loadList]);
-  // Clear the detail while loading another subcontract, during render (same
-  // committed values, no extra render).
-  const [prevSelectedId, setPrevSelectedId] = useState(selectedId);
-  if (prevSelectedId !== selectedId) {
-    setPrevSelectedId(selectedId);
-    setDetail(null);
+    if (!selectedId || !isUuid(selectedId)) return
+    const controller = new AbortController()
+    void loadDetail(selectedId, controller.signal).catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      setDetailFailure({ id: selectedId, message: error instanceof Error ? error.message : t('errors.detailFailed') })
+    })
+    return () => controller.abort()
+  }, [selectedId, retry, loadDetail, t])
+
+  const detailClose = useDirtyClose({
+    dirty: detailDirty,
+    busy,
+    onClose: () => router.push(closeHref as never),
+    message: common('feedback.unsavedChanges'),
+    confirmLabel: common('confirm.discardChanges'),
+  })
+  const beforeCloseDetail = async () => {
+    const allowed = await detailClose.beforeClose()
+    if (allowed) setDirtyDetail(null)
+    return allowed
   }
-  useEffect(() => {
-    if (!selectedId) return;
-    void loadDetail(selectedId).catch((error) => toast.error(error.message));
-  }, [selectedId, loadDetail]);
 
   const act = async (payload: Record<string, unknown>, success: string) => {
     if (busy) return null;
@@ -259,11 +267,8 @@ export function SubcontractsWorkspace({
     try {
       const result = await api(payload, t("errors.actionFailed"));
       toast.success(success);
-      setLoading(true);
-      await Promise.all([
-        loadList(),
-        selectedId ? loadDetail(selectedId) : Promise.resolve(),
-      ]);
+      router.refresh()
+      if (selectedId && isUuid(selectedId)) await loadDetail(selectedId)
       return result;
     } catch (error) {
       toast.error(
@@ -271,9 +276,10 @@ export function SubcontractsWorkspace({
       );
       // A conflict means someone else saved first: reload their values so
       // the form stops editing the state the refusal just invalidated.
-      if ((error as { status?: number }).status === 409 && selectedId) {
-        setLoading(true);
-        await loadDetail(selectedId).catch(() => null);
+      if ((error as { status?: number }).status === 409 && selectedId && isUuid(selectedId)) {
+        await loadDetail(selectedId).catch((reloadError: unknown) => {
+          setDetailFailure({ id: selectedId, message: reloadError instanceof Error ? reloadError.message : t('errors.detailFailed') })
+        })
       }
       return null;
     } finally {
@@ -283,88 +289,9 @@ export function SubcontractsWorkspace({
 
   return (
     <>
-      <div className="space-y-3" aria-busy={loading}>
-        <p className="text-sm text-slate-500">{t("register.hint")}</p>
-        <PagedTable
-          source="subcontracts_register"
-          rows={rows}
-          rowKey={(row) => row.id}
-          searchable
-          emptyAsRow
-          onRowClick={(row) => {
-            setSelectedId(row.id);
-            setTab("overview");
-          }}
-          rowLabel={(row) => `${row.number} · ${row.title}`}
-          toolbarAfter={
-            permissions.create ? (
-              <Button onClick={() => setCreateOpen(true)}>
-                {t("register.newButton")}
-              </Button>
-            ) : undefined
-          }
-          empty={
-            loading ? (
-              t("register.loading")
-            ) : (
-              <EmptyState
-                title={t("register.emptyTitle")}
-                description={t("register.emptyHint")}
-              />
-            )
-          }
-          columns={[
-            {
-              key: "number",
-              header: t("columns.number"),
-              className: "font-medium",
-              cell: (row) => row.number,
-              search: (row) => row.number,
-            },
-            {
-              key: "title",
-              header: t("columns.subcontract"),
-              cell: (row) => row.title,
-              search: (row) => row.title,
-            },
-            {
-              key: "project",
-              header: t("columns.project"),
-              cell: (row) => row.projectName,
-              search: (row) => row.projectName,
-            },
-            {
-              key: "vendor",
-              header: t("columns.vendor"),
-              cell: (row) => row.vendorName,
-              search: (row) => row.vendorName,
-            },
-            {
-              key: "status",
-              header: t("columns.status"),
-              cell: (row) => <StatusBadge status={row.status} />,
-            },
-            {
-              key: "revised",
-              header: t("columns.revised"),
-              align: "right",
-              className: "tabular-nums",
-              cell: (row) => money(row.revisedCommitment, row.currency),
-            },
-            {
-              key: "billed",
-              header: t("columns.billed"),
-              align: "right",
-              className: "tabular-nums",
-              cell: (row) => money(row.billedToDate, row.currency),
-            },
-          ]}
-        />
-      </div>
-
-      <CreateSubcontractDrawer
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
+      {createOpen ? <CreateSubcontractDrawer
+        open
+        closeHref={closeHref}
         projects={projects}
         vendors={vendors}
         busy={busy}
@@ -375,16 +302,21 @@ export function SubcontractsWorkspace({
             t("toasts.created"),
           );
           if (result?.id) {
-            setCreateOpen(false);
-            setSelectedId(result.id);
-            setTab("sov");
+            const next = new URLSearchParams(search)
+            next.set('subcontract', String(result.id))
+            next.set('tab', 'sov')
+            router.push(`/subcontracts?${next}` as never)
+            return true
           }
+          return false
         }}
-      />
+      /> : null}
 
-      <Drawer
-        open={!!selectedId}
-        onClose={() => setSelectedId(null)}
+      {selectedId ? <AsyncUrlDrawer
+        open
+        openKey={selectedId}
+        closeHref={closeHref}
+        beforeClose={beforeCloseDetail}
         size="2xl"
         title={
           detail
@@ -396,6 +328,12 @@ export function SubcontractsWorkspace({
             ? `${detail.subcontract.projectName} · ${detail.subcontract.vendorName}`
             : t("register.drawerLoading")
         }
+        pending={!invalidRecord && !detail && !detailError}
+        error={invalidRecord ? t('errors.detailFailed') : detailError}
+        onRetry={() => {
+          setDetailFailure(null)
+          setRetry((current) => current + 1)
+        }}
       >
         {detail ? (
           <div className="space-y-5 p-1">
@@ -421,73 +359,64 @@ export function SubcontractsWorkspace({
                 ] as Tab[]
               ).map((key) => ({ key, label: t(`tabs.${key}`) }))}
               active={tab}
-              onChange={setTab}
+              onChange={(nextTab) => {
+                const next = new URLSearchParams(search)
+                next.set('tab', nextTab)
+                router.push(`/subcontracts?${next}` as never)
+              }}
               className="border-b border-slate-200 dark:border-slate-800"
             />
-            {tab === "overview" ? (
-              <Overview
+            <div hidden={tab !== 'overview'}><Overview
                 key={`${detail.subcontract.id}:${detail.subcontract.updatedAt}`}
                 detail={detail}
                 money={money}
                 canEdit={permissions.create}
                 busy={busy}
                 act={act}
-              />
-            ) : null}
-            {tab === "sov" ? (
-              <SovSection
+                onDirtyChange={reportDetailDirty}
+              /></div>
+            <div hidden={tab !== 'sov'}><SovSection
                 detail={detail}
                 accounts={expenseAccounts}
                 canCreate={permissions.create}
                 busy={busy}
                 act={act}
                 money={money}
-              />
-            ) : null}
-            {tab === "changes" ? (
-              <ChangesSection
+              /></div>
+            <div hidden={tab !== 'changes'}><ChangesSection
                 detail={detail}
                 permissions={permissions}
                 busy={busy}
                 act={act}
                 money={money}
-              />
-            ) : null}
-            {tab === "applications" ? (
-              <ApplicationsSection
+              /></div>
+            <div hidden={tab !== 'applications'}><ApplicationsSection
                 detail={detail}
                 permissions={permissions}
                 busy={busy}
                 act={act}
                 money={money}
-              />
-            ) : null}
-            {tab === "retainage" ? (
-              <RetainageSection
+              /></div>
+            <div hidden={tab !== 'retainage'}><RetainageSection
                 detail={detail}
                 canPost={permissions.post}
                 busy={busy}
                 act={act}
                 money={money}
-              />
-            ) : null}
-            {tab === "controls" ? (
-              <ControlsSection
+              /></div>
+            <div hidden={tab !== 'controls'}><ControlsSection
                 detail={detail}
                 parties={parties}
                 canPay={permissions.pay}
                 busy={busy}
                 act={act}
                 money={money}
-              />
-            ) : null}
+              /></div>
           </div>
         ) : (
-          <div className="p-10 text-center text-sm text-slate-500">
-            Loading subcontract…
-          </div>
+          null
         )}
-      </Drawer>
+      </AsyncUrlDrawer> : null}
     </>
   );
 }
@@ -541,12 +470,14 @@ function Overview({
   canEdit,
   busy,
   act,
+  onDirtyChange,
 }: {
   detail: Detail;
   money: Money;
   canEdit: boolean;
   busy: boolean;
   act: Action;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const t = useTranslations("subcontracts");
   const s = detail.subcontract;
@@ -558,14 +489,22 @@ function Overview({
   // Seeded once: the call site keys this section on the subcontract's
   // updated_at, so a 409 reload (which restamps it) remounts with the
   // other editor's values instead of saving stale terms over them.
-  const [form, setForm] = useState({
+  const initialForm = useMemo(() => ({
     title: s.title,
     description: s.description || "",
     originalCommitment: s.originalCommitment,
     defaultRetainagePercent: s.defaultRetainagePercent,
     startsOn: s.startsOn || "",
     endsOn: s.endsOn || "",
-  });
+  }), [s.id, s.updatedAt]);
+  const [form, setForm] = useState(initialForm);
+  const dirty = form.title !== initialForm.title
+    || form.description !== initialForm.description
+    || form.originalCommitment !== initialForm.originalCommitment
+    || form.defaultRetainagePercent !== initialForm.defaultRetainagePercent
+    || form.startsOn !== initialForm.startsOn
+    || form.endsOn !== initialForm.endsOn;
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -1949,7 +1888,7 @@ function Field({
 
 function CreateSubcontractDrawer({
   open,
-  onClose,
+  closeHref,
   projects,
   vendors,
   busy,
@@ -1957,16 +1896,17 @@ function CreateSubcontractDrawer({
   multiCurrency = false,
 }: {
   open: boolean;
-  onClose: () => void;
+  closeHref: string;
   projects: Option[];
   vendors: Option[];
   busy: boolean;
-  onCreate: (value: Record<string, string | null>) => void;
+  onCreate: (value: Record<string, string | null>) => Promise<boolean>;
   multiCurrency?: boolean;
 }) {
   const t = useTranslations("subcontracts");
   const tCommon = useTranslations("common");
-  const [form, setForm] = useState({
+  const router = useRouter()
+  const initialForm = {
     projectId: "",
     vendorId: "",
     number: "",
@@ -1977,21 +1917,39 @@ function CreateSubcontractDrawer({
     defaultRetainagePercent: "10",
     startsOn: "",
     endsOn: "",
-  });
+  }
+  const [form, setForm] = useState(initialForm);
+  const dirty = Object.keys(initialForm).some((key) => form[key as keyof typeof form] !== initialForm[key as keyof typeof initialForm])
+  const closeGuard = useDirtyClose({
+    dirty,
+    busy,
+    onClose: () => {
+      setForm(initialForm)
+      router.push(closeHref as never)
+    },
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
+  const beforeClose = async () => {
+    const allowed = await closeGuard.beforeClose()
+    if (allowed) setForm(initialForm)
+    return allowed
+  }
   const vendorCurrency = useMemo(
     () => vendors.find((v) => v.id === form.vendorId)?.currency || "",
     [vendors, form.vendorId],
   );
   return (
-    <Drawer
+    <UrlDrawer
       open={open}
-      onClose={onClose}
+      closeHref={closeHref}
+      beforeClose={beforeClose}
       size="md"
       title={t("create.title")}
       description={t("create.description")}
       headerActions={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={closeGuard.close}>
             {tCommon("actions.cancel")}
           </Button>
           <Button
@@ -2003,9 +1961,9 @@ function CreateSubcontractDrawer({
               !form.title ||
               !form.originalCommitment
             }
-            onClick={() => {
+            onClick={async () => {
               const { currency, ...fields } = form;
-              onCreate({
+              const created = await onCreate({
                 ...fields,
                 ...(multiCurrency
                   ? { currency: currency || vendorCurrency || null }
@@ -2013,6 +1971,7 @@ function CreateSubcontractDrawer({
                 startsOn: form.startsOn || null,
                 endsOn: form.endsOn || null,
               });
+              if (created) setForm(initialForm)
             }}
           >
             {tCommon("actions.create")}
@@ -2117,6 +2076,6 @@ function CreateSubcontractDrawer({
           </Field>
         </div>
       </div>
-    </Drawer>
+    </UrlDrawer>
   );
 }
