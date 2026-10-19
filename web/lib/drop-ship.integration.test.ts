@@ -33,7 +33,6 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
         update orgs set settings = jsonb_set(settings, '{features}',
           coalesce(settings->'features', '{}'::jsonb) || '{"orders":true,"inventory":true,"dropShipping":true}'::jsonb)
          where id = ${org.orgId}`);
-      await db.execute(sql`update items set default_cost = '20' where org_id = ${org.orgId} and id = ${org.items.fifo}`);
       await db.execute(sql`insert into vendor_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.vendorId}, true)`);
       await db.execute(sql`
         insert into addresses (id, org_id, party_id, label, line1, city, region, postal_code, country, is_default_shipping)
@@ -55,28 +54,47 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
       assert.equal(approved.rows.length, 1);
     });
     await withOrgContext(org.orgId, () => routeSalesOrderLine(context, { salesOrderId: order.id, salesOrderLineId: salesLineId, routed: true }));
+    const purchaseOrderKey = randomUUID();
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`update items set default_cost = null where org_id = ${org.orgId} and id = ${org.items.fifo}`);
+      await db.execute(sql`update item_inventory_profiles set standard_cost = null where org_id = ${org.orgId} and item_id = ${org.items.fifo}`);
+    });
+    const purchaseOrderCount = async () => (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
+      select count(*)::text as count from documents where org_id = ${org.orgId} and kind = 'purchase_order'`))).rows[0]!.count;
+    const ordersBeforeRefusal = await purchaseOrderCount();
+    await assert.rejects(withOrgContext(org.orgId, () => createDropShipPurchaseOrder(context, {
+      salesOrderId: order.id, vendorId: org.vendorId, idempotencyKey: purchaseOrderKey,
+    })), (error: unknown) => error instanceof DropShipRefusal && error.code === "item_cost_required");
+    assert.equal(await purchaseOrderCount(), ordersBeforeRefusal, "a refused routed line does not leave a purchase-order draft");
+    await withOrgContext(org.orgId, () => db.execute(sql`update items set default_cost = '20' where org_id = ${org.orgId} and id = ${org.items.fifo}`));
     const po = await withOrgContext(org.orgId, () => createDropShipPurchaseOrder(context, {
-      salesOrderId: order.id, vendorId: org.vendorId, idempotencyKey: randomUUID(),
+      salesOrderId: order.id, vendorId: org.vendorId, idempotencyKey: purchaseOrderKey,
     }));
-    await withOrgContext(org.orgId, () => db.execute(sql`
-      update documents set status = 'approved'
-       where org_id = ${org.orgId} and id = ${po.id} and kind = 'purchase_order' and status = 'draft'`));
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2) on conflict (code) do nothing`);
+      await db.execute(sql`update documents set currency = 'USD', fx_rate = '1.5'
+        where org_id = ${org.orgId} and id = ${po.id} and kind = 'purchase_order' and status = 'draft'`);
+      await db.execute(sql`update documents set status = 'approved'
+        where org_id = ${org.orgId} and id = ${po.id} and kind = 'purchase_order' and status = 'draft'`);
+    });
     const poLines = await withOrgContext(org.orgId, () => db.execute<{ id: string; amount: string }>(sql`
       select id, amount::text as amount from document_lines where org_id = ${org.orgId} and document_id = ${po.id}`));
     assert.equal(poLines.rows.length, 1);
     assert.equal(poLines.rows[0]!.amount, "60.0000");
-    const confirmation = { purchaseOrderId: po.id, confirmationDate: org.date, idempotencyKey: randomUUID(),
-      lines: [{ purchaseOrderLineId: poLines.rows[0]!.id, quantity: "3" }] };
+    const confirmationLines = [{ purchaseOrderLineId: poLines.rows[0]!.id, quantity: "3" }];
 
     await withOrgContext(org.orgId, () => db.execute(sql`
       update item_inventory_profiles set received_not_billed_account_id = null
        where org_id = ${org.orgId} and item_id = ${org.items.fifo}`));
-    await assert.rejects(withOrgContext(org.orgId, () => confirmDropShip(context, confirmation)), (error: unknown) =>
+    const unconfiguredConfirmation = { purchaseOrderId: po.id, confirmationDate: org.date, idempotencyKey: randomUUID(), lines: confirmationLines };
+    await assert.rejects(withOrgContext(org.orgId, () => confirmDropShip(context, unconfiguredConfirmation)), (error: unknown) =>
       error instanceof DropShipRefusal && error.code === "received_not_billed_account_required"
-        && /FIFO Widget/.test(error.message) && /received-not-billed/.test(error.message) && /Costing profile/.test(error.remedy ?? ""));
+        && /FIFO Widget/.test(error.message) && /received-not-billed/.test(error.message) && /Company Settings/.test(error.remedy ?? ""));
     await withOrgContext(org.orgId, () => db.execute(sql`
-      update item_inventory_profiles set received_not_billed_account_id = ${org.accounts.clearing}
-       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`));
+      update orgs set settings = jsonb_set(settings, '{controlAccounts}',
+        coalesce(settings->'controlAccounts', '{}'::jsonb) || jsonb_build_object('receivedNotBilled', ${org.accounts.clearing}::text), true)
+       where id = ${org.orgId}`));
+    const confirmation = { purchaseOrderId: po.id, confirmationDate: org.date, idempotencyKey: randomUUID(), lines: confirmationLines };
 
     const first = await withOrgContext(org.orgId, () => confirmDropShip(context, confirmation));
     const replay = await withOrgContext(org.orgId, () => confirmDropShip(context, confirmation));
@@ -86,9 +104,12 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
     const facts = await withOrgContext(org.orgId, () => db.execute<{
       po_received: string; so_fulfilled: string; receipt_status: string; fulfillment_status: string;
       movement_count: number; cost: string; clearing: string; entry_count: number;
+      receipt_currency: string; receipt_fx_rate: string; receipt_subtotal: string; receipt_total: string;
     }>(sql`
       select pol.quantity_fulfilled::text as po_received, sol.quantity_fulfilled::text as so_fulfilled,
         receipt.status as receipt_status, fulfillment.status as fulfillment_status,
+        receipt.currency as receipt_currency, receipt.fx_rate::text as receipt_fx_rate,
+        receipt.subtotal::text as receipt_subtotal, receipt.total::text as receipt_total,
         (select count(*)::int from inventory_movements m join document_lines l
           on l.org_id = m.org_id and l.id = m.document_line_id
           where m.org_id = ${org.orgId} and l.document_id = receipt.id) as movement_count,
@@ -116,8 +137,12 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
     assert.equal(facts.rows[0]!.receipt_status, "approved");
     assert.equal(facts.rows[0]!.fulfillment_status, "approved");
     assert.equal(facts.rows[0]!.movement_count, 0);
-    assert.equal(facts.rows[0]!.cost, "60.0000");
-    assert.equal(facts.rows[0]!.clearing, "-60.0000");
+    assert.equal(facts.rows[0]!.receipt_currency, "USD");
+    assert.equal(facts.rows[0]!.receipt_fx_rate, "1.5000000000");
+    assert.equal(facts.rows[0]!.receipt_subtotal, "60.0000");
+    assert.equal(facts.rows[0]!.receipt_total, "60.0000");
+    assert.equal(facts.rows[0]!.cost, "90.0000");
+    assert.equal(facts.rows[0]!.clearing, "-90.0000");
     assert.equal(facts.rows[0]!.entry_count, 1);
 
     const bill = await withOrgContext(org.orgId, () => convertOrder(org.orgId, actorId, po.id, "vendor_bill"));
@@ -135,7 +160,7 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
           where l.org_id = ${org.orgId} and e.org_id = l.org_id and e.book_id = ${org.bookId}
             and e.status in ('posted', 'reversed') and l.account_id = ${org.accounts.adjustment}) as ppv`));
     assert.equal(clearingAfterBill.rows[0]!.balance, "0.0000");
-    assert.equal(clearingAfterBill.rows[0]!.ppv, "15.0000");
+    assert.equal(clearingAfterBill.rows[0]!.ppv, "22.5000");
 
     const invoice = await withOrgContext(org.orgId, () => convertOrder(org.orgId, actorId, order.id, "customer_invoice"));
     const invoiceLine = await withOrgContext(org.orgId, () => db.execute<{ quantity: string }>(sql`

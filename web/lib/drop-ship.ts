@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { add, cmp } from "@openbooks/engine/money/money";
 import { canonicalDecimal } from "@openbooks/engine/money/decimal";
-import { db } from "@openbooks/engine/platform/db";
+import { db, withOrgTransaction, type SqlExecutor } from "@openbooks/engine/platform/db";
+import { agencyForPurchaseLine } from "@openbooks/engine/inventory";
+import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from "@openbooks/engine/records/control-accounts";
 import {
   assertDropShippingFeature,
   applyDropShipConfirmationInventory,
@@ -20,7 +22,7 @@ import { isIsoCalendarDate, businessToday } from "@openbooks/engine/platform/bus
 import { openQuantitySql } from "@openbooks/engine/records/order-line-remainders";
 import { fromQuantityUnits, orderLineAmount, toQuantityUnits } from "./order-cycle-math";
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type Tx = SqlExecutor;
 
 type RoutedSourceLine = {
   sales_order_line_id: string;
@@ -166,18 +168,19 @@ export async function createDropShipPurchaseOrder(
     );
   }
 
-  const create = await createApplicationOrder(context, {
-    kind: "purchase_order",
-    idempotencyKey: input.idempotencyKey,
-    subsidiaryId: source.subsidiary_id,
-  });
-  const purchaseOrderId = create.result.id;
-  const command = {
-    salesOrderId: input.salesOrderId,
-    vendorId: input.vendorId,
-    salesOrderLineIds: [] as string[],
-  };
-  const result = await db.transaction(async (tx) => {
+  const result = await withOrgTransaction(orgId, async () => {
+    const create = await createApplicationOrder(context, {
+      kind: "purchase_order",
+      idempotencyKey: input.idempotencyKey,
+      subsidiaryId: source.subsidiary_id,
+    });
+    const purchaseOrderId = create.result.id;
+    const command = {
+      salesOrderId: input.salesOrderId,
+      vendorId: input.vendorId,
+      salesOrderLineIds: [] as string[],
+    };
+    const tx: Tx = db;
     const po = (await tx.execute<{ id: string; document_number: string; kind: string; status: string; custom: Record<string, unknown> | null }>(sql`
       select id, document_number, kind, status, custom from documents
        where org_id = ${orgId} and id = ${purchaseOrderId} for update`)).rows[0];
@@ -255,9 +258,9 @@ export async function createDropShipPurchaseOrder(
       lines: pairs,
       allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
     });
-    return { id: purchaseOrderId, documentNumber: po.document_number, replayed: false };
+    return { id: purchaseOrderId, documentNumber: po.document_number, replayed: create.replayed };
   });
-  return { ...result, replayed: result.replayed || create.replayed };
+  return result;
 }
 
 export interface ConfirmDropShipInput {
@@ -403,39 +406,38 @@ export async function confirmDropShip(
           "Enter a quantity no greater than the purchase-order line's remaining quantity",
         );
       }
-      const profile = (await tx.execute<{
-        item_id: string;
-        received_not_billed_account_id: string | null;
-        cogs_account_id: string | null;
-      }>(sql`
-        select item_id, received_not_billed_account_id, cogs_account_id
-          from item_inventory_profiles
-         where org_id = ${orgId} and item_id = ${pair.item_id}
-         for update
-      `)).rows[0];
-      if (!profile) {
-        throw new DropShipRefusal(
-          `Item ${pair.item_name} has no inventory costing profile`,
-          "item_profile_required",
-          422,
-          `Open Items, select ${pair.item_name}, and configure its Costing profile before confirming the shipment`,
-        );
-      }
-      if (!profile.received_not_billed_account_id) {
-        throw new DropShipRefusal(
-          `Item ${pair.item_name} is missing its received-not-billed account`,
-          "received_not_billed_account_required",
-          422,
-          `Open Items, select ${pair.item_name}, set the received-not-billed account in its Costing profile, and retry`,
-        );
-      }
-      if (!profile.cogs_account_id) {
-        throw new DropShipRefusal(
-          `Item ${pair.item_name} is missing its COGS account`,
-          "cogs_account_required",
-          422,
-          `Open Items, select ${pair.item_name}, set the COGS account in its Costing profile, and retry`,
-        );
+      const agency = await agencyForPurchaseLine(tx, orgId, pair.po_line_id, confirmationDate);
+      if (!agency) {
+        const profile = (await tx.execute<{ cogs_account_id: string | null }>(sql`
+          select cogs_account_id
+            from item_inventory_profiles
+           where org_id = ${orgId} and item_id = ${pair.item_id}
+           for update
+        `)).rows[0];
+        if (!profile) {
+          throw new DropShipRefusal(
+            `Item ${pair.item_name} has no inventory costing profile`,
+            "item_profile_required",
+            422,
+            `Open Items, select ${pair.item_name}, and configure its Costing profile before confirming the shipment`,
+          );
+        }
+        if (!profile.cogs_account_id) {
+          throw new DropShipRefusal(
+            `Item ${pair.item_name} is missing its COGS account`,
+            "cogs_account_required",
+            422,
+            `Open Items, select ${pair.item_name}, set the COGS account in its Costing profile, and retry`,
+          );
+        }
+        if (!(await resolveReceivedNotBilledAccount(tx, orgId, pair.item_id))) {
+          throw new DropShipRefusal(
+            receivedNotBilledMissingMessage(`Item ${pair.item_name}`),
+            "received_not_billed_account_required",
+            422,
+            `Open Items, select ${pair.item_name}, configure its Costing profile or set the company Received not billed control account in Company Settings, then retry`,
+          );
+        }
       }
       selectedPoLines.push({ sourceLineId: pair.po_line_id, quantity });
       selectedSoLines.push({ sourceLineId: pair.so_line_id, quantity });
