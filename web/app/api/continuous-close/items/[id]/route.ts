@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { isUuid } from "../../../../../lib/list-params";
-import { can, guardRootSubsidiaryScope, subsidiaryScopeAllows } from "../../../../../lib/authz";
+import { can } from "../../../../../lib/authz";
 import {
   canReadContinuousCloseAgent,
   loadWorkItemAccess,
@@ -11,6 +11,7 @@ import {
   withLockedWorkItemAccess,
 } from "../../../../../lib/continuous-close";
 import { loadWorkItemDetail } from "../../../../../lib/agents/work-item";
+import { workItemSubjectInScope } from "../../../../../lib/agents/work-item-subsidiary-scope";
 import { findingProposalCommand } from "../../../../../lib/agents/proposals";
 import {
   addWorkItemNote,
@@ -79,22 +80,17 @@ export const PATCH = defineRoute({
   body: itemActionBody,
   handler: async ({ authz, params: { id }, body }) => {
   if (!isUuid(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
-  const access = await loadWorkItemAccess(authz.user.orgId, id);
+  const access = await loadWorkItemAccess(authz.user.orgId, id, authz.allowedSubsidiaryIds);
   if (!access) return notFound("record");
   if (!canReadContinuousCloseAgent(authz, access.agentKey)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  // Lifecycle and assignment writes move another entity's finding when the
-  // subject is out of scope: restricted callers share the uniform not-found.
-  if (!subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)) {
+  // Out-of-scope subjects share the uniform not-found response.
+  if (!workItemSubjectInScope(authz.allowedSubsidiaryIds, access.subjectType ?? "", access.subjectSubsidiaryId)) {
     return notFound("record");
   }
   const action = body.action;
   if (action === "assign" || action === "note") {
-    if (action === "assign") {
-      const scopeDenied = await guardRootSubsidiaryScope(authz);
-      if (scopeDenied) return scopeDenied;
-    }
     const result =
       action === "assign"
         ? await setWorkItemAssignment(authz, id, {
@@ -120,13 +116,11 @@ export const PATCH = defineRoute({
     return NextResponse.json({ error: "reason_required" }, { status: 422 });
   }
   const status = ACTION_STATUS[action as keyof typeof ACTION_STATUS];
-  // Re-resolve agent, scope, and lifecycle inside the same
-  // row-locked transaction as the write — the pre-check above still guards
-  // the assign/note path, but a rehome between a pre-check and this write
-  // would move another entity's finding under it.
-  const result = await withLockedWorkItemAccess(authz.user.orgId, id, async (tx, locked) => {
+  // Re-resolve agent, scope, and lifecycle inside the row-locked transaction
+  // so a concurrent rehome or status change cannot slip between check and write.
+  const result = await withLockedWorkItemAccess(authz.user.orgId, id, authz.allowedSubsidiaryIds, async (tx, locked) => {
     if (!canReadContinuousCloseAgent(authz, locked.agentKey)) return { error: "forbidden" as const };
-    if (!subsidiaryScopeAllows(authz.allowedSubsidiaryIds, locked.subjectSubsidiaryId)) {
+    if (!workItemSubjectInScope(authz.allowedSubsidiaryIds, locked.subjectType ?? "", locked.subjectSubsidiaryId)) {
       return { error: "not_found" as const };
     }
     if (!(ALLOWED_ACTIONS[locked.status] as readonly string[]).includes(action)) {

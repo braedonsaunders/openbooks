@@ -2,13 +2,13 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { subsidiaryScopeAllows } from "../../../../../../lib/authz";
 import { isUuid } from "../../../../../../lib/list-params";
 import {
   canReadContinuousCloseAgent,
   withLockedWorkItemAccess,
 } from "../../../../../../lib/continuous-close";
 import { notFound } from "@/lib/api/responses";
+import { workItemSubjectInScope } from "../../../../../../lib/agents/work-item-subsidiary-scope";
 
 const feedbackBody = z.object({ rating: z.enum(["helpful", "not_helpful"]), comment: z.string().optional() });
 
@@ -27,9 +27,9 @@ export const PUT = defineRoute({
   // out-of-scope subject must answer like a missing item — a pre-check
   // followed by a later insert lets a rehome turn the rating into an
   // existence oracle for another entity's finding.
-  const result = await withLockedWorkItemAccess(authz.user.orgId, id, async (tx, access) => {
+  const result = await withLockedWorkItemAccess(authz.user.orgId, id, authz.allowedSubsidiaryIds, async (tx, access) => {
     if (!canReadContinuousCloseAgent(authz, access.agentKey)) return { error: "forbidden" as const };
-    if (!subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)) {
+    if (!workItemSubjectInScope(authz.allowedSubsidiaryIds, access.subjectType ?? "", access.subjectSubsidiaryId)) {
       return { error: "not_found" as const };
     }
     await tx.execute(sql`

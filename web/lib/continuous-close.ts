@@ -6,15 +6,16 @@ import {
   type ContinuousCloseAgentKey,
 } from "@openbooks/engine/agents/continuous-close-config";
 import { can, type Authz } from "./authz";
+import {
+  WORK_ITEM_SUBJECT_JOIN,
+  workItemSubjectInScope,
+  workItemSubjectScopePredicate,
+} from "./agents/work-item-subsidiary-scope";
 
 export type WorkItemAccess = {
   agentKey: ContinuousCloseAgentKey;
   status: "open" | "in_review" | "resolved" | "dismissed";
-  /**
-   * The subject's subsidiary via the account join. Null for non-account
-   * subjects and unattributed accounts: restricted callers fail closed on
-   * null, exactly like unattributed documents elsewhere.
-   */
+  subjectType: string | null;
   subjectSubsidiaryId: string | null;
 };
 
@@ -54,30 +55,43 @@ export function readableContinuousCloseAgents(authz: Authz): ContinuousCloseAgen
   return CONTINUOUS_CLOSE_AGENT_KEYS.filter((agent) => canReadContinuousCloseAgent(authz, agent));
 }
 
-export async function loadWorkItemAccess(orgId: string, itemId: string): Promise<WorkItemAccess | null> {
-  const result = (await db.execute<{ agent_key: ContinuousCloseAgentKey; status: WorkItemAccess["status"]; subjectSubsidiaryId: string | null }>(sql`
-    select w.agent_key, w.status, subj.subsidiary_id as "subjectSubsidiaryId"
+export async function loadWorkItemAccess(
+  orgId: string,
+  itemId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<WorkItemAccess | null> {
+  const result = (await db.execute<{
+    agent_key: ContinuousCloseAgentKey;
+    status: WorkItemAccess["status"];
+    subjectType: string | null;
+    subjectSubsidiaryId: string | null;
+  }>(sql`
+    select w.agent_key, w.status, w.subject_type as "subjectType",
+           coalesce(subj_acct.subsidiary_id, subj_rec_acct.subsidiary_id, subj_doc.subsidiary_id) as "subjectSubsidiaryId"
       from ai_work_items w
-      left join accounts subj
-        on subj.id = w.subject_id and w.subject_type = 'account' and subj.org_id = w.org_id
+      ${WORK_ITEM_SUBJECT_JOIN}
      where w.id = ${itemId} and w.org_id = ${orgId}
+       ${workItemSubjectScopePredicate(orgId, allowedSubsidiaryIds)}
   `));
   const row = result.rows[0];
-  return row ? { agentKey: row.agent_key, status: row.status, subjectSubsidiaryId: row.subjectSubsidiaryId } : null;
+  if (!row || !workItemSubjectInScope(allowedSubsidiaryIds, row.subjectType ?? "", row.subjectSubsidiaryId)) return null;
+  return {
+    agentKey: row.agent_key,
+    status: row.status,
+    subjectType: row.subjectType,
+    subjectSubsidiaryId: row.subjectSubsidiaryId,
+  };
 }
 
 /**
- * Hold the work-item row and its writable subject lineage
- * locked across a dependent write. A scope pre-check followed by a later
- * write lets a concurrent rehome move another entity's finding under the
- * write; resolving inside the same transaction (item row FOR UPDATE plus
- * the subject account FOR SHARE) keeps the check and the effects on one
- * snapshot. Locks only; every allow/deny decision stays with the caller,
- * so unrestricted and dangling-subject behavior is unchanged.
+ * Hold the work-item row and its writable subject lineage locked across a
+ * dependent write. Scope is resolved again inside this transaction so a
+ * concurrent rehome cannot move an out-of-scope finding under the write.
  */
 export async function withLockedWorkItemAccess<T>(
   orgId: string,
   itemId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
   use: (tx: SqlExecutor, access: WorkItemAccess) => Promise<T>,
 ): Promise<T | null> {
   return db.transaction(async (tx) => {
@@ -88,10 +102,8 @@ export async function withLockedWorkItemAccess<T>(
     `);
     const subject = item.rows[0];
     if (!subject) return null;
-    // Restricted writers can only pass the scope check on account subjects
-    // (and reconciliations through their account); every other kind resolves
-    // null and fails closed, so locking those two lineages leaves no
-    // writable window unlocked.
+    // Lock the source row whose subsidiary determines visibility. Budget
+    // edits lock their scenario before changing its subsidiary lines.
     if (subject.subject_type === "account" && subject.subject_id) {
       await tx.execute(sql`select id from accounts where id = ${subject.subject_id} and org_id = ${orgId} for share`);
     } else if (subject.subject_type === "reconciliation" && subject.subject_id) {
@@ -104,16 +116,32 @@ export async function withLockedWorkItemAccess<T>(
       if (accountId) {
         await tx.execute(sql`select id from accounts where id = ${accountId} and org_id = ${orgId} for share`);
       }
+    } else if (subject.subject_type === "documents" && subject.subject_id) {
+      await tx.execute(sql`select id from documents where id = ${subject.subject_id} and org_id = ${orgId} for share`);
+    } else if (subject.subject_type === "budget" && subject.subject_id) {
+      // Budget edits lock their scenario before changing its subsidiary lines.
+      await tx.execute(sql`select id from budget_scenarios where id = ${subject.subject_id} and org_id = ${orgId} for share`);
     }
-    const result = await tx.execute<{ agent_key: ContinuousCloseAgentKey; status: WorkItemAccess["status"]; subjectSubsidiaryId: string | null }>(sql`
-      select w.agent_key, w.status, subj.subsidiary_id as "subjectSubsidiaryId"
+    const result = await tx.execute<{
+      agent_key: ContinuousCloseAgentKey;
+      status: WorkItemAccess["status"];
+      subjectType: string | null;
+      subjectSubsidiaryId: string | null;
+    }>(sql`
+      select w.agent_key, w.status, w.subject_type as "subjectType",
+             coalesce(subj_acct.subsidiary_id, subj_rec_acct.subsidiary_id, subj_doc.subsidiary_id) as "subjectSubsidiaryId"
         from ai_work_items w
-        left join accounts subj
-          on subj.id = w.subject_id and w.subject_type = 'account' and subj.org_id = w.org_id
+        ${WORK_ITEM_SUBJECT_JOIN}
        where w.id = ${itemId} and w.org_id = ${orgId}
+         ${workItemSubjectScopePredicate(orgId, allowedSubsidiaryIds)}
     `);
     const row = result.rows[0];
-    if (!row) return null;
-    return use(tx, { agentKey: row.agent_key, status: row.status, subjectSubsidiaryId: row.subjectSubsidiaryId });
+    if (!row || !workItemSubjectInScope(allowedSubsidiaryIds, row.subjectType ?? "", row.subjectSubsidiaryId)) return null;
+    return use(tx, {
+      agentKey: row.agent_key,
+      status: row.status,
+      subjectType: row.subjectType,
+      subjectSubsidiaryId: row.subjectSubsidiaryId,
+    });
   });
 }
