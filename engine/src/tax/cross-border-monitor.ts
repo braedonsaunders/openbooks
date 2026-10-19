@@ -50,6 +50,13 @@ export async function findSupplyEvidenceConflicts(
            and d.kind in ('customer_invoice', 'customer_credit')
            and d.status in ('draft', 'approved')
            and d.custom -> 'crossBorder' ->> 'supplyKind' is not null
+           and exists (
+             select 1 from tax_oss_registrations registration
+              where registration.org_id = d.org_id
+                and registration.is_active
+                and registration.scheme in ('union', 'non_union', 'ioss')
+                and registration.subsidiary_id is not distinct from d.subsidiary_id
+           )
          group by e.document_id
         having count(distinct e.country_code) > 1
       )
@@ -122,6 +129,17 @@ export async function computeDistanceTurnover(
     throw new CrossBorderTaxError("assess the distance-sales threshold for a four-digit calendar year");
   }
   const windowEnd = today < `${year}-12-31` && today >= `${year}-01-01` ? today : `${year}-12-31`;
+  const registrations = (await runner.execute<{ subsidiaryId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId"
+      from tax_oss_registrations
+     where org_id = ${orgId} and scheme = 'union' and is_active
+  `)).rows;
+  if (registrations.length !== 1) {
+    throw new CrossBorderTaxError(
+      "configure exactly one active Union OSS registration in Tax setup before assessing the distance-sales threshold",
+    );
+  }
+  const subsidiaryId = registrations[0]!.subsidiaryId;
   const rows = (
     await runner.execute<{ currency: string; base: string }>(sql`
       select d.currency as currency,
@@ -133,6 +151,7 @@ export async function computeDistanceTurnover(
         join document_line_tax_components component
           on component.org_id = d.org_id and component.document_line_id = line.id
        where d.org_id = ${orgId}
+         and d.subsidiary_id is not distinct from ${subsidiaryId}
          and d.kind in ('customer_invoice', 'customer_credit')
          and d.status = 'posted'
          and d.document_date between ${`${year}-01-01`}::date and ${windowEnd}::date

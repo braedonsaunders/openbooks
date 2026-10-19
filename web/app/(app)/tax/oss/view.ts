@@ -2,10 +2,11 @@ import 'server-only'
 
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getTranslations } from 'next-intl/server'
-import { requirePermission } from '../../../../lib/authz'
+import { guardUnrestrictedScope, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import type { ModuleHomeTab } from '@/components/module-home/tab-types'
 import { taxWorkspaceTabs } from '../workspace-tabs'
+import { forbidden } from 'next/navigation'
 
 export interface OssData {
   setupHref: string
@@ -21,6 +22,7 @@ export interface OssData {
  */
 export async function loadOss(): Promise<OssData> {
   const authz = await requirePermission('reports.read')
+  if (guardUnrestrictedScope(authz)) forbidden()
   await requireFeatureEnabled(authz.user.orgId, 'crossBorderTax')
   const [t, tabs] = await Promise.all([
     getTranslations('tax.oss'),

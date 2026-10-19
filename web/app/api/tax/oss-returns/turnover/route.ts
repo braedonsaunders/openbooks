@@ -15,6 +15,7 @@ export const runtime = 'nodejs'
 export const GET = defineRoute({
   permission: 'reports.read',
   feature: 'crossBorderTax',
+  scope: 'unrestricted',
   handler: async ({ authz: routeAuthz, request }) => {
     const raw = new URL(request.url).searchParams.get('year')?.trim()
     const year = raw ? Number(raw) : new Date().getUTCFullYear()

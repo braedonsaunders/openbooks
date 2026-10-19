@@ -27,6 +27,7 @@ function queryParams(request: Request): { scheme?: string; from?: string; to?: s
 export const GET = defineRoute({
   permission: 'reports.read',
   feature: 'crossBorderTax',
+  scope: 'unrestricted',
   handler: async ({ authz: routeAuthz, request }) => {
     const gate = routeAuthz;
     const parsed = QuerySchema.safeParse(queryParams(request))
