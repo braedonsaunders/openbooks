@@ -1,4 +1,5 @@
 import 'server-only'
+import { getTranslations } from 'next-intl/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
@@ -7,6 +8,7 @@ import { can, requirePermission } from '@/lib/authz'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { isFeatureEnabled } from '@/lib/features'
 import { isUuid, pickString } from '@/lib/list-params'
+import { loadAssetWorkspaceTabs } from '../tabs-loader'
 
 export interface ScheduleDetail {
   id: string
@@ -43,10 +45,15 @@ export interface ScheduleDetail {
 }
 
 export interface MaintenanceData {
+  title: string
+  description: string
+  tabs: { key: string; href: string; label: string; active: boolean }[]
+  currentParams: Record<string, string | string[] | undefined>
   standing: 'all' | 'due' | 'overdue'
   today: string
   rows: MaintenanceQueueRow[]
   selected: ScheduleDetail | null
+  createMode: boolean
   canMaintain: boolean
   proposalsEnabled: boolean
   assets: { id: string; label: string }[]
@@ -61,6 +68,7 @@ export async function loadMaintenance(sp: Record<string, string | string[] | und
   const authz = await requirePermission('assets.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'assetMaintenance')
+  const t = await getTranslations('assets')
   const allowed = authz.allowedSubsidiaryIds
   const scope = allowed ? [...allowed] : null
   const requested = pickString(sp.standing)
@@ -154,10 +162,19 @@ export async function loadMaintenance(sp: Record<string, string | string[] | und
     }
   }
   return {
+    title: t('maintenance.title'),
+    description: t('maintenance.description'),
+    tabs: await loadAssetWorkspaceTabs(orgId, 'maintenance', {
+      register: t('tabs.register'), taxDepreciation: t('tabs.taxDepreciation'), equipment: t('equipment.title'),
+      proposals: t('proposals.title'), construction: t('construction.title'), leases: t('leases.pageTitle'),
+      maintenance: t('maintenance.title'), insurance: t('insurance.title'),
+    }),
+    currentParams: sp,
     standing,
     today,
     rows,
     selected,
+    createMode: pickString(sp.schedule) === 'new' && can(authz, 'assets.maintain'),
     canMaintain: can(authz, 'assets.maintain'),
     proposalsEnabled,
     assets: assets.rows,

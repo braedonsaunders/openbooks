@@ -10,6 +10,8 @@ import { DrawerTabStrip } from '@/components/drawer-tab-strip'
 import { PagedTable } from '@/components/paged-table'
 import { useMoney } from '@/components/money-provider'
 import { useAppAction } from '@/lib/use-app-action'
+import { useDirtyClose } from '@/lib/use-dirty-close'
+import { mergeHref } from '@/lib/list-params'
 import { postJson } from '../depth-client'
 import type { InsuranceData, PolicyDetail } from './_data'
 import { PolicyFields, policyBody, type PolicyFormValues } from './PolicyFields'
@@ -18,7 +20,70 @@ import { DateField } from '@/components/date-field'
 type Tab = 'coverage' | 'terms' | 'renew'
 
 /** One policy: covered assets and their values, the policy terms, and renewal into a new period. */
-export function PolicyDrawer({ policy, data, closeHref }: { policy: PolicyDetail; data: InsuranceData; closeHref: string }) {
+export function PolicyDrawer({ policy, data, closeHref, createMode = false }: { policy: PolicyDetail | null; data: InsuranceData; closeHref: string; createMode?: boolean }) {
+  if (createMode) return <PolicyCreateDrawer data={data} closeHref={closeHref} />
+  return policy ? <PolicyRecordDrawer policy={policy} data={data} closeHref={closeHref} /> : null
+}
+
+function PolicyCreateDrawer({ data, closeHref }: { data: InsuranceData; closeHref: string }) {
+  const t = useTranslations('assets')
+  const tc = useTranslations('common')
+  const router = useRouter()
+  const action = useAppAction()
+  const [form, setForm] = useState(() => ({
+    subsidiaryId: data.subsidiaries[0]?.id ?? '',
+    values: {
+      insurerPartyId: '', policyNumber: '', description: '', coverageStartsOn: data.today,
+      coverageEndsOn: '', premium: '', deductible: '', renewalLeadDays: '30',
+    } satisfies PolicyFormValues,
+  }))
+  const [initialForm] = useState(form)
+  const dirty = JSON.stringify(form) !== JSON.stringify(initialForm)
+  const closeGuard = useDirtyClose({
+    dirty,
+    busy: action.busy,
+    onClose: () => {},
+    message: tc('feedback.unsavedChanges'),
+    confirmLabel: tc('confirm.discardChanges'),
+  })
+
+  async function create() {
+    await action.execute(
+      () => postJson<{ id: string }>('/api/assets/insurance/policies', { subsidiaryId: form.subsidiaryId, ...policyBody(form.values) }, t('insurance.saveFailed')),
+      {
+        fallbackMessage: t('insurance.saveFailed'),
+        successMessage: t('insurance.created'),
+        onOk: (created) => {
+          router.push(mergeHref('/assets/insurance', data.currentParams, { tab: 'policies', policy: created.id }))
+          router.refresh()
+        },
+      },
+    )
+  }
+
+  return (
+    <UrlDrawer
+      open
+      closeHref={closeHref}
+      beforeClose={closeGuard.beforeClose}
+      size="xl"
+      title={t('insurance.new')}
+      headerActions={<Button disabled={action.busy || !form.subsidiaryId || !form.values.insurerPartyId || !form.values.policyNumber.trim() || !form.values.coverageEndsOn} onClick={() => void create()}>{t('insurance.create')}</Button>}
+    >
+      <div className="space-y-4 p-1">
+        <ActionAlert error={action.refusal} fallbackMessage={t('insurance.saveFailed')} />
+        <div className="space-y-1.5"><Label htmlFor="new-policy-subsidiary">{t('insurance.fields.legalEntity')}</Label>
+          <Select id="new-policy-subsidiary" value={form.subsidiaryId} onChange={(event) => setForm((current) => ({ ...current, subsidiaryId: event.target.value }))}>
+            {data.subsidiaries.map((subsidiary) => <option key={subsidiary.id} value={subsidiary.id}>{subsidiary.name}</option>)}
+          </Select>
+        </div>
+        <PolicyFields idPrefix="new-policy" values={form.values} insurers={data.insurers} onChange={(patch) => setForm((current) => ({ ...current, values: { ...current.values, ...patch } }))} />
+      </div>
+    </UrlDrawer>
+  )
+}
+
+function PolicyRecordDrawer({ policy, data, closeHref }: { policy: PolicyDetail; data: InsuranceData; closeHref: string }) {
   const t = useTranslations('assets')
   const { money } = useMoney(policy.currency)
   const router = useRouter()

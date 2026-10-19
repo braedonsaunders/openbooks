@@ -1,56 +1,22 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import type { InsuredValueRow } from '@openbooks/engine/assets/asset-insurance'
-import { Badge, Button, Label, Popover, Select } from '@openbooks/ui'
+import { Badge, Button } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '@/components/paged-table'
 import { ModuleHomeTabs } from '@/components/module-home/ui'
 import { useMoney } from '@/components/money-provider'
 import { mergeHref } from '@/lib/list-params'
-import { useAppAction } from '@/lib/use-app-action'
-import { postJson } from '../depth-client'
 import type { InsuranceData, PolicyRow } from './_data'
 import { PolicyDrawer } from './PolicyDrawer'
-import { PolicyFields, policyBody, type PolicyFormValues } from './PolicyFields'
 
 const STANDING_VARIANT = { underinsured: 'destructive', matched: 'secondary', overinsured: 'warning' } as const
 
-export function NewPolicyButton({ data }: { data: InsuranceData }) {
+export function NewPolicyButton({ currentParams }: { currentParams: Record<string, string | string[] | undefined> }) {
   const t = useTranslations('assets')
   const router = useRouter()
-  const action = useAppAction()
-  const [open, setOpen] = useState(false)
-  const [subsidiaryId, setSubsidiaryId] = useState(data.subsidiaries[0]?.id ?? '')
-  const [values, setValues] = useState<PolicyFormValues>({
-    insurerPartyId: '', policyNumber: '', description: '', coverageStartsOn: data.today, coverageEndsOn: '', premium: '', deductible: '', renewalLeadDays: '30',
-  })
-  async function create() {
-    await action.execute(
-      () => postJson<{ id: string }>('/api/assets/insurance/policies', { subsidiaryId, ...policyBody(values) }, t('insurance.saveFailed')),
-      {
-        fallbackMessage: t('insurance.saveFailed'),
-        successMessage: t('insurance.created'),
-        onOk: (created) => { setOpen(false); router.push(`/assets/insurance?policy=${created.id}`); router.refresh() },
-      },
-    )
-  }
-  return (
-    <Popover open={open} onOpenChange={setOpen} align="end" trigger={<Button onClick={() => setOpen((value) => !value)}>{t('insurance.new')}</Button>}>
-      <div className="w-[34rem] space-y-3 p-3">
-        <ActionAlert error={action.refusal} fallbackMessage={t('insurance.saveFailed')} />
-        <div className="space-y-1.5"><Label htmlFor="new-policy-subsidiary">{t('insurance.fields.legalEntity')}</Label>
-          <Select id="new-policy-subsidiary" value={subsidiaryId} onChange={(event) => setSubsidiaryId(event.target.value)}>
-            {data.subsidiaries.map((subsidiary) => <option key={subsidiary.id} value={subsidiary.id}>{subsidiary.name}</option>)}
-          </Select>
-        </div>
-        <PolicyFields idPrefix="new-policy" values={values} insurers={data.insurers} onChange={(patch) => setValues((current) => ({ ...current, ...patch }))} />
-        <Button className="w-full" disabled={action.busy || !subsidiaryId || !values.insurerPartyId || !values.policyNumber.trim() || !values.coverageEndsOn} onClick={create}>{t('insurance.create')}</Button>
-      </div>
-    </Popover>
-  )
+  return <Button onClick={() => router.push(mergeHref('/assets/insurance', currentParams, { tab: 'policies', policy: 'new' }))}>{t('insurance.new')}</Button>
 }
 
 export function InsuranceWorkspace({
@@ -122,7 +88,9 @@ export function InsuranceWorkspace({
           />
         </div>
       )}
-      {data.selected ? (
+      {data.createMode ? (
+        <PolicyDrawer key="new" policy={null} createMode data={data} closeHref={mergeHref('/assets/insurance', currentParams, { policy: undefined })} />
+      ) : data.selected ? (
         <PolicyDrawer
           key={`${data.selected.id}:${data.selected.updatedAt}`}
           policy={data.selected}

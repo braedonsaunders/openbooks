@@ -1,8 +1,6 @@
-import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '@/components/page-layout'
+import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadInsurance } from './_data'
-import { InsuranceWorkspace, NewPolicyButton } from './InsuranceWorkspace'
+import { insuranceSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,18 +11,6 @@ export default async function AssetInsurancePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const [data, t] = await Promise.all([loadInsurance(sp), getTranslations('assets')])
-  return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t('insurance.title')}
-          description={t('insurance.description')}
-          actions={data.canMaintain ? <NewPolicyButton data={data} /> : undefined}
-        />
-      }
-    >
-      <InsuranceWorkspace data={data} currentParams={sp} />
-    </ListPageLayout>
-  )
+  const data = await loadInsurance(sp)
+  return <ModuleView spec={insuranceSpec(data)} data={data} searchParams={sp} trusted />
 }

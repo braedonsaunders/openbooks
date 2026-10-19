@@ -1,69 +1,21 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { Badge, Button, Input, Label, Popover, Select } from '@openbooks/ui'
+import { Badge, Button, Label } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '@/components/paged-table'
 import { ModuleHomeTabs } from '@/components/module-home/ui'
 import { useMoney } from '@/components/money-provider'
 import { mergeHref } from '@/lib/list-params'
-import { useAppAction } from '@/lib/use-app-action'
-import { postJson } from '../depth-client'
 import type { CipRecordRow, ConstructionData } from './_data'
 import { CipDrawer } from './CipDrawer'
 import { DateField } from '@/components/date-field'
 
 /** Open a construction-in-progress record on its CIP account. */
-export function NewCipButton({ data }: { data: ConstructionData }) {
+export function NewCipButton({ currentParams }: { currentParams: Record<string, string | string[] | undefined> }) {
   const t = useTranslations('assets')
   const router = useRouter()
-  const action = useAppAction()
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [subsidiaryId, setSubsidiaryId] = useState(data.subsidiaries[0]?.id ?? '')
-  const [categoryId, setCategoryId] = useState(data.categories[0]?.id ?? '')
-  const [cipAccountId, setCipAccountId] = useState('')
-  const [startedOn, setStartedOn] = useState(data.today)
-
-  async function create() {
-    await action.execute(
-      () => postJson<{ id: string }>('/api/assets/construction', { name, subsidiaryId, categoryId, cipAccountId, startedOn }, t('construction.createFailed')),
-      {
-        fallbackMessage: t('construction.createFailed'),
-        successMessage: t('construction.created'),
-        onOk: (created) => { setOpen(false); router.push(`/assets/construction?cip=${created.id}`); router.refresh() },
-      },
-    )
-  }
-
-  return (
-    <Popover open={open} onOpenChange={setOpen} align="end" trigger={<Button onClick={() => setOpen((value) => !value)}>{t('construction.new')}</Button>}>
-      <div className="w-80 space-y-3 p-3">
-        <ActionAlert error={action.refusal} fallbackMessage={t('construction.createFailed')} />
-        <div className="space-y-1.5"><Label htmlFor="cip-name">{t('construction.fields.name')}</Label><Input id="cip-name" value={name} onChange={(event) => setName(event.target.value)} /></div>
-        <div className="space-y-1.5"><Label htmlFor="cip-subsidiary">{t('construction.fields.legalEntity')}</Label>
-          <Select id="cip-subsidiary" value={subsidiaryId} onChange={(event) => setSubsidiaryId(event.target.value)}>
-            {data.subsidiaries.map((subsidiary) => <option key={subsidiary.id} value={subsidiary.id}>{subsidiary.name}</option>)}
-          </Select>
-        </div>
-        <div className="space-y-1.5"><Label htmlFor="cip-account">{t('construction.fields.cipAccount')}</Label>
-          <Select id="cip-account" value={cipAccountId} onChange={(event) => setCipAccountId(event.target.value)}>
-            <option value="">{t('construction.fields.choose')}</option>
-            {data.cipAccounts.map((account) => <option key={account.id} value={account.id}>{account.label}</option>)}
-          </Select>
-        </div>
-        <div className="space-y-1.5"><Label htmlFor="cip-category">{t('construction.fields.expectedCategory')}</Label>
-          <Select id="cip-category" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-            {data.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-          </Select>
-        </div>
-        <div className="space-y-1.5"><Label htmlFor="cip-started">{t('construction.fields.startedOn')}</Label><DateField id="cip-started" value={startedOn} onChange={(value) => setStartedOn(value)} /></div>
-        <Button className="w-full" disabled={action.busy || !name.trim() || !subsidiaryId || !categoryId || !cipAccountId} onClick={create}>{t('construction.create')}</Button>
-      </div>
-    </Popover>
-  )
+  return <Button onClick={() => router.push(mergeHref('/assets/construction', currentParams, { tab: 'records', cip: 'new' }))}>{t('construction.new')}</Button>
 }
 
 export function ConstructionWorkspace({
@@ -132,7 +84,9 @@ export function ConstructionWorkspace({
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('construction.reconciliationHelp')}</p>
         </div>
       )}
-      {data.selected ? (
+      {data.createMode ? (
+        <CipDrawer key="new" record={null} createMode data={data} closeHref={mergeHref('/assets/construction', currentParams, { cip: undefined })} />
+      ) : data.selected ? (
         <CipDrawer
           key={data.selected.id}
           record={data.selected}

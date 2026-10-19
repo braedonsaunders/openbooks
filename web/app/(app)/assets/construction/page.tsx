@@ -1,8 +1,6 @@
-import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '@/components/page-layout'
+import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadConstruction } from './_data'
-import { ConstructionWorkspace, NewCipButton } from './ConstructionWorkspace'
+import { constructionSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,18 +15,6 @@ export default async function ConstructionPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const [data, t] = await Promise.all([loadConstruction(sp), getTranslations('assets')])
-  return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t('construction.title')}
-          description={t('construction.description')}
-          actions={data.canCapitalize ? <NewCipButton data={data} /> : undefined}
-        />
-      }
-    >
-      <ConstructionWorkspace data={data} currentParams={sp} />
-    </ListPageLayout>
-  )
+  const data = await loadConstruction(sp)
+  return <ModuleView spec={constructionSpec(data)} data={data} searchParams={sp} trusted />
 }

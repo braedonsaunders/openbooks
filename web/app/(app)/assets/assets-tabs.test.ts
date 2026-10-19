@@ -8,22 +8,59 @@ import type { EquipmentData } from './equipment/view'
 const { assetsSpec } = await import('./view')
 const { equipmentSpec } = await import('./equipment/view')
 
-test('asset workspace tabs use one route set across register, tax, and equipment', () => {
+test('asset workspace tabs expose enabled routes and mark the active route', () => {
   const tabs = assetWorkspaceTabs({
-    active: 'equipment',
-    registerLabel: 'Register',
-    taxDepreciationLabel: 'Tax depreciation',
-    equipmentLabel: 'Equipment',
+    active: 'insurance',
+    labels: {
+      register: 'Register', taxDepreciation: 'Tax depreciation', equipment: 'Equipment',
+      proposals: 'Proposals', construction: 'Construction', leases: 'Leases',
+      maintenance: 'Maintenance', insurance: 'Insurance',
+    },
     showFixedAssets: true,
     showEquipment: true,
+    showProposals: true,
+    showConstruction: true,
+    showLeases: true,
+    showMaintenance: true,
+    showInsurance: true,
   })
 
   assert.deepEqual(tabs.map(({ href }) => href), [
     '/assets',
     '/assets?tab=tax-depreciation',
     '/assets/equipment',
+    '/assets/proposals',
+    '/assets/construction',
+    '/assets/leases',
+    '/assets/maintenance',
+    '/assets/insurance',
   ])
-  assert.deepEqual(tabs.map(({ active }) => active), [false, false, true])
+  assert.deepEqual(tabs.map(({ active }) => active), [false, false, false, false, false, false, false, true])
+})
+
+test('asset tabs omit disabled routes, and leases follow the fixed-assets gate', () => {
+  const tabs = assetWorkspaceTabs({
+    active: 'leases',
+    labels: {
+      register: 'Register', taxDepreciation: 'Tax depreciation', equipment: 'Equipment',
+      proposals: 'Proposals', construction: 'Construction', leases: 'Leases',
+      maintenance: 'Maintenance', insurance: 'Insurance',
+    },
+    showFixedAssets: false,
+    showEquipment: true,
+    showProposals: false,
+    showConstruction: true,
+    showLeases: false,
+    showMaintenance: false,
+    showInsurance: true,
+  })
+
+  assert.deepEqual(tabs.map(({ href }) => href), [
+    '/assets/equipment',
+    '/assets/construction',
+    '/assets/insurance',
+  ])
+  assert.ok(tabs.every(({ active }) => !active), 'a disabled route is never marked active')
 })
 
 function widgetsNamed(node: unknown, name: string): Record<string, unknown>[] {

@@ -24,7 +24,7 @@ import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import type { AssetDrawer } from './AssetDrawer'
-import { assetWorkspaceTabs } from './tabs'
+import { loadAssetWorkspaceTabs } from './tabs-loader'
 
 /**
  * The fixed-asset register, split into a loader and a spec.
@@ -114,14 +114,15 @@ export async function loadAssets(
   const orgId = authz.user.orgId
 
   const tab = pickString(sp.tab) === 'tax-depreciation' ? 'tax-depreciation' : 'register'
-  const equipmentEnabled = await isFeatureEnabled(orgId, 'equipment')
-  const tabs = assetWorkspaceTabs({
-    active: tab,
-    registerLabel: t('tabs.register'),
-    taxDepreciationLabel: t('tabs.taxDepreciation'),
-    equipmentLabel: t('equipment.title'),
-    showFixedAssets: true,
-    showEquipment: equipmentEnabled,
+  const tabs = await loadAssetWorkspaceTabs(orgId, tab, {
+    register: t('tabs.register'),
+    taxDepreciation: t('tabs.taxDepreciation'),
+    equipment: t('equipment.title'),
+    proposals: t('proposals.title'),
+    construction: t('construction.title'),
+    leases: t('leases.pageTitle'),
+    maintenance: t('maintenance.title'),
+    insurance: t('insurance.title'),
   })
 
   const base = {

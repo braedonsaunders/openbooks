@@ -2,6 +2,16 @@ import { type ComponentProps } from 'react'
 import { DepreciationSetupHeader } from '../../app/(app)/admin/setup/depreciation/sections'
 import { TaxAuthorityConnectionsSlot, TaxSetupGuideSlot, TaxSetupHeader } from '../../app/(app)/admin/setup/tax-setup/sections'
 import { EquipmentHeaderLinks } from '../../app/(app)/assets/equipment/sections'
+import { ConstructionWorkspace, NewCipButton } from '../../app/(app)/assets/construction/ConstructionWorkspace'
+import type { ConstructionData } from '../../app/(app)/assets/construction/_data'
+import { InsuranceWorkspace, NewPolicyButton } from '../../app/(app)/assets/insurance/InsuranceWorkspace'
+import type { InsuranceData } from '../../app/(app)/assets/insurance/_data'
+import { MaintenanceWorkspace, NewScheduleButton } from '../../app/(app)/assets/maintenance/MaintenanceWorkspace'
+import type { MaintenanceData } from '../../app/(app)/assets/maintenance/_data'
+import { ProposalsWorkspace } from '../../app/(app)/assets/proposals/ProposalsWorkspace'
+import type { ProposalsData } from '../../app/(app)/assets/proposals/_data'
+import { LeaseDrawer, NewLeaseButton } from '../../app/(app)/assets/leases/LeaseDrawer'
+import type { LeasesData } from '../../app/(app)/assets/leases/view'
 import { ProvisionRunsTable } from '../../app/(app)/tax/provisions/sections'
 import { ProvisionRunDrawer } from '../../app/(app)/tax/provisions/ProvisionRunDrawer'
 import {
@@ -28,6 +38,61 @@ import { str, type WidgetRenderer } from './widget-props'
 
 /** Assets, depreciation and tax adapters. Compose native components without changing their props or boundaries. */
 export const ASSETS_TAX_WIDGETS = {
+
+  /* --- asset sub-workspaces --------------------------------------------------------- */
+  'asset-construction-workspace': (props) => (
+    <ConstructionWorkspace
+      data={props.data as ConstructionData}
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+    />
+  ),
+  'asset-insurance-workspace': (props) => (
+    <InsuranceWorkspace
+      data={props.data as InsuranceData}
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+    />
+  ),
+  'asset-maintenance-workspace': (props) => (
+    <MaintenanceWorkspace
+      data={props.data as MaintenanceData}
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+    />
+  ),
+  'asset-proposals-workspace': (props) => (
+    <ProposalsWorkspace
+      data={props.data as ProposalsData}
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+    />
+  ),
+  'new-cip-button': (props) => (
+    <NewCipButton currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}} />
+  ),
+  'new-insurance-policy-button': (props) => (
+    <NewPolicyButton currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}} />
+  ),
+  'new-maintenance-schedule-button': (props) => (
+    <NewScheduleButton currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}} />
+  ),
+  'asset-new-lease-button': (props) => (
+    <NewLeaseButton
+      accounts={(props.accounts as ComponentProps<typeof NewLeaseButton>['accounts']) ?? []}
+      subsidiaries={(props.subsidiaries as ComponentProps<typeof NewLeaseButton>['subsidiaries']) ?? []}
+    />
+  ),
+  'asset-lease-drawer': (props) => {
+    const drawer = props.drawer as NonNullable<LeasesData['drawer']> | null
+    if (!drawer) return null
+    return (
+      <LeaseDrawer
+        key={drawer.remountKey}
+        payload={drawer.payload}
+        canManage={drawer.canManage}
+        accounts={drawer.accounts}
+        subsidiaries={drawer.subsidiaries}
+        closeHref={drawer.closeHref}
+      />
+    )
+  },
 
   /* --- tax provision list ----------------------------------------------------------- */
   /** The empty state lives INSIDE the component: the native empty path keeps
