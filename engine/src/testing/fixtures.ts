@@ -1132,6 +1132,7 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   // securities before rounds and plans, everything before its share class.
   { table: "equity_action_requests", trigger: "equity_action_requests_immutable" },
   { table: "equity_position_movements", trigger: "equity_position_movements_immutable" },
+  { table: "equity_instrument_line_attributions", trigger: "equity_instrument_line_attributions_immutable" },
   { table: "equity_compensation_run_releases", trigger: "equity_compensation_run_releases_immutable" },
   { table: "equity_compensation_run_lines", trigger: "equity_compensation_run_lines_immutable" },
   { table: "equity_interest_run_lines", trigger: "equity_interest_run_lines_immutable" },
@@ -1140,6 +1141,7 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   { table: "equity_compensation_runs", trigger: "equity_compensation_runs_immutable" },
   { table: "equity_security_events", trigger: "equity_security_events_immutable" },
   { table: "equity_securities", trigger: "equity_securities_immutable" },
+  { table: "equity_round_amendments", trigger: "equity_round_amendments_immutable" },
   { table: "equity_financing_rounds", trigger: "equity_financing_rounds_immutable" },
   { table: "equity_plan_reserve_changes", trigger: "equity_plan_reserve_changes_immutable" },
   { table: "equity_plans", trigger: "equity_plans_immutable" },

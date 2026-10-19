@@ -29,6 +29,10 @@ export const TENANT_TABLE_POLICIES = {
   // position ledger copies with the securities and plans it restates.
   "equity_action_requests": "skip:no-copy",
   "equity_position_movements": "clone:catalog-uuid-rebase",
+  // Round corrections copy with their rounds; instrument line attributions
+  // copy with the rebased lines and securities they join.
+  "equity_round_amendments": "clone:catalog-uuid-rebase",
+  "equity_instrument_line_attributions": "clone:catalog-uuid-rebase",
   "payroll_us_filing_account_employer_lineage": "clone:catalog-uuid-rebase",
   // Closing rate quotes price the copied ledger, so they copy with rebased
   // identities (masked copies redact the authored source and reason).

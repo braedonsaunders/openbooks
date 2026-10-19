@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { postingRefusal } from './responses'
 
 /** A typed refusal is safe to show only when its class names the business condition and its status is 4xx. */
@@ -13,6 +13,25 @@ export function typedRefusal(error: unknown, safeStatus?: number): error is Erro
   if (!(error instanceof Error) || error.constructor === Error) return false
   const status = 'status' in error ? error.status : 'statusCode' in error ? error.statusCode : safeStatus
   return typeof status === 'number' && Number.isInteger(status) && status >= 400 && status < 500
+}
+
+/**
+ * A refusal that names figures (share counts, amounts) renders them in the
+ * reader's locale; outside a request it keeps its own rendering.
+ */
+export async function readerRefusalText(error: Error): Promise<{ message: string; remedy: string } | null> {
+  const localized = (error as Error & { localized?: unknown }).localized
+  if (typeof localized !== 'function') return null
+  let locale: string | null = null
+  try {
+    locale = await getLocale()
+  } catch {
+    return null
+  }
+  const text = (localized as (locale: string) => unknown).call(error, locale)
+  if (!text || typeof text !== 'object') return null
+  const { message, remedy } = text as { message?: unknown; remedy?: unknown }
+  return typeof message === 'string' && typeof remedy === 'string' ? { message, remedy } : null
 }
 
 /** Shared API boundary for typed business refusals and unexpected failures. */
@@ -36,6 +55,8 @@ export async function apiErrorResponse(
     if (details !== null && typeof details === 'object' && !Array.isArray(details)) {
       metadata.details = details
     }
+    const reader = await readerRefusalText(error)
+    if (reader) return NextResponse.json({ ...metadata, ...options.details, error: reader.message, remedy: reader.remedy }, { status })
     return NextResponse.json({ error: error.message, ...metadata, ...options.details }, { status })
   }
 

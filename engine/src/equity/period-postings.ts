@@ -9,9 +9,11 @@
 import { sql } from "drizzle-orm";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { compensationRunChange } from "./compensation-run.ts";
+import { compensationRunChange, compensationRunChanges } from "./compensation-run.ts";
 import { EQUITY_FEATURE_KEY, EquityError } from "./errors.ts";
-import { interestRunChange } from "./interest-run.ts";
+import { assertEquityReadable, requireEquityReader } from "./internal.ts";
+import { interestRunChange, interestRunChanges } from "./interest-run.ts";
+import { postingPeriodOpen } from "./posting.ts";
 
 export interface EquityPostingDue {
   /** A run through the date would post a change no run has posted yet. */
@@ -92,4 +94,46 @@ export async function closeEquityPostings(orgId: string, input: { through: strin
     }
     return out;
   });
+}
+
+export interface EquityRunPeriod {
+  periodId: string;
+  name: string;
+  endsOn: string;
+}
+
+/** Candidate periods the runs view weighs at most, oldest first. */
+const RUN_PERIOD_HORIZON = 36;
+
+/**
+ * The period a stock compensation or note interest run is due for: the
+ * earliest accounting period of the default calendar that has started by
+ * `today`, ends after the latest posted run, is open for posting, and
+ * through whose end the run would post a change. Null when nothing is due,
+ * so a closed period or an empty run is never offered (equity.read).
+ */
+export async function nextEquityRunPeriod(input: { orgId: string; actorId: string; subsidiaryId: string; kind: "compensation" | "interest"; today: string }): Promise<EquityRunPeriod | null> {
+  await assertEquityReadable(input.orgId);
+  return withOrgTransaction(input.orgId, async () => {
+    await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
+    const table = input.kind === "compensation" ? sql`equity_compensation_runs` : sql`equity_interest_runs`;
+    const last = (await db.execute<{ through: string | null }>(sql`
+      select max(through_date)::text as through from ${table} where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId}`)).rows[0]?.through ?? null;
+    const periods = (await db.execute<{ id: string; name: string; ends_on: string }>(sql`
+      select p.id, p.name, p.ends_on::text as ends_on from accounting_periods p
+       where p.org_id = ${input.orgId} and not p.is_adjustment and p.starts_on <= ${input.today}::date
+         ${last ? sql`and p.ends_on > ${last}::date` : sql``}
+         and p.fiscal_calendar_id in (select id from fiscal_calendars where org_id = ${input.orgId} and is_default and is_active)
+       order by p.ends_on, p.id
+       limit ${RUN_PERIOD_HORIZON}`)).rows;
+    const open: typeof periods = [];
+    for (const period of periods) if (await postingPeriodOpen(db, input.orgId, input.subsidiaryId, period.ends_on)) open.push(period);
+    if (open.length === 0) return null;
+    const dates = open.map((period) => period.ends_on);
+    const due = input.kind === "compensation"
+      ? (await compensationRunChanges(input.orgId, input.subsidiaryId, dates)).map((row) => nonZero(row.expense) || row.releaseLines > 0)
+      : (await interestRunChanges(input.orgId, input.subsidiaryId, dates)).map((row) => row.lines > 0);
+    const index = due.findIndex(Boolean);
+    return index < 0 ? null : { periodId: open[index]!.id, name: open[index]!.name, endsOn: open[index]!.ends_on };
+  }, { isolationLevel: "REPEATABLE READ" });
 }

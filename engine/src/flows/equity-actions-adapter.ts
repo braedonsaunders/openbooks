@@ -36,19 +36,22 @@ export const EQUITY_ACTION_KINDS = [
   { value: "split", label: "Stock split" },
   { value: "reserve_change", label: "Change a plan reserve" },
   { value: "mfn_election", label: "MFN election" },
+  { value: "mfn_reversal", label: "Reverse an MFN election" },
   { value: "compensation_run", label: "Stock compensation run" },
   { value: "interest_run", label: "Note interest run" },
   { value: "account_policy", label: "Equity account policy version" },
+  { value: "round_amendment", label: "Amend a financing round" },
+  { value: "round_void", label: "Void a financing round" },
 ] as const;
 
 const STATUSES = [
   { value: "pending_approval", label: "Pending approval" },
   { value: "applied", label: "Applied" },
   { value: "rejected", label: "Rejected" },
+  { value: "withdrawn", label: "Withdrawn" },
 ] as const;
 
 export const equityActionSubjectProfile: FlowSubjectProfile = {
-  { value: "withdrawn", label: "Withdrawn" },
   subjectKind: EQUITY_ACTION_SUBJECT_KIND,
   pinsSubmissionPolicy: true,
   label: "Equity action",
@@ -122,7 +125,11 @@ function deepLinkFor(request: Pick<RequestRow, "action" | "subject_id" | "subsid
     case "repay":
     case "cancel_convertible":
     case "mfn_election":
+    case "mfn_reversal":
       return `${base}&view=securities&security=${request.subject_id}`;
+    case "round_amendment":
+    case "round_void":
+      return `${base}&view=rounds&round=${request.subject_id}`;
     case "reserve_change":
       return `${base}&view=plans`;
     case "class_amendment":

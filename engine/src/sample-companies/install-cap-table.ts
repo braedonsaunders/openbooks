@@ -3,9 +3,9 @@ import { auditBankingModuleClose, evaluateBankingModuleClose } from "../close/ba
 import { generateAccountingPeriods } from "../close/calendar.ts";
 import { recordEquityAccountPolicy } from "../equity/account-policy.ts";
 import { buildCapTable, eventCeiling, holdingState } from "../equity/cap-table.ts";
-import { postCompensationRun } from "../equity/compensation-run.ts";
+import { compensationRunChange, postCompensationRun } from "../equity/compensation-run.ts";
 import { recordSecurityEvent, type RecordEventInput } from "../equity/events.ts";
-import { postInterestRun } from "../equity/interest-run.ts";
+import { interestRunChange, postInterestRun } from "../equity/interest-run.ts";
 import { electMfnTerms } from "../equity/mfn.ts";
 import { issueSecurity, type IssueSecurityInput } from "../equity/securities.ts";
 import { loadEquityBook } from "../equity/store.ts";
@@ -332,8 +332,9 @@ async function closePreLedgerYears(c: DemoContext, periodIds: readonly string[])
 
 /**
  * Post one month-end's stock compensation or note interest run. Runs are
- * sequential: a month already measured replays, and a month whose period is
- * closed is measured by the next open month-end.
+ * sequential: a month already measured replays, a month whose period is
+ * closed is measured by the next open month-end, and a month with nothing
+ * due posts no run.
  */
 async function monthlyRun(c: DemoContext, kind: "compensation" | "interest", through: string, periodOpen: (date: string) => Promise<boolean>): Promise<void> {
   const table = kind === "compensation" ? sql`equity_compensation_runs` : sql`equity_interest_runs`;
@@ -342,6 +343,10 @@ async function monthlyRun(c: DemoContext, kind: "compensation" | "interest", thr
       from ${table} where org_id = ${c.orgId} and subsidiary_id = ${c.subsidiaryId}`)).rows[0];
   if (runs?.recorded || (runs?.last && runs.last >= through) || !await periodOpen(through)) return;
   const input = { orgId: c.orgId, actorId: c.actorId, subsidiaryId: c.subsidiaryId, throughDate: through };
+  const due = kind === "compensation"
+    ? await compensationRunChange(c.orgId, c.subsidiaryId, through).then((change) => /[1-9]/.test(change.expense) || change.releaseLines > 0)
+    : await interestRunChange(c.orgId, c.subsidiaryId, through).then((change) => change.lines > 0);
+  if (!due) return;
   const run = kind === "compensation" ? await postCompensationRun(input) : await postInterestRun(input);
   if (run.status !== "applied") throw new SampleCompanyError(`The demonstration ${kind} run through ${through} awaits approval; review the Equity action Flow before preparing the master.`);
 }

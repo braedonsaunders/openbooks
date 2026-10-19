@@ -1,25 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCapTable, conversionRatio, conversionPrice, convertibleState, convertibleTerms, eventsOf, holdingState } from "./cap-table.ts";
+import { buildCapTable, conversionRatio, conversionPrice, convertibleState, convertibleTerms, electionInForce, eventsOf, holdingState } from "./cap-table.ts";
 import { compensationTranches } from "./compensation.ts";
 import { EquityError } from "./errors.ts";
 import { days360, noteInterest, yearFraction } from "./interest.ts";
 import { compareMfnTerms, mfnCandidates } from "./mfn.ts";
 import { formatMoney, formatPrice, rational } from "./quantities.ts";
-import { depositSlice, earlyExerciseSchedule, election83bStatus, measureRelease, releasedUnits } from "./restricted-stock.ts";
+import { depositSlice, earlyExerciseSchedule, election83bStatus, measureRelease, releasedUnits, unreleasedDeposit } from "./restricted-stock.ts";
 import type { EquityBook, SecurityEventRecord, SecurityRecord, ShareClassRecord } from "./types.ts";
 
 const COMMON: ShareClassRecord = {
   id: "c-common", code: "CS", name: "Common", kind: "common", effectiveOn: "2026-01-01", initialAuthorizedShares: 20_000_000n,
   parValue: "0.0001", originalIssuePrice: null, initialConversionPrice: null, liquidationMultiple: null,
   participation: "none", participationCapMultiple: null, seniority: 0, antiDilution: "none",
-  conversionShareClassId: null, conversionAdjustsForSplits: true,
+  conversionShareClassId: null, conversionAdjustsForSplits: true, liquidationPreferenceBasis: "original_issue_price",
 };
 const SERIES_A: ShareClassRecord = {
   id: "c-a", code: "A", name: "Series A Preferred", kind: "preferred", effectiveOn: "2026-01-01", initialAuthorizedShares: 5_000_000n,
   parValue: "0.0001", originalIssuePrice: "1.0000000000", initialConversionPrice: "1.0000000000", liquidationMultiple: "1.0000",
   participation: "none", participationCapMultiple: null, seniority: 1, antiDilution: "none",
-  conversionShareClassId: COMMON.id, conversionAdjustsForSplits: true,
+  conversionShareClassId: COMMON.id, conversionAdjustsForSplits: true, liquidationPreferenceBasis: "original_issue_price",
 };
 
 function security(overrides: Partial<SecurityRecord> & Pick<SecurityRecord, "id" | "kind">): SecurityRecord {
@@ -92,13 +92,29 @@ test("an MFN SAFE sees later instruments in its currency with better terms, unti
   assert.deepEqual(candidates[0]!.improves, ["cap"]);
   const elected = book({
     securities: [earlier, mfn, better, euro],
-    securityAmendments: [{ id: "am-1", securityId: mfn.id, kind: "mfn_election", effectiveOn: "2026-03-20", sourceSecurityId: better.id, valuationCap: "4000000.0000", discountPercent: null, safeType: "post_money" }],
+    securityAmendments: [{ id: "am-1", securityId: mfn.id, kind: "mfn_election", effectiveOn: "2026-03-20", sourceSecurityId: better.id, valuationCap: "4000000.0000", discountPercent: null, safeType: "post_money", reversesAmendmentId: null }],
   });
   assert.equal(convertibleState(elected, mfn, "2026-03-19").terms.valuationCap, null, "the election changes nothing before its date");
   assert.equal(convertibleState(elected, mfn, "2026-03-20").terms.valuationCap, "4000000.0000");
   assert.deepEqual(mfnCandidates(elected, mfn, "2026-03-25"), [], "an adopted instrument is not offered again");
   const converted = book({ ...elected, events: [event({ id: "e-1", securityId: mfn.id, kind: "convert", effectiveOn: "2026-04-01", resultingSecurityId: "s-cert" })] });
   assert.deepEqual(mfnCandidates(converted, mfn, "2026-04-02"), []);
+});
+
+test("an MFN SAFE carries an election only while it stands: a reversal returns the terms in force before it, and a voided source's terms never apply", () => {
+  const mfn = security({ id: "s-mfn", kind: "safe", shareClassId: null, quantity: null, considerationAmount: "100000.0000", safeType: "pre_money", mfn: true });
+  const later = security({ id: "s-later", kind: "safe", shareClassId: null, quantity: null, considerationAmount: "50000.0000", issueDate: "2026-03-01", safeType: "post_money", valuationCap: "4000000.0000", discountPercent: "20.0000" });
+  const election = { id: "am-1", securityId: mfn.id, kind: "mfn_election" as const, effectiveOn: "2026-03-20", sourceSecurityId: later.id, valuationCap: "4000000.0000", discountPercent: "20.0000", safeType: "post_money" as const, reversesAmendmentId: null };
+  const reversal = { ...election, id: "am-2", kind: "mfn_reversal" as const, effectiveOn: "2026-05-01", valuationCap: null, discountPercent: null, safeType: "pre_money" as const, reversesAmendmentId: election.id };
+  const reversed = book({ securities: [mfn, later], securityAmendments: [election, reversal] });
+  assert.equal(convertibleState(reversed, mfn, "2026-04-30").terms.valuationCap, "4000000.0000", "the election stands until its reversal");
+  const after = convertibleState(reversed, mfn, "2026-05-01");
+  assert.deepEqual([after.terms.valuationCap, after.terms.discountPercent, after.terms.safeType, after.electionId], [null, null, "pre_money", null]);
+  assert.deepEqual(mfnCandidates(reversed, mfn, "2026-05-02").map((row) => row.sourceSecurityId), [later.id], "a reversed election's source may be adopted again");
+  const voided = book({ securities: [mfn, later], securityAmendments: [election], events: [event({ id: "e-void", securityId: later.id, kind: "void", effectiveOn: "2026-04-10" })] });
+  assert.equal(convertibleState(voided, mfn, "2026-04-09").terms.valuationCap, null, "terms adopted from an instrument entered in error never apply");
+  assert.equal(convertibleState(voided, mfn, "2026-04-10").terms.valuationCap, null);
+  assert.equal(electionInForce(voided, mfn, "2026-04-10", { includeVoidedSources: true })?.id, election.id, "the recorded election is still found for review");
 });
 
 test("a common split adjusts the conversion price of preferred converting into it, from the split date only", () => {
@@ -163,6 +179,21 @@ test("restricted shares release their deposit front to back and repurchases take
   const tranches = compensationTranches(repurchased, option, "2026-12-31");
   const live = tranches.reduce((sum, tranche) => sum + Number(tranche.units.numerator / tranche.units.denominator), 0);
   assert.equal(live, 4200);
+});
+
+test("an early-exercised certificate's deposit on unvested shares follows its vesting as of each date", () => {
+  // 288,000 options at 0.12, four-year monthly vesting with a one-year cliff, exercised in full before any vests.
+  const grant = security({
+    id: "o-maya", kind: "option", quantity: 288_000n, pricePerShare: "0.1200000000", issueDate: "2024-03-04", earlyExercise: true, unvestedRepurchaseBasis: "cost",
+    vestingStart: "2024-03-04", vestingMonths: 48, cliffMonths: 12, vestingFrequency: "monthly", optionType: "iso",
+  });
+  const schedule = earlyExerciseSchedule(book({ securities: [grant] }), grant, 288_000n, "2024-03-18")!;
+  assert.equal(schedule.vestedOnIssue, 0n);
+  const certificate = security({ id: "s-cs3", kind: "share", quantity: 288_000n, pricePerShare: "0.1200000000", issueDate: "2024-03-18", sourceSecurityId: grant.id, vestingTranches: schedule.tranches });
+  const exercised = book({ securities: [grant, certificate], events: [event({ id: "e-ex", securityId: grant.id, kind: "exercise", effectiveOn: "2024-03-18", quantity: 288_000n, resultingSecurityId: certificate.id })] });
+  assert.equal(unreleasedDeposit(exercised, certificate, "2024-06-27", 2), 345_600_000n, "nothing has vested: the whole $34,560 is held");
+  assert.equal(unreleasedDeposit(exercised, certificate, "2026-10-19", 2), 122_400_000n, "31 of 48 months vested: $12,240 on 102,000 unvested shares");
+  assert.equal(unreleasedDeposit(exercised, certificate, "2024-03-17", 2), 0n, "nothing is held before the exercise");
 });
 
 test("an 83(b) election is open for 30 days from issue, then recorded or missed", () => {

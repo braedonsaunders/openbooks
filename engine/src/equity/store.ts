@@ -27,7 +27,9 @@ export function shareClassFromRow(row: Row): ShareClassRecord {
     id: str(row, "id"), code: str(row, "code"), name: str(row, "name"), kind: str(row, "kind") as ShareClassRecord["kind"],
     effectiveOn: str(row, "effective_on"), initialAuthorizedShares: BigInt(str(row, "initial_authorized_shares")),
     parValue: str(row, "par_value"), originalIssuePrice: opt(row, "original_issue_price"), initialConversionPrice: opt(row, "initial_conversion_price"),
-    liquidationMultiple: opt(row, "liquidation_multiple"), participation: str(row, "participation") as ShareClassRecord["participation"],
+    liquidationMultiple: opt(row, "liquidation_multiple"),
+    liquidationPreferenceBasis: (opt(row, "liquidation_preference_basis") ?? "original_issue_price") as ShareClassRecord["liquidationPreferenceBasis"],
+    participation: str(row, "participation") as ShareClassRecord["participation"],
     participationCapMultiple: opt(row, "participation_cap_multiple"), seniority: Number(row.seniority), antiDilution: str(row, "anti_dilution") as ShareClassRecord["antiDilution"],
     conversionShareClassId: opt(row, "conversion_share_class_id"), conversionAdjustsForSplits: row.conversion_adjusts_for_splits !== false,
   };
@@ -86,6 +88,7 @@ export async function loadEquityBook(runner: SqlExecutor, orgId: string, subsidi
     select id, code, name, kind, effective_on::text as effective_on, initial_authorized_shares::text as initial_authorized_shares,
            par_value::text as par_value, original_issue_price::text as original_issue_price,
            initial_conversion_price::text as initial_conversion_price, liquidation_multiple::text as liquidation_multiple,
+           liquidation_preference_basis,
            participation, participation_cap_multiple::text as participation_cap_multiple, seniority, anti_dilution,
            conversion_share_class_id, conversion_adjusts_for_splits
       from equity_share_classes where ${scope} order by created_at, id`)).rows.map(shareClassFromRow);
@@ -116,24 +119,89 @@ export async function loadEquityBook(runner: SqlExecutor, orgId: string, subsidi
       from equity_plan_reserve_changes where ${scope} order by created_at, id`)).rows.map((row): ReserveChangeRecord => ({
     id: str(row, "id"), planId: str(row, "plan_id"), effectiveOn: str(row, "effective_on"), shareDelta: BigInt(str(row, "share_delta")),
   }));
-  const rounds = (await runner.execute<Row>(sql`
-    select id, name, share_class_id, closed_on::text as closed_on, price_per_share::text as price_per_share,
-           pre_money_valuation::text as pre_money_valuation, currency
-      from equity_financing_rounds where ${scope} order by closed_on, created_at, id`)).rows.map((row): FinancingRoundRecord => ({
-    id: str(row, "id"), name: str(row, "name"), shareClassId: str(row, "share_class_id"), closedOn: str(row, "closed_on"),
-    pricePerShare: str(row, "price_per_share"), preMoneyValuation: str(row, "pre_money_valuation"), currency: str(row, "currency"),
-  }));
+  const rounds = applyRoundAmendments(
+    (await runner.execute<Row>(sql`
+      select id, name, share_class_id, closed_on::text as closed_on, price_per_share::text as price_per_share,
+             pre_money_valuation::text as pre_money_valuation, currency, pre_money_basis_reason
+        from equity_financing_rounds where ${scope} order by closed_on, created_at, id`)).rows.map((row): FinancingRoundRecord => ({
+      id: str(row, "id"), name: str(row, "name"), shareClassId: str(row, "share_class_id"), closedOn: str(row, "closed_on"),
+      pricePerShare: str(row, "price_per_share"), preMoneyValuation: str(row, "pre_money_valuation"), currency: str(row, "currency"),
+      preMoneyBasisReason: opt(row, "pre_money_basis_reason"),
+    })),
+    await loadRoundAmendments(runner, orgId, subsidiaryId),
+  ).live;
   const securities = (await runner.execute<Row>(sql`
     select ${SECURITY_COLUMNS} from equity_securities where ${scope} order by created_at, id`)).rows.map(securityFromRow);
   const events = (await runner.execute<Row>(sql`
     select ${EVENT_COLUMNS} from equity_security_events where ${scope} order by created_at, id`)).rows.map(eventFromRow);
   const securityAmendments = (await runner.execute<Row>(sql`
     select id, security_id, kind, effective_on::text as effective_on, source_security_id, valuation_cap::text as valuation_cap,
-           discount_percent::text as discount_percent, safe_type
+           discount_percent::text as discount_percent, safe_type, reverses_amendment_id
       from equity_security_amendments where ${scope} order by effective_on, created_at, id`)).rows.map((row): SecurityAmendmentRecord => ({
-    id: str(row, "id"), securityId: str(row, "security_id"), kind: "mfn_election", effectiveOn: str(row, "effective_on"),
+    id: str(row, "id"), securityId: str(row, "security_id"), kind: str(row, "kind") as SecurityAmendmentRecord["kind"], effectiveOn: str(row, "effective_on"),
     sourceSecurityId: str(row, "source_security_id"), valuationCap: opt(row, "valuation_cap"), discountPercent: opt(row, "discount_percent"),
-    safeType: str(row, "safe_type") as SecurityAmendmentRecord["safeType"],
+    safeType: str(row, "safe_type") as SecurityAmendmentRecord["safeType"], reversesAmendmentId: opt(row, "reverses_amendment_id"),
   }));
   return { classes, amendments, splits, plans, reserveChanges, rounds, securities, events, securityAmendments };
+}
+
+/** A recorded change to a financing round: an amendment of its terms, or its void. */
+export interface RoundAmendmentRecord {
+  id: string;
+  roundId: string;
+  kind: "amend" | "void";
+  effectiveOn: string;
+  name: string | null;
+  pricePerShare: string | null;
+  preMoneyValuation: string | null;
+  preMoneyBasisReason: string | null;
+  reason: string;
+  createdAt: string;
+}
+
+/** Every change recorded to the legal entity's rounds, in recording order. */
+export async function loadRoundAmendments(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<RoundAmendmentRecord[]> {
+  return (await runner.execute<Row>(sql`
+    select id, round_id, kind, effective_on::text as effective_on, name, price_per_share::text as price_per_share,
+           pre_money_valuation::text as pre_money_valuation, pre_money_basis_reason, reason, created_at::text as created_at
+      from equity_round_amendments where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
+     order by created_at, id`)).rows.map((row) => ({
+    id: str(row, "id"), roundId: str(row, "round_id"), kind: str(row, "kind") as RoundAmendmentRecord["kind"], effectiveOn: str(row, "effective_on"),
+    name: opt(row, "name"), pricePerShare: opt(row, "price_per_share"), preMoneyValuation: opt(row, "pre_money_valuation"),
+    preMoneyBasisReason: opt(row, "pre_money_basis_reason"), reason: str(row, "reason"), createdAt: str(row, "created_at"),
+  }));
+}
+
+/**
+ * Rounds with their amendments applied in recording order: each amendment
+ * restates the terms it names. A voided round leaves the live rounds and is
+ * returned with its void.
+ */
+export function applyRoundAmendments(
+  rounds: readonly FinancingRoundRecord[],
+  amendments: readonly RoundAmendmentRecord[],
+): { live: FinancingRoundRecord[]; voided: { round: FinancingRoundRecord; voidedOn: string; reason: string }[] } {
+  const live: FinancingRoundRecord[] = [];
+  const voided: { round: FinancingRoundRecord; voidedOn: string; reason: string }[] = [];
+  for (const original of rounds) {
+    let round = original;
+    let ended: RoundAmendmentRecord | null = null;
+    for (const amendment of amendments) {
+      if (amendment.roundId !== round.id) continue;
+      if (amendment.kind === "void") {
+        ended = amendment;
+        break;
+      }
+      round = {
+        ...round,
+        name: amendment.name ?? round.name,
+        pricePerShare: amendment.pricePerShare ?? round.pricePerShare,
+        preMoneyValuation: amendment.preMoneyValuation ?? round.preMoneyValuation,
+        preMoneyBasisReason: amendment.preMoneyValuation !== null ? amendment.preMoneyBasisReason : round.preMoneyBasisReason,
+      };
+    }
+    if (ended) voided.push({ round, voidedOn: ended.effectiveOn, reason: ended.reason });
+    else live.push(round);
+  }
+  return { live, voided };
 }

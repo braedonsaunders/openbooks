@@ -16,12 +16,12 @@ import {
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 import { accounts } from "./coa";
-import { journalEntries } from "./ledger";
+import { journalEntries, journalLines } from "./ledger";
 import { parties } from "./parties";
 import { subsidiaries } from "./subsidiaries";
 
 /**
- * Equity and cap table records (migrations 0733, 0738 and 0742). Every row belongs to one
+ * Equity and cap table records (migrations 0733, 0738, 0742 and 0760). Every row belongs to one
  * organization and one legal entity; children reference their parents by
  * (org_id, subsidiary_id, id) so a record cannot attach to another entity's
  * class, plan, round or security. Records are retained history: corrections
@@ -52,6 +52,8 @@ export const equityShareClasses = pgTable(
     originalIssuePrice: sharePrice("original_issue_price"),
     initialConversionPrice: sharePrice("initial_conversion_price"),
     liquidationMultiple: numeric("liquidation_multiple", { precision: 10, scale: 4 }),
+    /** What a preferred class's preference is measured on: the amount paid for each certificate, or the original issue price. */
+    liquidationPreferenceBasis: text("liquidation_preference_basis", { enum: ["original_issue_price", "amount_paid"] }).notNull().default("amount_paid"),
     participation: text("participation", { enum: ["none", "full", "capped"] }).notNull().default("none"),
     participationCapMultiple: numeric("participation_cap_multiple", { precision: 10, scale: 4 }),
     seniority: integer("seniority").notNull().default(0),
@@ -169,6 +171,8 @@ export const equityFinancingRounds = pgTable(
     pricePerShare: sharePrice("price_per_share").notNull(),
     preMoneyValuation: money("pre_money_valuation").notNull(),
     currency: currencyCode("currency").notNull(),
+    /** Why the pre-money valuation is stated on another basis than the price times the pre-round fully diluted shares. */
+    preMoneyBasisReason: text("pre_money_basis_reason"),
     ...created,
   },
   (t) => [
@@ -490,7 +494,7 @@ export const equityCompensationRunReleases = pgTable(
   ],
 );
 
-/** Security term amendments: a SAFE holder's MFN election adopting a later instrument's terms. */
+/** Security term amendments: a SAFE holder's MFN election adopting a later instrument's terms, or its reversal. */
 export const equitySecurityAmendments = pgTable(
   "equity_security_amendments",
   {
@@ -498,18 +502,22 @@ export const equitySecurityAmendments = pgTable(
     orgId: orgRef(),
     subsidiaryId: uuid("subsidiary_id").notNull(),
     securityId: uuid("security_id").notNull(),
-    kind: text("kind", { enum: ["mfn_election"] }).notNull(),
+    kind: text("kind", { enum: ["mfn_election", "mfn_reversal"] }).notNull(),
     effectiveOn: date("effective_on").notNull(),
     sourceSecurityId: uuid("source_security_id").notNull(),
     valuationCap: money("valuation_cap"),
     discountPercent: numeric("discount_percent", { precision: 9, scale: 4 }),
     safeType: text("safe_type", { enum: ["pre_money", "post_money"] }).notNull(),
+    /** The election a reversal undoes. */
+    reversesAmendmentId: uuid("reverses_amendment_id"),
     reason: text("reason").notNull(),
     idempotencyKey: text("idempotency_key"),
     ...created,
   },
   (t) => [
     uniqueIndex("equity_security_amendments_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("equity_security_amendments_one_reversal").on(t.orgId, t.reversesAmendmentId).where(sql`reverses_amendment_id IS NOT NULL`),
+    foreignKey({ name: "equity_security_amendments_reverses_fkey", columns: [t.orgId, t.reversesAmendmentId], foreignColumns: [t.orgId, t.id] }),
     uniqueIndex("equity_security_amendments_idempotency_unique").on(t.orgId, t.idempotencyKey),
     index("equity_security_amendments_security").on(t.orgId, t.securityId, t.effectiveOn),
     foreignKey({
@@ -653,6 +661,71 @@ export const equityPositionMovements = pgTable(
       name: "equity_position_movements_plan_fkey",
       columns: [t.orgId, t.subsidiaryId, t.planId],
       foreignColumns: [equityPlans.orgId, equityPlans.subsidiaryId, equityPlans.id],
+    }),
+  ],
+);
+
+/** Corrections of a recorded financing round: an amendment of its terms, or its void. */
+export const equityRoundAmendments = pgTable(
+  "equity_round_amendments",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    roundId: uuid("round_id").notNull(),
+    kind: text("kind", { enum: ["amend", "void"] }).notNull(),
+    effectiveOn: date("effective_on").notNull(),
+    name: text("name"),
+    pricePerShare: sharePrice("price_per_share"),
+    preMoneyValuation: money("pre_money_valuation"),
+    preMoneyBasisReason: text("pre_money_basis_reason"),
+    reason: text("reason").notNull(),
+    idempotencyKey: text("idempotency_key"),
+    ...created,
+  },
+  (t) => [
+    uniqueIndex("equity_round_amendments_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("equity_round_amendments_idempotency_unique").on(t.orgId, t.idempotencyKey),
+    index("equity_round_amendments_round").on(t.orgId, t.roundId, t.createdAt),
+    uniqueIndex("equity_round_amendments_one_void").on(t.orgId, t.roundId).where(sql`kind = 'void'`),
+    foreignKey({
+      name: "equity_round_amendments_round_fkey",
+      columns: [t.orgId, t.subsidiaryId, t.roundId],
+      foreignColumns: [equityFinancingRounds.orgId, equityFinancingRounds.subsidiaryId, equityFinancingRounds.id],
+    }),
+  ],
+);
+
+/**
+ * The security an equity journal line's instrument balance belongs to, when
+ * the line was copied from another environment under its source identity.
+ * Instrument balances read the attribution in preference to the line's own.
+ */
+export const equityInstrumentLineAttributions = pgTable(
+  "equity_instrument_line_attributions",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    journalEntryId: uuid("journal_entry_id").notNull(),
+    journalLineId: uuid("journal_line_id").notNull(),
+    securityId: uuid("security_id").notNull(),
+    role: text("role", { enum: ["deposit", "interest"] }).notNull(),
+    /** The security identity the line itself names. */
+    recordedIdentity: text("recorded_identity").notNull(),
+    reason: text("reason").notNull(),
+    ...created,
+  },
+  (t) => [
+    uniqueIndex("equity_instrument_line_attributions_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("equity_instrument_line_attributions_line_unique").on(t.orgId, t.journalLineId),
+    index("equity_instrument_line_attributions_security").on(t.orgId, t.securityId, t.role),
+    foreignKey({ name: "equity_instrument_line_attributions_entry_fkey", columns: [t.orgId, t.journalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id] }),
+    foreignKey({ name: "equity_instrument_line_attributions_line_fkey", columns: [t.orgId, t.journalLineId], foreignColumns: [journalLines.orgId, journalLines.id] }),
+    foreignKey({
+      name: "equity_instrument_line_attributions_security_fkey",
+      columns: [t.orgId, t.subsidiaryId, t.securityId],
+      foreignColumns: [equitySecurities.orgId, equitySecurities.subsidiaryId, equitySecurities.id],
     }),
   ],
 );

@@ -18,6 +18,15 @@ export type InterestBasis = "simple" | "compound_annual" | "compound_semiannual"
 export type DayCount = "actual_365" | "actual_360" | "thirty_360" | "actual_actual";
 export type RepurchaseBasis = "cost" | "lower_of_cost_or_fmv";
 export type ExpenseAttribution = "straight_line" | "graded";
+/**
+ * What a preferred class's liquidation preference is measured on, per share:
+ * the class's original issue price, or what was paid for each certificate
+ * (its purchase price, or the amount a SAFE or note converted), so shares a
+ * convertible bought at a discount or under a cap carry the investment as
+ * their preference.
+ */
+export type LiquidationPreferenceBasis = "original_issue_price" | "amount_paid";
+export const LIQUIDATION_PREFERENCE_BASES: readonly LiquidationPreferenceBasis[] = ["original_issue_price", "amount_paid"];
 export type SecurityEventKind =
   | "exercise"
   | "settle"
@@ -59,6 +68,7 @@ export interface ShareClassRecord {
   originalIssuePrice: string | null;
   initialConversionPrice: string | null;
   liquidationMultiple: string | null;
+  liquidationPreferenceBasis: LiquidationPreferenceBasis;
   participation: Participation;
   participationCapMultiple: string | null;
   seniority: number;
@@ -165,18 +175,27 @@ export interface SecurityEventRecord {
   reversesEventId: string | null;
 }
 
-/** A SAFE holder's MFN election: the later instrument's terms adopted from a date. */
+/**
+ * A SAFE holder's MFN election (the later instrument's terms adopted from a
+ * date), or the reversal of one: from its date the SAFE carries the terms
+ * the reversal records again, and the election no longer applies.
+ */
 export interface SecurityAmendmentRecord {
   id: string;
   securityId: string;
-  kind: "mfn_election";
+  kind: "mfn_election" | "mfn_reversal";
   effectiveOn: string;
+  /** The instrument whose terms the election adopted (a reversal names its election's source). */
   sourceSecurityId: string;
+  /** An election's adopted terms; a reversal's restored terms. */
   valuationCap: string | null;
   discountPercent: string | null;
   safeType: SafeType;
+  /** The election a reversal undoes. */
+  reversesAmendmentId: string | null;
 }
 
+/** A financing round with the terms its latest amendment states. Voided rounds are not part of the book. */
 export interface FinancingRoundRecord {
   id: string;
   name: string;
@@ -185,6 +204,8 @@ export interface FinancingRoundRecord {
   pricePerShare: string;
   preMoneyValuation: string;
   currency: string;
+  /** Why the pre-money valuation is stated on a basis other than the price times the pre-round fully diluted shares. */
+  preMoneyBasisReason: string | null;
 }
 
 /** Everything recorded for one legal entity. */

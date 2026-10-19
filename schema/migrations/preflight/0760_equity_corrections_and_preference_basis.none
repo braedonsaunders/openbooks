@@ -1,0 +1,1 @@
+The relaxed constraints accept every existing row, the new columns take defaults, and the attribution backfill records only lines whose copy chain resolves to a security of the same tenant and legal entity, so there is no precondition to probe.

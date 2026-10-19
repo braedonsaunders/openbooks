@@ -9,13 +9,13 @@ const COMMON: ShareClassRecord = {
   id: "c-common", code: "CS", name: "Common", kind: "common", effectiveOn: "2023-01-01", initialAuthorizedShares: 20_000_000n,
   parValue: "0.0001", originalIssuePrice: null, initialConversionPrice: null, liquidationMultiple: null,
   participation: "none", participationCapMultiple: null, seniority: 0, antiDilution: "none",
-  conversionShareClassId: null, conversionAdjustsForSplits: true,
+  conversionShareClassId: null, conversionAdjustsForSplits: true, liquidationPreferenceBasis: "original_issue_price",
 };
 const SERIES_A: ShareClassRecord = {
   id: "c-a", code: "A", name: "Series A Preferred", kind: "preferred", effectiveOn: "2024-01-01", initialAuthorizedShares: 3_000_000n,
   parValue: "0.0001", originalIssuePrice: "2.0000000000", initialConversionPrice: "2.0000000000", liquidationMultiple: "1.0000",
   participation: "none", participationCapMultiple: null, seniority: 1, antiDilution: "broad_based",
-  conversionShareClassId: "c-common", conversionAdjustsForSplits: true,
+  conversionShareClassId: "c-common", conversionAdjustsForSplits: true, liquidationPreferenceBasis: "original_issue_price",
 };
 const PLAN: PlanRecord = {
   id: "p-2023", code: "EIP", name: "Equity incentive plan", shareClassId: COMMON.id, effectiveOn: "2023-01-01",
@@ -72,6 +72,18 @@ test("the cap table counts outstanding shares as converted and adds awards and t
   const classA = table.classes.find((row) => row.code === "A")!;
   assert.equal(classA.conversionRatio, "1.0000000000");
   assert.equal(classA.fullyDilutedPercent, "10.0000");
+});
+
+test("on the holder basis the unallocated pool is its own line, so holders and the pool make up the fully diluted total", () => {
+  const table = buildCapTable(book(), "2024-06-30");
+  assert.deepEqual(table.unallocatedPool, { fullyDiluted: "520000", fullyDilutedPercent: "5.2000" });
+  const holders = table.holders.reduce((sum, holder) => sum + BigInt(holder.fullyDiluted), 0n);
+  assert.equal(holders + BigInt(table.unallocatedPool.fullyDiluted), BigInt(table.totals.fullyDiluted));
+  const classes = table.classes.reduce((sum, row) => sum + BigInt(row.fullyDiluted), 0n);
+  assert.equal(holders + BigInt(table.unallocatedPool.fullyDiluted), classes, "the holder basis totals what the class basis totals");
+  const percent = [...table.holders.map((holder) => holder.fullyDilutedPercent), table.unallocatedPool.fullyDilutedPercent]
+    .reduce((sum, value) => sum + BigInt(value.replace(".", "")), 0n);
+  assert.equal(percent, 1_000_000n, "the fully diluted percentages sum to 100%");
 });
 
 test("a security issued after the as-of date is not on the table", () => {

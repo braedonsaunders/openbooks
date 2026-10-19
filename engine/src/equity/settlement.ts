@@ -50,11 +50,20 @@ export interface Settlement {
   accrual: { txnUnits: bigint; functionalUnits: bigint; entryId: string | null } | null;
 }
 
-/** Interest a note has accrued on the ledger to date, in its own currency: run lines and settlement accruals. */
-export async function accruedToDate(orgId: string, securityId: string): Promise<bigint> {
+/**
+ * Interest a note has accrued on the ledger, in its own currency: run lines
+ * and settlement accruals. With `asOf`, only runs through that date and
+ * settlements dated on or before it count.
+ */
+export async function accruedToDate(orgId: string, securityId: string, asOf?: string | null): Promise<bigint> {
   const row = (await db.execute<{ runs: string; events: string }>(sql`
-    select coalesce((select sum(period_amount) from equity_interest_run_lines where org_id = ${orgId} and security_id = ${securityId}), 0)::text as runs,
-           coalesce((select sum(interest_accrued_amount) from equity_security_events where org_id = ${orgId} and security_id = ${securityId}), 0)::text as events`)).rows[0];
+    select coalesce((select sum(l.period_amount) from equity_interest_run_lines l
+                      join equity_interest_runs r on r.org_id = l.org_id and r.id = l.run_id
+                     where l.org_id = ${orgId} and l.security_id = ${securityId}
+                       ${asOf ? sql`and r.through_date <= ${asOf}::date` : sql``}), 0)::text as runs,
+           coalesce((select sum(interest_accrued_amount) from equity_security_events
+                     where org_id = ${orgId} and security_id = ${securityId}
+                       ${asOf ? sql`and effective_on <= ${asOf}::date` : sql``}), 0)::text as events`)).rows[0];
   return toUnits(row?.runs ?? "0") + toUnits(row?.events ?? "0");
 }
 

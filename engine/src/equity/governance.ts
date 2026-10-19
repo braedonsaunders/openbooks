@@ -2,11 +2,12 @@
  * Governed equity actions and their optional approval in Flows.
  *
  * Voids, reversals, repurchases, SAFE and note repayments and cancellations,
- * class amendments, splits, plan reserve changes, MFN elections, stock
- * compensation and note interest runs, and equity account policy versions
- * are governed: each is recorded as an action request (its kind, frozen
- * command input and the figures a Flow condition reads) and submitted to any
- * enabled Equity action Flow (`on_submit`).
+ * class amendments, splits, plan reserve changes, MFN elections and their
+ * reversals, financing round amendments and voids, stock compensation and
+ * note interest runs, and equity account policy versions are governed: each
+ * is recorded as an action request (its kind, frozen command input and the
+ * figures a Flow condition reads) and submitted to any enabled Equity action
+ * Flow (`on_submit`).
  *
  *  - When no Flow raises an approval gate, the action applies at once in the
  *    same transaction and the request records that no approval applied. An
@@ -36,7 +37,7 @@ import { assertEquityFeature, assertEquityReadable, loadLegalEntity, lockEquityE
 
 export const EQUITY_ACTIONS = [
   "void", "reverse", "repurchase", "repay", "cancel_convertible", "class_amendment", "split", "reserve_change",
-  "mfn_election", "compensation_run", "interest_run", "account_policy",
+  "mfn_election", "mfn_reversal", "compensation_run", "interest_run", "account_policy", "round_amendment", "round_void",
 ] as const;
 export type EquityAction = (typeof EQUITY_ACTIONS)[number];
 

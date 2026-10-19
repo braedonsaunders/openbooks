@@ -75,7 +75,7 @@ test("an MFN SAFE adopts a later SAFE's better terms by a recorded election and 
     assert.equal(audit.n, "1");
 
     const seriesSeed = await preferredClass(w);
-    const round = await createRound({ ...entity(w), name: "Seed", shareClassId: seriesSeed, closedOn: "2026-07-20", pricePerShare: "1.00", preMoneyValuation: "5000000" });
+    const round = await createRound({ ...entity(w), name: "Seed", shareClassId: seriesSeed, closedOn: "2026-07-20", pricePerShare: "1.00", preMoneyValuation: "1000000" });
     const converted = await recordSecurityEvent({ ...manage(w), securityId: mfn.id, kind: "convert", effectiveOn: "2026-07-20", roundId: round.id });
     // The adopted 20% discount prices the conversion at 0.80: 100,000 / 0.80 shares.
     const certificate = await loadSecurityDetail({ ...manage(w), securityId: converted.resultingSecurityId!, asOf: "2026-07-20" });
@@ -113,7 +113,10 @@ test("note interest accrues by idempotent runs on its day count and a conversion
     assert.equal(preview.lines[0]!.period, "679.4600", "61 days accrue 1,336.99; 657.53 is already posted");
 
     const seriesSeed = await preferredClass(w);
-    const round = await createRound({ ...entity(w), name: "Seed", shareClassId: seriesSeed, closedOn: "2026-08-31", pricePerShare: "1.00", preMoneyValuation: "5000000" });
+    const round = await createRound({
+      ...entity(w), name: "Seed", shareClassId: seriesSeed, closedOn: "2026-08-31", pricePerShare: "1.00", preMoneyValuation: "5000000",
+      preMoneyBasisReason: "Valued on the term sheet before any shares were issued",
+    });
     const converted = await recordSecurityEvent({ ...manage(w), securityId: issued.id, kind: "convert", effectiveOn: "2026-08-31", roundId: round.id });
     assert.ok(converted.accrualEntryId, "the interest since the last run accrues on the conversion date");
     assert.deepEqual((await entryLines(w.org.orgId, converted.accrualEntryId!)).map((line) => line.amount), ["679.4600", "-679.4600"]);
@@ -129,9 +132,7 @@ test("note interest accrues by idempotent runs on its day count and a conversion
     assert.equal(await accountBalance(w.org.orgId, w.accounts.convertible), "0.0000");
     const certificate = await loadSecurityDetail({ ...manage(w), securityId: converted.resultingSecurityId!, asOf: "2026-08-31" });
     assert.equal(certificate.security.quantity, "101336", "101,336.99 converts at 1.00 into whole shares");
-    const after = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" }));
-    assert.equal(after.total, "0.0000", "a converted note stops accruing");
-    assert.equal(after.journalEntryId, null);
+    await assert.rejects(postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" }), refusal("equity_run_nothing_due"), "a converted note stops accruing, so no run is due");
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
   }
@@ -239,7 +240,7 @@ test("an early exercise issues restricted stock, holds the deposit, releases it 
     assert.equal(await accountBalance(w.org.orgId, w.accounts.deposit), "-3400.0000");
     const optionCost = await loadSecurityDetail({ ...manage(w), securityId: option.id, asOf: "2026-10-31" });
     assert.equal(
-      BigInt(optionCost.compensation!.total.replace(".", "")),
+      BigInt(optionCost.compensation!.expectedAfterForfeitures.replace(".", "")),
       grantValue(3800n),
       "the repurchased unvested shares are forfeitures of the option's cost",
     );
@@ -452,7 +453,10 @@ test("a foreign-currency SAFE converts at the closing-date rate and its liabilit
     await seedSpotRate(w.org.orgId, "USD", "CAD", "2026-07-01", "1.3500000000");
     await seedSpotRate(w.org.orgId, "USD", "CAD", "2026-07-20", "1.4000000000");
     const instrument = await safe(w, { currency: "USD", considerationAmount: "10000" });
-    const round = await createRound({ ...entity(w), name: "Seed", shareClassId: w.commonClassId, closedOn: "2026-07-20", pricePerShare: "1.00", preMoneyValuation: "1000000" });
+    const round = await createRound({
+      ...entity(w), name: "Seed", shareClassId: w.commonClassId, closedOn: "2026-07-20", pricePerShare: "1.00", preMoneyValuation: "1000000",
+      preMoneyBasisReason: "Valued on the term sheet before any shares were issued",
+    });
     const converted = await recordSecurityEvent({ ...manage(w), securityId: instrument.id, kind: "convert", effectiveOn: "2026-07-20", roundId: round.id });
     const certificate = await loadSecurityDetail({ ...manage(w), securityId: converted.resultingSecurityId!, asOf: "2026-07-20" });
     assert.equal(certificate.security.quantity, "14000", "10,000 USD at 1.40 converts at 1.00 CAD a share");

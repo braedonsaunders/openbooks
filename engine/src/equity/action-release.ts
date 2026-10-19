@@ -10,7 +10,8 @@ import { applyCompensationRun } from "./compensation-run.ts";
 import { applySecurityEvent, type RecordEventInput } from "./events.ts";
 import { releaseEquityAction, type EquityAction, type EquityActionApplier } from "./governance.ts";
 import { applyInterestRun } from "./interest-run.ts";
-import { applyMfnElection, type ElectMfnInput } from "./mfn.ts";
+import { applyMfnElection, applyMfnReversal, type ElectMfnInput, type ReverseMfnInput } from "./mfn.ts";
+import { applyRoundAmendment, applyRoundVoid, type AmendRoundInput, type VoidRoundInput } from "./rounds.ts";
 import {
   applyReserveChange,
   applyShareClassAmendment,
@@ -32,6 +33,9 @@ const APPLIERS: Readonly<Record<EquityAction, EquityActionApplier>> = {
   split: (payload, actorId, orgId) => applySplit({ ...(payload as unknown as RecordSplitInput), orgId, actorId }),
   reserve_change: (payload, actorId, orgId) => applyReserveChange({ ...(payload as unknown as ChangePlanReserveInput), orgId, actorId }),
   mfn_election: (payload, actorId, orgId) => applyMfnElection({ ...(payload as unknown as ElectMfnInput), orgId, actorId }),
+  mfn_reversal: (payload, actorId, orgId) => applyMfnReversal({ ...(payload as unknown as ReverseMfnInput), orgId, actorId }),
+  round_amendment: (payload, actorId, orgId) => applyRoundAmendment({ ...(payload as unknown as AmendRoundInput), orgId, actorId }),
+  round_void: (payload, actorId, orgId) => applyRoundVoid({ ...(payload as unknown as VoidRoundInput), orgId, actorId }),
   compensation_run: (payload, actorId, orgId) =>
     applyCompensationRun({ orgId, actorId, subsidiaryId: String(payload.subsidiaryId), throughDate: String(payload.throughDate) }),
   interest_run: (payload, actorId, orgId) =>

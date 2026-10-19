@@ -6,8 +6,12 @@
  *    first, pro rata among notes when the proceeds fall short.
  * 2. Preferred classes that keep their preference are paid by seniority,
  *    most senior first (higher seniority number), pro rata within a tier.
- *    A class's preference is its liquidation multiple times its original
- *    issue price per outstanding share. A SAFE that takes its cash-out
+ *    A class's preference is its liquidation multiple times each outstanding
+ *    share's preference price: the class's original issue price, or, when
+ *    the class measures its preference on the amount paid, what was paid for
+ *    the share's certificate (a SAFE or note conversion's converted amount,
+ *    not the round price). Within a class the preference is shared by each
+ *    holding's own preference and any participation by shares. A SAFE that takes its cash-out
  *    amount (its purchase amount) is paid in the most junior preferred tier
  *    (ahead of common when no preferred class keeps a preference).
  * 3. The residual is shared per common-equivalent share by common stock,
@@ -55,6 +59,8 @@ export interface WaterfallHolding {
   securityId: string;
   holderPartyId: string;
   shares: bigint;
+  /** Preference price per share before the liquidation multiple (absent: the class's original issue price). */
+  preferencePrice?: Rational | null;
 }
 
 export interface WaterfallClass {
@@ -129,7 +135,7 @@ export interface WaterfallClassRow {
   participation: string;
   total: string;
   perShare: string;
-  /** The liquidation preference the class holds: its multiple times its original issue price per outstanding share. */
+  /** The liquidation preference the class holds: its multiple times each outstanding share's preference price. */
   preferenceEntitlement: string;
   /** A capped participating class's cap, preference included (null otherwise). */
   participationCap: string | null;
@@ -168,14 +174,29 @@ interface Distribution {
 
 const sharesOf = (shareClass: WaterfallClass): bigint => shareClass.holdings.reduce((sum, holding) => sum + holding.shares, 0n);
 
+/** A holding's preference price per share before the multiple: its own, else the class's original issue price. */
+function holdingPrice(shareClass: WaterfallClass, holding: WaterfallHolding): Rational | null {
+  return holding.preferencePrice ?? shareClass.originalIssuePrice;
+}
+
+/** What a holding's shares were paid at, before the multiple. */
+function holdingBasis(shareClass: WaterfallClass, holding: WaterfallHolding): Rational {
+  const price = holdingPrice(shareClass, holding);
+  return price ? multiplyRational(rational(holding.shares), price) : ZERO;
+}
+
+function classBasis(shareClass: WaterfallClass): Rational {
+  return sumRational(shareClass.holdings.map((holding) => holdingBasis(shareClass, holding)));
+}
+
 function preferenceOf(shareClass: WaterfallClass): Rational {
   if (shareClass.kind !== "preferred" || !shareClass.originalIssuePrice) return ZERO;
-  return multiplyRational(multiplyRational(rational(sharesOf(shareClass)), shareClass.originalIssuePrice), shareClass.liquidationMultiple);
+  return multiplyRational(classBasis(shareClass), shareClass.liquidationMultiple);
 }
 
 function capOf(shareClass: WaterfallClass): Rational | null {
   if (shareClass.participation !== "capped" || !shareClass.participationCapMultiple || !shareClass.originalIssuePrice) return null;
-  return multiplyRational(multiplyRational(rational(sharesOf(shareClass)), shareClass.originalIssuePrice), shareClass.participationCapMultiple);
+  return multiplyRational(classBasis(shareClass), shareClass.participationCapMultiple);
 }
 
 const asConverted = (shareClass: WaterfallClass): Rational => multiplyRational(rational(sharesOf(shareClass)), shareClass.conversionRatio);
@@ -395,11 +416,15 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
   // Exact lines: holdings by class, awards net of exercise price, convertibles, unallocated.
   const lines: { payout: WaterfallPayout | null; exact: Rational }[] = [];
   for (const shareClass of input.classes) {
-    const total = classTotal(distribution, shareClass.shareClassId);
+    // The preference follows each holding's own preference; participation follows shares.
+    const preference = distribution.classPreference.get(shareClass.shareClassId) ?? ZERO;
+    const participation = distribution.classParticipation.get(shareClass.shareClassId) ?? ZERO;
     const shares = sharesOf(shareClass);
+    const basis = classBasis(shareClass);
     for (const holding of shareClass.holdings) {
-      const exact = shares > 0n ? multiplyRational(total, rational(holding.shares, shares)) : ZERO;
-      lines.push({ payout: { securityId: holding.securityId, holderPartyId: holding.holderPartyId, kind: "share", shareClassId: shareClass.shareClassId, amount: "" }, exact });
+      const fromPreference = basis.numerator > 0n ? multiplyRational(preference, divideRational(holdingBasis(shareClass, holding), basis)) : ZERO;
+      const fromParticipation = shares > 0n ? multiplyRational(participation, rational(holding.shares, shares)) : ZERO;
+      lines.push({ payout: { securityId: holding.securityId, holderPartyId: holding.holderPartyId, kind: "share", shareClassId: shareClass.shareClassId, amount: "" }, exact: addRational(fromPreference, fromParticipation) });
     }
   }
   for (const award of input.awards) {

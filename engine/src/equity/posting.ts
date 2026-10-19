@@ -14,7 +14,7 @@ import { sql } from "drizzle-orm";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { CloseError } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { loadControlAccountsForRoles } from "../records/control-accounts.ts";
@@ -114,24 +114,24 @@ export async function isEquityAccount(runner: SqlExecutor, orgId: string, accoun
   return row?.type === "equity";
 }
 
-/** Accounts a consideration (cash received or paid) may settle through. */
-export const CONSIDERATION_ACCOUNT_TYPES = ["asset_bank", "asset_current_other"] as const;
+/** Accounts a consideration (cash received or paid) may settle through: cash and bank accounts. */
+export const CONSIDERATION_ACCOUNT_TYPES = ["asset_bank"] as const;
 
-/** A consideration account must be an active posting bank or current-asset account of the organization. */
+/** A consideration account must be an active posting cash or bank account of the organization. */
 export async function requireConsiderationAccount(runner: SqlExecutor, orgId: string, accountId: string | null | undefined): Promise<string> {
   if (!accountId) {
     throw new EquityError("Choose the account the consideration settles through.", {
       code: "equity_consideration_account_missing",
-      remedy: "Choose the bank or current-asset account that received or paid the cash.",
+      remedy: "Choose the cash or bank account that received or paid the cash.",
       field: "considerationAccountId",
     });
   }
   const row = (await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
     select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
   if (!row || !row.is_active || row.is_summary || !(CONSIDERATION_ACCOUNT_TYPES as readonly string[]).includes(row.type)) {
-    throw new EquityError("The consideration account must be an active bank or current-asset posting account.", {
+    throw new EquityError("The consideration account must be an active cash or bank posting account.", {
       code: "equity_consideration_account_invalid",
-      remedy: "Choose an active bank or current-asset account.",
+      remedy: "Choose an active cash or bank account; receivables, prepaid, inventory and allowance accounts cannot receive or pay the cash.",
       field: "considerationAccountId",
     });
   }
@@ -165,7 +165,11 @@ export interface InstrumentBalanceGroup {
  * The balance a security carries on the ledger in one role, grouped by
  * account, currency and rate: every posted equity line identified with the
  * security and role, reversals included, so a settlement relieves exactly
- * what was accrued, on the accounts it sits on.
+ * what was accrued, on the accounts it sits on. A line names its security
+ * on the line itself; a recorded attribution correction (see
+ * equity_instrument_line_attributions) names it instead when the line's own
+ * identity does not resolve in this organization. With `asOf`, only entries
+ * posted on or before that date count: the balance as the ledger stood then.
  */
 export async function instrumentBalance(
   runner: SqlExecutor,
@@ -173,16 +177,20 @@ export async function instrumentBalance(
   subsidiaryId: string,
   securityId: string,
   role: InstrumentBalanceRole,
+  asOf?: string | null,
 ): Promise<InstrumentBalanceGroup[]> {
   const rows = (await runner.execute<{ account_id: string; currency: string; fx_rate: string; amount: string; txn_amount: string }>(sql`
     with entries as materialized (
       select id from journal_entries
        where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and origin = ${EQUITY_JOURNAL_ORIGIN} and status in ('posted', 'reversed')
+         ${asOf ? sql`and posting_date <= ${asOf}::date` : sql``}
     )
     select l.account_id, l.currency, l.fx_rate::text as fx_rate, sum(l.amount)::text as amount, sum(l.txn_amount)::text as txn_amount
       from entries e
       join journal_lines l on l.org_id = ${orgId} and l.entry_id = e.id
-     where l.custom->>'equitySecurityId' = ${securityId} and l.custom->>'equityRole' = ${role}
+      left join equity_instrument_line_attributions a on a.org_id = l.org_id and a.journal_line_id = l.id
+     where coalesce(a.security_id::text, l.custom->>'equitySecurityId') = ${securityId}
+       and coalesce(a.role, l.custom->>'equityRole') = ${role}
      group by l.account_id, l.currency, l.fx_rate
      order by l.account_id, l.currency, l.fx_rate`)).rows;
   return rows
@@ -223,6 +231,42 @@ async function coveringPeriod(runner: SqlExecutor, orgId: string, subsidiaryId: 
     });
   }
   return period.id;
+}
+
+/**
+ * Refuse a dated equity record whose accounting period is closed for the
+ * general ledger in the primary book, whether or not it posts an amount: a
+ * run records what it measured into its period, so it is dated into an open
+ * one, exactly as its entry would be.
+ */
+export async function assertPostingPeriodOpen(runner: SqlExecutor, orgId: string, subsidiaryId: string, on: string, what: string): Promise<void> {
+  const bookId = await primaryBook(runner, orgId);
+  const periodId = await coveringPeriod(runner, orgId, subsidiaryId, on);
+  try {
+    await assertPeriodModulesOpen(runner, { orgId, periodId, bookId, subsidiaryIds: [subsidiaryId], modules: ["gl"] });
+  } catch (error) {
+    if (error instanceof CloseError) {
+      throw new EquityError(`The ${what} through ${on} falls in a closed period: ${error.message}`, {
+        status: 409,
+        code: "equity_period_closed",
+        remedy: "Run through the end of an open period (the runs view offers the next one with activity due), or reopen the period through Period Close.",
+        field: "throughDate",
+        cause: error,
+      });
+    }
+    throw error;
+  }
+}
+
+/** Whether the accounting period covering a date is open for general ledger posting in the primary book. */
+export async function postingPeriodOpen(runner: SqlExecutor, orgId: string, subsidiaryId: string, on: string): Promise<boolean> {
+  try {
+    await assertPostingPeriodOpen(runner, orgId, subsidiaryId, on, "posting");
+    return true;
+  } catch (error) {
+    if (error instanceof EquityError && (error.code === "equity_period_closed" || error.code === "equity_period_missing")) return false;
+    throw error;
+  }
 }
 
 /**

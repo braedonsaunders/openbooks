@@ -19,11 +19,12 @@ import {
 import { convertingAmount, type ConvertingInstrument } from "./convertibles.ts";
 import { EquityError } from "./errors.ts";
 import { restate } from "./fx.ts";
-import { compareRational, formatMoney, multiplyRational, parseDecimal, parseMoney, parsePrice, PERCENT_SCALE, rational, subtractRational, type Rational } from "./quantities.ts";
+import { addRational, compareRational, divideRational, formatMoney, multiplyRational, parseDecimal, parseMoney, parsePrice, PERCENT_SCALE, rational, subtractRational, type Rational } from "./quantities.ts";
 import { modelRound, type ProtectedClass, type RoundModelResult } from "./round-model.ts";
 import { restatePrice } from "./splits.ts";
-import type { EquityBook } from "./types.ts";
+import type { EquityBook, SecurityRecord, ShareClassRecord } from "./types.ts";
 import { acceleratedVested, hasVestingSchedule } from "./vesting.ts";
+import { piecewiseCurve } from "./waterfall-curve.ts";
 import { runWaterfall, type WaterfallAward, type WaterfallClass, type WaterfallConvertible, type WaterfallInput, type WaterfallResult } from "./waterfall.ts";
 
 export interface RoundScenario {
@@ -109,11 +110,33 @@ export interface ExitScenario {
   minorUnitScale: number;
 }
 
+/**
+ * A certificate's preference price per share on `asOf`, before the
+ * liquidation multiple, for a class that measures its preference on the
+ * amount paid: what was paid per share issued (the purchase price, or the
+ * amount a SAFE or note converted), restated through the class's splits and
+ * into the functional currency at the certificate's issue rate. Null for a
+ * class measured on its original issue price, or a certificate that records
+ * no amount paid, which then takes the class's original issue price.
+ */
+export function preferencePrice(book: Pick<EquityBook, "splits">, shareClass: ShareClassRecord, security: SecurityRecord, asOf: string): Rational | null {
+  if (shareClass.kind !== "preferred" || shareClass.liquidationPreferenceBasis !== "amount_paid") return null;
+  let paid: Rational | null = null;
+  if (security.considerationAmount && security.quantity !== null && security.quantity > 0n) {
+    paid = divideRational(parseMoney(security.considerationAmount, "the amount paid"), rational(security.quantity));
+  } else if (security.pricePerShare) {
+    paid = parsePrice(security.pricePerShare, "the price per share");
+  }
+  if (!paid) return null;
+  return restate(restatePrice(book.splits, shareClass.id, paid, security.issueDate, asOf), security.fxRate);
+}
+
 /** The holders, awards and convertibles taking part in an exit as of the scenario date. */
 function waterfallParticipants(book: EquityBook, scenario: Omit<ExitScenario, "exitValue" | "minorUnitScale">, rates: ModelRates): Pick<WaterfallInput, "classes" | "awards" | "convertibles"> {
   const { asOf } = scenario;
   const classes: WaterfallClass[] = [];
-  const holdingsByClass = new Map<string, { securityId: string; holderPartyId: string; shares: bigint }[]>();
+  const holdingsByClass = new Map<string, { securityId: string; holderPartyId: string; shares: bigint; preferencePrice: Rational | null }[]>();
+  const classById = new Map(book.classes.map((row) => [row.id, row]));
   const awards: WaterfallAward[] = [];
   for (const security of book.securities) {
     if (security.issueDate > asOf || security.quantity === null || !security.shareClassId) continue;
@@ -121,7 +144,11 @@ function waterfallParticipants(book: EquityBook, scenario: Omit<ExitScenario, "e
     if (state.outstanding === 0n) continue;
     if (security.kind === "share") {
       const list = holdingsByClass.get(security.shareClassId) ?? [];
-      list.push({ securityId: security.id, holderPartyId: security.holderPartyId, shares: state.outstanding });
+      const shareClass = classById.get(security.shareClassId);
+      list.push({
+        securityId: security.id, holderPartyId: security.holderPartyId, shares: state.outstanding,
+        preferencePrice: shareClass ? preferencePrice(book, shareClass, security, asOf) : null,
+      });
       holdingsByClass.set(security.shareClassId, list);
       continue;
     }
@@ -194,22 +221,40 @@ export function waterfallFromBook(book: EquityBook, scenario: ExitScenario, rate
 }
 
 /**
- * The waterfall at evenly spaced exit values from zero to `span` times the
- * scenario's exit value, the same fees taken from each (an exit below the
- * fees leaves nothing): how each class's proceeds move with the exit, and
- * where preferred classes switch between preference and conversion.
+ * The waterfall across exit values from zero to `span` times the scenario's
+ * exit value, the same fees taken from each (an exit below the fees leaves
+ * nothing): how each class's proceeds move with the exit, and where
+ * preferred classes switch between preference and conversion. The curve
+ * holds `points` evenly spaced exits plus a point beside every bend of a
+ * payout, located to within one unit of currency, so straight lines between
+ * its points draw every payout exactly.
  */
 export function waterfallCurveFromBook(book: EquityBook, scenario: ExitScenario, rates: ModelRates, points: number, span: Rational): { exitValue: string; result: WaterfallResult }[] {
   const gross = scenarioMoney(scenario.exitValue, "exitValue");
   netExitProceeds(scenario.exitValue, scenario.transactionFees);
   const fees = scenario.transactionFees ? scenarioMoney(scenario.transactionFees, "transactionFees") : rational(0n);
   const participants = waterfallParticipants(book, scenario, rates);
-  const steps = Math.max(1, Math.trunc(points) - 1);
-  const out: { exitValue: string; result: WaterfallResult }[] = [];
-  for (let step = 0; step <= steps; step += 1) {
-    const exit = multiplyRational(gross, multiplyRational(span, rational(BigInt(step), BigInt(steps))));
-    const net = compareRational(exit, fees) > 0 ? subtractRational(exit, fees) : rational(0n);
-    out.push({ exitValue: formatMoney(exit), result: runWaterfall({ exitValue: net, ...participants, minorUnitScale: scenario.minorUnitScale }) });
-  }
-  return out;
+  const minorUnit = rational(1n, 10n ** BigInt(Math.max(0, scenario.minorUnitScale)));
+  const curve = piecewiseCurve<WaterfallResult>({
+    from: rational(0n),
+    to: multiplyRational(gross, span),
+    points,
+    resolution: rational(1n),
+    evaluate: (exit) => runWaterfall({ exitValue: compareRational(exit, fees) > 0 ? subtractRational(exit, fees) : rational(0n), ...participants, minorUnitScale: scenario.minorUnitScale }),
+    measures: curveMeasures,
+    // Each payout line rounds to the minor unit on its own, so a series may
+    // drift from a straight line by up to one minor unit per line.
+    tolerance: (result) => multiplyRational(minorUnit, rational(BigInt(result.payouts.length + result.classes.length + 1))),
+  });
+  return curve.map((point) => ({ exitValue: formatMoney(point.exit), result: point.result }));
+}
+
+/** The payout series a waterfall curve draws: each class, awards, SAFEs, notes and the unallocated remainder. */
+function curveMeasures(result: WaterfallResult): Map<string, Rational> {
+  const measures = new Map<string, Rational>();
+  const add = (key: string, amount: string) => measures.set(key, addRational(measures.get(key) ?? rational(0n), parseMoney(amount, "the payout")));
+  for (const row of result.classes) add(`class:${row.shareClassId}`, row.total);
+  for (const payout of result.payouts) if (payout.kind !== "share") add(`kind:${payout.kind}`, payout.amount);
+  add("unallocated", result.unallocated);
+  return measures;
 }

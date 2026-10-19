@@ -470,22 +470,72 @@ export function convertibleTerms(security: SecurityRecord): ConvertibleTerms {
   };
 }
 
+/** MFN elections undone by a recorded reversal effective on or before `asOf`. */
+export function reversedElections(book: Pick<EquityBook, "securityAmendments">, asOf: string): Set<string> {
+  return new Set(book.securityAmendments
+    .filter((row) => row.kind === "mfn_reversal" && row.reversesAmendmentId !== null && row.effectiveOn <= asOf)
+    .map((row) => row.reversesAmendmentId!));
+}
+
+/**
+ * The MFN election in force for a SAFE on `asOf`: its latest election
+ * effective by then that no reversal has undone. An election whose source
+ * instrument is void names terms that were entered in error, so it never
+ * applies, whatever the void's date: a conversion always uses terms that
+ * stand. `includeVoidedSources` reads the elections as recorded, to find
+ * conversions that relied on such terms.
+ */
+export function electionInForce(
+  book: Pick<EquityBook, "securityAmendments" | "events">,
+  security: SecurityRecord,
+  asOf: string,
+  options: { includeVoidedSources?: boolean } = {},
+): EquityBook["securityAmendments"][number] | null {
+  const reversed = reversedElections(book, asOf);
+  const voided = options.includeVoidedSources ? new Set<string>() : voidedSecurities(book, "9999-12-31");
+  let election: EquityBook["securityAmendments"][number] | null = null;
+  for (const amendment of book.securityAmendments) {
+    if (amendment.securityId !== security.id || amendment.kind !== "mfn_election" || amendment.effectiveOn > asOf) continue;
+    if (reversed.has(amendment.id) || voided.has(amendment.sourceSecurityId)) continue;
+    if (!election || amendment.effectiveOn >= election.effectiveOn) election = amendment;
+  }
+  return election;
+}
+
+/**
+ * A conversion recorded on terms an MFN election adopted from an instrument
+ * voided after the conversion was recorded: the terms no longer stand, so
+ * the conversion is corrected by voiding the certificate it produced and
+ * converting again. Null for any conversion on terms that stand.
+ */
+export function conversionOnVoidedTerms(
+  book: Pick<EquityBook, "securityAmendments" | "events">,
+  security: SecurityRecord,
+  asOf: string,
+): { electionId: string; sourceSecurityId: string; sourceVoidedOn: string; resultingSecurityId: string | null } | null {
+  if (security.kind !== "safe") return null;
+  const order = new Map(book.events.map((event, index) => [event.id, index]));
+  const conversion = eventsOf(book, security.id, asOf).find((event) => event.kind === "convert");
+  if (!conversion) return null;
+  const election = electionInForce(book, security, conversion.effectiveOn, { includeVoidedSources: true });
+  if (!election) return null;
+  const voided = book.events.find((event) => event.kind === "void" && event.securityId === election.sourceSecurityId && event.effectiveOn <= asOf);
+  if (!voided || (order.get(voided.id) ?? 0) < (order.get(conversion.id) ?? 0)) return null;
+  return { electionId: election.id, sourceSecurityId: election.sourceSecurityId, sourceVoidedOn: voided.effectiveOn, resultingSecurityId: conversion.resultingSecurityId };
+}
+
 /**
  * The terms in force on `asOf`: an MFN SAFE carries the cap, discount and
- * SAFE type of its latest election effective by then; otherwise the terms
- * as issued.
+ * SAFE type of its election in force then (see electionInForce); otherwise
+ * the terms as issued.
  */
 export function effectiveConvertibleTerms(
-  book: Pick<EquityBook, "securityAmendments">,
+  book: Pick<EquityBook, "securityAmendments" | "events">,
   security: SecurityRecord,
   asOf: string,
 ): { terms: ConvertibleTerms; electionId: string | null } {
   const terms = convertibleTerms(security);
-  let election: EquityBook["securityAmendments"][number] | null = null;
-  for (const amendment of book.securityAmendments) {
-    if (amendment.securityId !== security.id || amendment.kind !== "mfn_election" || amendment.effectiveOn > asOf) continue;
-    if (!election || amendment.effectiveOn >= election.effectiveOn) election = amendment;
-  }
+  const election = electionInForce(book, security, asOf);
   if (!election) return { terms, electionId: null };
   return {
     terms: { ...terms, valuationCap: election.valuationCap, discountPercent: election.discountPercent, safeType: election.safeType },
@@ -596,8 +646,12 @@ export interface ConvertibleRow {
   holderPartyId: string;
   status: ConvertibleState["status"];
   principal: string;
+  /** Principal still outstanding on the date: the principal while outstanding, zero once converted, repaid, cancelled or void. */
+  outstandingPrincipal: string;
   accruedInterest: string;
   convertingAmount: string;
+  /** The share certificate a conversion produced. */
+  resultingSecurityId: string | null;
   /** Terms in force on the as-of date (an MFN election's adopted terms when one applies). */
   valuationCap: string | null;
   discountPercent: string | null;
@@ -607,10 +661,19 @@ export interface ConvertibleRow {
   currency: string;
 }
 
+/** The unallocated plan pools on the holder basis: no holder owns them, but they count toward fully diluted. */
+export interface UnallocatedPoolRow {
+  /** Unallocated pool shares, as converted into common. */
+  fullyDiluted: string;
+  fullyDilutedPercent: string;
+}
+
 export interface CapTable {
   asOf: string;
   classes: ClassRow[];
   holders: HolderRow[];
+  /** The holder basis's line for the unallocated pools, so holders and the pool sum to the fully diluted total. */
+  unallocatedPool: UnallocatedPoolRow;
   plans: PlanRow[];
   holdings: HoldingRow[];
   convertibles: ConvertibleRow[];
@@ -675,7 +738,8 @@ export function buildCapTable(book: EquityBook, asOf: string): CapTable {
       const state = convertibleState(book, security, asOf);
       convertibles.push({
         securityId: security.id, securityNumber: security.securityNumber, kind: security.kind, holderPartyId: security.holderPartyId,
-        status: state.status, principal: state.principal, accruedInterest: state.accruedInterest, convertingAmount: state.convertingAmount,
+        status: state.status, principal: state.principal, outstandingPrincipal: state.status === "outstanding" ? state.principal : "0.0000",
+        accruedInterest: state.accruedInterest, convertingAmount: state.convertingAmount, resultingSecurityId: state.resultingSecurityId,
         valuationCap: state.terms.valuationCap, discountPercent: state.terms.discountPercent, safeType: state.terms.safeType,
         mfn: security.mfn, electionId: state.electionId, currency: security.currency,
       });
@@ -774,6 +838,7 @@ export function buildCapTable(book: EquityBook, asOf: string): CapTable {
     asOf,
     classes,
     holders,
+    unallocatedPool: { fullyDiluted: poolTotal.toString(), fullyDilutedPercent: percentOf(poolTotal, fullyDilutedTotal) },
     plans,
     holdings,
     convertibles,

@@ -128,6 +128,22 @@ export function depositSlice(certificate: SecurityRecord, from: Rational, to: Ra
   return at(to) - at(from);
 }
 
+/**
+ * The deposit a certificate's vesting leaves held on `asOf`, in functional
+ * ledger units: the cash paid for its restricted units that have not vested
+ * and are still held (releases come from the front of the restricted
+ * portion, repurchases from the back). Zero before issue and once void.
+ */
+export function unreleasedDeposit(book: EquityBook, certificate: SecurityRecord, asOf: string, exponent: number): bigint {
+  if (asOf < certificate.issueDate) return 0n;
+  const state = holdingState(book, certificate, asOf);
+  if (state.status === "void") return 0n;
+  const held = subtractRational(rational(restrictedPortion(certificate).restricted), state.exact.removedUnvested);
+  const released = releasedUnits(book, certificate, asOf);
+  if (compareRational(held, released) <= 0) return 0n;
+  return depositSlice(certificate, released, held, exponent);
+}
+
 export interface ReleaseMeasure {
   securityId: string;
   /** Restricted units released to date, whole shares (rounded down). */

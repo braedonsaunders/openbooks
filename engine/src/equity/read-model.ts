@@ -14,30 +14,36 @@ import {
   buildCapTable,
   conversionClassOf,
   conversionPrice,
+  conversionOnVoidedTerms,
   convertibleState,
+  effectiveConvertibleTerms,
+  electionInForce,
   eventCeiling,
   holdingState,
   planPool,
+  reversedElections,
   reversedEvents,
   vestingTermsOf,
+  voidedSecurities,
   type CapTable,
   type HoldingState,
 } from "./cap-table.ts";
 import { cumulativeCompensation, isCompensatory, totalCompensation } from "./compensation.ts";
 import { EquityError } from "./errors.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, type LegalEntity } from "./internal.ts";
-import { spotRate } from "./fx.ts";
+import { restate, spotRate } from "./fx.ts";
 import { mfnCandidates, type MfnCandidate } from "./mfn.ts";
 import { modelCurrencies, modelRoundFromBook, waterfallCurveFromBook, waterfallFromBook, type ExitScenario, type ModelRates, type RoundScenario } from "./models.ts";
 import { instrumentBalance } from "./posting.ts";
-import { floorShares, formatMoney, formatPrice, ledgerUnits, parseMoney, parsePrice, rational } from "./quantities.ts";
-import { earlyExerciseSource, election83bStatus, releasedUnits, restrictedPortion, type Election83b } from "./restricted-stock.ts";
+import { floorShares, formatMoney, formatPrice, ledgerUnits, multiplyRational, parseMoney, parsePrice, rational } from "./quantities.ts";
+import { earlyExerciseSource, election83bStatus, releasedUnits, restrictedPortion, unreleasedDeposit, type Election83b } from "./restricted-stock.ts";
 import { accruedToDate } from "./settlement.ts";
 import { toUnits } from "../money/money.ts";
 import type { RoundModelResult } from "./round-model.ts";
+import { bookBeforeRound } from "./round-conversion.ts";
 import { formatLedger } from "./securities.ts";
 import { restatePrice } from "./splits.ts";
-import { EVENT_COLUMNS, loadEquityBook, SECURITY_COLUMNS, securityFromRow } from "./store.ts";
+import { applyRoundAmendments, EVENT_COLUMNS, loadEquityBook, loadRoundAmendments, SECURITY_COLUMNS, securityFromRow, type RoundAmendmentRecord } from "./store.ts";
 import { REVERSIBLE_EVENT_KINDS, type EquityBook, type SecurityKind } from "./types.ts";
 import { vestingInstallments } from "./vesting.ts";
 import type { WaterfallResult } from "./waterfall.ts";
@@ -118,6 +124,11 @@ export interface SecurityRow {
   vested: string | null;
   price: string | null;
   principal: string | null;
+  /** A SAFE's or note's principal still outstanding on the date: zero once it converted, was repaid, cancelled or voided. */
+  outstandingAmount: string | null;
+  /** The share certificate a SAFE or note converted into. */
+  resultingSecurityId: string | null;
+  resultingSecurityNumber: string | null;
   currency: string;
   /** Restricted stock's 83(b) election standing (null when none is called for). */
   election83b: Election83b | null;
@@ -132,6 +143,7 @@ export async function listSecurities(input: ReadInput & { subsidiaryId: string; 
     const convertibles = new Map(table.convertibles.map((row) => [row.securityId, row]));
     const classes = new Map(book.classes.map((row) => [row.id, row.code]));
     const plans = new Map(book.plans.map((row) => [row.id, row.code]));
+    const numbers = new Map(book.securities.map((row) => [row.id, row.securityNumber]));
     const securities = book.securities.filter((row) => (!input.kind || row.kind === input.kind) && (!input.holderPartyId || row.holderPartyId === input.holderPartyId));
     const names = await partyNames(input.orgId, securities.map((row) => row.holderPartyId));
     const rows = securities.map((security): SecurityRow => {
@@ -152,6 +164,9 @@ export async function listSecurities(input: ReadInput & { subsidiaryId: string; 
         vested: holding?.vested ?? null,
         price: holding?.exercisePrice ?? security.pricePerShare,
         principal: convertible?.principal ?? null,
+        outstandingAmount: convertible?.outstandingPrincipal ?? null,
+        resultingSecurityId: convertible?.resultingSecurityId ?? null,
+        resultingSecurityNumber: convertible?.resultingSecurityId ? numbers.get(convertible.resultingSecurityId) ?? null : null,
         currency: security.currency,
         election83b: election83bStatus(book, security, input.asOf),
       };
@@ -172,10 +187,26 @@ export interface SecurityDetail {
   state: { status: HoldingState["status"]; outstanding: string; vestedAvailable: string; unvested: string; consumed: Record<string, string> } | null;
   convertible: {
     status: string; principal: string; accruedInterest: string; convertingAmount: string; endedOn: string | null; convertedOn: string | null;
-    resultingSecurityId: string | null; valuationCap: string | null; discountPercent: string | null; safeType: string | null; electionId: string | null;
+    /** Principal still outstanding on the date: zero once converted, repaid, cancelled or voided. */
+    outstanding: string;
+    resultingSecurityId: string | null; resultingSecurityNumber: string | null;
+    valuationCap: string | null; discountPercent: string | null; safeType: string | null; electionId: string | null;
+    /** The terms the instrument was issued with, beside the terms in force. */
+    issuedTerms: { valuationCap: string | null; discountPercent: string | null; safeType: string | null };
+    /**
+     * A conversion that used terms an MFN election adopted from an
+     * instrument since voided: the terms no longer stand, so the conversion
+     * is corrected by voiding the certificate it produced and converting again.
+     */
+    invalidConversionTerms: { electionId: string; sourceSecurityId: string; sourceSecurityNumber: string; sourceVoidedOn: string } | null;
   } | null;
   vesting: { date: string; quantity: string; cumulative: string }[];
-  compensation: { total: string; recognized: string; posted: string } | null;
+  /**
+   * Share-based payment cost: the full grant-date fair value of the units
+   * granted, the cost expected once forfeitures to the date are taken out,
+   * what is recognized through the date and what runs through it posted.
+   */
+  compensation: { grantDateValue: string; expectedAfterForfeitures: string; recognized: string; posted: string } | null;
   events: Record<string, unknown>[];
   source: { id: string; securityNumber: string } | null;
   resulting: { id: string; securityNumber: string; holderName: string }[];
@@ -183,7 +214,12 @@ export interface SecurityDetail {
   /** An MFN SAFE: later instruments whose better terms the holder may adopt, and the elections recorded. */
   mfn: {
     candidates: MfnCandidate[];
-    elections: { id: string; effectiveOn: string; sourceSecurityId: string; sourceSecurityNumber: string; valuationCap: string | null; discountPercent: string | null; safeType: string }[];
+    /**
+     * Elections and their reversals in date order: each election's adopted
+     * terms beside the terms in force before it, whether it still stands on
+     * the date, and why not (reversed, or its source voided).
+     */
+    elections: MfnElectionView[];
   } | null;
   /** Interest a note carries on the ledger (posted accruals, in its currency) beside what has accrued to the date. */
   interest: { posted: string; accrued: string } | null;
@@ -197,9 +233,32 @@ export interface SecurityDetail {
     vestedOnIssue: string;
     restrictedShares: string;
     releasedShares: string;
+    /** The certificate's deposit on the ledger as of the date: credited by the exercise, less what runs dated by then released. */
     depositHeld: string;
+    /** The deposit the vesting schedule leaves held on the date: the cash paid for restricted shares not yet vested and still held. */
+    depositUnvested: string;
   } | null;
   election83b: Election83b | null;
+}
+
+export interface MfnElectionView {
+  id: string;
+  kind: "mfn_election" | "mfn_reversal";
+  effectiveOn: string;
+  sourceSecurityId: string;
+  sourceSecurityNumber: string;
+  /** An election's adopted terms; a reversal's restored terms. */
+  valuationCap: string | null;
+  discountPercent: string | null;
+  safeType: string;
+  /** The terms in force immediately before the record. */
+  before: { valuationCap: string | null; discountPercent: string | null; safeType: string | null };
+  /** The election a reversal undid. */
+  reversesAmendmentId: string | null;
+  /** An election's standing on the date. */
+  standing: "in_force" | "reversed" | "source_void" | "superseded" | null;
+  reversedOn: string | null;
+  reason: string;
 }
 
 /** One security with its state, schedule, cost and history. */
@@ -225,7 +284,8 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
     let restricted: SecurityDetail["restricted"] = null;
     if (source83b) {
       const portion = restrictedPortion(security);
-      const held = await instrumentBalance(db, input.orgId, subsidiaryId, security.id, "deposit");
+      const held = await instrumentBalance(db, input.orgId, subsidiaryId, security.id, "deposit", input.asOf);
+      const certificateExponent = await currencyExponent(db, security.currency);
       restricted = {
         sourceSecurityId: source83b.id,
         sourceSecurityNumber: source83b.securityNumber,
@@ -234,6 +294,7 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
         restrictedShares: portion.restricted.toString(),
         releasedShares: floorShares(releasedUnits(book, security, input.asOf)).toString(),
         depositHeld: formatLedger(-held.reduce((sum, group) => sum + group.units, 0n)),
+        depositUnvested: formatLedger(unreleasedDeposit(book, security, input.asOf, certificateExponent)),
       };
     }
     const eventRows = (await db.execute<Record<string, unknown>>(sql`
@@ -251,12 +312,46 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
       const posted = (await db.execute<{ cumulative_amount: string }>(sql`
         select l.cumulative_amount::text as cumulative_amount from equity_compensation_run_lines l
           join equity_compensation_runs r on r.org_id = l.org_id and r.id = l.run_id
-         where l.org_id = ${input.orgId} and l.security_id = ${security.id}
+         where l.org_id = ${input.orgId} and l.security_id = ${security.id} and r.through_date <= ${input.asOf}::date
          order by r.through_date desc limit 1`)).rows[0];
+      const fairValue = parsePrice(security.fairValuePerUnit, "the fair value per unit");
       compensation = {
-        total: formatLedger(ledgerUnits(totalCompensation(book, security, input.asOf), exponent)),
-        recognized: formatLedger(ledgerUnits(cumulativeCompensation(book, security, input.asOf), exponent)),
+        grantDateValue: formatLedger(ledgerUnits(restate(multiplyRational(rational(security.quantity ?? 0n), fairValue), security.fxRate), exponent)),
+        expectedAfterForfeitures: formatLedger(ledgerUnits(restate(totalCompensation(book, security, input.asOf), security.fxRate), exponent)),
+        recognized: formatLedger(ledgerUnits(restate(cumulativeCompensation(book, security, input.asOf), security.fxRate), exponent)),
         posted: posted?.cumulative_amount ?? "0.0000",
+      };
+    }
+    const onVoided = convertible ? conversionOnVoidedTerms(book, security, input.asOf) : null;
+    const invalidConversionTerms: NonNullable<SecurityDetail["convertible"]>["invalidConversionTerms"] = onVoided
+      ? { electionId: onVoided.electionId, sourceSecurityId: onVoided.sourceSecurityId, sourceSecurityNumber: numberOf.get(onVoided.sourceSecurityId) ?? "", sourceVoidedOn: onVoided.sourceVoidedOn }
+      : null;
+    let mfn: SecurityDetail["mfn"] = null;
+    if (security.kind === "safe" && security.mfn) {
+      const records = book.securityAmendments.filter((row) => row.securityId === security.id);
+      const reversedOn = new Map(records.filter((row) => row.kind === "mfn_reversal" && row.reversesAmendmentId).map((row) => [row.reversesAmendmentId!, row.effectiveOn]));
+      const reversedNow = reversedElections(book, input.asOf);
+      const voidedEver = voidedSecurities(book, "9999-12-31");
+      const inForce = electionInForce(book, security, input.asOf);
+      const reasons = new Map((await db.execute<{ id: string; reason: string }>(sql`
+        select id, reason from equity_security_amendments where org_id = ${input.orgId} and security_id = ${security.id}`)).rows.map((row) => [row.id, row.reason]));
+      mfn = {
+        candidates: mfnCandidates(book, security, input.asOf),
+        elections: records.map((row, index): MfnElectionView => {
+          // The terms in force just before this record: the history without it and anything after it.
+          const prior = { ...book, securityAmendments: records.slice(0, index) };
+          const { terms: before } = effectiveConvertibleTerms(prior, security, row.effectiveOn);
+          const standing: MfnElectionView["standing"] = row.kind !== "mfn_election" || row.effectiveOn > input.asOf ? null
+            : reversedNow.has(row.id) ? "reversed"
+            : voidedEver.has(row.sourceSecurityId) ? "source_void"
+            : inForce?.id === row.id ? "in_force" : "superseded";
+          return {
+            id: row.id, kind: row.kind, effectiveOn: row.effectiveOn, sourceSecurityId: row.sourceSecurityId, sourceSecurityNumber: numberOf.get(row.sourceSecurityId) ?? "",
+            valuationCap: row.valuationCap, discountPercent: row.discountPercent, safeType: row.safeType,
+            before: { valuationCap: before.valuationCap, discountPercent: before.discountPercent, safeType: before.safeType },
+            reversesAmendmentId: row.reversesAmendmentId, standing, reversedOn: reversedOn.get(row.id) ?? null, reason: reasons.get(row.id) ?? "",
+          };
+        }),
       };
     }
     return {
@@ -273,8 +368,13 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
       } : null,
       convertible: convertible ? {
         status: convertible.status, principal: convertible.principal, accruedInterest: convertible.accruedInterest, convertingAmount: convertible.convertingAmount,
-        endedOn: convertible.endedOn, convertedOn: convertible.convertedOn, resultingSecurityId: convertible.resultingSecurityId,
+        endedOn: convertible.endedOn, convertedOn: convertible.convertedOn,
+        outstanding: convertible.status === "outstanding" ? convertible.principal : "0.0000",
+        resultingSecurityId: convertible.resultingSecurityId,
+        resultingSecurityNumber: convertible.resultingSecurityId ? numberOf.get(convertible.resultingSecurityId) ?? null : null,
         valuationCap: convertible.terms.valuationCap, discountPercent: convertible.terms.discountPercent, safeType: convertible.terms.safeType, electionId: convertible.electionId,
+        issuedTerms: { valuationCap: security.valuationCap, discountPercent: security.discountPercent, safeType: security.safeType },
+        invalidConversionTerms,
       } : null,
       vesting: security.quantity !== null ? vestingInstallments(vestingTermsOf(security)).map((row) => ({ date: row.date, quantity: row.quantity.toString(), cumulative: row.cumulative.toString() })) : [],
       compensation,
@@ -290,14 +390,8 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
       exercisePrice: (security.kind === "option" || security.kind === "warrant") && security.pricePerShare && shareClass
         ? formatPrice(restatePrice(book.splits, shareClass.id, parsePrice(security.pricePerShare, "the exercise price"), security.issueDate, input.asOf))
         : null,
-      mfn: security.kind === "safe" && security.mfn ? {
-        candidates: mfnCandidates(book, security, input.asOf),
-        elections: book.securityAmendments.filter((row) => row.securityId === security.id).map((row) => ({
-          id: row.id, effectiveOn: row.effectiveOn, sourceSecurityId: row.sourceSecurityId, sourceSecurityNumber: numberOf.get(row.sourceSecurityId) ?? "",
-          valuationCap: row.valuationCap, discountPercent: row.discountPercent, safeType: row.safeType,
-        })),
-      } : null,
-      interest: security.kind === "note" ? { posted: formatLedger(await accruedToDate(input.orgId, security.id)), accrued: convertible?.accruedInterest ?? "0.0000" } : null,
+      mfn,
+      interest: security.kind === "note" ? { posted: formatLedger(await accruedToDate(input.orgId, security.id, input.asOf)), accrued: convertible?.accruedInterest ?? "0.0000" } : null,
       earlyExercise: security.kind === "option" && security.earlyExercise && state ? {
         exercisable: eventCeiling(book, security, state.exact.outstanding, input.asOf).toString(),
         vested: state.vestedAvailable.toString(),
@@ -313,7 +407,19 @@ export interface StructureView {
   entity: LegalEntity;
   classes: (ReturnType<typeof classRow>)[];
   plans: { id: string; code: string; name: string; shareClassId: string; effectiveOn: string; reserved: string; used: string; returned: string; available: string; recycleForfeited: boolean; recycleExpired: boolean; recycleRepurchased: boolean; reserveChanges: { id: string; effectiveOn: string; shareDelta: string }[] }[];
-  rounds: { id: string; name: string; shareClassId: string; closedOn: string; pricePerShare: string; preMoneyValuation: string; currency: string; raised: string; sharesIssued: string }[];
+  rounds: {
+    id: string; name: string; shareClassId: string; closedOn: string; pricePerShare: string; preMoneyValuation: string; currency: string; raised: string; sharesIssued: string;
+    /** Why the pre-money valuation is stated on another basis than the price times the pre-round fully diluted shares. */
+    preMoneyBasisReason: string | null;
+    /** Fully diluted shares before the round on its closing date, and the pre-money valuation they imply at the round price. */
+    fullyDilutedBefore: string;
+    impliedPreMoney: string;
+    /** Live securities issued in the round or converted into it: while any stand, its price and date cannot change and it cannot be voided. */
+    liveSecurities: { id: string; securityNumber: string }[];
+    amendments: RoundAmendmentRecord[];
+  }[];
+  /** Rounds recorded in error and voided: kept for history, out of every figure. */
+  voidedRounds: { id: string; name: string; closedOn: string; pricePerShare: string; preMoneyValuation: string; currency: string; voidedOn: string; reason: string }[];
 }
 
 function classRow(book: EquityBook, shareClass: EquityBook["classes"][number], asOf: string) {
@@ -334,6 +440,12 @@ function classRow(book: EquityBook, shareClass: EquityBook["classes"][number], a
 export async function loadStructure(input: ReadInput & { subsidiaryId: string; asOf: string }): Promise<StructureView> {
   return snapshot(input.orgId, async () => {
     const { entity, book } = await entityBook(input);
+    const amendments = await loadRoundAmendments(db, input.orgId, input.subsidiaryId);
+    const originalRounds = (await db.execute<{ id: string; name: string; share_class_id: string; closed_on: string; price_per_share: string; pre_money_valuation: string; currency: string; pre_money_basis_reason: string | null }>(sql`
+      select id, name, share_class_id, closed_on::text as closed_on, price_per_share::text as price_per_share, pre_money_valuation::text as pre_money_valuation,
+             currency, pre_money_basis_reason
+        from equity_financing_rounds where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} order by closed_on, created_at, id`)).rows
+      .map((row) => ({ id: row.id, name: row.name, shareClassId: row.share_class_id, closedOn: row.closed_on, pricePerShare: row.price_per_share, preMoneyValuation: row.pre_money_valuation, currency: row.currency, preMoneyBasisReason: row.pre_money_basis_reason }));
     return {
       entity,
       classes: book.classes.map((row) => classRow(book, row, input.asOf)),
@@ -347,15 +459,27 @@ export async function loadStructure(input: ReadInput & { subsidiaryId: string; a
         };
       }),
       rounds: book.rounds.map((round) => {
-        const issued = book.securities.filter((row) => row.roundId === round.id && row.kind === "share");
+        const voided = voidedSecurities(book, "9999-12-31");
+        const issued = book.securities.filter((row) => row.roundId === round.id && row.kind === "share" && !voided.has(row.id));
         let raised = 0n;
         let shares = 0n;
         for (const security of issued) {
           if (security.considerationAmount) raised += toUnits(security.considerationAmount);
           shares += security.quantity ?? 0n;
         }
-        return { ...round, raised: formatLedger(raised), sharesIssued: shares.toString() };
+        const fullyDilutedBefore = BigInt(buildCapTable(bookBeforeRound(book, round.id), round.closedOn).totals.fullyDiluted);
+        return {
+          ...round, raised: formatLedger(raised), sharesIssued: shares.toString(),
+          fullyDilutedBefore: fullyDilutedBefore.toString(),
+          impliedPreMoney: formatMoney(multiplyRational(parsePrice(round.pricePerShare, "the round price"), rational(fullyDilutedBefore))),
+          liveSecurities: issued.map((row) => ({ id: row.id, securityNumber: row.securityNumber })),
+          amendments: amendments.filter((row) => row.roundId === round.id),
+        };
       }),
+      voidedRounds: applyRoundAmendments(originalRounds, amendments).voided.map(({ round, voidedOn, reason }) => ({
+        id: round.id, name: round.name, closedOn: round.closedOn, pricePerShare: round.pricePerShare, preMoneyValuation: round.preMoneyValuation,
+        currency: round.currency, voidedOn, reason,
+      })),
     };
   });
 }
@@ -450,6 +574,10 @@ export interface CompensationRunRow {
   currency: string;
   journalEntryId: string | null;
   entryNumber: string | null;
+  /** Early-exercise deposits the run released to equity as restricted shares vested, and the entry that posted them. */
+  releaseTotal: string;
+  releaseJournalEntryId: string | null;
+  releaseEntryNumber: string | null;
   createdAt: string;
 }
 
@@ -457,13 +585,18 @@ export interface CompensationRunRow {
 export async function listCompensationRuns(input: ReadInput & { subsidiaryId: string }): Promise<CompensationRunRow[]> {
   return snapshot(input.orgId, async () => {
     await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
-    const rows = (await db.execute<{ id: string; through_date: string; total_amount: string; currency: string; journal_entry_id: string | null; entry_number: string | null; created_at: string }>(sql`
+    const rows = (await db.execute<{ id: string; through_date: string; total_amount: string; currency: string; journal_entry_id: string | null; entry_number: string | null; release_amount: string; release_journal_entry_id: string | null; release_entry_number: string | null; created_at: string }>(sql`
       select r.id, r.through_date::text as through_date, r.total_amount::text as total_amount, r.currency, r.journal_entry_id,
-             je.entry_number, r.created_at::text as created_at
+             je.entry_number, r.release_amount::text as release_amount, r.release_journal_entry_id, rje.entry_number as release_entry_number,
+             r.created_at::text as created_at
         from equity_compensation_runs r
         left join journal_entries je on je.org_id = r.org_id and je.id = r.journal_entry_id
+        left join journal_entries rje on rje.org_id = r.org_id and rje.id = r.release_journal_entry_id
        where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId}
        order by r.through_date desc`)).rows;
-    return rows.map((row) => ({ id: row.id, throughDate: row.through_date, total: row.total_amount, currency: row.currency, journalEntryId: row.journal_entry_id, entryNumber: row.entry_number, createdAt: row.created_at }));
+    return rows.map((row) => ({
+      id: row.id, throughDate: row.through_date, total: row.total_amount, currency: row.currency, journalEntryId: row.journal_entry_id, entryNumber: row.entry_number,
+      releaseTotal: row.release_amount, releaseJournalEntryId: row.release_journal_entry_id, releaseEntryNumber: row.release_entry_number, createdAt: row.created_at,
+    }));
   });
 }

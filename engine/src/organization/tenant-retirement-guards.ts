@@ -3340,6 +3340,16 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "function": "equity_record_immutable"
   },
   {
+    "table": "equity_round_amendments",
+    "trigger": "equity_round_amendments_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_instrument_line_attributions",
+    "trigger": "equity_instrument_line_attributions_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
     "table": "field_ticket_source_certifications",
     "trigger": "field_ticket_source_certification_guard",
     "function": "field_ticket_source_certification_guard"

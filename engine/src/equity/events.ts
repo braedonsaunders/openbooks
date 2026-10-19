@@ -57,8 +57,9 @@ import {
   eventCeiling,
   eventsOf,
   holdingState,
+  reversedElections,
 } from "./cap-table.ts";
-import { EquityError } from "./errors.ts";
+import { EquityError, type RefusalValue } from "./errors.ts";
 import { functionalUnits, restate, spotRate } from "./fx.ts";
 import { governEquityAction, type EquityAction, type GovernedStatus } from "./governance.ts";
 import { currencyExponent, requireReason, writeEquityAudit } from "./internal.ts";
@@ -176,9 +177,11 @@ export function governedEventAction(kind: SecurityEventKind, securityKind: Secur
   return null;
 }
 
-function refuse(message: string, remedy: string, options: { field?: string; status?: 404 | 409 | 422; code?: string } = {}): never {
-  throw new EquityError(message, { code: options.code ?? "equity_event_invalid", status: options.status ?? 422, remedy, field: options.field });
+function refuse(message: string, remedy: string, options: { field?: string; status?: 404 | 409 | 422; code?: string; values?: Record<string, RefusalValue> } = {}): never {
+  throw new EquityError(message, { code: options.code ?? "equity_event_invalid", status: options.status ?? 422, remedy, field: options.field, values: options.values });
 }
+
+const ceilingValue = (value: bigint): Record<string, RefusalValue> => ({ ceiling: { kind: "shares", value } });
 
 interface EventInsert {
   id: string;
@@ -394,14 +397,14 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         const ceiling = early ? eventCeiling(book, security, state.exact.outstanding, effectiveOn) : vestedCeiling;
         if (units > ceiling) {
           refuse(
-            early ? `Only ${ceiling} units are outstanding on ${effectiveOn}.` : `Only ${ceiling} units are vested and unexercised on ${effectiveOn}.`,
-            early ? `Exercise no more than ${ceiling} units.` : `Record no more than ${ceiling} units; unvested units cannot be ${kind === "exercise" ? "exercised" : "settled"}.`,
-            { field: "quantity", status: 409, code: "equity_event_exceeds_vested" },
+            early ? `Only {ceiling} units are outstanding on ${effectiveOn}.` : `Only {ceiling} units are vested and unexercised on ${effectiveOn}.`,
+            early ? "Exercise no more than {ceiling} units." : `Record no more than {ceiling} units; unvested units cannot be ${kind === "exercise" ? "exercised" : "settled"}.`,
+            { field: "quantity", status: 409, code: "equity_event_exceeds_vested", values: ceilingValue(ceiling) },
           );
         }
         const schedule = early && units > vestedCeiling ? earlyExerciseSchedule(book, security, units, effectiveOn) : null;
         if (schedule && !security.unvestedRepurchaseBasis) {
-          refuse(`Grant ${security.securityNumber} does not record the price at which the company repurchases unvested shares.`, `Exercise no more than the ${vestedCeiling} vested units.`, { field: "quantity", status: 409, code: "equity_repurchase_terms_missing" });
+          refuse(`Grant ${security.securityNumber} does not record the price at which the company repurchases unvested shares.`, "Exercise no more than the {ceiling} vested units.", { field: "quantity", status: 409, code: "equity_repurchase_terms_missing", values: ceilingValue(vestedCeiling) });
         }
         const price = kind === "exercise" ? restatePrice(book.splits, shareClass!.id, parsePrice(security.pricePerShare, "the exercise price"), security.issueDate, effectiveOn) : rational(0n);
         const cashTxn = ledgerUnits(multiplyRational(price, rational(units)), securityExponent);
@@ -470,7 +473,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         const ceiling = eventCeiling(book, security, available, effectiveOn);
         if (units > ceiling) {
           const what = kind === "forfeit" ? "unvested" : kind === "expire" ? "vested and unexercised" : "outstanding";
-          refuse(`Only ${ceiling} units are ${what} on ${effectiveOn}.`, `Record no more than ${ceiling} units.`, { field: "quantity", status: 409, code: "equity_event_exceeds_holding" });
+          refuse(`Only {ceiling} units are ${what} on ${effectiveOn}.`, "Record no more than {ceiling} units.", { field: "quantity", status: 409, code: "equity_event_exceeds_holding", values: ceilingValue(ceiling) });
         }
         event.quantity = units;
         break;
@@ -479,13 +482,13 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         const units = quantity();
         const state = holdingState(book, security, effectiveOn);
         const ceiling = eventCeiling(book, security, state.exact.outstanding, effectiveOn);
-        if (units > ceiling) refuse(`Only ${ceiling} shares are outstanding on ${effectiveOn}.`, `Repurchase no more than ${ceiling} shares.`, { field: "quantity", status: 409, code: "equity_event_exceeds_holding" });
+        if (units > ceiling) refuse(`Only {ceiling} shares are outstanding on ${effectiveOn}.`, "Repurchase no more than {ceiling} shares.", { field: "quantity", status: 409, code: "equity_event_exceeds_holding", values: ceilingValue(ceiling) });
         const source = earlyExerciseSource(book, security);
         const unvested = eventCeiling(book, security, state.exact.unvested, effectiveOn);
         event.quantity = units;
         if (source && unvested > 0n) {
           if (units > unvested) {
-            refuse(`${unvested} of the shares are unvested on ${effectiveOn}; the company repurchases them on the grant's terms.`, `Repurchase the ${unvested} unvested shares first, then record a separate repurchase of vested shares.`, { field: "quantity", status: 409, code: "equity_restricted_repurchase_mixed" });
+            refuse(`{ceiling} of the shares are unvested on ${effectiveOn}; the company repurchases them on the grant's terms.`, "Repurchase the {ceiling} unvested shares first, then record a separate repurchase of vested shares.", { field: "quantity", status: 409, code: "equity_restricted_repurchase_mixed", values: ceilingValue(unvested) });
           }
           const basis = source.unvestedRepurchaseBasis;
           if (!basis) refuse(`Grant ${source.securityNumber} does not record the repurchase price of unvested shares.`, "Record the repurchase price basis on the grant's terms before repurchasing unvested shares.", { status: 409, code: "equity_repurchase_terms_missing" });
@@ -548,7 +551,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         if (transferee === security.holderPartyId) refuse("The transferee is already the holder.", "Choose a different holder.", { field: "transfereePartyId" });
         const state = holdingState(book, security, effectiveOn);
         const ceiling = eventCeiling(book, security, state.exact.vestedAvailable, effectiveOn);
-        if (units > ceiling) refuse(`Only ${ceiling} vested units can be transferred on ${effectiveOn}.`, `Transfer no more than ${ceiling} units.`, { field: "quantity", status: 409, code: "equity_event_exceeds_vested" });
+        if (units > ceiling) refuse(`Only {ceiling} vested units can be transferred on ${effectiveOn}.`, "Transfer no more than {ceiling} units.", { field: "quantity", status: 409, code: "equity_event_exceeds_vested", values: ceilingValue(ceiling) });
         const restatedPrice = security.pricePerShare && shareClass
           ? formatPrice(restatePrice(book.splits, shareClass.id, parsePrice(security.pricePerShare, "the price"), security.issueDate, effectiveOn))
           : null;
@@ -579,7 +582,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
           const units = quantity();
           const state = holdingState(book, security, effectiveOn);
           const ceiling = eventCeiling(book, security, state.exact.vestedAvailable, effectiveOn);
-          if (units > ceiling) refuse(`Only ${ceiling} shares can convert on ${effectiveOn}.`, `Convert no more than ${ceiling} shares.`, { field: "quantity", status: 409, code: "equity_event_exceeds_holding" });
+          if (units > ceiling) refuse(`Only {ceiling} shares can convert on ${effectiveOn}.`, "Convert no more than {ceiling} shares.", { field: "quantity", status: 409, code: "equity_event_exceeds_holding", values: ceilingValue(ceiling) });
           const commonShares = floorShares(multiplyRational(rational(units), conversionRatio(book, shareClass!, effectiveOn)));
           if (commonShares <= 0n) refuse("The shares convert into less than one common share.", "Convert more shares.", { field: "quantity" });
           resulting = certificate(security, {
@@ -676,6 +679,21 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         break;
       }
       case "void": {
+        // An MFN election that adopted this instrument's terms names them while it stands.
+        const reversed = reversedElections(book, "9999-12-31");
+        const adopting = book.securityAmendments.find((row) => row.kind === "mfn_election" && row.sourceSecurityId === security.id && !reversed.has(row.id));
+        if (adopting) {
+          const safe = book.securities.find((row) => row.id === adopting.securityId)!;
+          const settled = convertibleState(book, safe, "9999-12-31");
+          const certificate = settled.resultingSecurityId ? book.securities.find((row) => row.id === settled.resultingSecurityId) : null;
+          refuse(
+            `${safe.securityNumber} adopted the terms of ${security.securityNumber} by its MFN election of ${adopting.effectiveOn}; voiding ${security.securityNumber} would leave that election naming terms entered in error.`,
+            certificate
+              ? `Void certificate ${certificate.securityNumber}, which ${safe.securityNumber}'s conversion produced, dated ${settled.endedOn} (the round's closing date); reverse the MFN election on ${safe.securityNumber} (Securities → ${safe.securityNumber} → MFN terms); then void ${security.securityNumber} and convert ${safe.securityNumber} again.`
+              : `Reverse the MFN election on ${safe.securityNumber} first (Securities → ${safe.securityNumber} → MFN terms), then void ${security.securityNumber}.`,
+            { status: 409, code: "equity_void_mfn_source" },
+          );
+        }
         const live = eventsOf(book, security.id, "9999-12-31");
         if (live.length > 0) {
           refuse(`Security ${security.securityNumber} has recorded activity and cannot be voided.`, "Void the certificates its events produced first, reverse its other events, or record a cancellation instead.", { status: 409, code: "equity_void_has_activity" });
@@ -758,7 +776,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
     assertReplayable(pending, security.id);
     if (resulting?.shareClassId) assertWithinAuthorized(pending, resulting.shareClassId, effectiveOn);
     if (kind === "reverse" && security.shareClassId) {
-      assertWithinAuthorized(pending, security.shareClassId, effectiveOn);
+      assertWithinAuthorized(pending, security.shareClassId, effectiveOn, "reversal");
       const planId = security.planId ?? book.securities.find((row) => row.id === security.sourceSecurityId)?.planId ?? null;
       if (planId) assertPoolsCovered(pending, planId, effectiveOn);
     }

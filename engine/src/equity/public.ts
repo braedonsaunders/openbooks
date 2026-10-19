@@ -1,5 +1,5 @@
 /** Equity and cap table: the public engine contract for the application. */
-export { EquityError, EQUITY_FEATURE_KEY, EQUITY_FEATURE_REMEDY, EQUITY_ACCOUNTS_REMEDY } from "./errors.ts";
+export { EquityError, EQUITY_FEATURE_KEY, EQUITY_FEATURE_REMEDY, EQUITY_ACCOUNTS_REMEDY, type RefusalValue } from "./errors.ts";
 export { equityAccountPolicyRefusal, EQUITY_POLICY_ACCOUNT_FIELDS, EQUITY_POLICY_OPTIONAL_ACCOUNT_FIELDS } from "./account-policy.ts";
 export { EQUITY_JOURNAL_ORIGIN, CONSIDERATION_ACCOUNT_TYPES } from "./posting.ts";
 export {
@@ -8,6 +8,8 @@ export {
   REVERSIBLE_EVENT_KINDS,
   INTEREST_BASES,
   DAY_COUNTS,
+  LIQUIDATION_PREFERENCE_BASES,
+  type LiquidationPreferenceBasis,
   type DayCount,
   type RepurchaseBasis,
   type SecurityKind,
@@ -35,12 +37,13 @@ export {
   type ChangePlanReserveInput,
   type CreateRoundInput,
 } from "./structure.ts";
+export { amendRound, voidRound, type AmendRoundInput, type VoidRoundInput } from "./rounds.ts";
 export { issueSecurity, type IssueSecurityInput, type ValuationInput } from "./securities.ts";
 export { recordSecurityEvent, governedEventAction, type RecordEventInput, type RecordEventResult } from "./events.ts";
 export { EQUITY_ACTIONS, locateEquityAction, pendingEquityActions, withdrawEquityAction, type EquityAction, type GovernedStatus, type PendingRequest, type WithdrawnEquityAction } from "./governance.ts";
 export { recordEquityAccountPolicy, type RecordAccountPolicyInput } from "./account-policy.ts";
 export { syncPositionLedger } from "./positions.ts";
-export { electMfnTerms, mfnCandidates, type ElectMfnInput, type MfnCandidate, type MfnTerm } from "./mfn.ts";
+export { electMfnTerms, mfnCandidates, reverseMfnElection, type ElectMfnInput, type MfnCandidate, type MfnTerm, type ReverseMfnInput } from "./mfn.ts";
 export {
   previewInterestRun,
   postInterestRun,
@@ -76,6 +79,7 @@ export {
   type SecurityDetail,
   type StructureView,
   type CompensationRunRow,
+  type MfnElectionView,
 } from "./read-model.ts";
 export {
   loadEquityOverview,
@@ -86,8 +90,8 @@ export {
   type EquityActivity,
   type OwnershipSlice,
 } from "./overview.ts";
-export type { EquityPostingDue, EquityPostingsDue } from "./period-postings.ts";
-export type { CapTable, ClassRow, HolderRow, PlanRow, HoldingRow, ConvertibleRow } from "./cap-table.ts";
+export { nextEquityRunPeriod, type EquityPostingDue, type EquityPostingsDue, type EquityRunPeriod } from "./period-postings.ts";
+export type { CapTable, ClassRow, HolderRow, PlanRow, HoldingRow, ConvertibleRow, UnallocatedPoolRow } from "./cap-table.ts";
 export type { RoundModelResult, RoundModelDilutionRow } from "./round-model.ts";
 export type { WaterfallResult, WaterfallClassRow, WaterfallPayout, WaterfallSafeRow } from "./waterfall.ts";
 export { blackScholesCall, type BlackScholesInputs, type BlackScholesResult } from "./black-scholes.ts";

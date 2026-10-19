@@ -188,6 +188,11 @@ test("a gated action is validated in full when it is recorded, and a run waits f
     );
     assert.equal(await count(w.org.orgId, "equity_action_requests"), 0);
 
+    // An award whose cost the run recognizes: a run with nothing due refuses before it is submitted.
+    await issueSecurity({
+      ...manage(w), subsidiaryId: w.org.subsidiaryId, kind: "rsu", holderPartyId: w.holderId, issueDate: "2026-07-01", shareClassId: w.commonClassId, quantity: "1200",
+      vestingStart: "2026-07-01", vestingMonths: 12, cliffMonths: 0, vestingFrequency: "monthly", valuation: { sharePrice: "1.00", attribution: "straight_line" },
+    });
     const run = await postCompensationRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" });
     assert.equal(run.status, "pending_approval");
     assert.equal((await db.execute(sql`select 1 from equity_compensation_runs where org_id = ${w.org.orgId}`)).rows.length, 0);

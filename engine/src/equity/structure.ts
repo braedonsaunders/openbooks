@@ -23,7 +23,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { authorizedShares, classCommitted, conversionClassOf, conversionPrice, planPool } from "./cap-table.ts";
+import { authorizedShares, buildCapTable, classCommitted, conversionClassOf, conversionPrice, planPool } from "./cap-table.ts";
 import { EquityError } from "./errors.ts";
 import { spotRate } from "./fx.ts";
 import { governEquityAction, type GovernedStatus } from "./governance.ts";
@@ -37,11 +37,11 @@ import {
   writeEquityAudit,
   type EquityPermission,
 } from "./internal.ts";
-import { compareRational, formatPrice, parseDecimal, parsePrice, parseShares, PERCENT_SCALE, rational } from "./quantities.ts";
+import { compareRational, divideRational, formatMoney, formatPrice, multiplyRational, parseDecimal, parsePrice, parseShares, PERCENT_SCALE, formatUnits, quantize, rational, subtractRational, type Rational } from "./quantities.ts";
 import { validateSplitRatio } from "./splits.ts";
 import { syncPositionLedger } from "./positions.ts";
 import { loadEquityBook } from "./store.ts";
-import type { AntiDilution, EquityBook, Participation, ShareClassKind } from "./types.ts";
+import { LIQUIDATION_PREFERENCE_BASES, type AntiDilution, type EquityBook, type LiquidationPreferenceBasis, type Participation, type ShareClassKind } from "./types.ts";
 
 export interface EquityCommand {
   orgId: string;
@@ -94,12 +94,15 @@ function classCheckDates(book: EquityBook, shareClassId: string, from: string): 
   return [...dates].sort();
 }
 
+/** What a commitment check guards, so its refusal names the remedy that fits the action. */
+export type CommitmentPurpose = "issue" | "authorized_amendment" | "reserve_increase" | "plan" | "reversal";
+
 /**
  * Refuse when the class's outstanding shares, outstanding awards and
  * unallocated pools would exceed its authorized shares on any date from
  * `from` onward.
  */
-export function assertWithinAuthorized(book: EquityBook, shareClassId: string, from: string): void {
+export function assertWithinAuthorized(book: EquityBook, shareClassId: string, from: string, purpose: CommitmentPurpose = "issue", room: bigint = 0n): void {
   const shareClass = book.classes.find((row) => row.id === shareClassId);
   if (!shareClass) throw new EquityError("The share class does not exist for this legal entity.", { status: 404, code: "equity_class_unknown", remedy: "Choose a share class of the legal entity.", field: "shareClassId" });
   for (const date of classCheckDates(book, shareClassId, from)) {
@@ -107,35 +110,99 @@ export function assertWithinAuthorized(book: EquityBook, shareClassId: string, f
     const committed = classCommitted(book, shareClassId, date);
     const authorized = authorizedShares(book, shareClass, date);
     if (committed > authorized) {
-      throw new EquityError(`Class ${shareClass.code} would commit ${committed} shares on ${date} but authorizes ${authorized}.`, {
+      const remedy = {
+        issue: `Record an authorized-share amendment raising class ${shareClass.code} to at least {committed} shares, or issue {excess} fewer shares.`,
+        authorized_amendment: `Authorize at least {committed} shares of class ${shareClass.code}: its outstanding shares, outstanding awards and unallocated plan pools need them on ${date}.`,
+        reserve_increase: `Add no more than {room} shares to the reserve, or first record an authorized-share amendment raising class ${shareClass.code} to at least {committed} shares.`,
+        plan: `Reserve no more than {room} shares, or first record an authorized-share amendment raising class ${shareClass.code} to at least {committed} shares.`,
+        reversal: `Record an authorized-share amendment raising class ${shareClass.code} to at least {committed} shares before reversing the event.`,
+      }[purpose];
+      const excess = committed - authorized;
+      throw new EquityError(`Class ${shareClass.code} would commit {committed} shares on ${date} but authorizes {authorized}.`, {
         status: 409,
         code: "equity_authorized_exceeded",
-        remedy: `Record an authorized-share amendment for class ${shareClass.code}, or reduce the quantity.`,
+        remedy,
+        field: purpose === "authorized_amendment" ? "authorizedShares" : undefined,
+        values: {
+          committed: { kind: "shares", value: committed },
+          authorized: { kind: "shares", value: authorized },
+          excess: { kind: "shares", value: excess },
+          room: { kind: "shares", value: room },
+        },
       });
     }
   }
 }
 
 /** Refuse when a plan's unallocated pool would fall below zero on any date from `from` onward. */
-export function assertPoolsCovered(book: EquityBook, planId: string, from: string): void {
+export function assertPoolsCovered(book: EquityBook, planId: string, from: string, options: { reduction?: { maximum: bigint } } = {}): void {
   const plan = book.plans.find((row) => row.id === planId);
   if (!plan) throw new EquityError("The plan does not exist for this legal entity.", { status: 404, code: "equity_plan_unknown", remedy: "Choose a plan of the legal entity.", field: "planId" });
   for (const date of classCheckDates(book, plan.shareClassId, from)) {
     if (date < plan.effectiveOn) continue;
     const pool = planPool(book, plan, date);
     if (pool.available < 0n) {
-      throw new EquityError(`Plan ${plan.code} would have ${pool.available} shares available on ${date}.`, {
+      const reduction = options.reduction;
+      throw new EquityError(`Plan ${plan.code} would have {available} shares available on ${date}.`, {
         status: 409,
         code: "equity_pool_exhausted",
-        remedy: `Increase plan ${plan.code}'s reserve or grant fewer units.`,
+        remedy: reduction
+          ? reduction.maximum > 0n
+            ? `Remove no more than {maximum} shares from plan ${plan.code}'s reserve from ${from}; the rest is granted to awards.`
+            : `Plan ${plan.code} has no unallocated shares to remove on or after ${from}; forfeit or cancel awards first.`
+          : `Grant {shortfall} fewer units, or first increase plan ${plan.code}'s reserve.`,
+        field: reduction ? "shareDelta" : undefined,
+        values: {
+          available: { kind: "shares", value: pool.available },
+          maximum: { kind: "shares", value: reduction?.maximum ?? 0n },
+          shortfall: { kind: "shares", value: -pool.available },
+        },
       });
     }
   }
 }
 
-/** A split must postdate the class's recorded activity, so no recorded quantity is reinterpreted. */
+/** The smallest unallocated pool of a plan on any date from `from` onward: how much of its reserve can be removed then. */
+export function poolHeadroom(book: EquityBook, planId: string, from: string): bigint {
+  const plan = book.plans.find((row) => row.id === planId)!;
+  let minimum: bigint | null = null;
+  for (const date of classCheckDates(book, plan.shareClassId, from)) {
+    if (date < plan.effectiveOn) continue;
+    const available = planPool(book, plan, date).available;
+    if (minimum === null || available < minimum) minimum = available;
+  }
+  return minimum !== null && minimum > 0n ? minimum : 0n;
+}
+
+/** Shares a class can still commit on every date from `from` onward: its smallest authorized headroom. */
+export function authorizedHeadroom(book: EquityBook, shareClassId: string, from: string): bigint {
+  const shareClass = book.classes.find((row) => row.id === shareClassId)!;
+  let minimum: bigint | null = null;
+  for (const date of classCheckDates(book, shareClassId, from)) {
+    if (date < shareClass.effectiveOn) continue;
+    const room = authorizedShares(book, shareClass, date) - classCommitted(book, shareClassId, date);
+    if (minimum === null || room < minimum) minimum = room;
+  }
+  return minimum !== null && minimum > 0n ? minimum : 0n;
+}
+
+/**
+ * The latest date of the class's own recorded activity, which a split must
+ * postdate so no recorded quantity is reinterpreted: its securities' issue
+ * dates and events, its amendments, splits, plans and their reserve changes.
+ */
 function latestClassActivity(book: EquityBook, shareClassId: string): string | null {
-  return classCheckDates(book, shareClassId, "0001-01-01").filter((date) => date !== "0001-01-01").at(-1) ?? null;
+  const own = new Set(book.securities.filter((row) => row.shareClassId === shareClassId).map((row) => row.id));
+  const plans = new Set(book.plans.filter((row) => row.shareClassId === shareClassId).map((row) => row.id));
+  const shareClass = book.classes.find((row) => row.id === shareClassId);
+  const dates: string[] = shareClass ? [shareClass.effectiveOn] : [];
+  for (const security of book.securities) if (own.has(security.id)) dates.push(security.issueDate);
+  for (const event of book.events) if (own.has(event.securityId)) dates.push(event.effectiveOn);
+  for (const plan of book.plans) if (plans.has(plan.id)) dates.push(plan.effectiveOn);
+  for (const change of book.reserveChanges) if (plans.has(change.planId)) dates.push(change.effectiveOn);
+  for (const amendment of book.amendments) if (amendment.shareClassId === shareClassId) dates.push(amendment.effectiveOn);
+  for (const split of book.splits) if (split.shareClassId === shareClassId) dates.push(split.effectiveOn);
+  return dates.sort().at(-1) ?? null;
 }
 
 export interface CreateShareClassInput extends EquityCommand {
@@ -149,6 +216,8 @@ export interface CreateShareClassInput extends EquityCommand {
   originalIssuePrice?: string | null;
   conversionPrice?: string | null;
   liquidationMultiple?: string | null;
+  /** What a preferred class's liquidation preference is measured on (default: the amount paid for each certificate). */
+  liquidationPreferenceBasis?: LiquidationPreferenceBasis | null;
   participation?: Participation;
   participationCapMultiple?: string | null;
   seniority?: number;
@@ -193,6 +262,10 @@ export async function createShareClass(input: CreateShareClassInput): Promise<{ 
     }
   }
   const adjustsForSplits = kind === "preferred" ? input.conversionAdjustsForSplits !== false : true;
+  const preferenceBasis: LiquidationPreferenceBasis = input.liquidationPreferenceBasis ?? "amount_paid";
+  if (!LIQUIDATION_PREFERENCE_BASES.includes(preferenceBasis)) {
+    throw new EquityError("Choose what the liquidation preference is measured on.", { code: "equity_class_terms_invalid", remedy: "Choose the amount paid for each certificate or the class's original issue price.", field: "liquidationPreferenceBasis" });
+  }
   return inEquityCommand(input, "equity.manage", async ({ book }) => {
     if (book.classes.some((row) => row.code.toLowerCase() === code.toLowerCase())) {
       throw new EquityError(`Class code ${code} is already used by this legal entity.`, { status: 409, code: "equity_class_code_taken", remedy: "Choose a different class code.", field: "code" });
@@ -212,16 +285,16 @@ export async function createShareClass(input: CreateShareClassInput): Promise<{ 
     }
     const row = (await db.execute<{ id: string }>(sql`
       insert into equity_share_classes (org_id, subsidiary_id, code, name, kind, effective_on, initial_authorized_shares, par_value,
-        original_issue_price, initial_conversion_price, liquidation_multiple, participation, participation_cap_multiple, seniority,
+        original_issue_price, initial_conversion_price, liquidation_multiple, liquidation_preference_basis, participation, participation_cap_multiple, seniority,
         anti_dilution, conversion_share_class_id, conversion_adjusts_for_splits, created_by)
       values (${input.orgId}, ${input.subsidiaryId}, ${code}, ${name}, ${kind}, ${effectiveOn}::date, ${authorized.toString()}::bigint,
-        ${input.parValue.trim()}::numeric, ${originalIssuePrice}::numeric, ${conversionPrice}::numeric, ${multiple}::numeric,
+        ${input.parValue.trim()}::numeric, ${originalIssuePrice}::numeric, ${conversionPrice}::numeric, ${multiple}::numeric, ${preferenceBasis},
         ${participation}, ${cap}::numeric, ${seniority}, ${antiDilution}, ${conversionClassId}, ${adjustsForSplits}, ${input.actorId})
       returning id`)).rows[0];
     if (!row) throw new EquityError("The share class was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_share_classes", rowId: row.id, action: "equity.class.create", actorId: input.actorId,
-      changes: { before: null, after: { code, name, kind, effectiveOn, authorizedShares: authorized, parValue: input.parValue, originalIssuePrice, conversionPrice, liquidationMultiple: multiple, participation, participationCapMultiple: cap, seniority, antiDilution, conversionShareClassId: conversionClassId, conversionAdjustsForSplits: adjustsForSplits } },
+      changes: { before: null, after: { code, name, kind, effectiveOn, authorizedShares: authorized, parValue: input.parValue, originalIssuePrice, conversionPrice, liquidationMultiple: multiple, liquidationPreferenceBasis: kind === "preferred" ? preferenceBasis : null, participation, participationCapMultiple: cap, seniority, antiDilution, conversionShareClassId: conversionClassId, conversionAdjustsForSplits: adjustsForSplits } },
     });
     return { id: row.id };
   });
@@ -325,7 +398,7 @@ export async function applyShareClassAmendment(input: AmendShareClassInput): Pro
       ...book,
       amendments: [...book.amendments, { id: "pending", shareClassId: shareClass.id, kind: input.kind, effectiveOn, authorizedShares: authorized, conversionPrice: conversion, conversionShareClassId: conversionClassId, reason }],
     };
-    if (input.kind === "authorized_shares") assertWithinAuthorized(amended, shareClass.id, effectiveOn);
+    if (input.kind === "authorized_shares") assertWithinAuthorized(amended, shareClass.id, effectiveOn, "authorized_amendment");
     const row = (await db.execute<{ id: string }>(sql`
       insert into equity_class_amendments (org_id, subsidiary_id, share_class_id, kind, effective_on, authorized_shares, conversion_price,
         conversion_share_class_id, reason, created_by)
@@ -470,7 +543,7 @@ export async function createPlan(input: CreatePlanInput): Promise<{ id: string }
       ...book,
       plans: [...book.plans, { id: "pending", code, name, shareClassId: shareClass.id, effectiveOn, initialReservedShares: reserved, recycleForfeited: input.recycleForfeited, recycleExpired: input.recycleExpired, recycleRepurchased: input.recycleRepurchased }],
     };
-    assertWithinAuthorized(pending, shareClass.id, effectiveOn);
+    assertWithinAuthorized(pending, shareClass.id, effectiveOn, "plan", authorizedHeadroom(book, shareClass.id, effectiveOn));
     const row = (await db.execute<{ id: string }>(sql`
       insert into equity_plans (org_id, subsidiary_id, code, name, share_class_id, effective_on, initial_reserved_shares,
         recycle_forfeited, recycle_expired, recycle_repurchased, created_by)
@@ -528,8 +601,8 @@ export async function applyReserveChange(input: ChangePlanReserveInput): Promise
     if (effectiveOn < record.effectiveOn) throw new EquityError("A reserve change cannot precede the plan.", { code: "equity_date_invalid", remedy: `Date the change on or after ${record.effectiveOn}.`, field: "effectiveOn" });
     const before = planPool(book, record, effectiveOn);
     const pending: EquityBook = { ...book, reserveChanges: [...book.reserveChanges, { id: "pending", planId: record.id, effectiveOn, shareDelta: delta }] };
-    if (delta < 0n) assertPoolsCovered(pending, record.id, effectiveOn);
-    else assertWithinAuthorized(pending, record.shareClassId, effectiveOn);
+    if (delta < 0n) assertPoolsCovered(pending, record.id, effectiveOn, { reduction: { maximum: poolHeadroom(book, record.id, effectiveOn) } });
+    else assertWithinAuthorized(pending, record.shareClassId, effectiveOn, "reserve_increase", authorizedHeadroom(book, record.shareClassId, effectiveOn));
     const row = (await db.execute<{ id: string }>(sql`
       insert into equity_plan_reserve_changes (org_id, subsidiary_id, plan_id, effective_on, share_delta, reason, created_by)
       values (${input.orgId}, ${plan.subsidiary_id}, ${record.id}, ${effectiveOn}::date, ${delta.toString()}::bigint, ${reason}, ${input.actorId})
@@ -552,6 +625,67 @@ export interface CreateRoundInput extends EquityCommand {
   preMoneyValuation: string;
   /** The currency the round is priced in (default: the legal entity's functional currency). */
   currency?: string | null;
+  /**
+   * Why the pre-money valuation is stated on another basis than the price
+   * times the fully diluted shares before the round (a pool increase or
+   * conversions counted in it, say). Required only when they disagree.
+   */
+  preMoneyBasisReason?: string | null;
+}
+
+/** A price rounded half up to four places, as a decimal string. */
+const fourPlaces = (value: Rational): string => formatUnits(quantize(value, 4, "half_up"), 4);
+
+/** A four-place round price carries this much rounding per share. */
+const PRE_MONEY_TOLERANCE = rational(1n, 20000n);
+
+/**
+ * A round's pre-money valuation must equal its price times the fully
+ * diluted shares before the round, within the rounding of a four-place
+ * price. A valuation stated on another basis is accepted with the reason
+ * recorded; without one it refuses with the figures that would agree.
+ */
+export function assertPreMoneyConsistent(
+  before: EquityBook,
+  input: { closedOn: string; price: Rational; preMoney: Rational; currency: string; basisReason: string | null },
+): void {
+  const fullyDiluted = BigInt(buildCapTable(before, input.closedOn).totals.fullyDiluted);
+  const implied = multiplyRational(input.price, rational(fullyDiluted));
+  if (fullyDiluted > 0n) {
+    const gap = subtractRational(divideRational(input.preMoney, rational(fullyDiluted)), input.price);
+    const magnitude = gap.numerator < 0n ? rational(-gap.numerator, gap.denominator) : gap;
+    if (compareRational(magnitude, PRE_MONEY_TOLERANCE) <= 0) return;
+  }
+  if (input.basisReason) return;
+  throw new EquityError("A pre-money valuation of {preMoney} does not match the round price of {price} times the {fullyDiluted} fully diluted shares before the round ({implied}).", {
+    code: "equity_round_pre_money_inconsistent",
+    remedy: fullyDiluted > 0n
+      ? "Enter a pre-money valuation of {implied}, or a price per share of {impliedPrice}; if the valuation is stated on another basis (a pool increase or conversions counted in it), record that basis in the reason."
+      : "No shares are outstanding before the round, so the valuation cannot be checked against the price; record the basis of the valuation in the reason.",
+    field: "preMoneyValuation",
+    values: {
+      preMoney: { kind: "money", value: formatMoney(input.preMoney), currency: input.currency },
+      price: { kind: "decimal", value: formatPrice(input.price) },
+      fullyDiluted: { kind: "shares", value: fullyDiluted },
+      implied: { kind: "money", value: formatMoney(implied), currency: input.currency },
+      impliedPrice: { kind: "decimal", value: fullyDiluted > 0n ? fourPlaces(divideRational(input.preMoney, rational(fullyDiluted))) : "0" },
+    },
+  });
+}
+
+/** An optional basis reason: blank is none; a written one needs five characters. */
+export function optionalBasisReason(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  return requireReason(value, "the pre-money basis");
+}
+
+/** Every round name the legal entity has used, voided rounds and amended names included. */
+export async function usedRoundNames(orgId: string, subsidiaryId: string): Promise<{ roundId: string; name: string }[]> {
+  return (await db.execute<{ round_id: string; name: string }>(sql`
+    select id as round_id, name from equity_financing_rounds where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
+    union all
+    select round_id, name from equity_round_amendments where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and name is not null`)).rows
+    .map((row) => ({ roundId: row.round_id, name: row.name }));
 }
 
 /** Record a closed financing round; its shares are then issued against it. */
@@ -560,6 +694,7 @@ export async function createRound(input: CreateRoundInput): Promise<{ id: string
   const closedOn = requireDate(input.closedOn, "closedOn", "The closing date");
   const price = parsePrice(input.pricePerShare, "the price per share");
   const pre = parseDecimal(input.preMoneyValuation, "the pre-money valuation", 4);
+  const basisReason = optionalBasisReason(input.preMoneyBasisReason);
   if (price.numerator <= 0n) throw new EquityError("The price per share must be greater than zero.", { code: "equity_round_terms_invalid", remedy: "Enter the round price per share.", field: "pricePerShare" });
   if (compareRational(pre, rational(0n)) <= 0) throw new EquityError("The pre-money valuation must be greater than zero.", { code: "equity_round_terms_invalid", remedy: "Enter the pre-money valuation.", field: "preMoneyValuation" });
   return inEquityCommand(input, "equity.manage", async ({ book, currency: functional }) => {
@@ -571,18 +706,19 @@ export async function createRound(input: CreateRoundInput): Promise<{ id: string
     const shareClass = book.classes.find((row) => row.id === input.shareClassId);
     if (!shareClass) throw new EquityError("The share class does not exist for this legal entity.", { status: 404, code: "equity_class_unknown", remedy: "Choose a share class of the legal entity.", field: "shareClassId" });
     if (closedOn < shareClass.effectiveOn) throw new EquityError("A round cannot close before its share class is effective.", { code: "equity_date_invalid", remedy: `Date the round on or after ${shareClass.effectiveOn}.`, field: "closedOn" });
-    if (book.rounds.some((row) => row.name.toLowerCase() === name.toLowerCase())) {
-      throw new EquityError(`A round named ${name} already exists for this legal entity.`, { status: 409, code: "equity_round_name_taken", remedy: "Choose a different round name.", field: "name" });
+    if ((await usedRoundNames(input.orgId, input.subsidiaryId)).some((row) => row.name.toLowerCase() === name.toLowerCase())) {
+      throw new EquityError(`A round named ${name} already exists for this legal entity, or did before it was renamed or voided.`, { status: 409, code: "equity_round_name_taken", remedy: "Choose a different round name.", field: "name" });
     }
+    assertPreMoneyConsistent(book, { closedOn, price, preMoney: pre, currency, basisReason });
     const row = (await db.execute<{ id: string }>(sql`
-      insert into equity_financing_rounds (org_id, subsidiary_id, name, share_class_id, closed_on, price_per_share, pre_money_valuation, currency, created_by)
+      insert into equity_financing_rounds (org_id, subsidiary_id, name, share_class_id, closed_on, price_per_share, pre_money_valuation, currency, pre_money_basis_reason, created_by)
       values (${input.orgId}, ${input.subsidiaryId}, ${name}, ${shareClass.id}, ${closedOn}::date, ${input.pricePerShare.trim()}::numeric,
-        ${input.preMoneyValuation.trim()}::numeric, ${currency}, ${input.actorId})
+        ${input.preMoneyValuation.trim()}::numeric, ${currency}, ${basisReason}, ${input.actorId})
       returning id`)).rows[0];
     if (!row) throw new EquityError("The round was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_financing_rounds", rowId: row.id, action: "equity.round.create", actorId: input.actorId,
-      changes: { before: null, after: { name, shareClassId: shareClass.id, closedOn, pricePerShare: input.pricePerShare, preMoneyValuation: input.preMoneyValuation, currency } },
+      changes: { before: null, after: { name, shareClassId: shareClass.id, closedOn, pricePerShare: input.pricePerShare, preMoneyValuation: input.preMoneyValuation, currency, preMoneyBasisReason: basisReason } },
     });
     return { id: row.id };
   });

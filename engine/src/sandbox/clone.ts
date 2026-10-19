@@ -532,6 +532,15 @@ export function generateCopySql(
     } else if(t.name==='journal_entries'&&c.name==='custom') {
       const rebased=`public.production_clone_journal_evidence("custom", '${seed}'::uuid, '${sbx}'::uuid, ${opts.masked?'true':'false'})`;
       exprs.push(`(case when "origin"='manufacturing' then ${rebased} else ${opts.masked?maskExpr(c.name,tableMask?.get(c.name)??'null_out','id',c):'"custom"'} end)`);
+    } else if (t.name === "journal_lines" && c.name === "custom") {
+      // Equity lines name the security whose instrument balance they carry
+      // (an early-exercise deposit, accrued note interest). The security is
+      // copied with a rebased id, so the line's identity is rebased with it;
+      // a masked copy keeps only that identity, which holds no personal data.
+      const tagged = `("custom"->>'equitySecurityId') ~ '^[0-9a-fA-F-]{36}$'`;
+      const identity = `jsonb_build_object('equitySecurityId', ob_rebase(("custom"->>'equitySecurityId')::uuid, '${seed}'::uuid)::text, 'equityRole', "custom"->'equityRole')`;
+      const otherwise = opts.masked ? maskExpr(c.name, tableMask?.get(c.name) ?? "null_out", "id", { ...c, tableName: t.name }) : `"custom"`;
+      exprs.push(`(case when ${tagged} then ${opts.masked ? identity : `"custom" || ${identity}`} else ${otherwise} end)`);
     } else if(t.name==='mfg_wo_operations'&&['standard_labor_burden','overhead_snapshot'].includes(c.name)) {
       exprs.push(`public.production_clone_safe_evidence("${c.name}",'${seed}'::uuid,'${c.name}','${sbx}'::uuid,${opts.masked?'true':'false'})`);
     } else if(t.name==='mfg_wo_operations'&&['standard_labor_burden_hash','overhead_snapshot_hash'].includes(c.name)) {

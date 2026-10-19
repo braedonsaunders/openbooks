@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { toUnits } from "../money/money.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { buildCapTable, holdingState, vestingTermsOf, voidedSecurities, type CapTable } from "./cap-table.ts";
+import { buildCapTable, conversionOnVoidedTerms, holdingState, vestingTermsOf, voidedSecurities, type CapTable } from "./cap-table.ts";
 import { assertEquityReadable, loadLegalEntity, requireEquityReader, type LegalEntity } from "./internal.ts";
 import { equityPostingsDue, type EquityPostingsDue } from "./period-postings.ts";
 import { floorShares, formatPercent, rational } from "./quantities.ts";
@@ -42,6 +42,7 @@ export type EquityAttention =
   | { kind: "restricted_deposit"; securityId: string; securityNumber: string; holderName: string; shares: string }
   | { kind: "departed"; holderPartyId: string; holderName: string; date: string; units: string; securityId: string }
   | { kind: "expiring"; securityId: string; securityNumber: string; securityKind: SecurityKind; holderName: string; date: string; quantity: string }
+  | { kind: "conversion_terms_void"; securityId: string; securityNumber: string; holderName: string; sourceSecurityNumber: string; certificateId: string | null; certificateNumber: string | null }
   | { kind: "compensation_due"; date: string; amount: string; currency: string; refusal: string | null }
   | { kind: "interest_due"; date: string; amount: string; currency: string; refusal: string | null };
 
@@ -201,6 +202,18 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
         departedUnits.set(security.holderPartyId, row);
       }
     }
+    // A SAFE converted on terms an MFN election adopted from an instrument since voided.
+    const numberOf = new Map(book.securities.map((row) => [row.id, row.securityNumber]));
+    for (const security of issued) {
+      if (security.kind !== "safe" || !security.mfn) continue;
+      const invalid = conversionOnVoidedTerms(book, security, asOf);
+      if (!invalid) continue;
+      attention.push({
+        kind: "conversion_terms_void", securityId: security.id, securityNumber: security.securityNumber, holderName: nameOf(security.holderPartyId),
+        sourceSecurityNumber: numberOf.get(invalid.sourceSecurityId) ?? "", certificateId: invalid.resultingSecurityId,
+        certificateNumber: invalid.resultingSecurityId ? numberOf.get(invalid.resultingSecurityId) ?? null : null,
+      });
+    }
     for (const [holderPartyId, row] of departedUnits) {
       attention.push({ kind: "departed", holderPartyId, holderName: nameOf(holderPartyId), date: departures.get(holderPartyId)!, units: row.units.toString(), securityId: row.securityId });
     }
@@ -210,7 +223,8 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
     if (postings?.interest.due) {
       attention.push({ kind: "interest_due", date: postings.throughDate, amount: postings.interest.amount, currency: postings.interest.currency, refusal: postings.interest.refusal?.message ?? null });
     }
-    const urgency = (item: EquityAttention): string => ("date" in item ? item.date : "9999-12-31");
+    // A conversion on terms that no longer stand misstates the cap table, so it leads.
+    const urgency = (item: EquityAttention): string => (item.kind === "conversion_terms_void" ? "0000-01-01" : "date" in item ? item.date : "9999-12-31");
     attention.sort((a, b) => (urgency(a) < urgency(b) ? -1 : urgency(a) > urgency(b) ? 1 : 0));
 
     const securityById = new Map(book.securities.map((row) => [row.id, row]));
