@@ -18,6 +18,7 @@ const body = z.object({
   originalIssuePrice: optionalDecimal,
   conversionPrice: optionalDecimal,
   liquidationMultiple: optionalDecimal,
+  liquidationPreferenceBasis: z.enum(['amount_paid', 'original_issue_price']).nullable().optional(),
   participation: z.enum(['none', 'full', 'capped']).optional(),
   participationCapMultiple: optionalDecimal,
   seniority: z.number().int().min(0).max(1000).optional(),

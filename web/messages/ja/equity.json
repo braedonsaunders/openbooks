@@ -199,7 +199,10 @@
     "interestDayCount": "日数計算方法",
     "unvestedRepurchaseBasis": "未確定株式の買戻価格",
     "conversionClass": "転換先",
-    "partyKind": "取引先の種類"
+    "partyKind": "取引先の種類",
+    "liquidationPreferenceBasis": "優先分配額の基準",
+    "preMoneyBasisReason": "プレマネー評価の根拠",
+    "issuedTerms": "発行時の条件"
   },
   "capTable": {
     "by": {
@@ -275,7 +278,8 @@
       "allStatuses": "すべてのステータス",
       "holder": "保有者",
       "allHolders": "すべての保有者"
-    }
+    },
+    "convertedInto": "転換先"
   },
   "stakeholders": {
     "empty": "資本政策表にはまだ保有者がいません。",
@@ -511,13 +515,18 @@
     "exercisable": "現在行使可能",
     "restrictedShares": "譲渡制限株式",
     "releasedShares": "累計解除数",
-    "depositHeld": "預り金残高",
+    "depositHeld": "元帳上の預り金",
     "election83b": "83(b) 選択",
     "mfn": "MFN 条件",
     "restrictedFrom": "早期行使（{basis}）による譲渡制限株式。元の証券：",
     "reversed": "逆仕訳済み",
     "accrualEntry": "利息発生仕訳",
-    "reverse": "逆仕訳"
+    "reverse": "逆仕訳",
+    "depositUnvested": "未確定株式の預り金",
+    "outstandingPrincipal": "未決済残高",
+    "convertedInto": "転換先",
+    "invalidConversionTitle": "この転換は{source}から採用した条件を使用しましたが、{source}は{date}に取り消されました。",
+    "invalidConversionRemedy": "ラウンドの締結日である{date}付で証書{certificate}を取り消して転換を取り消し、その後この商品を自身の条件で再度転換してください。"
   },
   "events": {
     "saved": "{kind}を記録しました",
@@ -594,7 +603,8 @@
     },
     "createStakeholder": "作成して証券を発行",
     "stakeholderHelp": "ステークホルダーはディレクトリ内の個人または会社です。保存後、最初の証券を発行すると資本政策表に記載されます。",
-    "stakeholderSaved": "{name} を追加しました。最初の証券を発行してください。"
+    "stakeholderSaved": "{name} を追加しました。最初の証券を発行してください。",
+    "preMoneyBasisHint": "プレマネー評価額がラウンド前の完全希薄化後株式数×価格でない場合（プール拡大や転換を含める場合など）にのみ必要です。"
   },
   "dayCount": {
     "actual_365": "Actual/365",
@@ -655,7 +665,28 @@
     "elections": "記録済みの選択",
     "source": "条件の出所",
     "saved": "MFN 選択を記録しました",
-    "failed": "選択は記録されませんでした。"
+    "failed": "選択は記録されませんでした。",
+    "noCap": "上限なし",
+    "noDiscount": "割引なし",
+    "recordKind": {
+      "mfn_election": "MFN選択（採用元）",
+      "mfn_reversal": "選択の取消（採用元）"
+    },
+    "standing": {
+      "in_force": "有効",
+      "reversed": "取消済",
+      "source_void": "採用元が取消済",
+      "superseded": "置換済"
+    },
+    "standingTitle": "状態",
+    "before": "変更前の条件",
+    "after": "変更後の条件",
+    "termsChange": "{before} → {after}",
+    "reverse": "選択を取り消す",
+    "reverseTitle": "{date}の{source}の条件を採用した選択を取り消す",
+    "reverseHelp": "取消日以降、SAFEは選択前の条件に戻ります。適用前にFlowによる承認が必要な場合があります。",
+    "reversed": "MFN選択を取り消しました",
+    "reverseFailed": "選択を取り消せませんでした。"
   },
   "approval": {
     "pendingTitle": "承認待ち",
@@ -781,6 +812,18 @@
     "openClose": "締めを開く",
     "noPeriods": "会計期間がありません",
     "noPeriodsRemedy": "実行は会計期間の末日まで転記します。株式報酬とノート利息を実行するには、会計カレンダーの期間を生成してください。",
-    "setUpPeriods": "期間を設定"
+    "setUpPeriods": "期間を設定",
+    "nothingDueCompensation": "実行が必要な株式報酬の処理はありません。",
+    "nothingDueInterest": "実行が必要な転換社債の利息処理はありません。",
+    "nothingDueRemedy": "{date}までの処理は計上済みで、それ以降の未締めの期間に計上すべき取引はありません。確認する期間を選択してください。",
+    "nothingDueRemedyFirst": "計上すべき取引のある未締めの期間はまだありません。確認する期間を選択してください。"
+  },
+  "preferenceBasis": {
+    "amount_paid": "証書ごとの払込額",
+    "original_issue_price": "当初発行価格"
+  },
+  "preferenceBasisHint": {
+    "amount_paid": "各株式の優先分配額は払込額です。SAFEや転換社債から転換された株式は、ラウンド価格ではなく転換額を基準とします。",
+    "original_issue_price": "払込額にかかわらず、各株式の優先分配額は当該種類の当初発行価格です。"
   }
 }

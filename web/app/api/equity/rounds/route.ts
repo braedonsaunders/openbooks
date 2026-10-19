@@ -15,6 +15,7 @@ const body = z.object({
   pricePerShare: decimalText,
   preMoneyValuation: decimalText,
   currency: currencyCode.nullable().optional(),
+  preMoneyBasisReason: z.string().trim().max(2000).nullable().optional(),
 })
 
 /** Record a closed financing round; its shares and conversions are then recorded against it. */

@@ -93,7 +93,7 @@ function RunsBody({ view }: { view: RunsViewData }) {
         <OpenReport href={view.reportHref} label={t('compensation.report')} />
         <Button asChild variant="outline" size="sm"><Link href={view.historyHref}>{t('runs.history')}</Link></Button>
         {context.canManage && view.throughDate && preview && (
-          <Button size="sm" onClick={post} disabled={busy || alreadyRun || backdated}>
+          <Button size="sm" onClick={post} disabled={busy || alreadyRun || backdated || !preview.due}>
             {compensation ? t('runs.postCompensation', { period: period?.name ?? view.throughDate }) : t('runs.postInterest', { period: period?.name ?? view.throughDate })}
           </Button>
         )}

@@ -199,7 +199,10 @@
     "interestDayCount": "计息天数惯例",
     "unvestedRepurchaseBasis": "未归属股份回购价格",
     "conversionClass": "转换为",
-    "partyKind": "往来方类型"
+    "partyKind": "往来方类型",
+    "liquidationPreferenceBasis": "优先清算额计量基础",
+    "preMoneyBasisReason": "投前估值依据",
+    "issuedTerms": "发行时条款"
   },
   "capTable": {
     "by": {
@@ -275,7 +278,8 @@
       "allStatuses": "全部状态",
       "holder": "持有人",
       "allHolders": "全部持有人"
-    }
+    },
+    "convertedInto": "转为"
   },
   "stakeholders": {
     "empty": "股权结构表中尚无持有人。",
@@ -511,13 +515,18 @@
     "exercisable": "当前可行权",
     "restrictedShares": "限制性股票",
     "releasedShares": "累计已解禁",
-    "depositHeld": "持有的保证金",
+    "depositHeld": "总账上的保证金",
     "election83b": "83(b) 选择",
     "mfn": "MFN 条款",
     "restrictedFrom": "提前行权（{basis}）产生的限制性股票，来源：",
     "reversed": "已冲销",
     "accrualEntry": "利息计提",
-    "reverse": "冲销"
+    "reverse": "冲销",
+    "depositUnvested": "未归属股份的保证金",
+    "outstandingPrincipal": "未结余额",
+    "convertedInto": "已转换为",
+    "invalidConversionTitle": "此次转换使用了从{source}采用的条款，而{source}已于{date}作废。",
+    "invalidConversionRemedy": "以本轮交割日{date}为日期作废证书{certificate}以撤销转换，然后按该工具自身条款重新转换。"
   },
   "events": {
     "saved": "已记录{kind}",
@@ -594,7 +603,8 @@
     },
     "createStakeholder": "创建并发行证券",
     "stakeholderHelp": "利益相关方是您通讯录中的个人或公司。保存后，发行其首个证券即可将其列入股权结构表。",
-    "stakeholderSaved": "已添加 {name}。请发行其首个证券。"
+    "stakeholderSaved": "已添加 {name}。请发行其首个证券。",
+    "preMoneyBasisHint": "仅当投前估值不等于价格乘以本轮前完全稀释股份数时（例如计入期权池扩大或转换）才需填写。"
   },
   "dayCount": {
     "actual_365": "Actual/365",
@@ -655,7 +665,28 @@
     "elections": "已记录的选择",
     "source": "条款来源",
     "saved": "已记录 MFN 选择",
-    "failed": "选择未记录。"
+    "failed": "选择未记录。",
+    "noCap": "无上限",
+    "noDiscount": "无折扣",
+    "recordKind": {
+      "mfn_election": "最惠国选择，采用",
+      "mfn_reversal": "撤销选择，原采用"
+    },
+    "standing": {
+      "in_force": "有效",
+      "reversed": "已撤销",
+      "source_void": "来源已作废",
+      "superseded": "已被取代"
+    },
+    "standingTitle": "状态",
+    "before": "变更前条款",
+    "after": "变更后条款",
+    "termsChange": "{before} → {after}",
+    "reverse": "撤销选择",
+    "reverseTitle": "撤销{date}采用{source}条款的选择",
+    "reverseHelp": "自撤销日起，SAFE恢复选择前的有效条款。生效前可能需经Flow审批。",
+    "reversed": "已撤销最惠国选择",
+    "reverseFailed": "无法撤销该选择。"
   },
   "approval": {
     "pendingTitle": "待审批",
@@ -781,6 +812,18 @@
     "openClose": "打开结账",
     "noPeriods": "没有会计期间",
     "noPeriodsRemedy": "运行过账至会计期间末。请生成财务日历的期间，以运行股权激励和票据利息。",
-    "setUpPeriods": "设置期间"
+    "setUpPeriods": "设置期间",
+    "nothingDueCompensation": "没有到期的股权激励运行。",
+    "nothingDueInterest": "没有到期的票据利息运行。",
+    "nothingDueRemedy": "运行已过账至{date}；此后没有待过账活动的未关闭期间。请选择一个期间进行查看。",
+    "nothingDueRemedyFirst": "尚无有待过账活动的未关闭期间。请选择一个期间进行查看。"
+  },
+  "preferenceBasis": {
+    "amount_paid": "每份证书的实付金额",
+    "original_issue_price": "原始发行价格"
+  },
+  "preferenceBasisHint": {
+    "amount_paid": "每股优先清算额为其实付金额：由SAFE或票据转换的股份以转换金额为准，而非本轮价格。",
+    "original_issue_price": "无论实付多少，每股优先清算额均为该类别的原始发行价格。"
   }
 }

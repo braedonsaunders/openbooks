@@ -199,7 +199,10 @@
     "interestDayCount": "Convention de décompte des jours",
     "unvestedRepurchaseBasis": "Prix de rachat des actions non acquises",
     "conversionClass": "Convertit en",
-    "partyKind": "Type de tiers"
+    "partyKind": "Type de tiers",
+    "liquidationPreferenceBasis": "Préférence calculée sur",
+    "preMoneyBasisReason": "Base de la valorisation pré-money",
+    "issuedTerms": "Conditions à l'émission"
   },
   "capTable": {
     "by": {
@@ -275,7 +278,8 @@
       "allStatuses": "Tous les statuts",
       "holder": "Porteur",
       "allHolders": "Tous les porteurs"
-    }
+    },
+    "convertedInto": "en"
   },
   "stakeholders": {
     "empty": "Aucun porteur à la table de capitalisation pour l’instant.",
@@ -511,13 +515,18 @@
     "exercisable": "Exerçable maintenant",
     "restrictedShares": "Actions restreintes",
     "releasedShares": "Libérées à ce jour",
-    "depositHeld": "Dépôt détenu",
+    "depositHeld": "Dépôt au grand livre",
     "election83b": "Élection 83(b)",
     "mfn": "Conditions MFN",
     "restrictedFrom": "Actions restreintes issues d’un exercice anticipé ({basis}) de",
     "reversed": "Extourné",
     "accrualEntry": "Constatation des intérêts courus",
-    "reverse": "Extourner"
+    "reverse": "Extourner",
+    "depositUnvested": "Dépôt sur actions non acquises",
+    "outstandingPrincipal": "En cours",
+    "convertedInto": "Converti en",
+    "invalidConversionTitle": "Cette conversion a utilisé des conditions reprises de {source}, annulé le {date}.",
+    "invalidConversionRemedy": "Annulez le certificat {certificate} à la date du {date}, date de clôture du tour, pour défaire la conversion, puis convertissez à nouveau l'instrument selon ses propres conditions."
   },
   "events": {
     "saved": "{kind} enregistré",
@@ -594,7 +603,8 @@
     },
     "createStakeholder": "Créer et émettre un titre",
     "stakeholderHelp": "Un porteur est une personne ou une société de votre annuaire. Après l’enregistrement, émettez son premier titre pour l’inscrire à la table de capitalisation.",
-    "stakeholderSaved": "{name} ajouté. Émettez son premier titre."
+    "stakeholderSaved": "{name} ajouté. Émettez son premier titre.",
+    "preMoneyBasisHint": "Nécessaire seulement lorsque la valorisation pré-money n'est pas le prix multiplié par les actions entièrement diluées avant le tour, par exemple si elle inclut une hausse de la réserve ou des conversions."
   },
   "dayCount": {
     "actual_365": "Actual/365",
@@ -655,7 +665,28 @@
     "elections": "Élections enregistrées",
     "source": "Conditions de",
     "saved": "Élection MFN enregistrée",
-    "failed": "L’élection n’a pas été enregistrée."
+    "failed": "L’élection n’a pas été enregistrée.",
+    "noCap": "Sans plafond",
+    "noDiscount": "Sans décote",
+    "recordKind": {
+      "mfn_election": "Choix NPF reprenant",
+      "mfn_reversal": "Annulation du choix reprenant"
+    },
+    "standing": {
+      "in_force": "En vigueur",
+      "reversed": "Annulé",
+      "source_void": "Source annulée",
+      "superseded": "Remplacé"
+    },
+    "standingTitle": "Statut",
+    "before": "Conditions avant",
+    "after": "Conditions après",
+    "termsChange": "{before} → {after}",
+    "reverse": "Annuler le choix",
+    "reverseTitle": "Annuler le choix du {date} reprenant les conditions de {source}",
+    "reverseHelp": "À compter de la date d'annulation, le SAFE reprend les conditions en vigueur avant le choix. Un Flow peut exiger une approbation avant son application.",
+    "reversed": "Choix NPF annulé",
+    "reverseFailed": "Le choix n'a pas pu être annulé."
   },
   "approval": {
     "pendingTitle": "En attente d’approbation",
@@ -781,6 +812,18 @@
     "openClose": "Ouvrir la clôture",
     "noPeriods": "Aucune période comptable",
     "noPeriodsRemedy": "Les traitements comptabilisent jusqu’à la fin d’une période comptable. Générez les périodes du calendrier fiscal pour traiter la rémunération en actions et les intérêts des obligations.",
-    "setUpPeriods": "Configurer les périodes"
+    "setUpPeriods": "Configurer les périodes",
+    "nothingDueCompensation": "Aucune exécution de rémunération en actions n'est due.",
+    "nothingDueInterest": "Aucune exécution d'intérêts sur billets n'est due.",
+    "nothingDueRemedy": "Les exécutions sont comptabilisées jusqu'au {date} ; aucune période ouverte depuis n'a d'activité à comptabiliser. Choisissez une période pour la consulter.",
+    "nothingDueRemedyFirst": "Aucune période ouverte n'a encore d'activité à comptabiliser. Choisissez une période pour la consulter."
+  },
+  "preferenceBasis": {
+    "amount_paid": "Montant payé par certificat",
+    "original_issue_price": "Prix d'émission initial"
+  },
+  "preferenceBasisHint": {
+    "amount_paid": "La préférence de chaque action est ce qui a été payé pour elle : les actions issues de la conversion d'un SAFE ou d'un billet portent le montant converti, et non le prix du tour.",
+    "original_issue_price": "La préférence de chaque action est le prix d'émission initial de la catégorie, quel que soit le montant payé."
   }
 }

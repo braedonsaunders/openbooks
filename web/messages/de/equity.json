@@ -199,7 +199,10 @@
     "interestDayCount": "Zinstagequotient",
     "unvestedRepurchaseBasis": "Rückkaufpreis nicht unverfallbarer Anteile",
     "conversionClass": "Wandelt in",
-    "partyKind": "Art des Beteiligten"
+    "partyKind": "Art des Beteiligten",
+    "liquidationPreferenceBasis": "Präferenz bemessen nach",
+    "preMoneyBasisReason": "Grundlage der Pre-Money-Bewertung",
+    "issuedTerms": "Ursprüngliche Bedingungen"
   },
   "capTable": {
     "by": {
@@ -275,7 +278,8 @@
       "allStatuses": "Alle Stände",
       "holder": "Inhaber",
       "allHolders": "Alle Inhaber"
-    }
+    },
+    "convertedInto": "in"
   },
   "stakeholders": {
     "empty": "Noch keine Inhaber in der Kapitaltabelle.",
@@ -511,13 +515,18 @@
     "exercisable": "Jetzt ausübbar",
     "restrictedShares": "Gesperrte Anteile",
     "releasedShares": "Bisher freigegeben",
-    "depositHeld": "Gehaltene Einlage",
+    "depositHeld": "Einlage laut Hauptbuch",
     "election83b": "83(b)-Wahl",
     "mfn": "MFN-Bedingungen",
     "restrictedFrom": "Gesperrte Anteile aus einer vorzeitigen Ausübung ({basis}) von",
     "reversed": "Rückabgewickelt",
     "accrualEntry": "Zinsabgrenzung",
-    "reverse": "Rückabwickeln"
+    "reverse": "Rückabwickeln",
+    "depositUnvested": "Einlage auf nicht unverfallbare Aktien",
+    "outstandingPrincipal": "Ausstehend",
+    "convertedInto": "Umgewandelt in",
+    "invalidConversionTitle": "Diese Umwandlung nutzte von {source} übernommene Bedingungen; {source} wurde am {date} storniert.",
+    "invalidConversionRemedy": "Stornieren Sie Zertifikat {certificate} zum {date}, dem Abschlussdatum der Runde, um die Umwandlung aufzuheben, und wandeln Sie das Instrument dann zu seinen eigenen Bedingungen erneut um."
   },
   "events": {
     "saved": "{kind} erfasst",
@@ -594,7 +603,8 @@
     },
     "createStakeholder": "Anlegen und Wertpapier ausgeben",
     "stakeholderHelp": "Ein Anteilseigner ist eine Person oder ein Unternehmen in Ihrem Verzeichnis. Geben Sie nach dem Speichern das erste Wertpapier aus, um ihn in die Kapitaltabelle aufzunehmen.",
-    "stakeholderSaved": "{name} hinzugefügt. Geben Sie das erste Wertpapier aus."
+    "stakeholderSaved": "{name} hinzugefügt. Geben Sie das erste Wertpapier aus.",
+    "preMoneyBasisHint": "Nur erforderlich, wenn die Pre-Money-Bewertung nicht Preis mal voll verwässerte Aktien vor der Runde ist, etwa weil sie eine Pool-Erhöhung oder Umwandlungen einrechnet."
   },
   "dayCount": {
     "actual_365": "Actual/365",
@@ -655,7 +665,28 @@
     "elections": "Erfasste Wahlen",
     "source": "Bedingungen von",
     "saved": "MFN-Wahl erfasst",
-    "failed": "Die Wahl wurde nicht erfasst."
+    "failed": "Die Wahl wurde nicht erfasst.",
+    "noCap": "Keine Obergrenze",
+    "noDiscount": "Kein Abschlag",
+    "recordKind": {
+      "mfn_election": "MFN-Wahl mit Übernahme von",
+      "mfn_reversal": "Rücknahme der Wahl mit Übernahme von"
+    },
+    "standing": {
+      "in_force": "In Kraft",
+      "reversed": "Zurückgenommen",
+      "source_void": "Quelle storniert",
+      "superseded": "Abgelöst"
+    },
+    "standingTitle": "Status",
+    "before": "Bedingungen davor",
+    "after": "Bedingungen danach",
+    "termsChange": "{before} → {after}",
+    "reverse": "Wahl zurücknehmen",
+    "reverseTitle": "Wahl vom {date} zur Übernahme der Bedingungen von {source} zurücknehmen",
+    "reverseHelp": "Ab dem Rücknahmedatum gelten für den SAFE wieder die Bedingungen vor der Wahl. Ein Flow kann eine Genehmigung verlangen, bevor sie wirksam wird.",
+    "reversed": "MFN-Wahl zurückgenommen",
+    "reverseFailed": "Die Wahl konnte nicht zurückgenommen werden."
   },
   "approval": {
     "pendingTitle": "Wartet auf Genehmigung",
@@ -781,6 +812,18 @@
     "openClose": "Abschluss öffnen",
     "noPeriods": "Keine Buchungsperioden",
     "noPeriodsRemedy": "Läufe buchen bis zum Ende einer Buchungsperiode. Erzeugen Sie die Perioden des Geschäftsjahreskalenders, um Aktienvergütung und Darlehenszinsen zu buchen.",
-    "setUpPeriods": "Perioden einrichten"
+    "setUpPeriods": "Perioden einrichten",
+    "nothingDueCompensation": "Kein Lauf zur aktienbasierten Vergütung ist fällig.",
+    "nothingDueInterest": "Kein Lauf für Wandeldarlehenszinsen ist fällig.",
+    "nothingDueRemedy": "Läufe sind bis {date} gebucht; seitdem hat keine offene Periode zu buchende Vorgänge. Wählen Sie eine Periode, um sie zu prüfen.",
+    "nothingDueRemedyFirst": "Noch hat keine offene Periode zu buchende Vorgänge. Wählen Sie eine Periode, um sie zu prüfen."
+  },
+  "preferenceBasis": {
+    "amount_paid": "Gezahlter Betrag je Zertifikat",
+    "original_issue_price": "Ursprünglicher Ausgabepreis"
+  },
+  "preferenceBasisHint": {
+    "amount_paid": "Die Präferenz jeder Aktie ist der dafür gezahlte Betrag: Aktien aus der Umwandlung eines SAFE oder Darlehens tragen den umgewandelten Betrag, nicht den Rundenpreis.",
+    "original_issue_price": "Die Präferenz jeder Aktie ist der ursprüngliche Ausgabepreis der Klasse, unabhängig vom gezahlten Betrag."
   }
 }

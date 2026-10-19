@@ -199,7 +199,10 @@
     "interestDayCount": "Day count",
     "unvestedRepurchaseBasis": "Unvested repurchase price",
     "conversionClass": "Converts into",
-    "partyKind": "Party type"
+    "partyKind": "Party type",
+    "liquidationPreferenceBasis": "Preference measured on",
+    "preMoneyBasisReason": "Pre-money basis",
+    "issuedTerms": "Terms as issued"
   },
   "capTable": {
     "by": {
@@ -275,7 +278,8 @@
       "allStatuses": "All statuses",
       "holder": "Holder",
       "allHolders": "All holders"
-    }
+    },
+    "convertedInto": "into"
   },
   "stakeholders": {
     "empty": "No holders on the cap table yet.",
@@ -511,13 +515,18 @@
     "exercisable": "Exercisable now",
     "restrictedShares": "Restricted shares",
     "releasedShares": "Released to date",
-    "depositHeld": "Deposit held",
+    "depositHeld": "Deposit on the ledger",
     "election83b": "83(b) election",
     "mfn": "MFN terms",
     "restrictedFrom": "Restricted stock from an early exercise ({basis}) of",
     "reversed": "Reversed",
     "accrualEntry": "Interest accrual",
-    "reverse": "Reverse"
+    "reverse": "Reverse",
+    "depositUnvested": "Deposit on unvested shares",
+    "outstandingPrincipal": "Outstanding",
+    "convertedInto": "Converted into",
+    "invalidConversionTitle": "This conversion used terms adopted from {source}, which was voided on {date}.",
+    "invalidConversionRemedy": "Void certificate {certificate} dated {date}, the round's closing date, to undo the conversion, then convert the instrument again on its own terms."
   },
   "events": {
     "saved": "{kind} recorded",
@@ -594,7 +603,8 @@
     },
     "createStakeholder": "Create and issue a security",
     "stakeholderHelp": "A stakeholder is a person or company in your directory. After saving, issue their first security to put them on the cap table.",
-    "stakeholderSaved": "{name} added. Issue their first security."
+    "stakeholderSaved": "{name} added. Issue their first security.",
+    "preMoneyBasisHint": "Needed only when the pre-money valuation is not the price times the fully diluted shares before the round, such as when it counts a pool increase or conversions."
   },
   "dayCount": {
     "actual_365": "Actual/365",
@@ -655,7 +665,28 @@
     "elections": "Elections recorded",
     "source": "Terms of",
     "saved": "MFN election recorded",
-    "failed": "The election was not recorded."
+    "failed": "The election was not recorded.",
+    "noCap": "No cap",
+    "noDiscount": "No discount",
+    "recordKind": {
+      "mfn_election": "MFN election adopting",
+      "mfn_reversal": "Reversal of the election adopting"
+    },
+    "standing": {
+      "in_force": "In force",
+      "reversed": "Reversed",
+      "source_void": "Source void",
+      "superseded": "Superseded"
+    },
+    "standingTitle": "Standing",
+    "before": "Terms before",
+    "after": "Terms after",
+    "termsChange": "{before} → {after}",
+    "reverse": "Reverse election",
+    "reverseTitle": "Reverse the election adopting {source}'s terms on {date}",
+    "reverseHelp": "From the reversal date the SAFE carries the terms in force before the election again. A Flow may require approval before it applies.",
+    "reversed": "MFN election reversed",
+    "reverseFailed": "The election could not be reversed."
   },
   "approval": {
     "pendingTitle": "Awaiting approval",
@@ -781,6 +812,18 @@
     "openClose": "Open close",
     "noPeriods": "No accounting periods",
     "noPeriodsRemedy": "Runs post through the end of an accounting period. Generate the fiscal calendar's periods to run stock compensation and note interest.",
-    "setUpPeriods": "Set up periods"
+    "setUpPeriods": "Set up periods",
+    "nothingDueCompensation": "No stock compensation run is due.",
+    "nothingDueInterest": "No note interest run is due.",
+    "nothingDueRemedy": "Runs are posted through {date}; no open period since then has activity to post. Choose a period to review it.",
+    "nothingDueRemedyFirst": "No open period has activity to post yet. Choose a period to review it."
+  },
+  "preferenceBasis": {
+    "amount_paid": "Amount paid per certificate",
+    "original_issue_price": "Original issue price"
+  },
+  "preferenceBasisHint": {
+    "amount_paid": "Each share's preference is what was paid for it: shares a SAFE or note converted into carry the amount converted, not the round price.",
+    "original_issue_price": "Every share's preference is the class's original issue price, whatever was paid for it."
   }
 }
