@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { pathToFileURL } from 'node:url'
+import type { loadDemandPage as LoadDemandPage } from '../../app/(app)/resourcing/demand/view'
 import { resolveAppModule } from '../test-module-hooks'
 
 const repo = process.cwd()
@@ -23,7 +24,9 @@ registerHooks({
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { loadDemandPage } = await import(root + 'web/app/(app)/resourcing/demand/view.ts')
+const { loadDemandPage } = await import(root + 'web/app/(app)/resourcing/demand/view.ts') as {
+  loadDemandPage: typeof LoadDemandPage
+}
 
 test('demand drawer options use opportunity titles', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
