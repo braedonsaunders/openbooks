@@ -70,7 +70,7 @@ export function SalesDrawer({
   const [quotaTarget, setQuotaTarget] = useState<"representative" | "team">(
     source?.sales_team_id ? "team" : "representative",
   );
-  const [repId, setRep] = useState(source?.id ?? "");
+  const [repId, setRep] = useState(source?.id ?? data.creatingEmployee?.id ?? "");
   const [enabled, setEnabled] = useState(source?.is_sales_rep ?? true);
   const [since, setSince] = useState(source?.sales_rep_since ?? data.periodEnd);
   const [members, setMembers] = useState(source?.members ?? []);
@@ -460,10 +460,13 @@ export function SalesDrawer({
                       value={repId}
                       disabled={!editable}
                       onChange={(e) => {
-                        setRep(e.target.value);
-                        router.push(
-                          `/crm/sales/representatives?row=${e.target.value}`,
-                        );
+                        const employeeId = e.target.value;
+                        setRep(employeeId);
+                        const next = new URLSearchParams(window.location.search);
+                        next.set("row", "new");
+                        if (employeeId) next.set("employee", employeeId);
+                        else next.delete("employee");
+                        router.push(`/crm/sales/representatives?${next.toString()}`);
                       }}
                     >
                       {options(data.employees)}
@@ -829,7 +832,7 @@ export function SalesDrawer({
                   ) : (
                     <Link
                       className="text-sm text-teal-700"
-                      href="/admin/features"
+                      href="/admin/setup/features"
                     >
                       {t("enableMap")}
                     </Link>

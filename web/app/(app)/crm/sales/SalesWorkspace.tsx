@@ -2,14 +2,12 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Badge,
   Button,
   EmptyState,
-  Input,
   PageHeader,
-  Select,
 } from "@openbooks/ui";
 import type {
   SalesRecord,
@@ -19,7 +17,11 @@ import { ListPageLayout } from "@/components/page-layout";
 import { PagedTable, type PagedColumn } from "@/components/paged-table";
 import { Pagination } from "@/components/pagination";
 import { HomePanel, HomeStatTile } from "@/components/module-home/client";
+import { LiveDirectory, type DirectoryItem, ModuleHomeTabs } from "@/components/module-home/ui";
 import { useMoney } from "@/components/money-provider";
+import { FilterChips } from "@/components/filter-bar";
+import { ListFilterSelect } from "@/components/list-filter-select";
+import { SearchInput } from "@/components/search-input";
 import { mergeHref } from "@/lib/list-params";
 import { SalesDrawer } from "./SalesDrawer";
 import { DateField } from '@/components/date-field'
@@ -44,11 +46,34 @@ export function SalesWorkspace({
   params: Record<string, string | undefined>;
 }) {
   const t = useTranslations("crm.sales");
+  const locale = useLocale();
   const router = useRouter();
   const base =
     data.page === "overview" ? "/crm/sales" : `/crm/sales/${data.page}`;
   const href = (values: Record<string, string | number | null>) =>
     mergeHref(base, params, values);
+  const tabs = [
+    { href: "/crm/sales", label: t("tabs.overview"), active: data.page === "overview" },
+    { href: "/crm/sales/representatives", label: t("tabs.representatives"), active: data.page === "representatives" },
+    { href: "/crm/sales/teams", label: t("tabs.teams"), active: data.page === "teams" },
+    { href: "/crm/sales/quotas", label: t("tabs.quotas"), active: data.page === "quotas" },
+    { href: "/crm/sales/territories", label: t("tabs.territories"), active: data.page === "territories" },
+  ];
+  const territoryFilters = data.page === "territories" ? (
+    <>
+      <ListFilterSelect basePath={base} currentParams={params} paramKey="department" label={t("department")} allLabel={t("allDepartments")} options={data.departments.map(({ id, name }) => ({ value: id, label: name }))} />
+      <ListFilterSelect basePath={base} currentParams={params} paramKey="salesTeam" label={t("team")} allLabel={t("allTeams")} options={data.teams.map(({ id, name }) => ({ value: id, label: name }))} />
+      <ListFilterSelect basePath={base} currentParams={params} paramKey="subsidiary" label={t("legalEntity")} allLabel={t("allEntities")} options={data.subsidiaries.map(({ id, name }) => ({ value: id, label: name }))} />
+      <ListFilterSelect basePath={base} currentParams={params} paramKey="salesRep" label={t("representative")} allLabel={t("allRepresentatives")} options={data.representatives.map(({ id, name }) => ({ value: id, label: name }))} />
+      {data.mapEnabled ? <FilterChips basePath={base} currentParams={params} paramKey="view" label={t("view")} defaultValue="list" hideAll options={[{ value: "list", label: t("list") }, { value: "map", label: t("map") }]} /> : null}
+    </>
+  ) : null;
+  const listToolbar = data.page !== "overview" ? (
+    <>
+      <SearchInput placeholder={t("search")} />
+      {territoryFilters}
+    </>
+  ) : undefined;
   const columns: PagedColumn<SalesRecord>[] = [
     {
       key: "name",
@@ -203,105 +228,15 @@ export function SalesWorkspace({
           <PageHeader
             title={t(`tabs.${data.page}`)}
             description={t("description")}
-            actions={
-              data.canManage && data.page !== "overview" ? (
+            actions={<>
+              {data.canManage && data.page !== "overview" ? (
                 <Button onClick={() => router.push(href({ row: "new" }))}>
-                  {t(
-                    (
-                      {
-                        representatives: "designate",
-                        teams: "newTeam",
-                        quotas: "newQuota",
-                        territories: "newTerritory",
-                      } as const
-                    )[
-                      data.page as
-                        "representatives" | "teams" | "quotas" | "territories"
-                    ],
-                  )}
+                  {t(({ representatives: "designate", teams: "newTeam", quotas: "newQuota", territories: "newTerritory" } as const)[data.page as "representatives" | "teams" | "quotas" | "territories"])}
                 </Button>
-              ) : undefined
-            }
+              ) : null}
+              <ModuleHomeTabs tabs={tabs} />
+            </>}
           />
-          {data.page !== "overview" ? (
-            <form className="flex flex-wrap items-center gap-2" action={base}>
-              <Input
-                name="q"
-                defaultValue={params.q ?? ""}
-                placeholder={t("search")}
-                aria-label={t("search")}
-                className="max-w-sm"
-              />
-              {data.page === "territories" ? (
-                <>
-                  <input
-                    type="hidden"
-                    name="view"
-                    value={params.view ?? "list"}
-                  />
-                  {(
-                    [
-                      [
-                        "department",
-                        "department",
-                        "allDepartments",
-                        data.departments,
-                      ],
-                      ["salesTeam", "team", "allTeams", data.teams],
-                      [
-                        "subsidiary",
-                        "legalEntity",
-                        "allEntities",
-                        data.subsidiaries,
-                      ],
-                      [
-                        "salesRep",
-                        "representative",
-                        "allRepresentatives",
-                        data.representatives,
-                      ],
-                    ] as const
-                  ).map(([key, label, all, options]) => (
-                    <Select
-                      key={key}
-                      name={key}
-                      aria-label={t(label)}
-                      defaultValue={params[key] ?? ""}
-                      className="max-w-48"
-                    >
-                      <option value="">{t(all)}</option>
-                      {options.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </Select>
-                  ))}
-                </>
-              ) : null}
-              <Button variant="outline" type="submit">
-                {t("search")}
-              </Button>
-              {data.page === "territories" && data.mapEnabled ? (
-                <>
-                  <Link href={href({ view: "list", row: null })}>
-                    <Button
-                      variant={params.view !== "map" ? "secondary" : "ghost"}
-                    >
-                      {t("list")}
-                    </Button>
-                  </Link>
-                  <Link href={href({ view: "map", row: null })}>
-                    <Button
-                      variant={params.view === "map" ? "secondary" : "ghost"}
-                    >
-                      {t("map")}
-                    </Button>
-                  </Link>
-                </>
-              ) : null}
-            </form>
-          ) : null}
         </>
       }
       className="space-y-6"
@@ -409,31 +344,21 @@ export function SalesWorkspace({
                 </Link>
               </HomePanel>
               <HomePanel title={t("planning")} icon="clipboard">
-                <div className="space-y-3 text-sm">
-                  {(
-                    [
-                      "representatives",
-                      "teams",
-                      "quotas",
-                      "territories",
-                    ] as const
-                  ).map((key) => (
-                    <Link
-                      className="block rounded-lg border border-slate-200 p-3 hover:bg-slate-50 dark:border-slate-700"
-                      key={key}
-                      href={`/crm/sales/${key}`}
-                    >
-                      {t(`tabs.${key}`)}{" "}
-                      <span className="float-right text-slate-400">→</span>
-                    </Link>
-                  ))}
-                </div>
+                <LiveDirectory items={([
+                  { href: "/crm/sales/representatives", label: t("tabs.representatives"), iconKey: "users", badge: { value: new Intl.NumberFormat(locale).format(data.counts.representatives) } },
+                  { href: "/crm/sales/teams", label: t("tabs.teams"), iconKey: "briefcase-business", badge: { value: new Intl.NumberFormat(locale).format(data.counts.teams) } },
+                  { href: "/crm/sales/quotas", label: t("tabs.quotas"), iconKey: "circle-dollar-sign", badge: { value: new Intl.NumberFormat(locale).format(data.counts.draftQuotas) } },
+                  { href: "/crm/sales/territories", label: t("tabs.territories"), iconKey: "building", badge: { value: new Intl.NumberFormat(locale).format(data.counts.territories) } },
+                ] satisfies DirectoryItem[])} />
               </HomePanel>
             </div>
           </div>
         </>
       ) : (
         <>
+          {data.page === "territories" && params.view === "map" && data.mapEnabled ? (
+            <div className="flex flex-wrap items-end gap-2">{listToolbar}</div>
+          ) : null}
           {data.page === "territories" &&
           params.view === "map" &&
           data.mapEnabled ? (
@@ -475,6 +400,7 @@ export function SalesWorkspace({
                 />
               }
               emptyAsRow
+              toolbarAfter={listToolbar}
             />
           )}
           {data.total > 0 ? (
@@ -496,7 +422,7 @@ export function SalesWorkspace({
               : (data.selected?.id ?? "new")
           }
           data={data}
-          closeHref={href({ row: null })}
+          closeHref={href({ row: null, employee: null })}
         />
       ) : null}
     </ListPageLayout>
