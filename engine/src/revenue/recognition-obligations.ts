@@ -157,15 +157,14 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
   const obligationIds: string[] = [];
   const contractId = await db.transaction(async (tx) => {
     let cId: string | null = null;
-    if (lines.length > 0) {
+    if (lines.length > 0 || scopedEnabled) {
       // A concurrent disable must not interleave scoped writes: recheck the
       // gate on the writer's transaction and fall back to the invoice's own
       // contract when it is off. The fallback is today's shape — no scoped
       // row is written while the surface is off.
-      const scoped = billingSource
-        && (await lockAndCheckOrgFeature(tx, orgId, "revenueContracts"))
-        ? billingSource
-        : null;
+      const contractFeatureActive = scopedEnabled
+        && await lockAndCheckOrgFeature(tx, orgId, "revenueContracts");
+      const scoped = contractFeatureActive ? billingSource : null;
       if (scoped) {
         // The agreement's contract accumulates this billing: shared across
         // every invoice of the order or subscription (created on first
@@ -206,7 +205,7 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
         if (existingContract?.rows[0] && cmp(existingContract.rows[0].total_transaction_price, contractTotal) !== 0) {
           throw new RevenueRecognitionError("Partial revenue allocation conflicts with the existing contract total; reconcile the contract before retrying");
         }
-        if (scopedEnabled) {
+        if (contractFeatureActive) {
           await recordContractBilling(
             tx, orgId, cId, documentId, contractTotal, doc.document_date, actorId,
           );
