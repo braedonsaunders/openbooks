@@ -1,7 +1,6 @@
 import { getTranslations } from 'next-intl/server'
+import { notFound, redirect } from 'next/navigation'
 import { isUuid } from '../../../../../lib/list-params'
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { filingDetailSpec, loadFilingDetail } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,14 +21,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
  */
 export default async function FilingDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>
-  // Optional: this route natively takes only `params`.
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const sp = (await searchParams) ?? {}
   const { id } = await params
-  const data = await loadFilingDetail(id)
-  return <ModuleView spec={filingDetailSpec(data)} data={data} searchParams={sp} trusted />
+  if (!isUuid(id)) notFound()
+  redirect(`/compliance/information-returns?filing=${encodeURIComponent(id)}`)
 }

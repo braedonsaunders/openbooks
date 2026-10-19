@@ -10,17 +10,13 @@ export async function generateMetadata() {
 }
 
 
-/**
- * Information-return filings by year. One row per (year, form, filing entity),
- * with the readiness queue underneath — the list of vendors that will make a
- * filing wrong if nobody chases them before January.
- */
+/** Information-return filings and readiness, selected as URL-addressed views. */
 export default async function InformationReturnsPage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | undefined>>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = (await searchParams) ?? {}
-  const data = await loadInformationReturns()
+  const data = await loadInformationReturns(sp)
   return <ModuleView spec={informationReturnsSpec(data)} data={data} searchParams={sp} trusted />
 }

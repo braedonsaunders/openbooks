@@ -30,6 +30,7 @@ import { PostingPeriodsView } from '../../app/(app)/close/posting-periods/Postin
 import { ProvisionsWorkspace } from '../../app/(app)/accounting/provisions/workspace'
 import { ReopenRequestsWorkspace } from '../../app/(app)/accounting/reopen-requests/workspace'
 import { AccountingChangesWorkspace } from '../../app/(app)/accounting/changes/workspace'
+import { InformationReturnFilingDrawer } from '../../app/(app)/compliance/information-returns/FilingDrawer'
 import { JournalDraftsPanel } from '../../app/(app)/journal/sections'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
@@ -99,6 +100,12 @@ export const OPERATIONS_WIDGETS = {
       boxes={props.boxes as ComponentProps<typeof FilingWorksheet>['boxes']}
       canManage={props.canManage === true}
       canFile={props.canFile === true}
+    />
+  ),
+  'information-return-filing-drawer': (props) => (
+    <InformationReturnFilingDrawer
+      detail={props.detail as ComponentProps<typeof InformationReturnFilingDrawer>['detail']}
+      closeHref={str(props, 'closeHref') ?? ''}
     />
   ),
 

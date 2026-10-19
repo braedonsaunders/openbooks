@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import {
@@ -31,17 +32,16 @@ import {
 } from '../../../../lib/compliance'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { complianceTabs } from '../tabs'
+import { isUuid, pickString } from '../../../../lib/list-params'
+import { loadFilingDetail, type FilingDetailData } from './[id]/view'
+import {
+  informationReturnDrawerCloseHref,
+  informationReturnFilingHref,
+  informationReturnsViewState,
+  type InformationReturnsView,
+} from './view-state'
 
-/**
- * Information-return filings by year. One row per (year, form, filing entity),
- * with the readiness queue underneath — the list of vendors that will make a
- * filing wrong if nobody chases them before January.
- *
- * The readiness queue is a real <section> with its own heading and prose, so
- * the vocabulary gained a `heading` block and an `as: 'section'` grid. An <h2>
- * is not a <p>, and the element name is part of the document rather than
- * decoration, so approximating either would be a real difference.
- */
+/** Information-return filings and the readiness queue, selected as URL views. */
 
 const STATUS_TONE: Record<string, 'success' | 'warning' | 'secondary' | 'outline' | 'destructive'> = {
   draft: 'outline',
@@ -80,13 +80,20 @@ export interface InformationReturnsData {
   title: string
   description: string
   tabs: Awaited<ReturnType<typeof complianceTabs>>
+  viewTabs: Awaited<ReturnType<typeof informationReturnsViewState>>['tabs']
+  view: InformationReturnsView
+  showFilingEmpty: boolean
+  showFilingRows: boolean
+  showReadiness: boolean
+  showReadinessClear: boolean
+  showReadinessRows: boolean
+  filingDetail: FilingDetailData | null
+  filingCloseHref: string
   canManage: boolean
   formTypes: string[]
   defaultYear: number
   emptyTitle: string
   emptyDescription: string
-  noFilings: boolean
-  hasFilings: boolean
   columnYear: string
   columnForm: string
   columnEntity: string
@@ -98,8 +105,6 @@ export interface InformationReturnsData {
   readinessTitle: string
   readinessDescription: string
   readinessClear: string
-  readinessIsClear: boolean
-  readinessHasRows: boolean
   columnVendor: string
   columnIssue: string
   columnClassification: string
@@ -107,33 +112,50 @@ export interface InformationReturnsData {
   readiness: ReadinessRow[]
 }
 
-export async function loadInformationReturns(): Promise<InformationReturnsData> {
+export async function loadInformationReturns(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<InformationReturnsData> {
   const authz = await requirePermission('compliance.read')
   const orgId = authz.user.orgId
   await requireInformationReturnsFeature(orgId)
   const t = await getTranslations('compliance')
   const { money } = await getMoneyFormatter()
   const lastYear = Number((await businessToday(orgId)).slice(0, 4)) - 1
+  const selectedFilingId = pickString(sp.filing)
+  if (selectedFilingId && !isUuid(selectedFilingId)) notFound()
 
-  const [filings, readiness, projectsEnabled, complianceEnabled] = await Promise.all([
+  const [filings, readiness, projectsEnabled, complianceEnabled, filingDetail] = await Promise.all([
     loadFilings(orgId, authz.allowedSubsidiaryIds),
     loadInformationReturnReadiness(orgId, lastYear, authz.allowedSubsidiaryIds),
     isFeatureEnabled(orgId, 'projects'),
     isFeatureEnabled(orgId, 'subcontractorCompliance'),
+    selectedFilingId ? loadFilingDetail(selectedFilingId) : Promise.resolve(null),
   ])
   const tabs = await complianceTabs('/compliance/information-returns', { projectsEnabled, complianceEnabled })
+  const readinessTitle = t('informationReturns.readinessTitle', { year: lastYear })
+  const { view, tabs: viewTabs } = informationReturnsViewState(sp, readiness.length, {
+    filings: t('informationReturns.title'),
+    readiness: readinessTitle,
+  })
 
   return {
     title: t('informationReturns.title'),
     description: t('informationReturns.description'),
     tabs,
+    viewTabs,
+    view,
+    showFilingEmpty: view === 'filings' && filings.length === 0,
+    showFilingRows: view === 'filings' && filings.length > 0,
+    showReadiness: view === 'readiness',
+    showReadinessClear: view === 'readiness' && readiness.length === 0,
+    showReadinessRows: view === 'readiness' && readiness.length > 0,
+    filingDetail,
+    filingCloseHref: informationReturnDrawerCloseHref(sp),
     canManage: can(authz, 'compliance.manage'),
     formTypes: [...FORM_TYPES],
     defaultYear: lastYear,
     emptyTitle: t('informationReturns.empty.title'),
     emptyDescription: t('informationReturns.empty.description'),
-    noFilings: filings.length === 0,
-    hasFilings: filings.length > 0,
     columnYear: t('informationReturns.columns.year'),
     columnForm: t('informationReturns.columns.form'),
     columnEntity: t('informationReturns.columns.entity'),
@@ -144,7 +166,7 @@ export async function loadInformationReturns(): Promise<InformationReturnsData> 
     rows: filings.map((filing) => ({
       id: filing.id,
       taxYear: String(filing.taxYear),
-      href: `/compliance/information-returns/${filing.id}`,
+      href: informationReturnFilingHref(sp, filing.id),
       formType: filing.formType,
       entity: filing.subsidiaryName ?? t('informationReturns.orgRoot'),
       includedCount: String(filing.includedCount),
@@ -161,11 +183,9 @@ export async function loadInformationReturns(): Promise<InformationReturnsData> 
           ? t('informationReturns.missingTin', { count: filing.missingTinCount })
           : '',
     })),
-    readinessTitle: t('informationReturns.readinessTitle', { year: lastYear }),
+    readinessTitle,
     readinessDescription: t('informationReturns.readinessDescription'),
     readinessClear: t('informationReturns.readinessClear'),
-    readinessIsClear: readiness.length === 0,
-    readinessHasRows: readiness.length > 0,
     columnVendor: t('informationReturns.columns.vendor'),
     columnIssue: t('informationReturns.columns.issue'),
     columnClassification: t('informationReturns.columns.classification'),
@@ -194,7 +214,6 @@ const item = field
 const rootF = rootRef<InformationReturnsData>()
 
 const MUTED = 'text-slate-500 dark:text-slate-400'
-const PANEL = 'overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
 
 export function informationReturnsSpec(data: InformationReturnsData): PageSpec {
   return page({
@@ -215,66 +234,65 @@ export function informationReturnsSpec(data: InformationReturnsData): PageSpec {
       widgetBlock('module-home-tabs', { tabs: data.tabs }),
     ],
     body: [
+      widgetBlock('module-home-tabs', { tabs: f('viewTabs'), placement: 'local' }),
       {
         ...widgetBlock('empty-state', {
           title: data.emptyTitle,
           description: data.emptyDescription,
         }),
-        when: f('noFilings'),
+        when: f('showFilingEmpty'),
       },
       {
-        ...grid(PANEL, [
-          registeredListTable('compliance_information_returns', {
-            variant: 'app',
-            rows: f('rows'),
-            rowKey: item('id'),
-            columns: [
-              column(rootF('columnYear'), link(item('taxYear'), item('href'), 'hover:underline'), {
-                className: 'font-medium tabular-nums',
-              }),
-              column(rootF('columnForm'), text(item('formType'))),
-              column(rootF('columnEntity'), text(item('entity')), { className: MUTED }),
-              column(
-                rootF('columnRecipients'),
-                text(item('includedCount'), {
-                  suffix: { field: item('excludedNote'), className: 'ml-1 text-xs text-slate-400' },
-                }),
-                { align: 'right', className: 'tabular-nums' },
-              ),
-              column(rootF('columnTotal'), text(item('filedTotal')), {
-                align: 'right',
-                className: 'tabular-nums',
-              }),
-              column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-              column(
-                rootF('columnAttention'),
-                widgetCell('badge-or-dash', {
-                  shown: item('missingTin'),
-                  label: item('missingTinLabel'),
-                  variant: 'destructive',
-                }),
-              ),
-            ],
-          }),
-        ]),
-        when: f('hasFilings'),
-      },
-      grid(
-        'mt-6',
-        [
-          heading(2, f('readinessTitle'), 'mb-1 text-sm font-semibold text-slate-800 dark:text-slate-100'),
-          textBlock(f('readinessDescription'), { size: 'sm', className: 'mb-3', tone: 'muted' }),
-          {
-            ...textBlock(f('readinessClear'), {
-              size: 'sm',
-              className:
-                'rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300',
+        ...registeredListTable('compliance_information_returns', {
+          variant: 'app',
+          rows: f('rows'),
+          rowKey: item('id'),
+          columns: [
+            column(rootF('columnYear'), link(item('taxYear'), item('href'), 'hover:underline'), {
+              className: 'font-medium tabular-nums',
             }),
-            when: f('readinessIsClear'),
-          },
-          {
-            ...grid(PANEL, [
-              registeredListTable('compliance_information_return_readiness', {
+            column(rootF('columnForm'), text(item('formType'))),
+            column(rootF('columnEntity'), text(item('entity')), { className: MUTED }),
+            column(
+              rootF('columnRecipients'),
+              text(item('includedCount'), {
+                suffix: { field: item('excludedNote'), className: 'ml-1 text-xs text-slate-400' },
+              }),
+              { align: 'right', className: 'tabular-nums' },
+            ),
+            column(rootF('columnTotal'), text(item('filedTotal')), {
+              align: 'right',
+              className: 'tabular-nums',
+            }),
+            column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(
+              rootF('columnAttention'),
+              widgetCell('badge-or-dash', {
+                shown: item('missingTin'),
+                label: item('missingTinLabel'),
+                variant: 'destructive',
+              }),
+            ),
+          ],
+        }),
+        when: f('showFilingRows'),
+      },
+      {
+        ...grid(
+          'space-y-3',
+          [
+            heading(2, f('readinessTitle'), 'mb-1 text-sm font-semibold text-slate-800 dark:text-slate-100'),
+            textBlock(f('readinessDescription'), { size: 'sm', className: 'mb-1', tone: 'muted' }),
+            {
+              ...textBlock(f('readinessClear'), {
+                size: 'sm',
+                className:
+                  'rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300',
+              }),
+              when: f('showReadinessClear'),
+            },
+            {
+              ...registeredListTable('compliance_information_return_readiness', {
                 variant: 'app',
                 rows: f('readiness'),
                 rowKey: item('partyId'),
@@ -290,12 +308,17 @@ export function informationReturnsSpec(data: InformationReturnsData): PageSpec {
                   }),
                 ],
               }),
-            ]),
-            when: f('readinessHasRows'),
-          },
-        ],
-        { as: 'section' },
-      ),
+              when: f('showReadinessRows'),
+            },
+          ],
+          { as: 'section' },
+        ),
+        when: f('showReadiness'),
+      },
+      widgetBlock('information-return-filing-drawer', {
+        detail: f('filingDetail'),
+        closeHref: f('filingCloseHref'),
+      }),
     ],
   })
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -62,11 +62,13 @@ export function FilingWorksheet({
   boxes,
   canManage,
   canFile,
+  onDirtyChange,
 }: {
   filing: FilingDetail
   boxes: FormBox[]
   canManage: boolean
   canFile: boolean
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const t = useTranslations('compliance')
   const router = useRouter()
@@ -87,6 +89,18 @@ export function FilingWorksheet({
 
   const frozen = filing.status === 'finalized' || filing.status === 'filed' || filing.status === 'void'
   const amountBoxes = boxes.filter((box) => !box.isIndicator)
+  const adjustmentDirty = editing !== null && (
+    draft.reason !== (editing.adjustmentReason ?? '') ||
+    draft.excluded !== (editing.status === 'excluded') ||
+    draft.exclusionReason !== (editing.exclusionReason ?? '') ||
+    amountBoxes.some((box) => (draft.adjustments[box.key] ?? '') !== (editing.adjustments[box.key] ?? ''))
+  )
+  const filingDirty = fileOpen && (
+    filingChannel !== 'iris' || filingReference !== (filing.filingReference ?? '')
+  )
+  useEffect(() => {
+    onDirtyChange?.(adjustmentDirty || filingDirty)
+  }, [adjustmentDirty, filingDirty, onDirtyChange])
 
   async function post(body: Record<string, unknown>): Promise<unknown | null> {
     setError(null)

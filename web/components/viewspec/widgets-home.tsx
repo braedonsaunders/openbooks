@@ -64,7 +64,10 @@ export const HOME_WIDGETS = {
     />
   ),
   'module-home-tabs': (props) => (
-    <ModuleHomeTabs tabs={props.tabs as ComponentProps<typeof ModuleHomeTabs>['tabs']} />
+    <ModuleHomeTabs
+      tabs={props.tabs as ComponentProps<typeof ModuleHomeTabs>['tabs']}
+      placement={props.placement === 'local' ? 'local' : 'header'}
+    />
   ),
   'commitments-section': (props) => (
     <CommitmentsSection

@@ -201,6 +201,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'file-drawer',
   'file-list',
   'filing-worksheet',
+  'information-return-filing-drawer',
   'filter-chips',
   'financial-health-view',
   'finding-cell',

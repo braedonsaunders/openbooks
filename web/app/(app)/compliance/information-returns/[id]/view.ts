@@ -3,15 +3,13 @@ import 'server-only'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { formDefinition } from '@openbooks/engine/compliance/information-returns'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { loadFiling, requireInformationReturnsFeature } from '../../../../../lib/compliance'
 import { isUuid } from '../../../../../lib/list-params'
-import type { FilingWorksheet } from './FilingWorksheet'
 
 /**
- * One information-return filing's recipient worksheet, split into a loader and
- * a spec.
+ * One information-return filing's recipient worksheet data, shared by its
+ * URL-addressed drawer and the legacy detail route.
  *
  * The worksheet is the artefact an accountant reviews before anything is
  * transmitted, so the ledger figure and the filed figure are both visible on
@@ -35,7 +33,6 @@ export interface FilingDetailData {
   canManage: boolean
   canFile: boolean
 }
-
 export async function loadFilingDetail(id: string): Promise<FilingDetailData> {
   const authz = await requirePermission('compliance.read')
   const orgId = authz.user.orgId
@@ -59,28 +56,4 @@ export async function loadFilingDetail(id: string): Promise<FilingDetailData> {
     canManage: can(authz, 'compliance.manage'),
     canFile: can(authz, 'compliance.file'),
   }
-}
-
-const f = ref<FilingDetailData>()
-
-export function filingDetailSpec(data: FilingDetailData): PageSpec {
-  return page({
-    route: '/compliance/information-returns/[id]',
-    layout: 'list',
-    header: [
-      pageHeader({
-        title: f('title'),
-        description: f('description'),
-        back: { href: f('backHref'), label: f('backLabel') },
-      }),
-    ],
-    body: [
-      widgetBlock('filing-worksheet', {
-        filing: data.filing,
-        boxes: data.boxes,
-        canManage: data.canManage,
-        canFile: data.canFile,
-      }),
-    ],
-  })
 }

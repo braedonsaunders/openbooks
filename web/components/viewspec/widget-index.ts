@@ -229,6 +229,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'file-drawer': 'records',
   'file-list': 'records',
   'filing-worksheet': 'operations',
+  'information-return-filing-drawer': 'operations',
   'filter-chips': 'controls',
   'financial-health-view': 'reporting',
   'finding-cell': 'agents',
