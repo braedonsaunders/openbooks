@@ -1,4 +1,5 @@
 import type { ReportEntity } from './entities'
+import { REPORT_AS_OF } from './report-as-of'
 
 const shared = {
   category: 'general_ledger' as const,
@@ -15,11 +16,59 @@ const shared = {
  * runs posted and the change this run posted — so the expense schedule sums
  * the change by period and the latest cumulative per award is the cost
  * recognized to date. The register lists every security as issued, with its
- * terms. Positions as of a date come from the position ledger: every change
+ * terms, and its status and outstanding quantity on the as-of date. Positions as of a date come from the position ledger: every change
  * of a certificate's, award's or plan pool's position, restated through
  * splits and converted into common at the ratio in force, so the sum of the
  * movements effective on or before a date is the cap table on that date.
  */
+/** The statuses a security reads with on a date, as the equity read model names them. */
+export const SECURITY_STATUSES = ['outstanding', 'exercised', 'settled', 'converted', 'transferred', 'forfeited', 'expired', 'cancelled', 'repurchased', 'repaid', 'void'] as const
+
+/**
+ * Events in force on the as-of date: effective on or before it, not undone
+ * by a governed reversal effective by then, and not an event whose
+ * resulting security was voided by then (voiding the certificate an event
+ * produced is how that event is corrected). The equity read model replays
+ * the same events.
+ */
+const EVENT_IN_FORCE = `e.org_id = s.org_id and e.security_id = s.id and e.effective_on <= ${REPORT_AS_OF}::date
+          and not exists (select 1 from equity_security_events r
+                           where r.org_id = e.org_id and r.kind = 'reverse' and r.reverses_event_id = e.id and r.effective_on <= ${REPORT_AS_OF}::date)
+          and not (e.resulting_security_id is not null and exists (
+                select 1 from equity_security_events v
+                 where v.org_id = e.org_id and v.security_id = e.resulting_security_id and v.kind = 'void' and v.effective_on <= ${REPORT_AS_OF}::date))`
+
+/**
+ * A security's state on the as-of date: the shares or units it holds from
+ * the position ledger, whether it was voided, the last event that reduced a
+ * certificate or award, and the event that ended a SAFE or note.
+ */
+const SECURITY_STATE_AS_OF = `select
+        (select coalesce(sum(m.shares_delta), 0) from equity_position_movements m
+          where m.org_id = s.org_id and m.security_id = s.id and m.position_kind in ('share', 'award')
+            and m.effective_on <= ${REPORT_AS_OF}::date) as outstanding,
+        exists (select 1 from equity_security_events e where ${EVENT_IN_FORCE} and e.kind = 'void') as voided,
+        (select e.kind from equity_security_events e
+          where ${EVENT_IN_FORCE} and e.kind in ('exercise', 'settle', 'forfeit', 'expire', 'cancel', 'repurchase', 'transfer', 'convert')
+          order by e.effective_on desc, e.created_at desc, e.id desc limit 1) as last_reduction,
+        (select e.kind from equity_security_events e
+          where ${EVENT_IN_FORCE} and e.kind in ('void', 'convert', 'repay', 'cancel')
+          order by e.effective_on, e.created_at, e.id limit 1) as ending`
+
+/**
+ * The status on the as-of date. A SAFE or note is outstanding until the
+ * first event that ends it; a certificate or award is void once voided,
+ * outstanding while it holds shares or units, and otherwise named by the
+ * last event that reduced it.
+ */
+const SECURITY_STATUS_AS_OF = `case
+      when s.kind in ('safe', 'note') then coalesce(case st.ending when 'void' then 'void' when 'convert' then 'converted' when 'repay' then 'repaid' when 'cancel' then 'cancelled' end, 'outstanding')
+      when st.voided then 'void'
+      when st.outstanding > 0 then 'outstanding'
+      else coalesce(case st.last_reduction when 'exercise' then 'exercised' when 'settle' then 'settled' when 'forfeit' then 'forfeited' when 'expire' then 'expired'
+        when 'cancel' then 'cancelled' when 'repurchase' then 'repurchased' when 'transfer' then 'transferred' when 'convert' then 'converted' end, 'outstanding')
+    end`
+
 export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
   {
     ...shared,
@@ -58,13 +107,14 @@ export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
     ...shared,
     key: 'equity_securities_register',
     label: 'Equity securities register',
-    description: "Every share certificate, award, SAFE and note as issued, with holder, class and terms.",
+    description: "Every share certificate, award, SAFE and note issued by the as-of date, with holder, class, terms, and its status and quantity outstanding on that date.",
     from: `equity_securities s
       left join parties holder on holder.org_id = s.org_id and holder.id = s.holder_party_id
       left join equity_share_classes c on c.org_id = s.org_id and c.id = s.share_class_id
       left join equity_plans p on p.org_id = s.org_id and p.id = s.plan_id
       left join equity_financing_rounds rd on rd.org_id = s.org_id and rd.id = s.round_id
-      left join subsidiaries sub on sub.org_id = s.org_id and sub.id = s.subsidiary_id`,
+      left join subsidiaries sub on sub.org_id = s.org_id and sub.id = s.subsidiary_id
+      left join lateral (${SECURITY_STATE_AS_OF}) st on true`,
     orgColumn: 's.org_id',
     subsidiaryScope: { column: 's.subsidiary_id' },
     timeKey: 'issue_date',
@@ -81,12 +131,14 @@ export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'plan', label: 'Plan', kind: 'text', expr: 'p.code' },
       { key: 'round', label: 'Round', kind: 'text', expr: 'rd.name' },
       { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: SECURITY_STATUS_AS_OF, options: [...SECURITY_STATUSES] },
       { key: 'quantity_issued', label: 'Quantity issued', kind: 'number', expr: 's.quantity' },
+      { key: 'quantity_outstanding', label: 'Quantity outstanding', kind: 'number', expr: "case when s.kind in ('safe', 'note') then null else st.outstanding end" },
       { key: 'price_per_share', label: 'Price per share', kind: 'number', expr: 's.price_per_share' },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 's.currency' },
       { key: 'consideration', label: 'Consideration', kind: 'money', expr: 'coalesce(s.consideration_amount, 0)', txnCurrency: true },
       { key: 'fair_value_per_unit', label: 'Fair value per unit', kind: 'number', expr: 's.fair_value_per_unit' },
-      { key: 'voided', label: 'Voided', kind: 'boolean', expr: "exists (select 1 from equity_security_events v where v.org_id = s.org_id and v.security_id = s.id and v.kind = 'void')" },
+      { key: 'voided', label: 'Voided', kind: 'boolean', expr: 'st.voided' },
       { key: 'security_id', label: 'Security (id)', kind: 'uuid', expr: 's.id' },
       { key: 'journal_entry_id', label: 'Issuance entry (id)', kind: 'uuid', expr: 's.journal_entry_id' },
     ],

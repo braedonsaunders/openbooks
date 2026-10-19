@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "Registro de valores de patrimonio",
-        "description": "Cada certificado de acciones, adjudicación, SAFE y nota tal como se emitió, con titular, clase y condiciones."
+        "description": "Cada certificado de acciones, adjudicación, SAFE y nota emitidos hasta la fecha de corte, con titular, clase, condiciones, y su estado y cantidad en circulación en esa fecha."
       },
       "equity_cap_table_positions": {
         "label": "Movimientos de posiciones de la tabla de capitalización",
@@ -1284,7 +1284,9 @@
         "plan": "Plan",
         "round": "Ronda",
         "subsidiary": "Subsidiaria",
+        "status": "Estado",
         "quantity_issued": "Cantidad emitida",
+        "quantity_outstanding": "Cantidad en circulación",
         "price_per_share": "Precio por acción",
         "currency": "Moneda",
         "consideration": "Contraprestación",
@@ -3393,6 +3395,19 @@
           "warrant": "Warrant",
           "safe": "SAFE",
           "note": "Nota convertible"
+        },
+        "status": {
+          "outstanding": "En circulación",
+          "exercised": "Ejercido",
+          "settled": "Liquidado",
+          "converted": "Convertido",
+          "transferred": "Transferido",
+          "forfeited": "Perdido",
+          "expired": "Vencido",
+          "cancelled": "Cancelado",
+          "repurchased": "Recomprado",
+          "repaid": "Reembolsado",
+          "void": "Anulado"
         }
       },
       "equity_cap_table_positions": {

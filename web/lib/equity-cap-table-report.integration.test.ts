@@ -120,3 +120,50 @@ test('the Reports-hub cap table omits positions that are zero on the date and li
     await dropScratchOrgReporting(w.org.orgId)
   }
 })
+
+test('the securities register reads each security\'s status and outstanding quantity on its date exactly as the register view does', { skip: !DB }, async () => {
+  const w = await setupEquityWorld()
+  try {
+    const scenario = await seedPositionScenario(w)
+    const entity = { orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId }
+    const safe = await issueSecurity({ ...entity, kind: 'safe', holderPartyId: w.holderId, issueDate: '2026-07-10', considerationAmount: '25000', considerationAccountId: w.org.accounts.bank, safeType: 'post_money', valuationCap: '5000000' })
+    await recordSecurityEvent({ ...entity, securityId: safe.id, kind: 'cancel', effectiveOn: '2026-08-20', reason: 'Cancelled by agreement with the holder' })
+    const { listSecurities } = await import('@openbooks/engine/equity')
+    const { executeReport } = await import('./custom-reports.ts')
+    const { withReportAuthz } = await import('./report-execution-context.ts')
+    const reader: Authz = {
+      user: {
+        id: w.managerId, email: 'equity.reader@example.test', name: 'Equity Reader', roles: [], orgId: w.org.orgId, envKind: 'production',
+        productionOrgId: w.org.orgId, homeUserId: w.managerId, homeOrgId: w.org.orgId, isSuperAdmin: false,
+      },
+      permissions: new Set(['reports.read', 'equity.read']),
+      allowedSubsidiaryIds: null,
+    } as Authz
+    const definition = BUILT_IN_REPORT_DEFINITION_MAP['equity-securities-register']!
+    const statusLabels = new Map(Object.entries((await import('../messages/en/index.ts')).default.reports.catalog.columnValues.equity_securities_register.status).map(([value, label]) => [label, value]))
+    const seen = new Set<string>()
+    for (const asOf of [...scenario.checkDates, '2026-08-21']) {
+      const result = await withOrgContext(w.org.orgId, () => withReportAuthz(reader, () => executeReport(w.org.orgId, { ...definition.query, asOf }, undefined, {}))) as Result
+      const group = result.groups[0]
+      const view = await listSecurities({ ...entity, asOf })
+      const expected = view.rows.filter((row) => row.issueDate <= asOf).map((row) => [
+        row.securityNumber, row.status, row.kind === 'safe' || row.kind === 'note' ? null : row.outstanding,
+      ]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+      if (!group) {
+        assert.deepEqual(expected, [], `${asOf}: nothing is issued`)
+        continue
+      }
+      const at = (label: string) => group.columns.indexOf(label)
+      const actual = group.rows.map((row) => {
+        const status = String(row[at('Status')])
+        const quantity = row[at('Quantity outstanding')]
+        return [row[at('Security')], statusLabels.get(status) ?? status, quantity == null || quantity === '' ? null : String(quantity).replace(/[,\s]/g, '')]
+      }).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+      assert.deepEqual(actual, expected, `the register on ${asOf}`)
+      for (const row of expected) seen.add(String(row[1]))
+    }
+    for (const status of ['outstanding', 'void', 'cancelled']) assert.ok(seen.has(status), `the dates cover a ${status} security`)
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId)
+  }
+})

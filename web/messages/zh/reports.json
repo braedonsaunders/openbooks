@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "权益证券登记簿",
-        "description": "按发行时状态列示的每份股票凭证、授予、SAFE 和票据，含持有人、类别和条款。"
+        "description": "截至基准日发行的每份股票凭证、授予、SAFE 和可转换票据，含持有人、类别、条款，以及当日的状态和流通数量。"
       },
       "equity_cap_table_positions": {
         "label": "股权结构表持仓变动",
@@ -1284,7 +1284,9 @@
         "plan": "计划",
         "round": "融资轮次",
         "subsidiary": "子公司",
+        "status": "状态",
         "quantity_issued": "发行数量",
+        "quantity_outstanding": "流通数量",
         "price_per_share": "每股价格",
         "currency": "币种",
         "consideration": "对价",
@@ -3393,6 +3395,19 @@
           "warrant": "认股权证",
           "safe": "SAFE",
           "note": "可转换票据"
+        },
+        "status": {
+          "outstanding": "流通中",
+          "exercised": "已行权",
+          "settled": "已结算",
+          "converted": "已转换",
+          "transferred": "已转让",
+          "forfeited": "已没收",
+          "expired": "已到期",
+          "cancelled": "已取消",
+          "repurchased": "已回购",
+          "repaid": "已偿还",
+          "void": "已作废"
         }
       },
       "equity_cap_table_positions": {

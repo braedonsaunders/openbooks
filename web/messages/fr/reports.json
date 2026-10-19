@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "Registre des titres de capital",
-        "description": "Chaque certificat d’actions, attribution, SAFE et obligation tels qu’émis, avec détenteur, catégorie et conditions."
+        "description": "Chaque certificat d'actions, attribution, SAFE et obligation émis à la date de référence, avec détenteur, catégorie, conditions, ainsi que son statut et sa quantité en circulation à cette date."
       },
       "equity_cap_table_positions": {
         "label": "Mouvements des positions de la table de capitalisation",
@@ -1284,7 +1284,9 @@
         "plan": "Plan",
         "round": "Tour de financement",
         "subsidiary": "Filiale",
+        "status": "Statut",
         "quantity_issued": "Quantité émise",
+        "quantity_outstanding": "Quantité en circulation",
         "price_per_share": "Prix par action",
         "currency": "Devise",
         "consideration": "Contrepartie",
@@ -3393,6 +3395,19 @@
           "warrant": "Bon de souscription",
           "safe": "SAFE",
           "note": "Obligation convertible"
+        },
+        "status": {
+          "outstanding": "En circulation",
+          "exercised": "Exercé",
+          "settled": "Réglé",
+          "converted": "Converti",
+          "transferred": "Transféré",
+          "forfeited": "Déchu",
+          "expired": "Expiré",
+          "cancelled": "Annulé",
+          "repurchased": "Racheté",
+          "repaid": "Remboursé",
+          "void": "Annulé (erreur)"
         }
       },
       "equity_cap_table_positions": {

@@ -121,3 +121,19 @@ test('the securities register reads as of a date: every security issued on or be
   assert.ok(compiled.values.includes('2025-10-01'))
   assert.doesNotMatch(compiled.text, /s\.issue_date >=/, 'no lower bound hides earlier issues')
 })
+
+test('the securities register shows each security\'s status and outstanding quantity on its as-of date', () => {
+  const register = BUILT_IN_REPORT_DEFINITION_MAP['equity-securities-register']!
+  for (const column of ['status', 'quantity_issued', 'quantity_outstanding']) assert.ok(register.query.columns.includes(column), `the register shows ${column}`)
+  const entity = REPORT_ENTITY_MAP.equity_securities_register!
+  const compiled = compileCustomQuery(entity, validateCustomQuery({ ...register.query, asOf: '2025-10-01' }), ORG, { asOf: '2026-10-19' })
+  // The state in the FROM reads on the plan's date, the same date that bounds
+  // the rows; the run's own business date never leaks into it.
+  assert.ok(compiled.values.includes('2025-10-01'))
+  assert.ok(!compiled.values.includes('2026-10-19'), 'the business date is not the register date')
+  assert.doesNotMatch(compiled.text, /__report_as_of__/)
+  assert.match(compiled.text, /m\.effective_on <= \$\d+::date/, 'outstanding quantity sums the position ledger to the date')
+  assert.match(compiled.text, /r\.kind = 'reverse'/, 'reversed events no longer count')
+  const status = entity.columns.find((column) => column.key === 'status')!
+  assert.deepEqual(status.options, ['outstanding', 'exercised', 'settled', 'converted', 'transferred', 'forfeited', 'expired', 'cancelled', 'repurchased', 'repaid', 'void'])
+})

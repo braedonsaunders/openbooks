@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "Registro de valores mobiliários de patrimônio",
-        "description": "Cada certificado de ações, outorga, SAFE e nota conforme emitidos, com titular, classe e condições."
+        "description": "Cada certificado de ações, concessão, SAFE e nota emitidos até a data de referência, com titular, classe, termos, e seu status e quantidade em circulação nessa data."
       },
       "equity_cap_table_positions": {
         "label": "Movimentações de posições da tabela de capitalização",
@@ -1284,7 +1284,9 @@
         "plan": "Plano",
         "round": "Rodada",
         "subsidiary": "Subsidiária",
+        "status": "Status",
         "quantity_issued": "Quantidade emitida",
+        "quantity_outstanding": "Quantidade em circulação",
         "price_per_share": "Preço por ação",
         "currency": "Moeda",
         "consideration": "Contraprestação",
@@ -3393,6 +3395,19 @@
           "warrant": "Bônus de subscrição",
           "safe": "SAFE",
           "note": "Nota conversível"
+        },
+        "status": {
+          "outstanding": "Em circulação",
+          "exercised": "Exercido",
+          "settled": "Liquidado",
+          "converted": "Convertido",
+          "transferred": "Transferido",
+          "forfeited": "Perdido",
+          "expired": "Expirado",
+          "cancelled": "Cancelado",
+          "repurchased": "Recomprado",
+          "repaid": "Reembolsado",
+          "void": "Anulado"
         }
       },
       "equity_cap_table_positions": {

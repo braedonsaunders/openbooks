@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "株式等証券台帳",
-        "description": "発行時点のすべての株券、付与、SAFE、ノート（保有者、種類、条件付き）。"
+        "description": "基準日までに発行されたすべての株券、付与、SAFE、転換社債を、保有者、種類、条件、および基準日時点のステータスと残高数量とともに表示します。"
       },
       "equity_cap_table_positions": {
         "label": "資本政策表ポジションの異動",
@@ -1284,7 +1284,9 @@
         "plan": "プラン",
         "round": "ラウンド",
         "subsidiary": "子会社",
+        "status": "ステータス",
         "quantity_issued": "発行数量",
+        "quantity_outstanding": "残高数量",
         "price_per_share": "1株当たり価格",
         "currency": "通貨",
         "consideration": "対価",
@@ -3393,6 +3395,19 @@
           "warrant": "ワラント",
           "safe": "SAFE",
           "note": "コンバーティブルノート"
+        },
+        "status": {
+          "outstanding": "発行済",
+          "exercised": "行使済",
+          "settled": "交付済",
+          "converted": "転換済",
+          "transferred": "譲渡済",
+          "forfeited": "失効",
+          "expired": "期限切れ",
+          "cancelled": "取消済",
+          "repurchased": "買戻済",
+          "repaid": "返済済",
+          "void": "無効"
         }
       },
       "equity_cap_table_positions": {

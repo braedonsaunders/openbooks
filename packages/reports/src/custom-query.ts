@@ -670,7 +670,9 @@ function compileRows(
 
   const params = new SqlParams()
   const whereParts = implicitWhere(entity, q, orgId, params, opts)
-  const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
+  // A point-in-time source reads its FROM on the plan's as-of date, the same
+  // date that bounds its rows, so state read in the FROM never disagrees with them.
+  const from = bindReportFromAsOf(entity.from, q.asOf ?? opts.asOf, (value) => params.add(value))
   const countFrom = from.replace(/\r?\n/g, ' ')
   const filters = compileCustomFilters(entity, q, params, opts)
   if (filters) whereParts.push(`(${filters})`)
@@ -915,7 +917,9 @@ function compileSummarize(
   const startMonth = opts.fiscalStartMonth && opts.fiscalStartMonth >= 1 && opts.fiscalStartMonth <= 12 ? opts.fiscalStartMonth : 1
   const params = new SqlParams()
   const whereParts = implicitWhere(entity, q, orgId, params, opts)
-  const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
+  // A point-in-time source reads its FROM on the plan's as-of date, the same
+  // date that bounds its rows, so state read in the FROM never disagrees with them.
+  const from = bindReportFromAsOf(entity.from, q.asOf ?? opts.asOf, (value) => params.add(value))
   const filters = compileCustomFilters(entity, q, params, opts)
   if (filters) whereParts.push(`(${filters})`)
   const measureFilters = measures.map((measure) =>

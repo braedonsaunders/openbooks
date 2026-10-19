@@ -549,6 +549,8 @@ const SERVICE_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   },
 ]
 
+const REGISTER = EQUITY_REPORT_ENTITIES.find((entity) => entity.key === 'equity_securities_register')!
+
 export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   ...FIXED_ASSET_REPORTS,
   ...PORTFOLIO_SUMMARY_REPORTS,
@@ -557,7 +559,19 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   ...REBATE_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...CONTRACT_COST_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...AMORTIZATION_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
-  ...EQUITY_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
+  ...EQUITY_REPORT_ENTITIES.filter(entity => entity.key !== REGISTER.key).map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
+  {
+    // The register as of a date: every security issued by then, with the
+    // status and quantity it holds on that date beside its terms, so voided,
+    // converted and exercised securities read as such.
+    slug: 'equity-securities-register',
+    name: REGISTER.label,
+    description: REGISTER.description,
+    query: {
+      ...defaultRowsQuery(REGISTER),
+      columns: ['issue_date', 'security_number', 'security_kind', 'holder', 'share_class', 'status', 'quantity_issued', 'quantity_outstanding', 'price_per_share', 'currency'],
+    },
+  },
   {
     slug: 'equity-stock-compensation-schedule',
     name: 'Stock compensation expense schedule',

@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "Equity securities register",
-        "description": "Every share certificate, award, SAFE and note as issued, with holder, class and terms."
+        "description": "Every share certificate, award, SAFE and note issued by the as-of date, with holder, class, terms, and its status and quantity outstanding on that date."
       },
       "equity_cap_table_positions": {
         "label": "Cap table position movements",
@@ -1284,7 +1284,9 @@
         "plan": "Plan",
         "round": "Round",
         "subsidiary": "Subsidiary",
+        "status": "Status",
         "quantity_issued": "Quantity issued",
+        "quantity_outstanding": "Quantity outstanding",
         "price_per_share": "Price per share",
         "currency": "Currency",
         "consideration": "Consideration",
@@ -3393,6 +3395,19 @@
           "warrant": "Warrant",
           "safe": "SAFE",
           "note": "Convertible note"
+        },
+        "status": {
+          "outstanding": "Outstanding",
+          "exercised": "Exercised",
+          "settled": "Settled",
+          "converted": "Converted",
+          "transferred": "Transferred",
+          "forfeited": "Forfeited",
+          "expired": "Expired",
+          "cancelled": "Cancelled",
+          "repurchased": "Repurchased",
+          "repaid": "Repaid",
+          "void": "Void"
         }
       },
       "equity_cap_table_positions": {

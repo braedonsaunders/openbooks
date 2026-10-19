@@ -743,7 +743,7 @@
       },
       "equity_securities_register": {
         "label": "Wertpapierregister Eigenkapital",
-        "description": "Jedes Aktienzertifikat, jede Zuteilung, jeder SAFE und jedes Wandeldarlehen wie ausgegeben, mit Inhaber, Gattung und Bedingungen."
+        "description": "Jedes bis zum Stichtag ausgegebene Aktienzertifikat, jede Zuteilung, jeder SAFE und jedes Wandeldarlehen mit Inhaber, Gattung, Konditionen sowie Status und ausstehender Menge zu diesem Datum."
       },
       "equity_cap_table_positions": {
         "label": "Bewegungen der Cap-Table-Positionen",
@@ -1284,7 +1284,9 @@
         "plan": "Plan",
         "round": "Finanzierungsrunde",
         "subsidiary": "Tochtergesellschaft",
+        "status": "Status",
         "quantity_issued": "Ausgegebene Menge",
+        "quantity_outstanding": "Ausstehende Menge",
         "price_per_share": "Preis je Aktie",
         "currency": "Währung",
         "consideration": "Gegenleistung",
@@ -3393,6 +3395,19 @@
           "warrant": "Optionsschein",
           "safe": "SAFE",
           "note": "Wandeldarlehen"
+        },
+        "status": {
+          "outstanding": "Ausstehend",
+          "exercised": "Ausgeübt",
+          "settled": "Erfüllt",
+          "converted": "Gewandelt",
+          "transferred": "Übertragen",
+          "forfeited": "Verfallen",
+          "expired": "Abgelaufen",
+          "cancelled": "Storniert",
+          "repurchased": "Zurückgekauft",
+          "repaid": "Zurückgezahlt",
+          "void": "Ungültig"
         }
       },
       "equity_cap_table_positions": {
