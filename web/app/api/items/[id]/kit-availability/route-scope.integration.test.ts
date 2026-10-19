@@ -13,6 +13,10 @@ test('kit availability validates item IDs and lists warehouses admitted by the c
 }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   const branchId = randomUUID()
+  const homeLocationId = randomUUID()
+  const branchLocationId = randomUUID()
+  const homeWarehouseId = randomUUID()
+  const branchWarehouseId = randomUUID()
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Kit reader', 'kit-reader'))
     await withBypassContext(async () => {
@@ -25,13 +29,15 @@ test('kit availability validates item IDs and lists warehouses admitted by the c
       await db.execute(sql`insert into subsidiaries(id,org_id,name,parent_id,base_currency,country,is_active,is_elimination,custom)
         values(${branchId},${org.orgId},'Other kit entity',${org.subsidiaryId},'CAD','CA',true,false,'{}'::jsonb)`)
       await db.execute(sql`update items set kind='kit' where org_id=${org.orgId} and id=${org.items.assembly}`)
-      await db.execute(sql`update locations set subsidiary_id=${org.subsidiaryId}, subsidiary_include_children=false
-        where org_id=${org.orgId} and id=${org.locationId}`)
-      await db.execute(sql`update locations set subsidiary_id=${branchId}, subsidiary_include_children=false
-        where org_id=${org.orgId} and id=${org.locationId2}`)
+      await db.execute(sql`insert into locations(id,org_id,name,is_active,custom,subsidiary_id,subsidiary_include_children)
+        values(${homeLocationId},${org.orgId},'Home kit site',true,'{}'::jsonb,${org.subsidiaryId},false),
+              (${branchLocationId},${org.orgId},'Branch kit site',true,'{}'::jsonb,${branchId},false)`)
+      await db.execute(sql`insert into stock_locations(id,org_id,location_id,code,kind,is_active)
+        values(${homeWarehouseId},${org.orgId},${homeLocationId},'KIT-HOME','warehouse',true),
+              (${branchWarehouseId},${org.orgId},${branchLocationId},'KIT-BRANCH','warehouse',true)`)
       await db.execute(sql`insert into warehouses(stock_location_id,org_id,name,status)
-        values(${org.stockLocationId},${org.orgId},'Main warehouse','active'),
-              (${org.stockLocationId2},${org.orgId},'Branch warehouse','active')`)
+        values(${homeWarehouseId},${org.orgId},'Main warehouse','active'),
+              (${branchWarehouseId},${org.orgId},'Branch warehouse','active')`)
     })
 
     const call = (id: string) => withOrgContext(org.orgId, async () => {
@@ -44,7 +50,7 @@ test('kit availability validates item IDs and lists warehouses admitted by the c
     const valid = await call(org.items.assembly)
     assert.equal(valid.status, 200, await valid.clone().text())
     const payload = await valid.json()
-    assert.deepEqual(payload.warehouses.map((warehouse: { warehouseId: string }) => warehouse.warehouseId), [org.stockLocationId])
+    assert.deepEqual(payload.warehouses.map((warehouse: { warehouseId: string }) => warehouse.warehouseId), [homeWarehouseId])
 
     const malformed = await call('not-a-uuid')
     assert.equal(malformed.status, 404)
