@@ -1,4 +1,3 @@
-import { z } from 'zod'
 import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/platform/db'

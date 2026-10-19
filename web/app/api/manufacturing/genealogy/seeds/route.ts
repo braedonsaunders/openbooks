@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
 import { searchManufacturingGenealogySeeds } from "@openbooks/engine/manufacturing/genealogy";
 import { can, guardPermission } from "@/lib/authz";
@@ -9,7 +10,7 @@ import { manufacturingTransaction } from "../../_transaction";
 const Query = z.object({
   kind: z.enum(["lot", "serial"]),
   q: z.string().max(200).optional(),
-  selected: z.string().uuid().optional(),
+  selected: uuidString().optional(),
 }).strict();
 
 export const GET = defineRoute({
