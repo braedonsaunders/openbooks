@@ -46,6 +46,7 @@ async function mount(locale: keyof typeof MESSAGES, initial: string, maxScale?: 
 }
 
 const selected = (input: HTMLInputElement) => [input.selectionStart, input.selectionEnd]
+const fullSelection = (input: HTMLInputElement) => [0, input.value.length]
 
 async function tabInto(input: HTMLInputElement) {
   const before = input.closest('div')!.parentElement!.querySelector('button')!
@@ -62,7 +63,7 @@ test('tabbing into a grouped amount selects its editable digits, so typing repla
     assert.equal(field.input.value, '74,424,261.56', 'at rest the amount reads grouped in the viewer locale')
     await tabInto(field.input)
     assert.equal(field.input.value, '74424261.56', 'editing shows the digits without grouping')
-    assert.deepEqual(selected(field.input), [0, field.input.value.length], 'the whole value is selected')
+    assert.deepEqual(selected(field.input), fullSelection(field.input), 'the whole value is selected')
     await act(async () => setJsdomInput(field.input, '5000000'))
     assert.equal(field.held(), '5000000', 'the typed amount replaced the old one instead of appending to it')
     await act(async () => { field.input.blur() })
