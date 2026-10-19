@@ -195,6 +195,11 @@ test("a full discount needs the register override permission", { skip: !DB }, as
 test("voided POS sales do not count toward session totals or expected cash", { skip: !DB }, async () => {
   const f = await fixture();
   try {
+    const serviceItem = await withBypassContext(() => db.execute<{ id: string }>(sql`
+      update items set recognition_rule_id = null, deferred_account_id = null
+       where org_id = ${f.org.orgId} and id = ${f.org.items.service}
+       returning id`));
+    assert.equal(serviceItem.rows.length, 1, 'the sale fixture uses a non-recurring service item');
     const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
       lines: [{ itemId: f.org.items.service, quantity: "1" }],
       payments: [{ kind: "cash", tendered: "10.00" }],
