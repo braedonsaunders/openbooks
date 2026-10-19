@@ -171,28 +171,30 @@ test("a pending equity action is the requester's submission and the equity appro
 
 /** A pending accounting-event approval held by a live Flow run, assigned to a role. */
 async function pendingFinancialChangeGate(orgId: string, subsidiaryId: string, submitterId: string, role: string): Promise<{ changeId: string; gateId: string }> {
-  const changeId = randomUUID();
-  await db.execute(sql`
-    insert into financial_changes
-      (id, org_id, subsidiary_id, domain, subject_id, operation, effective_on, reason,
-       idempotency_key, payload, before_state, submitted_by, created_by, updated_by)
-    values (${changeId}, ${orgId}, ${subsidiaryId}, 'asset', ${randomUUID()}, 'revaluation',
-      '2026-07-15', 'Year-end revaluation', ${`all-approvals-${changeId}`},
-      ${JSON.stringify({ estimate: "1500.00", currency: "CAD" })}::jsonb, '{}'::jsonb,
-      ${submitterId}, ${submitterId}, ${submitterId})`);
-  await db.execute(sql`update financial_changes set status = 'pending' where org_id = ${orgId} and id = ${changeId}`);
-  const flowId = randomUUID();
-  await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
-    values (${flowId}, ${orgId}, 'Accounting event approval', 'financial_change', true, '{}'::jsonb)`);
-  const runId = randomUUID();
-  await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status, created_by)
-    values (${runId}, ${orgId}, ${flowId}, 'financial_change', ${changeId}, 'on_submit', 'waiting', ${submitterId})`);
-  const gateId = randomUUID();
-  await db.execute(sql`insert into flow_gates
-    (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key, quorum, status, assignee_role)
-    values (${gateId}, ${orgId}, ${flowId}, ${runId}, 'gate', 'financial_change', ${changeId},
-            'Approve the revaluation', 'gate', 'any', 'pending', ${role})`);
-  return { changeId, gateId };
+  return withBypassContext(async () => {
+    const changeId = randomUUID();
+    await db.execute(sql`
+      insert into financial_changes
+        (id, org_id, subsidiary_id, domain, subject_id, operation, effective_on, reason,
+         idempotency_key, payload, before_state, submitted_by, created_by, updated_by)
+      values (${changeId}, ${orgId}, ${subsidiaryId}, 'asset', ${randomUUID()}, 'revaluation',
+        '2026-07-15', 'Year-end revaluation', ${`all-approvals-${changeId}`},
+        ${JSON.stringify({ estimate: "1500.00", currency: "CAD" })}::jsonb, '{}'::jsonb,
+        ${submitterId}, ${submitterId}, ${submitterId})`);
+    await db.execute(sql`update financial_changes set status = 'pending' where org_id = ${orgId} and id = ${changeId}`);
+    const flowId = randomUUID();
+    await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
+      values (${flowId}, ${orgId}, 'Accounting event approval', 'financial_change', true, '{}'::jsonb)`);
+    const runId = randomUUID();
+    await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status, created_by)
+      values (${runId}, ${orgId}, ${flowId}, 'financial_change', ${changeId}, 'on_submit', 'waiting', ${submitterId})`);
+    const gateId = randomUUID();
+    await db.execute(sql`insert into flow_gates
+      (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key, quorum, status, assignee_role)
+      values (${gateId}, ${orgId}, ${flowId}, ${runId}, 'gate', 'financial_change', ${changeId},
+              'Approve the revaluation', 'gate', 'any', 'pending', ${role})`);
+    return { changeId, gateId };
+  });
 }
 
 test("All approvals lists every pending approval in the organization within the viewer's legal entities", { skip: !DB }, async () => {
