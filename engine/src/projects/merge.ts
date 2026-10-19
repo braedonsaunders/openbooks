@@ -715,9 +715,13 @@ async function moveJournalLinesForProjectMerge(
     period_id: string;
     memo: string | null;
     origin: string;
+    source_document_id: string | null;
+    reverses_entry_id: string | null;
+    custom: Record<string, unknown>;
   }>(sql`
     select distinct e.id, e.status, e.book_id, e.subsidiary_id, e.entry_number,
-           e.posting_date::text as posting_date, e.period_id, e.memo, e.origin
+           e.posting_date::text as posting_date, e.period_id, e.memo, e.origin,
+           e.source_document_id, e.reverses_entry_id, e.custom
       from journal_entries e
       join journal_lines jl on jl.entry_id = e.id and jl.org_id = e.org_id
      where e.org_id = ${orgId} and jl.project_id = ${duplicateId}
@@ -772,7 +776,6 @@ async function moveJournalLinesForProjectMerge(
       periodId: entry.period_id,
       memo: entry.memo,
       origin: entry.origin,
-      reversesEntryId: entry.id,
       currency: null,
       closeModules: ["gl"],
       allowImportedLocks: true,
@@ -781,6 +784,7 @@ async function moveJournalLinesForProjectMerge(
     await postEntry(tx, {
       ...posting,
       entryNumber: `${entry.entry_number}-R`,
+      reversesEntryId: entry.id,
       lines: legs.map((leg) => ({
         ...leg,
         amount: neg(leg.amount),
@@ -791,6 +795,9 @@ async function moveJournalLinesForProjectMerge(
     const replacement = await postEntry(tx, {
       ...posting,
       entryNumber: `${entry.entry_number}-C`,
+      reversesEntryId: entry.reverses_entry_id,
+      sourceDocumentId: entry.source_document_id,
+      custom: entry.custom,
       lines: legs.map((leg) => ({
         ...leg,
         projectId: leg.projectId === duplicateId ? survivorId : leg.projectId,
@@ -803,6 +810,13 @@ async function moveJournalLinesForProjectMerge(
         `cannot move project attribution on ${entry.status} journal entry ${entry.id}; only draft, posted, and reversed entries move`,
       );
     }
+    await tx.execute(sql`
+      update time_entries
+         set cost_journal_entry_id = case when cost_journal_entry_id = ${entry.id} then ${replacement.entryId} else cost_journal_entry_id end,
+             overhead_journal_entry_id = case when overhead_journal_entry_id = ${entry.id} then ${replacement.entryId} else overhead_journal_entry_id end
+       where org_id = ${orgId}
+         and (cost_journal_entry_id = ${entry.id} or overhead_journal_entry_id = ${entry.id})
+    `);
     const oldByNumber = new Map(
       rows.map((row) => [Number(row.line_number), String(row.id)]),
     );

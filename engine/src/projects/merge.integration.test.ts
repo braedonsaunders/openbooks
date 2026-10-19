@@ -103,13 +103,17 @@ async function seedPostedEntry(args: {
   bankAccount: string;
   projectId: string;
   tag: string;
-}): Promise<void> {
+  sourceDocumentId?: string;
+  custom?: Record<string, unknown>;
+}): Promise<string> {
   const entry = randomUUID();
   await db.execute(sql`
     insert into journal_entries
-      (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin,
+       source_document_id, custom)
     values (${entry}, ${args.orgId}, ${args.bookId}, ${args.subsidiaryId}, ${`JE-${args.tag}`},
-            ${args.date}, ${args.periodId}, 'merge posted lines', 'draft', 'manual')`);
+            ${args.date}, ${args.periodId}, 'merge posted lines', 'draft', 'manual',
+            ${args.sourceDocumentId ?? null}, ${JSON.stringify(args.custom ?? {})}::jsonb)`);
   // One balanced pair: the deferred entry-balance trigger fires at commit.
   await db.execute(sql`
     insert into journal_lines
@@ -118,6 +122,7 @@ async function seedPostedEntry(args: {
       (${args.orgId}, ${entry}, 1, ${args.adjustmentAccount}, ${args.subsidiaryId}, ${args.projectId}, '25', 'CAD', '25', '1'),
       (${args.orgId}, ${entry}, 2, ${args.bankAccount}, ${args.subsidiaryId}, ${args.projectId}, '-25', 'CAD', '-25', '1')`);
   await db.execute(sql`update journal_entries set status = 'posted' where id = ${entry} and org_id = ${args.orgId}`);
+  return entry;
 }
 
 async function seedReferences(
@@ -456,11 +461,27 @@ test("merge moves posted journal lines in open periods by reversal plus repost",
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J1", "Posted one");
     const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J2", "Posted two");
-    await seedPostedEntry({
+    const sourceDocumentId = randomUUID();
+    await db.execute(sql`
+      insert into documents (id, org_id, subsidiary_id, kind, status, document_number, document_date, currency, project_id)
+      values (${sourceDocumentId}, ${org.orgId}, ${org.subsidiaryId}, 'vendor_bill', 'draft',
+              ${`BILL-${randomUUID()}`}, ${org.date}, 'CAD', ${duplicate})`);
+    const originalEntryId = await seedPostedEntry({
       orgId: org.orgId, subsidiaryId: org.subsidiaryId, bookId: org.bookId, periodId: org.periodId,
       date: org.date, adjustmentAccount: org.accounts.adjustment, bankAccount: org.accounts.bank,
-      projectId: duplicate, tag: "JOPEN",
+      projectId: duplicate, tag: "JOPEN", sourceDocumentId, custom: { mergeMarker: "preserve" },
     });
+    const employee = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${employee}, ${org.orgId}, 'person', 'Merge labor worker', true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into time_entries
+        (org_id, employee_party_id, worked_on, hours, project_id, status, is_billable,
+         billing_status, costing_basis, cost_journal_entry_id, overhead_journal_entry_id,
+         created_by, updated_by)
+      values (${org.orgId}, ${employee}, ${org.date}, '2', ${duplicate}, 'approved', false,
+              'unbilled', 'actual', ${originalEntryId}, ${originalEntryId}, ${actor}, ${actor})`);
     const preview = await previewProjectMerge(org.orgId, survivor, duplicate);
     assert.equal(preview.moved.find((m) => m.table === "journal_lines")?.rows, 2);
     const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
@@ -489,6 +510,28 @@ test("merge moves posted journal lines in open periods by reversal plus repost",
       { entry_number: "JE-JOPEN-C", status: "posted" },
       { entry_number: "JE-JOPEN-R", status: "posted" },
     ]);
+    const replacement = await db.execute<{
+      id: string; source_document_id: string | null; reverses_entry_id: string | null; merge_marker: string | null;
+    }>(sql`
+      select id, source_document_id::text, reverses_entry_id::text, custom->>'mergeMarker' as merge_marker
+        from journal_entries where org_id = ${org.orgId} and entry_number = 'JE-JOPEN-C'
+    `);
+    assert.deepEqual(replacement.rows[0], {
+      id: replacement.rows[0]?.id,
+      source_document_id: sourceDocumentId,
+      reverses_entry_id: null,
+      merge_marker: "preserve",
+    });
+    const timeEvidence = await db.execute<{
+      cost_journal_entry_id: string | null; overhead_journal_entry_id: string | null;
+    }>(sql`
+      select cost_journal_entry_id::text, overhead_journal_entry_id::text from time_entries
+       where org_id = ${org.orgId} and employee_party_id = ${employee}
+    `);
+    assert.deepEqual(timeEvidence.rows[0], {
+      cost_journal_entry_id: replacement.rows[0]?.id,
+      overhead_journal_entry_id: replacement.rows[0]?.id,
+    });
     // The merge adds no money: posted entries still balance overall.
     const books = await db.execute<{ balance: string }>(sql`
       select coalesce(sum(jl.amount), 0)::text as balance
