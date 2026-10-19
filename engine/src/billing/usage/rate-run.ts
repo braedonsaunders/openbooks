@@ -415,7 +415,7 @@ async function previouslyRatedTotal(
              select sum(line.amount)
                from document_lines line
               where line.org_id = r.org_id and line.document_id = r.invoice_id
-                and line.custom->'rating'->>'runId' = r.id
+                and line.custom->'rating'->>'runId' = r.id::text
                 and line.custom->'rating'->>'kind' is distinct from 'commit_shortfall'
            ), 0) + coalesce((
              select sum(draw.amount)
