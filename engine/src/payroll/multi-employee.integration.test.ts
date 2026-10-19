@@ -19,6 +19,7 @@ import { recurringBenefitSource } from "./benefit-plan-inputs.ts";
 import { entitlementBalances, planBalanceExcludingRun } from "./entitlements-db.ts";
 import { employeesNearLimit } from "./entitlements-reports.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { upsertUnionFringe } from "./union.ts";
 import { requestDocumentVoid } from '../ledger/document-void.ts';
 import { postDocument } from '../ledger/posting-document.ts';
@@ -508,6 +509,23 @@ test(
     const fx = await payrollOrg();
     try {
       const id = await employee(fx, "Bonnie Bonus");
+      const filingAccountId = randomUUID();
+      assert.equal((await db.execute(sql`insert into payroll_filing_accounts
+        (id,org_id,country,program_type,account_number,name,subsidiary_id,is_default,created_by,updated_by)
+        values(${filingAccountId},${fx.orgId},'CA','ca_rp','123456789RP0001','CRA payroll',${fx.subsidiaryId},true,${fx.actorId},${fx.actorId}) returning id`)).rows.length, 1);
+      await upsertPayrollEmployerFact({ orgId: fx.orgId, actorId: fx.actorId, filingAccountId,
+        country: "CA", factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01", value: "1.4",
+        changeReason: "Standard employer EI rate for this CRA payroll account" });
+      assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+        where org_id=${fx.orgId} and employee_party_id=${id} returning id`)).rows.length, 1);
+      // The native bonus method uses actual committed regular income for this employment.
+      for (const day of ["2026-06-22", "2026-06-24", "2026-06-26", "2026-06-30"]) {
+        await hours(fx, id, day, "20");
+      }
+      const priorRegular = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId,
+        payScheduleId: fx.scheduleId, periodStart: "2026-06-21", periodEnd: "2026-07-04" });
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: priorRegular.documentId, actorId: fx.actorId })).errors, []);
+      await commitPayRun({ orgId: fx.orgId, documentId: priorRegular.documentId, actorId: fx.actorId });
       for (const day of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await hours(fx, id, day, "20");
       }
@@ -524,7 +542,7 @@ test(
                                          created_by, updated_by)
         values (${fx.orgId}, ${bonus.documentId}, ${id}, 'line', ${bonusComponent.id},
                 '500', 'Spot bonus', ${fx.actorId}, ${fx.actorId})`);
-      await calculatePayRun({ orgId: fx.orgId, documentId: bonus.documentId, actorId: fx.actorId });
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: bonus.documentId, actorId: fx.actorId })).errors, []);
       await commitPayRun({ orgId: fx.orgId, documentId: bonus.documentId, actorId: fx.actorId });
 
       // The bonus run priced no hours, so it may not claim any. Claiming them
@@ -532,7 +550,8 @@ test(
       // readiness still reported the hours as present.
       const claimed = ((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from time_entries
-         where org_id = ${fx.orgId} and payroll_batch_ref is not null`))).rows[0]!.n;
+         where org_id = ${fx.orgId} and worked_on between '2026-07-05' and '2026-07-18'
+           and payroll_batch_ref is not null`))).rows[0]!.n;
       assert.equal(claimed, 0, "a bonus run prices no time and therefore claims none");
 
       const regular = await createPayRun({

@@ -841,6 +841,11 @@ async function createRetroPayRunLocked(
   const paying = proposal.periods.filter((period) =>
     period.outcome === "payable" && !excluded.has(period.candidate.sourcePayRunDocumentId));
   if (paying.length === 0) {
+    const blocked = proposal.periods.filter(period => period.outcome === "unavailable");
+    if (blocked.length > 0) {
+      throw new RetroPayError("Retroactive pay could not be calculated: "
+        + blocked.map(period => period.blockedReason).join("; "));
+    }
     throw new RetroPayError(
       "there is nothing to pay retroactively: no committed period in this statutory year "
       + "produces a positive difference against what it already paid",

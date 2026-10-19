@@ -1,6 +1,6 @@
 import { seedCanadianPostingAccounts } from "../testing/payroll-posting-fixture.ts";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
@@ -449,4 +449,55 @@ export async function markLegacy(orgId: string) {
     );
     return rows.rows[0]!.id;
   });
+}
+
+/** Retain an explicitly declared Canadian opening packet through native qualification commands. */
+export async function qualifyCanadianOpeningForTest(input: {
+  orgId: string; actorId: string; subsidiaryId: string; employeePartyId: string; taxYear: number;
+  filingAccountId: string; province: string; coverageStart: string; coverageEnd: string;
+  amounts: Record<string, string>; reportableBases: { cpp: string; ei: string; qpip: string };
+  levyAllocations: readonly import("./opening-levy-source-authority.ts").OpeningLevySourceAllocationInput[];
+}): Promise<void> {
+  const { readOpeningEmployerContext, qualifyOpeningEmployerAuthority } = await import("./opening-employer-authority.ts");
+  const { readOpeningLevySourceContext, qualifyOpeningLevySourceAuthority } = await import("./opening-levy-source-authority.ts");
+  const { readCanadianOpeningReportingSourceContext, qualifyCanadianOpeningReportingSource } = await import("./canada/opening-reporting-authority.ts");
+  const retainFile = async (evidence: unknown) => {
+    const sourceFileId = randomUUID(), sourceVersionId = randomUUID(), folderId = randomUUID();
+    const bytes = Buffer.from(JSON.stringify(evidence));
+    const sourceSha256 = createHash("sha256").update(bytes).digest("hex");
+    assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
+      values(${folderId},${input.orgId},'Original payroll evidence',true,${input.actorId},${input.actorId},${input.actorId}) returning id`)).rows.length, 1);
+    assert.equal((await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
+      values(${sourceFileId},${input.orgId},${folderId},'original-payroll.json','application/json',${bytes.length},${input.actorId},${input.actorId}) returning id`)).rows.length, 1);
+    assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
+      values(${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${input.actorId}) returning id`)).rows.length, 1);
+    assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${sourceVersionId},${bytes}) returning version_id`)).rows.length, 1);
+    assert.equal((await db.execute(sql`update files set current_version_id=${sourceVersionId}
+      where org_id=${input.orgId} and id=${sourceFileId} returning id`)).rows.length, 1);
+    return { sourceFileId, sourceVersionId, sourceSha256 };
+  };
+  const facts = { originalCountry: "CA", originalCurrency: "CAD", coverageStart: input.coverageStart,
+    coverageEnd: input.coverageEnd, coverageComplete: true } as const;
+  const contextInput = { orgId: input.orgId, actorId: input.actorId, employeePartyId: input.employeePartyId,
+    taxYear: input.taxYear, allowedSubsidiaryIds: null };
+  const file = await retainFile({ ...input, ...facts });
+  const employer = await readOpeningEmployerContext({ ...contextInput, sourceFileId: file.sourceFileId });
+  const source = await readOpeningLevySourceContext(contextInput);
+  assert.ok(employer.record); assert.ok(source.record);
+  const packet = { ...contextInput, openingBalanceId: employer.record.id,
+    expectedOpeningSha256: employer.record.openingSha256,
+    expectedOpeningChildrenSha256: source.record.openingChildrenSha256, ...file, ...facts,
+    allocations: input.levyAllocations, sourceReference: "Complete original payroll year-to-date report",
+    reason: "Retain the declared original employer, statutory coverage and reporting amounts" };
+  await qualifyOpeningEmployerAuthority({ ...packet, subsidiaryId: input.subsidiaryId });
+  const levy = await qualifyOpeningLevySourceAuthority(packet);
+  const reporting = await readCanadianOpeningReportingSourceContext(contextInput);
+  assert.ok(reporting.original.children);
+  const allocations = [{ sourceOrdinal: 1, firstCoveredPayDate: input.coverageStart,
+    filingAccountId: input.filingAccountId, province: input.province,
+    annualAmounts: reporting.original.annualAmounts, reportableBases: input.reportableBases,
+    children: reporting.original.children }];
+  const reportingFile = await retainFile({ ...input, ...facts, allocations });
+  await qualifyCanadianOpeningReportingSource({ ...packet, ...reportingFile, requestId: randomUUID(),
+    expectedLevyAuthorityId: levy.id, expectedLevyAllocationSha256: levy.allocationSha256, allocations });
 }

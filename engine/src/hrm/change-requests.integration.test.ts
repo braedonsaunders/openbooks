@@ -540,9 +540,7 @@ test("rejection writes the snapshot and no canonical rows", { skip: !DB }, async
 
 test("identity separation: the submitter cannot decide their own submission", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
-    // The submitter is a routed approver here, so the refusal comes from
-    // separation of duties — not from missing gate assignment.
-    await seedFlow(h.org.orgId, [h.submitterId, h.approver1Id]);
+    await seedFlow(h.org.orgId, h.approver1Id);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, employeeRole: true, displayName: "Hired Worker" });
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
@@ -550,6 +548,9 @@ test("identity separation: the submitter cannot decide their own submission", { 
     });
     await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: "hire" });
     const gate = await gateOf(draft.id);
+    // Assignment changes cannot let a maker approve their own record.
+    assert.equal((await db.execute(sql`update flow_gates set assignee_user_id=${h.submitterId}
+      where org_id=${h.org.orgId} and id=${gate.id} returning id`)).rows.length, 1);
     await assert.rejects(
       decideGate({ gateId: gate.id, decision: "approved", userId: h.submitterId }),
       (e: unknown) => e instanceof GateError && /own submission/.test(e.message),

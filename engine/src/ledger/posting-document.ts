@@ -106,7 +106,7 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
     const identity=(await db.execute<{org_id:string;journal_mode:string}>(sql`select org_id,journal_mode from documents where id=${documentId}`)).rows[0];
     if (identity) {
       await lockLedgerSetupFence(db,identity.org_id,identity.journal_mode==='currency_adjustment' ? 'exclusive' : 'shared');
-      const locked=(await db.execute<{journal_mode:string}>(sql`select journal_mode from documents where org_id=${identity.org_id} and id=${documentId} for share`)).rows[0];
+      const locked=(await db.execute<{journal_mode:string}>(sql`select journal_mode from documents where org_id=${identity.org_id} and id=${documentId} for update`)).rows[0];
       if (locked?.journal_mode==='currency_adjustment' && identity.journal_mode!=='currency_adjustment') throw new PostingError("The journal mode changed before posting. Reload the journal and post again.");
       await assertRebateSettlementTaxBeforePosting(identity.org_id, documentId);
     }

@@ -469,7 +469,7 @@ describe("calculation-rollback", () => {
       const fx = await seedAdoption();
       const fault = sql.identifier(`payroll_commit_fault_${randomUUID().replaceAll("-", "")}`);
       try {
-        await assertDedicatedFixtureDatabase("payroll commit rollback verification");
+        await assertDedicatedFixtureDatabase();
         const { input } = await calculatedRun(fx);
         const before = await evidence(fx.orgId);
         await withOrgTransaction(fx.orgId, async () => {

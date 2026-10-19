@@ -8,7 +8,7 @@ import {
   enqueueEmail,
   getEmailQueue,
 } from "@openbooks/jobs";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { loadEmailAttachments } from "../delivery/email-attachments.ts";
 import {
   enqueueApprovalEscalation,
@@ -33,6 +33,7 @@ import {
   createScratchOrg,
   createScratchUser,
   grantScratchPermissions,
+  assertDedicatedFixtureDatabase,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
 import {
@@ -1814,6 +1815,12 @@ test("tenant scan failures remain retryable and system recovery requires live pl
       if (row.id === rowId) throw new Error("Scheduler infrastructure is unavailable");
     });
     assert.equal((await readTerminalEvidence(rowId)).length, 1);
+    await withOrgTransaction(org.orgId, async () => {
+      await db.execute(sql`select set_config('openbooks.scheduler_outbox_replay_org','__system__',true)`);
+      const allowed = (await db.execute<{allowed:boolean}>(sql`
+        select public.openbooks_scheduler_outbox_replay_allowed(null) as allowed`)).rows[0]!;
+      assert.equal(allowed.allowed, false, "a tenant connection cannot authorize system replay by setting a scope pin");
+    });
     await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:operator,reason:"Infrastructure has recovered and delivery can resume"}), /platform administrator/);
     assert.equal((await readTerminalEvidence(rowId)).length, 1);
     await replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:platformAdmin,reason:"Infrastructure has recovered and delivery can resume"});
@@ -1825,8 +1832,13 @@ test("tenant scan failures remain retryable and system recovery requires live pl
     await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:platformAdmin,reason:"Infrastructure has recovered and delivery can resume"}), /not an active user/);
   } finally {
     if (rowId) {
-      await db.execute(sql`delete from scheduler_outbox_terminal_audit where outbox_row_id=${rowId}`);
-      await db.execute(sql`delete from scheduler_outbox where id=${rowId}`);
+      await assertDedicatedFixtureDatabase();
+      await db.transaction(async tx => {
+        await tx.execute(sql`alter table scheduler_outbox_terminal_audit disable trigger scheduler_outbox_terminal_audit_append_only`);
+        await tx.execute(sql`delete from scheduler_outbox_terminal_audit where outbox_row_id=${rowId}`);
+        await tx.execute(sql`alter table scheduler_outbox_terminal_audit enable trigger scheduler_outbox_terminal_audit_append_only`);
+        await tx.execute(sql`delete from scheduler_outbox where id=${rowId}`);
+      });
     }
     await dropScratchOrg(org.orgId);
   }

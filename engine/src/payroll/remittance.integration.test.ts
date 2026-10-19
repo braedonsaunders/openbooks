@@ -3,7 +3,7 @@ import { seedPayrollLine, seedPayrollParty, seedPayrollVendorRole } from '../tes
 import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollPerson, seedPostingAccount, seedPayrollProfile, seedPayrollWage, createScratchOrg,
-  dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -28,7 +28,7 @@ import { attributePayRunEntity } from "./run-lifecycle.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
+import { qualifyCanadianOpeningForTest, seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 import { t4Slips, t4Summary } from "./yearend.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 
@@ -588,6 +588,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await grantScratchPermissions(org.orgId, actorId, ["payroll.run", "payroll.read"]);
     try {
       const filingAccountId = randomUUID();
       const filingAccount = await db.execute<{ id: string }>(sql`
@@ -641,9 +642,22 @@ test(
 
       // Cross the first CPP ceiling in this payment so the employee and
       // employer CPP2 rows are both exercised by GL and CRA remittance paths.
-      await saveOpeningBalances({
+      const openingAmounts = { pensionableYtd: "74000.00", insurableYtd: "0.00" };
+      assert.deepEqual((await saveOpeningBalances({
         orgId: org.orgId, actorId, taxYear: 2026,
-        rows: [{ employeePartyId: employeeId, amounts: { pensionableYtd: "74000.00", insurableYtd: "0.00" } }],
+        rows: [{ employeePartyId: employeeId, amounts: openingAmounts }],
+      })).errors, []);
+      await qualifyCanadianOpeningForTest({ orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId,
+        employeePartyId: employeeId, taxYear: 2026, filingAccountId, province: "ON",
+        coverageStart: "2026-01-01", coverageEnd: "2026-06-30", amounts: openingAmounts,
+        reportableBases: { cpp: "74000", ei: "0", qpip: "0" },
+        levyAllocations: [
+          ...["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"].map(region =>
+            ({ programKey: "ca_wcb", region, federalAccountId: null, amount: "0" })),
+          ...["BC","MB","NL","ON"].map(region =>
+            ({ programKey: "ca_eht", region, federalAccountId: null, amount: "0" })),
+          { programKey: "ca_cnt", region: "QC", federalAccountId: null, amount: "0" },
+        ],
       });
 
 
@@ -792,6 +806,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await grantScratchPermissions(org.orgId, actorId, ["payroll.run", "payroll.read"]);
     try {
       const childSubsidiaryId = randomUUID();
       const netPayableId = randomUUID();

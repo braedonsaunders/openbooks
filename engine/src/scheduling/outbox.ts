@@ -1110,8 +1110,14 @@ export async function replayTerminalSchedulerOutbox(input: {
       if (!actor.rows[0].is_super_admin) {
         throw new SchedulerOutboxReplayError("system scheduler replay requires an active platform administrator");
       }
-    } else if (!await actorHasPermission(tx, input.orgId, input.actorId, "admin.setup.manage")) {
-      throw new SchedulerOutboxReplayError("scheduler replay requires admin.setup.manage");
+    } else {
+      await tx.execute(sql`select id from role_assignments where org_id=${input.orgId} and user_id=${input.actorId} order by id for share`);
+      await tx.execute(sql`select id from app_roles where org_id=${input.orgId} and id in
+        (select role_id from role_assignments where org_id=${input.orgId} and user_id=${input.actorId}) order by id for share`);
+      await tx.execute(sql`select id from user_permission_overrides where org_id=${input.orgId} and user_id=${input.actorId} order by id for share`);
+      if (!await actorHasPermission(tx, input.orgId, input.actorId, "admin.setup.manage")) {
+        throw new SchedulerOutboxReplayError("scheduler replay requires admin.setup.manage");
+      }
     }
     const evidence = await tx.execute<{ exists: boolean }>(sql`
       select exists (

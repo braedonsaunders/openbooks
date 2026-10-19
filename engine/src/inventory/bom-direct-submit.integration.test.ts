@@ -389,9 +389,9 @@ test("back-dated revision refuses naming an applied standard-cost roll-up", { sk
     const approver = await withBypassContext(() => createWorkOperator(f.org.orgId, "Cost approver", ["manufacturing.manage", "items.manage"]));
     await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: approver }], mode: "any", preventSelfApproval: true }));
     await withOrgContext(f.org.orgId, () => submitFinancialChange(f.org.orgId, proposal.changeId, f.actorId));
-    const gate = await run(async (tx) => (await tx.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`)).rows[0]!);
+    const gate = await run(f.org.orgId, async (tx) => (await tx.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`)).rows[0]!);
     await withBypassContext(() => decideGate({ gateId: gate.id, userId: approver, decision: "approved" }));
-    await withBypassContext(() => applyStandardRollup(f.org.orgId, f.actorId, proposal.changeId));
+    await withOrgContext(f.org.orgId, () => applyStandardRollup(f.org.orgId, f.actorId, proposal.changeId));
     const version = await run(f.org.orgId, (tx) => readBomPolicyVersion(tx, f.org.orgId, itemId));
     await assert.rejects(run(f.org.orgId, (tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
       assemblyItemId: itemId, expectedVersion: version, reason: "Record the opening recipe for converting historical production",

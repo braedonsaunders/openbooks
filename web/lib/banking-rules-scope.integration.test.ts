@@ -263,8 +263,7 @@ const consolidatedRows = [
               const org = await createScratchOrg();
               try {
                 const actorId = (await seedFlowActors(org.orgId)).adminId;
-                // Categorizing journals post to the ledger, so the applier holds gl.post
-                // (76a56b8fef); scratch roles start with no permissions.
+                // Rule application requires both reconciliation and ledger posting authority.
                 await db.execute(sql\`update app_roles set permissions = '["gl.post","banking.reconcile"]'::jsonb
                   where org_id = \${org.orgId} and key = 'admin'\`);
                 await db.execute(sql\`
@@ -340,7 +339,7 @@ const consolidatedRows = [
                 assert.equal(
                   attempts.filter((result) => result.status === "fulfilled").length,
                   1,
-                  "exactly one invocation owns the line",
+                  "exactly one invocation owns the line: " + attempts.map(result => result.status === "rejected" ? String(result.reason) : "posted").join("; "),
                 );
                 const rejected = attempts.find((result) => result.status === "rejected");
                 assert.ok(rejected && rejected.reason instanceof Error);
@@ -409,8 +408,7 @@ const consolidatedRows = [
               const org = await createScratchOrg();
               try {
                 const actorId = (await seedFlowActors(org.orgId)).adminId;
-                // Categorizing journals post to the ledger, so the applier holds gl.post
-                // (76a56b8fef); scratch roles start with no permissions.
+                // Rule application requires both reconciliation and ledger posting authority.
                 await db.execute(sql\`update app_roles set permissions = '["gl.post","banking.reconcile"]'::jsonb
                   where org_id = \${org.orgId} and key = 'admin'\`);
                 await db.execute(sql\`
@@ -635,8 +633,7 @@ const consolidatedRows = [
               const org = await createScratchOrg();
               try {
                 const actorId = (await seedFlowActors(org.orgId)).adminId;
-                // Categorizing journals post to the ledger, so the applier holds gl.post
-                // (76a56b8fef); scratch roles start with no permissions.
+                // Rule application requires both reconciliation and ledger posting authority.
                 await db.execute(sql\`update app_roles set permissions = '["gl.post","banking.reconcile"]'::jsonb
                   where org_id = \${org.orgId} and key = 'admin'\`);
                 await db.execute(sql\`

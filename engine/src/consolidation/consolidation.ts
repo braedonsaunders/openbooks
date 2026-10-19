@@ -812,12 +812,14 @@ export async function runOwnershipConsolidation(
   periodId: string,
   userId: string,
 ): Promise<{ runId: string; entryIds: string[] }> {
+  const callerOwnsTransaction = !!orgContext.getStore()?.txDb;
   try {
     // A consistent source snapshot also protects the across-period acquisition
     // predicate: two first-use periods cannot both commit an acquisition.
     return await withOwnershipSourceTransaction(orgId,
       (tx) => runOwnershipConsolidationIn(orgId, periodId, userId, tx));
   } catch (error) {
+    if (callerOwnsTransaction) throw error;
     const message = error instanceof Error ? error.message : String(error);
     await withOrgContext(orgId, () => db.execute(sql`
       insert into ownership_consolidation_runs (org_id,period_id,status,error,finished_at,created_by,updated_by)

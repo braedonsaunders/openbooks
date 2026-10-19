@@ -36,7 +36,7 @@ async function insertDeclaredFixture(table: Table, row: Record<string, unknown>)
   for (const [key] of entries) if (!columns[key]) throw new Error(`Unknown fixture field ${getTableName(table)}.${key}`);
   const written = await db.execute(sql`insert into ${sql.identifier(getTableName(table))}
     (${sql.join(entries.map(([key]) => sql.identifier(columns[key]!.name)), sql`, `)})
-    values (${sql.join(entries.map(([, value]) => sql`${value}`), sql`, `)}) returning 1 as written`);
+    values (${sql.join(entries.map(([key, value]) => sql.param(value, columns[key]!)), sql`, `)}) returning 1 as written`);
   if (written.rows.length !== 1) throw new Error(`Native fixture ${getTableName(table)} did not record its declared row`);
 }
 
