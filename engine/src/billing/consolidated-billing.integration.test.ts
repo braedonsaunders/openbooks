@@ -48,13 +48,18 @@ async function seedCustomer(orgId: string, name: string, subsidiaryId: string | 
   return id;
 }
 
-async function seedPlan(org: ScratchOrg, actorId: string, amount = "100.00"): Promise<string> {
+async function seedPlan(
+  org: ScratchOrg,
+  actorId: string,
+  amount = "100.00",
+  options: { currency?: string; taxCodeId?: string } = {},
+): Promise<string> {
   const planId = randomUUID();
   await db.execute(sql`
     insert into subscription_plans
-      (id, org_id, name, amount, interval, interval_count, income_account_id, is_active, created_by)
-    values (${planId}, ${org.orgId}, 'Hierarchy Plan', ${amount}, 'monthly', 1,
-            ${org.accounts.revenue}, true, ${actorId})`);
+      (id, org_id, name, amount, currency_code, interval, interval_count, income_account_id, tax_code_id, is_active, created_by)
+    values (${planId}, ${org.orgId}, 'Hierarchy Plan', ${amount}, ${options.currency ?? null}, 'monthly', 1,
+            ${org.accounts.revenue}, ${options.taxCodeId ?? null}, true, ${actorId})`);
   return planId;
 }
 
@@ -548,4 +553,90 @@ test("consolidation rechecks current unrestricted operator and posting authority
     assert.ok(replay);
     assert.equal(replay.invoiceId, run.invoiceId); assert.equal(replay.replayed, true);
   } finally { await dropScratchOrgReporting(org.orgId); }
+});
+
+test("consolidation retains inclusive tax inputs and resolves the invoice currency rate", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Consolidation operator", "admin");
+    await grantConsolidationOperator(org.orgId, actorId);
+    await enableFeatures(org.orgId);
+    const payer = await seedCustomer(org.orgId, "Payer", org.subsidiaryId);
+    const child = await seedCustomer(org.orgId, "Service customer", org.subsidiaryId);
+    const groupId = await seedGroup(org.orgId, payer);
+    await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
+
+    const taxCodeId = randomUUID();
+    const taxGroupId = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes (id, org_id, code, name, collected_account_id, paid_account_id, price_includes_tax)
+      values (${taxCodeId}, ${org.orgId}, 'CONSOLIDATED-INCLUSIVE', 'Consolidated inclusive tax',
+              ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)
+    `);
+    await db.execute(sql`
+      insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from)
+      values (${org.orgId}, ${taxCodeId}, '10', '2026-01-01')
+    `);
+    await db.execute(sql`
+      insert into tax_groups (id, org_id, code, name, price_includes_tax)
+      values (${taxGroupId}, ${org.orgId}, 'CONSOLIDATED-GROUP', 'Consolidated inclusive profile', true)
+    `);
+    await db.execute(sql`
+      insert into tax_group_members (tax_group_id, tax_code_id, sequence)
+      values (${taxGroupId}, ${taxCodeId}, 1)
+    `);
+
+    const planId = await seedPlan(org, actorId, "110.00", { currency: "USD", taxCodeId });
+    const subscriptionId = await seedSubscription(org, actorId, planId, child, org.date);
+    const { invoiceId: sourceId } = await billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null);
+    await db.execute(sql`
+      update document_lines set tax_group_id = ${taxGroupId}, tax_overridden = true
+       where org_id = ${org.orgId} and document_id = ${sourceId}
+    `);
+    await db.execute(sql`
+      update document_line_tax_components set overridden = true
+       where org_id = ${org.orgId} and document_line_id in
+         (select id from document_lines where org_id = ${org.orgId} and document_id = ${sourceId})
+    `);
+
+    await assert.rejects(
+      runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", { actorId }),
+      (error: unknown) => error instanceof ConsolidatedBillingError && /No spot exchange rate converts USD to CAD/.test(error.message),
+    );
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${org.orgId}, 'USD', 'CAD', '2026-07-31', 'spot', '1.35', 'manual')
+    `);
+
+    const [run] = await runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", { actorId });
+    assert.ok(run);
+    const invoice = (await db.execute<{
+      fxRate: string;
+      amount: string;
+      taxInputAmount: string | null;
+      taxAmount: string;
+      taxGroupId: string | null;
+      taxOverridden: boolean;
+      componentOverridden: boolean;
+    }>(sql`
+      select d.fx_rate::text as "fxRate", l.amount::text as amount,
+             l.tax_input_amount::text as "taxInputAmount", l.tax_amount::text as "taxAmount",
+             l.tax_group_id as "taxGroupId", l.tax_overridden as "taxOverridden",
+             (select bool_and(c.overridden) from document_line_tax_components c
+               where c.org_id = l.org_id and c.document_line_id = l.id) as "componentOverridden"
+        from documents d join document_lines l on l.org_id = d.org_id and l.document_id = d.id
+       where d.org_id = ${org.orgId} and d.id = ${run.invoiceId}
+    `)).rows[0]!;
+    assert.deepEqual(invoice, {
+      fxRate: "1.3500000000",
+      amount: "100.0000",
+      taxInputAmount: "110.0000",
+      taxAmount: "10.0000",
+      taxGroupId,
+      taxOverridden: true,
+      componentOverridden: true,
+    });
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
 });

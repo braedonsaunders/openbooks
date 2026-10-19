@@ -12,6 +12,8 @@ import { businessToday } from "../platform/business-date.ts";
 import { addCalendarDays, daysInCivilMonth, mondayOfIsoWeek } from "../platform/civil-date.ts";
 import { db, orgContext, withBypass, withOrg, type SqlExecutor } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { lookupExchangeRate } from "../fx/spot-rate.ts";
+import { accountingPreferences } from "../organization/accounting-preferences.ts";
 
 /**
  * Payer hierarchies and consolidated billing. A subscription's service-to
@@ -426,7 +428,10 @@ type PendingLine = {
   unitPrice: string;
   amount: string;
   taxCodeId: string | null;
+  taxGroupId: string | null;
+  taxInputAmount: string | null;
   taxAmount: string;
+  taxOverridden: boolean;
   servicePartyId: string | null;
   serviceName: string | null;
   subscriptionId: string | null;
@@ -584,6 +589,15 @@ export async function runConsolidationGroup(
 
     const guarded = new Map(priorRuns.map((run) => [run.currency, run]));
     const results: ConsolidationRunResult[] = [];
+    const billingEntity = (await db.execute<{ baseCurrency: string }>(sql`
+      select base_currency as "baseCurrency" from subsidiaries
+       where org_id = ${orgId} and id = ${billingSubsidiaryId} and is_active
+    `)).rows[0];
+    if (!billingEntity) {
+      throw new ConsolidatedBillingError(
+        "The billing subsidiary is no longer active in this organization — choose an active billing subsidiary and retry.",
+      );
+    }
     for (const [currency, bucket] of [...byCurrency.entries()].sort(([a], [b]) => (a < b ? -1 : 1))) {
       const guard = guarded.get(currency);
       if (guard) {
@@ -599,7 +613,9 @@ export async function runConsolidationGroup(
                l.item_id as "itemId", l.account_id as "accountId", l.description,
                l.quantity::text as quantity, l.unit_price::text as "unitPrice",
                l.amount::text as amount, l.tax_code_id as "taxCodeId",
-               l.tax_amount::text as "taxAmount", l.service_party_id as "servicePartyId",
+               l.tax_group_id as "taxGroupId", l.tax_input_amount::text as "taxInputAmount",
+               l.tax_amount::text as "taxAmount", l.tax_overridden as "taxOverridden",
+               l.service_party_id as "servicePartyId",
                p.display_name as "serviceName", d.custom->>'subscriptionId' as "subscriptionId",
                l.custom as custom
           from document_lines l
@@ -630,6 +646,14 @@ export async function runConsolidationGroup(
       );
       const ordered = orderLines(inDraftOrder, group.grouping);
 
+      const rateType = (await accountingPreferences(db, orgId, billingSubsidiaryId, periodEnd)).postingRateType;
+      const fxRate = await lookupExchangeRate(db, orgId, currency, billingEntity.baseCurrency, periodEnd, rateType);
+      if (fxRate === null) {
+        throw new ConsolidatedBillingError(
+          `No ${rateType} exchange rate converts ${currency} to ${billingEntity.baseCurrency} on or before ${periodEnd} — enter the dated quote in Setup → Exchange rates, then retry consolidation.`,
+        );
+      }
+
       const sums = (await db.execute<{ subtotal: string; taxTotal: string; total: string }>(sql`
         select sum(amount)::text as subtotal, sum(tax_amount)::text as "taxTotal",
                sum(amount + tax_amount)::text as total
@@ -644,10 +668,10 @@ export async function runConsolidationGroup(
       const billToPartyId = bucket[0]!.billToPartyId ?? group.payerPartyId;
       const documentNumber = await allocateDocumentNumber(db, orgId, "customer_invoice", "INV-");
       const created = (await db.execute<{ id: string }>(sql`
-        insert into documents (org_id, kind, document_number, party_id, document_date, due_date, currency, status,
+        insert into documents (org_id, kind, document_number, party_id, document_date, due_date, currency, fx_rate, status,
                                subsidiary_id, memo, subtotal, tax_total, total, custom, created_by)
         values (${orgId}, 'customer_invoice', ${documentNumber}, ${group.payerPartyId}, ${periodEnd},
-                null, ${currency}, 'draft', ${billingSubsidiaryId},
+                null, ${currency}, ${fxRate}, 'draft', ${billingSubsidiaryId},
                 ${`Consolidated billing — ${group.name} (${periodStart} → ${periodEnd})`},
                 ${sums.subtotal}, ${sums.taxTotal}, ${sums.total},
                 ${JSON.stringify({
@@ -678,10 +702,12 @@ export async function runConsolidationGroup(
         const lineSubsidiary = serviceSubsidiary && serviceSubsidiary !== billingSubsidiaryId ? serviceSubsidiary : null;
         const inserted = (await db.execute<{ id: string }>(sql`
           insert into document_lines (org_id, document_id, line_number, item_id, account_id, description, quantity,
-                unit_price, amount, tax_code_id, tax_amount, subsidiary_id, party_id, service_party_id, custom, is_billable, created_by)
+                unit_price, amount, tax_code_id, tax_group_id, tax_input_amount, tax_amount, tax_overridden,
+                subsidiary_id, party_id, service_party_id, custom, is_billable, created_by)
           values (${orgId}, ${invoiceId}, ${lineNumber}, ${line.itemId}, ${line.accountId},
                 ${line.description}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
-                ${line.taxCodeId}, ${line.taxAmount}, ${lineSubsidiary}, ${line.servicePartyId}, ${line.servicePartyId},
+                ${line.taxCodeId}, ${line.taxGroupId}, ${line.taxInputAmount}, ${line.taxAmount}, ${line.taxOverridden},
+                ${lineSubsidiary}, ${line.servicePartyId}, ${line.servicePartyId},
                 ${JSON.stringify(line.custom ?? {})}::jsonb, true, ${actorId})
           returning id
         `));
