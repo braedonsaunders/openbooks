@@ -673,12 +673,21 @@ export async function approveSubcontractChangeOrder(orgId: string, userId: strin
     if (!change) throw new SubcontractError("Change order not found");
     if (change.status !== "draft") throw new SubcontractError("Only a draft change order can be approved");
     if (change.created_by === userId) throw new SubcontractError("The change-order creator cannot approve it");
+    const openApplication = (await tx.execute(sql`
+      select 1 from vendor_pay_applications
+       where org_id = ${orgId} and subcontract_id = ${change.subcontract_id}
+         and status in ('draft', 'submitted', 'approved')
+       limit 1
+    `));
+    if (openApplication.rows.length) {
+      throw new SubcontractError("Complete or void the open vendor application before approving a change order");
+    }
     if (change.target_sov_line_id) {
       const line = (await tx.execute<{ scheduled_value: string; earned: string }>(sql`
         select l.scheduled_value,
           coalesce((select max(vpal.previous_earned + vpal.work_completed_this_period + vpal.materials_stored_current - vpal.previous_materials_stored)
             from vendor_pay_application_lines vpal join vendor_pay_applications vpa on vpa.id = vpal.pay_application_id and vpa.org_id = vpal.org_id
-            where vpal.org_id = ${orgId} and vpal.sov_line_id = l.id and vpa.status in ('billed','approved')), 0) as earned
+            where vpal.org_id = ${orgId} and vpal.sov_line_id = l.id and vpa.status in ('billed','approved','submitted')), 0) as earned
         from subcontract_sov_lines l where l.org_id = ${orgId} and l.subcontract_id = ${change.subcontract_id} and l.id = ${change.target_sov_line_id} for update
       `));
       if (!line.rows[0]) throw new SubcontractError("Target SOV line not found");
@@ -944,8 +953,10 @@ export async function approveVendorPayApplication(orgId: string, userId: string,
     if (!app.rows[0]) throw new SubcontractError("Vendor application not found");
     if (app.rows[0].status !== "submitted") throw new SubcontractError("Application is not awaiting approval");
     if ((app.rows[0].submitted_by ?? app.rows[0].created_by) === userId) throw new SubcontractError("The submitter cannot approve this vendor application");
+    const computed = await computeApplicationTx(tx, orgId, id);
+    if (cmp(computed.grossThisPeriod, "0") <= 0) throw new SubcontractError("Application must request a positive amount");
     await tx.execute(sql`update vendor_pay_applications set status = 'approved', approved_at = now(), approved_by = ${userId}, updated_at = now(), updated_by = ${userId} where org_id = ${orgId} and id = ${id}`);
-    await audit(tx, orgId, "vendor_pay_applications", id, "approve", { after: { status: "approved" } }, userId);
+    await audit(tx, orgId, "vendor_pay_applications", id, "approve", { after: { status: "approved", ...computed } }, userId);
   });
 }
 
