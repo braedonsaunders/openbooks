@@ -70,9 +70,13 @@ export const GET = defineRoute({
     }
     try {
       if (features !== null) {
+        const scopeDenied = guardUnrestrictedScope(authz);
+        if (scopeDenied) return scopeDenied;
         return NextResponse.json({ ok: true, features: await listSaasFeatures(authz.user.orgId) });
       }
       if (planVersionId !== null) {
+        const scopeDenied = guardUnrestrictedScope(authz);
+        if (scopeDenied) return scopeDenied;
         const entitlements = await listPlanVersionEntitlements(
           authz.user.orgId,
           planVersionId,

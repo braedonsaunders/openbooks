@@ -137,6 +137,7 @@ export async function getV1Entitlements(
   query: V1EntitlementsQuery,
 ): Promise<V1EntitlementsResult> {
   assertApplicationPermission(context, "ar.read");
+  if (query.feature !== undefined) assertApplicationPermission(context, "usage.bill");
   const orgId = context.authz.user.orgId;
   // Token routes gate apiAccess in the wrapper; entitlements additionally
   // need the advanced-subscriptions surface, refused without existence leak.
@@ -154,7 +155,6 @@ export async function getV1Entitlements(
   }
   // A usage check can bill overage into rating, so it carries the billing
   // permission rather than riding the read.
-  assertApplicationPermission(context, "usage.bill");
   try {
     const subscriptions = await withOrgContext(orgId, () =>
         resolveEntitlements(orgId, { customerId: customer.id }, { at: query.at, allowedSubsidiaryIds }));

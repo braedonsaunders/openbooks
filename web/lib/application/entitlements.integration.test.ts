@@ -130,6 +130,23 @@ test('a customer outside the caller subsidiary scope is hidden from entitlement 
   } finally { await dropScratchOrg(orgId); }
 });
 
+test('a usage check requires billing permission before resolving its customer', async () => {
+  const { org } = await seedOrg();
+  const orgId = org.orgId;
+  try {
+    await withOrgContext(orgId, async () => {
+      await assert.rejects(
+        getV1Entitlements(context(orgId, ['ar.read']), {
+          customer: 'Secret Customer Name', feature: 'metered_feature', used: '1',
+        }),
+        (error: unknown) => error instanceof ApplicationError
+          && error.code === 'forbidden'
+          && error.status === 403,
+      );
+    });
+  } finally { await dropScratchOrg(orgId); }
+});
+
 test('an unknown external reference refuses with its remedy', async () => {
   const { org } = await seedOrg();
   const orgId = org.orgId;

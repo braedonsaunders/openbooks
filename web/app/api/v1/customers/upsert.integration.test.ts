@@ -17,6 +17,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Setup {
   orgId: string;
+  subsidiaryId: string;
   key: string;
 }
 
@@ -34,7 +35,7 @@ async function setup(): Promise<Setup> {
     insert into api_keys (org_id, user_id, name, key_prefix, key_hash, key_preview, scopes, is_active)
     values (${org.orgId}, ${actor}, 'upsert test', ${generated.keyPrefix}, ${generated.keyHash},
             ${generated.keyPreview}, '["parties.manage","parties.read"]'::jsonb, true)`));
-  return { orgId: org.orgId, key: generated.plaintext };
+  return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, key: generated.plaintext };
 }
 
 async function callUpsert(
@@ -60,15 +61,21 @@ async function callUpsert(
 
 async function partyRow(orgId: string, id: string) {
   return (await withBypassContext(() => db.execute<Record<string, unknown>>(sql`
-    select id, display_name, email, custom from parties where id = ${id} and org_id = ${orgId}`))).rows[0];
+    select id, display_name, email, subsidiary_id, custom from parties where id = ${id} and org_id = ${orgId}`))).rows[0];
 }
 
-async function seedParty(orgId: string, name: string, email: string | null): Promise<string> {
+async function seedParty(orgId: string, name: string, email: string | null, subsidiaryId: string | null = null): Promise<string> {
   const id = randomUUID();
   await withBypassContext(() => db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, email, is_active)
-    values (${id}, ${orgId}, 'company', ${name}, ${email}, true)`));
+    insert into parties (id, org_id, kind, display_name, email, subsidiary_id, is_active)
+    values (${id}, ${orgId}, 'company', ${name}, ${email}, ${subsidiaryId}, true)`));
   return id;
+}
+
+async function restrictApiRoleTo(orgId: string, subsidiaryIds: string[]): Promise<void> {
+  await withBypassContext(() => db.execute(sql`
+    update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
+     where org_id = ${orgId} and key = 'api_owner'`));
 }
 
 test("upsert creates by email with an address, then matches", { skip: !DB }, async () => {
@@ -171,6 +178,61 @@ test("upsert refuses a half external pair and an unknown id", { skip: !DB }, asy
     const missing = await callUpsert(fixture, { id: randomUUID() });
     assert.equal(missing.status, 422, JSON.stringify(missing.json));
     assert.match(String(missing.json.message), /not found in this organization/);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(fixture.orgId));
+  }
+});
+
+test("restricted upserts require an in-scope subsidiary for creation", { skip: !DB }, async () => {
+  const fixture = await setup();
+  try {
+    await restrictApiRoleTo(fixture.orgId, [fixture.subsidiaryId]);
+    const missingScope = await callUpsert(fixture, { email: `scoped-${randomUUID()}@example.com`, name: "Scoped Customer" });
+    assert.equal(missingScope.status, 403, JSON.stringify(missingScope.json));
+
+    const created = await callUpsert(fixture, {
+      email: `scoped-${randomUUID()}@example.com`,
+      name: "Scoped Customer",
+      subsidiaryId: fixture.subsidiaryId,
+    });
+    assert.equal(created.status, 201, JSON.stringify(created.json));
+    const stored = await partyRow(fixture.orgId, String(created.json.id));
+    assert.equal(stored?.subsidiary_id, fixture.subsidiaryId);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(fixture.orgId));
+  }
+});
+
+test("upsert does not turn another party into a customer or cross subsidiary scope", { skip: !DB }, async () => {
+  const fixture = await setup();
+  try {
+    const childId = randomUUID();
+    await withBypassContext(() => db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${childId}, ${fixture.orgId}, ${fixture.subsidiaryId}, 'Other Customer Entity', 'CAD', 'CA')`));
+    const employeeEmail = `staff-${randomUUID()}@example.com`;
+    const employeeId = await seedParty(fixture.orgId, "Existing Employee", employeeEmail, fixture.subsidiaryId);
+    const foreignEmail = `foreign-${randomUUID()}@example.com`;
+    const foreignId = await seedParty(fixture.orgId, "Foreign Customer Candidate", foreignEmail, childId);
+    await restrictApiRoleTo(fixture.orgId, [fixture.subsidiaryId]);
+
+    const employeeMatch = await callUpsert(fixture, { email: employeeEmail, name: "Renamed Employee" });
+    assert.equal(employeeMatch.status, 409, JSON.stringify(employeeMatch.json));
+    assert.equal((await partyRow(fixture.orgId, employeeId))?.display_name, "Existing Employee");
+    const employeeNameMatch = await callUpsert(fixture, { name: "Existing Employee" });
+    assert.equal(employeeNameMatch.status, 409, JSON.stringify(employeeNameMatch.json));
+    const employeeRoleCount = (await withBypassContext(() => db.execute<{ n: string }>(sql`
+      select count(*)::text as n from customer_roles where org_id = ${fixture.orgId} and party_id = ${employeeId}`))).rows[0]!.n;
+    assert.equal(employeeRoleCount, "0");
+
+    const foreignMatch = await callUpsert(fixture, {
+      email: foreignEmail,
+      name: "Scoped Duplicate Customer",
+      subsidiaryId: fixture.subsidiaryId,
+    });
+    assert.equal(foreignMatch.status, 201, JSON.stringify(foreignMatch.json));
+    assert.notEqual(foreignMatch.json.id, foreignId);
+    assert.equal((await partyRow(fixture.orgId, foreignId))?.display_name, "Foreign Customer Candidate");
   } finally {
     await withBypassContext(() => dropScratchOrg(fixture.orgId));
   }

@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
-import { toUnits } from "@openbooks/engine/money/money";
+import { fromUnits, toUnits } from "@openbooks/engine/money/money";
 import { lockLedgerSetupFence } from "@openbooks/engine/organization/ledger-setup";
 import { lockScopeRow } from "@openbooks/engine/organization/scope";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
@@ -12,6 +12,7 @@ import { postPaymentWithApplications } from "@openbooks/engine/payments/payment-
 import { PaymentError } from "@openbooks/engine/payments-core/payment-errors";
 import { PostingError } from "@openbooks/engine/journal/contracts";
 import { hashStoredValueCode } from "@openbooks/engine/stored-value";
+import { isFeatureEnabled } from "../features";
 import {
   lookupStoredValueByCode,
   resolveStoredValueTender,
@@ -53,15 +54,16 @@ export async function lookupStoredValueBalance(
   input: { code: string },
 ): Promise<StoredValueLookupResult> {
   assertApplicationPermission(context, "stored_value.read");
+  const orgId = context.authz.user.orgId;
+  if (!(await isFeatureEnabled(orgId, "storedValue"))) throw notFound("stored value");
   const code = input.code.trim();
   if (!code) throw invalidInput("code is required");
-  const orgId = context.authz.user.orgId;
   const found = await withOrgContext(orgId, () => lookupStoredValueByCode(orgId, code, context.authz.allowedSubsidiaryIds));
   if (!found) throw notFound("stored value");
   return {
     kind: found.kind,
     currency: found.currency,
-    balance: found.balanceMinor,
+    balance: fromUnits(found.balanceMinor),
     status: found.status,
     expiresOn: found.expiresOn,
   };
@@ -87,6 +89,9 @@ export async function redeemStoredValueForInvoice(
   input: { code: string; amount: string; invoiceId: string; idempotencyKey: string },
 ): Promise<{ replayed: boolean; result: StoredValueRedeemResult }> {
   assertApplicationPermission(context, "stored_value.manage");
+  assertApplicationPermission(context, "ar.pay");
+  const orgId = context.authz.user.orgId;
+  if (!(await isFeatureEnabled(orgId, "storedValue"))) throw notFound("stored value");
   if (!isUuid(input.invoiceId)) throw invalidInput("invoiceId must be a UUID");
   const code = input.code.trim();
   if (!code) throw invalidInput("code is required");
@@ -97,7 +102,6 @@ export async function redeemStoredValueForInvoice(
     throw invalidInput("amount must be a decimal with at most 4 decimal places");
   }
   if (amountMinor <= 0n) throw invalidInput("amount must be positive");
-  const orgId = context.authz.user.orgId;
   const outcome = await executeIdempotent({
     context,
     operation: "stored_value.redeem",
@@ -185,7 +189,7 @@ export async function redeemStoredValueForInvoice(
               entryId: null,
               requestId: submission.runId ?? undefined,
               accountId: resolved.accountId,
-              balance: resolved.balanceMinor.toString(),
+              balance: fromUnits(resolved.balanceMinor),
             };
           }
           const posted = await postPaymentWithApplications(created.id, undefined, context.authz.user.id, context.source);
@@ -202,7 +206,7 @@ export async function redeemStoredValueForInvoice(
             paymentId: created.id,
             entryId: posted.entryId,
             accountId: resolved.accountId,
-            balance: balance.balance,
+            balance: fromUnits(BigInt(balance.balance)),
           };
         });
       } catch (error) {
