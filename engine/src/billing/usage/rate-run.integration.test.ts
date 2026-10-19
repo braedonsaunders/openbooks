@@ -85,6 +85,21 @@ async function postInvoice(org: ScratchOrg, actor: string, invoiceId: string): P
   await postDocument(invoiceId, { control: await loadRequiredControlAccounts(org.orgId) }, { audit: { actorId: actor, source: "usage-rating-test" } });
 }
 
+async function addMonthlyPeriods(org: ScratchOrg, months: readonly number[]): Promise<void> {
+  await withOrgContext(org.orgId, async () => {
+    const calendar = await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods
+      where org_id = ${org.orgId} and id = ${org.periodId}`);
+    assert.ok(calendar.rows[0]);
+    for (const month of months) {
+      const start = `2026-${String(month).padStart(2, "0")}-01`;
+      const end = month === 2 ? "2026-02-28" : month === 12 ? "2026-12-31" : `2026-${String(month).padStart(2, "0")}-31`;
+      assert.equal((await db.execute(sql`insert into accounting_periods
+        (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${org.orgId}, 2026, ${month}, ${start.slice(0, 7)}, ${start}, ${end}, false, ${calendar.rows[0]!.id}) returning id`)).rows.length, 1);
+    }
+  });
+}
+
 test("graduated rating is traced, idempotent, and draft rerating replaces the invoice", DB, async () => {
   await fixture(async (org, actor) => {
     const usageMeter = await meter(org, actor);
@@ -233,6 +248,84 @@ test("annual minimums true up only in the year-closing run and recognition rules
       commitRateRun(org.orgId, actor, rulePlan.link.id, org.date, org.date),
       (error: unknown) => error instanceof UsageBillingError && error.code === "usage_rate_run_item_recognition_rule" && error.remedy.includes("Remove the rule"),
     );
+  });
+});
+
+test("annual minimums sum the rated totals of active monthly runs", DB, async () => {
+  await fixture(async (org, actor) => {
+    const usageMeter = await meter(org, actor);
+    const changed = await db.execute(sql`update usage_meters set aggregation = 'max'
+      where org_id = ${org.orgId} and id = ${usageMeter.id} returning id`);
+    assert.equal(changed.rows.length, 1);
+    const { link, subscriptionId } = await linkedPlan(org, actor, usageMeter.id, {
+      effectiveFrom: "2026-01-01",
+      commitAmount: "45",
+      commitPeriod: "annual",
+    });
+    await withOrgContext(org.orgId, async () => {
+      const changedSubscription = await db.execute(sql`update subscriptions set start_on = '2026-01-01', next_bill_on = '2026-01-01'
+        where org_id = ${org.orgId} and id = ${subscriptionId} returning id`);
+      assert.equal(changedSubscription.rows.length, 1);
+    });
+    await addMonthlyPeriods(org, [1, 2, 12]);
+    await record(org, actor, usageMeter.key, "10", "2026-01-15", subscriptionId);
+    await record(org, actor, usageMeter.key, "10", "2026-02-15", subscriptionId);
+
+    const january = await commitRateRun(org.orgId, actor, link.id, "2026-01-01", "2026-01-31");
+    const february = await commitRateRun(org.orgId, actor, link.id, "2026-02-01", "2026-02-28");
+    assert.deepEqual([january.preview.totalRated, february.preview.totalRated], ["22.5000", "22.5000"]);
+
+    const december = await commitRateRun(org.orgId, actor, link.id, "2026-12-01", "2026-12-31");
+    assert.deepEqual([december.preview.commitRatedTotal, december.preview.commitShortfall], ["45.0000", "0.0000"]);
+    assert.ok(!december.preview.invoiceLines.some((line) => line.kind === "commit_shortfall"));
+  });
+});
+
+test("out-of-order usage rating reserves prepaid draws from later periods", DB, async () => {
+  await fixture(async (org, actor) => {
+    const usageMeter = await meter(org, actor);
+    const { link, subscriptionId } = await linkedPlan(org, actor, usageMeter.id, { effectiveFrom: "2026-01-01" });
+    await withOrgContext(org.orgId, async () => {
+      const changed = await db.execute(sql`update recognition_rules set method = 'usage'
+        where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`);
+      assert.equal(changed.rows.length, 1);
+      const subscription = await db.execute(sql`update subscriptions set start_on = '2026-01-01', next_bill_on = '2026-01-01'
+        where org_id = ${org.orgId} and id = ${subscriptionId} returning id`);
+      assert.equal(subscription.rows.length, 1);
+    });
+    await addMonthlyPeriods(org, [1, 2]);
+    const prepaidInvoice = await createSubscriptionInvoice({
+      orgId: org.orgId,
+      actorId: actor,
+      customerId: org.customerId,
+      subsidiaryId: org.subsidiaryId,
+      currency: "CAD",
+      incomeAccountId: org.accounts.revenue,
+      itemId: org.items.service,
+      taxCodeId: null,
+      description: "Prepaid usage",
+      quantity: "1",
+      unitPrice: "250",
+      memo: "Prepaid usage",
+      invoiceDate: org.date,
+      autoPost: true,
+    });
+    const source = (await db.execute<{ id: string }>(sql`select id from document_lines
+      where org_id = ${org.orgId} and document_id = ${prepaidInvoice.invoiceId}`)).rows[0];
+    assert.ok(source);
+    await createPrepaidGrant(org.orgId, actor, {
+      customerId: org.customerId,
+      sourceDocumentLineId: source.id,
+      amount: "250",
+      currency: "CAD",
+    });
+    await record(org, actor, usageMeter.key, "80", "2026-02-15", subscriptionId);
+    await record(org, actor, usageMeter.key, "40", "2026-01-15", subscriptionId);
+
+    const february = await commitRateRun(org.orgId, actor, link.id, "2026-02-01", "2026-02-28");
+    assert.equal(february.preview.prepaidDrawn, "197.5000");
+    const january = await commitRateRun(org.orgId, actor, link.id, "2026-01-01", "2026-01-31");
+    assert.deepEqual([january.preview.prepaidDrawn, january.preview.billableTotal], ["52.5000", "45.0000"]);
   });
 });
 

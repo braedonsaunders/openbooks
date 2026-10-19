@@ -25,7 +25,7 @@ import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } fr
 import { db, withOrg } from "../../platform/db.ts";
 import { prepaidRecognitionAdjustment } from '../../revenue/prepaid-breakage.ts';
 import { recordRecognitionEvent } from "../../revenue/recognition-events.ts";
-import { recordPrepaidDraw, reversePrepaidDraw, prepaidBalance } from "./prepaid.ts";
+import { recordPrepaidDraw, reversePrepaidDraw, prepaidBalanceForDraw } from "./prepaid.ts";
 import { listUsageRecordsForWindow, type UsageRecord } from "./records.ts";
 import {
   aggregateUsage,
@@ -401,6 +401,45 @@ async function rateWindow(
   };
 }
 
+async function previouslyRatedTotal(
+  orgId: string,
+  linkId: string,
+  periodStart: string,
+  periodEnd: string,
+  currentRunId: string | null,
+  allowedSubsidiaryIds: UsageSubsidiaryScope,
+): Promise<{ total: Money; runs: Array<{ id: string; outputHash: string; total: Money }> }> {
+  const rows = (await db.execute<{ id: string; outputHash: string; total: string }>(sql`
+    select r.id, r.output_hash as "outputHash",
+           (coalesce((
+             select sum(line.amount)
+               from document_lines line
+              where line.org_id = r.org_id and line.document_id = r.invoice_id
+                and line.custom->'rating'->>'runId' = r.id
+                and line.custom->'rating'->>'kind' is distinct from 'commit_shortfall'
+           ), 0) + coalesce((
+             select sum(draw.amount)
+               from usage_prepaid_draws draw
+              where draw.org_id = r.org_id and draw.run_id = r.id
+           ), 0))::text as total
+      from usage_rating_runs r
+     where r.org_id = ${orgId} and r.link_id = ${linkId} and r.status = 'active'
+       and r.period_start >= ${periodStart} and r.period_end <= ${periodEnd}
+       and (${currentRunId}::uuid is null or r.id <> ${currentRunId})
+       and exists (
+         select 1 from subscription_usage_links l
+         join parties c on c.org_id = l.org_id and c.id = l.customer_id
+          where l.org_id = r.org_id and l.id = r.link_id
+            ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       )
+     order by r.period_start, r.period_end, r.id`)).rows;
+  const runs = rows.map((row) => ({ id: row.id, outputHash: row.outputHash, total: parseMoney(row.total) }));
+  return {
+    total: runs.reduce((sum, run) => parseMoney(add(sum, run.total)), parseMoney("0")),
+    runs,
+  };
+}
+
 async function loadGrants(
   orgId: string,
   context: RateRunContext,
@@ -447,7 +486,7 @@ async function loadGrants(
     if (!row.obligationId) {
       refuse("usage_prepaid_obligation_missing", `Prepaid grant ${row.id} has no live recognition obligation.`, "Restore the source invoice's usage obligation through the revenue recognition workflow before drawing the grant.", "grant_id");
     }
-    const balance = parseMoney(await prepaidBalance(orgId, row.id, periodEnd, allowedSubsidiaryIds));
+    const balance = parseMoney(await prepaidBalanceForDraw(orgId, row.id, periodEnd, allowedSubsidiaryIds));
     grants.push({
       id: row.id,
       obligationId: row.obligationId,
@@ -534,9 +573,16 @@ async function buildPreview(
   let commitRecordsHash = rated.recordsHash;
   if (commitWindow !== null && context.link.commitAmount !== null) {
     if (context.link.commitPeriod === "annual") {
-      const annual = await rateWindow(orgId, context, commitWindow.start, commitWindow.end, allowedSubsidiaryIds);
-      commitRatedTotal = annual.total;
-      commitRecordsHash = annual.recordsHash;
+      const prior = await previouslyRatedTotal(
+        orgId,
+        context.link.id,
+        commitWindow.start,
+        commitWindow.end,
+        addBackRunId,
+        allowedSubsidiaryIds,
+      );
+      commitRatedTotal = parseMoney(add(prior.total, rated.total));
+      commitRecordsHash = hash({ current: rated.recordsHash, priorRuns: prior.runs });
     }
     shortfall = commitShortfall({
       commitAmount: parseMoney(context.link.commitAmount),

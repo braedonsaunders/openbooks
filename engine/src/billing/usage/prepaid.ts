@@ -204,6 +204,7 @@ async function readSnapshot(
   grantIdInput: string,
   asOfInput: string,
   allowedSubsidiaryIds: UsageSubsidiaryScope = null,
+  includeFutureDraws = false,
 ): Promise<PrepaidSnapshot> {
   const grantId = uuidText(grantIdInput, "grant_id");
   const asOf = dateText(asOfInput, "as_of");
@@ -216,7 +217,8 @@ async function readSnapshot(
   const drawn = (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(amount), 0)::text as amount
       from usage_prepaid_draws
-     where org_id = ${orgId} and grant_id = ${grantId} and period_month <= ${asOf}`)).rows[0]?.amount ?? "0";
+     where org_id = ${orgId} and grant_id = ${grantId}
+       ${includeFutureDraws ? sql`` : sql`and period_month <= ${asOf}`}`)).rows[0]?.amount ?? "0";
   return { amount: grant.amount, expiresOn: grant.expiresOn, drawn };
 }
 
@@ -229,6 +231,20 @@ export async function prepaidBalance(
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
     const snapshot = await readSnapshot(orgId, grantId, asOf, allowedSubsidiaryIds);
+    return subMoney(snapshot.amount, snapshot.drawn);
+  });
+}
+
+/** Remaining amount available for a new rating draw, matching the draw writer's all-period balance check. */
+export async function prepaidBalanceForDraw(
+  orgId: string,
+  grantId: string,
+  periodEnd: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope,
+): Promise<string> {
+  return withOrg(orgId, async () => {
+    await requireUsageBillingRead(orgId);
+    const snapshot = await readSnapshot(orgId, grantId, periodEnd, allowedSubsidiaryIds, true);
     return subMoney(snapshot.amount, snapshot.drawn);
   });
 }
