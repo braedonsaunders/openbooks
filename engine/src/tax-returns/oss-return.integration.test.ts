@@ -7,6 +7,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { computeOssReturn, ossReturnToCsv } from "./oss-return.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { recordSupplyEvidence } from "../tax/cross-border-records.ts";
+import { isoDateOf, utcDateFromParts } from "../platform/civil-date.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 // Union OSS from posted B2C digital invoices: DE and FR sales aggregate by
@@ -247,8 +248,7 @@ test("a supply voided in a later quarter remains in its original return and corr
     const previousQuarterStartMonth = (previousQuarter - 1) * 3 + 1;
     const quarterStart = (year: number, month: number) => `${year}-${String(month).padStart(2, "0")}-01`;
     const monthEnd = (year: number, month: number) => {
-      const end = new Date(Date.UTC(year, month, 0));
-      return `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, "0")}-${String(end.getUTCDate()).padStart(2, "0")}`;
+      return isoDateOf(utcDateFromParts(year, month, 0));
     };
     const quarterEnd = (year: number, month: number) => monthEnd(year, month + 2);
     const invoiceDate = `${quarterStart(previousQuarterYear, previousQuarterStartMonth).slice(0, 8)}15`;
