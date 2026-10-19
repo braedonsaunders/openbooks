@@ -367,7 +367,7 @@ async function assertSubsidiaryWriteScope(
 ): Promise<void> {
   if (!ctx.allowedSubsidiaryIds) return
   const schema = (await loadApiSchema(ctx.orgId)).find((type) => type.key === typeKey)
-  if (!schema?.fields.some((field) => field.name === 'subsidiary_id')) return
+  if (!schema || (!resolved.dynamic && !schema.fields.some((field) => field.name === 'subsidiary_id'))) return
 
   const customData =
     resolved.dynamic && body.data && typeof body.data === 'object' && !Array.isArray(body.data)
@@ -402,14 +402,15 @@ async function assertSubsidiaryWriteScope(
 
   const table = quoteIdentifier(resolved.table)
   const allowed = [...ctx.allowedSubsidiaryIds]
+  const scopeCondition = resolved.dynamic
+    ? recordVisibleInSubsidiaryFenceSql(ctx.allowedSubsidiaryIds, hasSubsidiaryField(schema))
+    : null
   const found = (await db.execute(sql`
     select 1 from ${table}
      where id = ${id} and org_id = ${ctx.orgId}
        ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
        ${resolved.dynamic
-         ? (allowed.length > 0
-           ? sql`and data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral(allowed)}::text[])`
-           : sql`and false`)
+         ? sql`and ${scopeCondition ?? sql`false`}`
          : (allowed.length > 0
            ? sql`and subsidiary_id = any(${pgTextArrayLiteral(allowed)}::uuid[])`
            : sql`and false`)}

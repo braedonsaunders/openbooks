@@ -4,6 +4,9 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
 const { createAppPlatformAdapter } = await import('./platform.ts')
+const { queryAppRecords } = await import('./query.ts')
+const { listRecords: listApplicationRecords, getRecord: getApplicationRecord } = await import('../application/records.ts')
+const { ApplicationError } = await import('../application/errors.ts')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/testing/fixtures',
@@ -77,7 +80,6 @@ test(
       userCan: () => true,
       allowedSubsidiaryIds: new Set([org.subsidiaryId]),
     })
-
     try {
       await withOrgContext(org.orgId, async () => {
         const listed = await platform.list(typeKey, {}) as {
@@ -171,6 +173,20 @@ test(
       userCan: () => true,
       allowedSubsidiaryIds: new Set([org.subsidiaryId]),
     })
+    const allowedSubsidiaryIds = new Set([org.subsidiaryId])
+    const applicationContext = {
+      authz: { user, permissions: new Set(['records.read']), allowedSubsidiaryIds },
+      source: 'api' as const,
+      requestId: randomUUID(),
+      apiKeyId: null,
+    }
+    const queryContext = {
+      orgId: org.orgId,
+      user,
+      grantedPermissions: ['records.read'],
+      userCan: (permission: string) => permission === 'records.read',
+      allowedSubsidiaryIds,
+    }
 
     try {
       await withOrgContext(org.orgId, async () => {
@@ -181,6 +197,21 @@ test(
         assert.equal(listed.total, 1)
         assert.equal(listed.records[0]?.id, visibleId)
         assert.equal(await platform.get(typeKey, hiddenId), null)
+        const apiListed = await listApplicationRecords(applicationContext, { typeKey })
+        assert.equal(apiListed.total, 1)
+        assert.equal(apiListed.records[0]?.id, visibleId)
+        await assert.rejects(
+          getApplicationRecord(applicationContext, { typeKey, id: hiddenId }),
+          (error: unknown) => error instanceof ApplicationError && error.code === 'not_found',
+        )
+        const queried = await queryAppRecords(queryContext, {
+          from: { type: typeKey, as: 'record' },
+          joins: [],
+          select: [{ source: 'record', field: 'id' }],
+          limit: 10,
+        })
+        assert.equal(queried.records.length, 1)
+        assert.equal(queried.records[0]?.id, visibleId)
 
         const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
         const revision = (await db.execute<{ revision: string }>(sql`

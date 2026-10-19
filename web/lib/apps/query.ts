@@ -53,11 +53,15 @@ export async function queryAppRecords(ctx: AppPlatformContext, raw: unknown) {
     const predicates: string[] = []
     if (resolved.dynamic) predicates.push(`r.type_key = ${literal(key)}`)
     if (resolved.documentKinds) predicates.push(`r.kind IN (${resolved.documentKinds.map(literal).join(',')})`)
-    if (ctx.allowedSubsidiaryIds !== null && type.fields.some(f => f.name === 'subsidiary_id')) {
+    if (ctx.allowedSubsidiaryIds !== null && resolved.dynamic) {
       const values = [...ctx.allowedSubsidiaryIds].map(literal).join(',')
-      predicates.push(resolved.dynamic
-        ? (values ? `r.data ->> 'subsidiary_id' IN (${values})` : 'FALSE')
-        : (values ? `r.subsidiary_id IN (${values})` : 'FALSE'))
+      const inFence = values ? `r.data ->> 'subsidiary_id' IN (${values})` : 'FALSE'
+      predicates.push(type.fields.some(f => f.name === 'subsidiary_id')
+        ? inFence
+        : `(${inFence} OR r.data ->> 'subsidiary_id' IS NULL OR r.data ->> 'subsidiary_id' = '')`)
+    } else if (ctx.allowedSubsidiaryIds !== null && type.fields.some(f => f.name === 'subsidiary_id')) {
+      const values = [...ctx.allowedSubsidiaryIds].map(literal).join(',')
+      predicates.push(values ? `r.subsidiary_id IN (${values})` : 'FALSE')
     }
     sources.set(key, { from: `${ident(resolved.table)} r`, orgColumn: 'r.org_id', predicates, columns: [...base, ...fields.filter(f => !base.some(b => b.key === f.key))] })
   }

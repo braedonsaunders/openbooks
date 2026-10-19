@@ -19,7 +19,7 @@ import {
 } from "./context";
 import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
-import { inTypeAudience, loadRecordTypeByKey } from "../records";
+import { inTypeAudience, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql } from "../records";
 import { customFieldViewerFor, loadCustomFieldAccessDefs, redactHiddenCustomValues } from "../custom-fields";
 
 export interface RecordListInput {
@@ -106,7 +106,6 @@ function subsidiaryWhere(
   scope: RecordScope,
   requested?: string,
 ): SQL | null {
-  if (!hasSubsidiary(scope)) return null;
   if (requested) {
     if (!isUuid(requested)) throw invalidInput("subsidiaryId must be a UUID");
     assertSubsidiaryAccess(context, requested);
@@ -114,6 +113,13 @@ function subsidiaryWhere(
       ? sql`data ->> ${'subsidiary_id'} = ${requested}`
       : sql`subsidiary_id = ${requested}`;
   }
+  if (scope.resolved.dynamic) {
+    return recordVisibleInSubsidiaryFenceSql(
+      context.authz.allowedSubsidiaryIds,
+      hasSubsidiary(scope),
+    );
+  }
+  if (!hasSubsidiary(scope)) return null;
   const allowed = context.authz.allowedSubsidiaryIds;
   if (allowed === null) return null;
   if (allowed.size === 0) return sql`false`;
