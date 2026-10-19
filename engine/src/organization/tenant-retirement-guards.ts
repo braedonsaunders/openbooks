@@ -4755,11 +4755,6 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "function": "schedule_entries_guard"
   },
   {
-    "table": "schedule_source_records",
-    "trigger": "schedule_source_records_guard",
-    "function": "schedule_source_records_guard"
-  },
-  {
     "table": "schedule_patterns",
     "trigger": "schedule_roster_guard",
     "function": "schedule_roster_guard"
@@ -4821,6 +4816,11 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
   },
   {
     "table": "schedule_attendance_event_claims",
+    "trigger": "schedule_attendance_guard",
+    "function": "schedule_attendance_guard"
+  },
+  {
+    "table": "schedule_attendance_observation_events",
     "trigger": "schedule_attendance_guard",
     "function": "schedule_attendance_guard"
   },
@@ -4913,11 +4913,6 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "schedule_source_records",
     "trigger": "schedule_source_records_guard",
     "function": "schedule_source_records_guard"
-  },
-  {
-    "table": "schedule_attendance_observation_events",
-    "trigger": "schedule_attendance_guard",
-    "function": "schedule_attendance_guard"
   },
   {
     "table": "schedule_distributions",

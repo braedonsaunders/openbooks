@@ -2499,8 +2499,8 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "schedule_baselines.description",
   "schedule_baselines.kind",
   "schedule_baselines.name",
-  "schedule_boards.code",
   "schedule_boards.board_type", // registered board-type key
+  "schedule_boards.code",
   "schedule_boards.default_view",
   "schedule_boards.distribution_visibility", // constrained personal/whole-board audience policy
   "schedule_boards.description",
@@ -2515,7 +2515,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "schedule_codes.color",
   "schedule_codes.description",
   "schedule_codes.label",
-  "schedule_entries.detail",
   "schedule_entry_requests.kind",
   "schedule_entry_requests.status",
   "schedule_entry_requests.request_hash",
@@ -2532,6 +2531,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "schedule_patterns.detail",
   "schedule_patterns.reason",
   "schedule_attendance_policies.reason",
+  "schedule_entries.detail",
   "schedule_entries.notes",
   "schedule_entries.reason",
   "schedule_entries.request_hash",
