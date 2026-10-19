@@ -20,7 +20,7 @@ const requestBodySchema = z.object({
   "replyTo": z.string().nullable().optional(),
   "secret": z.string().nullable().optional(),
   "smtpHost": z.string().nullable().optional(),
-  "smtpPort": z.union([z.number().int(), z.string().regex(/^\\d+$/), z.null()]).optional(),
+  "smtpPort": z.union([z.number().int(), z.string().regex(/^\d+$/), z.null()]).optional(),
   "smtpSecure": z.boolean().optional(),
   "smtpUsername": z.string().nullable().optional(),
 }).refine((body) => Object.keys(body).length > 0, "Provide an email setting to update or reload the page before saving");
@@ -88,7 +88,7 @@ export const PUT = defineRoute({
 
     try {
       const saved = await saveOrgEmailConfig(gate.user.orgId, {
-        enabled: enabled === true,
+        enabled: enabled === undefined ? undefined : enabled === true,
         provider: provider === undefined ? undefined : isEmailProvider(provider) ? provider : null,
         fromName: clearableStr(body.fromName),
         fromEmail: clearableStr(body.fromEmail),
