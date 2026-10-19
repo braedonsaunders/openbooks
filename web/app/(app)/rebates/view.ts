@@ -13,7 +13,8 @@ import {
   widget,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { db, withScopeSnapshot } from '@openbooks/engine/platform/db'
+import { db } from '@openbooks/engine/platform/db'
+import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import type { RebateAgreement, RebateClaim } from '@openbooks/engine/revenue/rebates'
 import { getMoneyFormatter } from '@/lib/money-server'

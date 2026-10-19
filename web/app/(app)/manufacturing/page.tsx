@@ -199,7 +199,7 @@ export default async function ManufacturingHome({
       ],
     },
     {
-      paramKey: 'sub', label: t('fields.subsidiaryId'), allLabel,
+      paramKey: 'sub', label: t('fields.subsidiaryId'), allLabel: allLabels,
       options: loaded.options.subsidiaries.map((option) => ({ value: option.value, label: option.label })),
     },
     {

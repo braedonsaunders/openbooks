@@ -167,8 +167,8 @@ export async function loadSubcontracts(sp: SearchParams = {}): Promise<Subcontra
     perPage: loaded.register.perPage,
     projects: loaded.projects as SubcontractOption[],
     vendors: loaded.vendors as SubcontractOption[],
-    expenseAccounts: loaded.accounts.rows as SubcontractOption[],
-    parties: loaded.parties.rows as SubcontractOption[],
+    expenseAccounts: loaded.accounts as SubcontractOption[],
+    parties: loaded.parties as SubcontractOption[],
     multiCurrency,
     permissions: {
       create: can(authz, 'ap.create'),
