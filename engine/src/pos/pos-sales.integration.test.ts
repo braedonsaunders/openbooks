@@ -304,3 +304,38 @@ test("a register refund of stocked goods pays back the tender and restocks from 
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
 });
+
+test("successive partial refunds allocate the full original line amount", { skip: !DB }, async () => {
+  const f = await fixture();
+  try {
+    const salePricing: PosPricingDeps = { unitPrice: async () => "3.3333" };
+    const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
+      lines: [{ itemId: f.org.items.fifo, quantity: "3" }],
+      payments: [{ kind: "cash", tendered: "10.00" }],
+      expectedTotal: "10.0000",
+    }), manager, salePricing));
+
+    const refundTotals: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const refund = await withSimClock(SALE_INSTANT, () => completePosRefund({
+        orgId: f.org.orgId,
+        actorId: f.actorId,
+        sessionId: f.sessionId,
+        idempotencyKey: randomUUID(),
+        originalDocumentId: sold.documentId,
+        lines: [{ lineNumber: 1, quantity: "1" }],
+        payments: [{ kind: "cash" }],
+        reason: null,
+        allowedSubsidiaryIds: null,
+      }));
+      refundTotals.push(refund.total);
+    }
+
+    assert.deepEqual(refundTotals, ["3.3300", "3.3400", "3.3300"]);
+    const receipt = await withOrg(f.org.orgId, () => readPosReceipt(db, f.org.orgId, sold.documentId, null));
+    assert.equal(receipt.lines[0]!.refundedQuantity, "3.0000");
+    assert.equal(receipt.lines[0]!.refundableQuantity, "0.0000");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
