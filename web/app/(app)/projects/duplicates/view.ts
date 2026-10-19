@@ -89,7 +89,7 @@ export async function loadProjectDuplicateGroups(
 const f = ref<ProjectDuplicateGroupsData>()
 const row = field
 
-export function projectDuplicateGroupsSpec(data: ProjectDuplicateGroupsData): PageSpec {
+export function projectDuplicateGroupsSpec(_data: ProjectDuplicateGroupsData): PageSpec {
   return page({
     route: '/projects/duplicates',
     layout: 'list',
