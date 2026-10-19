@@ -28,6 +28,7 @@ const mockSources = new Map<string, string>([
   ['mock:families', `
     const state = globalThis[Symbol.for('openbooks.item-family-routes-test')]
     export async function createItemFamily() { state.engineCalls.push('createItemFamily'); throw new Error('engine must not run while the feature is off') }
+    export async function listItemFamilies() { state.engineCalls.push('listItemFamilies'); return [{ id: 'family-1', code: 'TEE', name: 'Classic Tee' }] }
     export async function generateFamilyVariants() { state.engineCalls.push('generateFamilyVariants'); throw new Error('engine must not run while the feature is off') }
     export async function previewGenerateVariants() { state.engineCalls.push('previewGenerateVariants'); throw new Error('engine must not run while the feature is off') }
   `],
@@ -53,6 +54,7 @@ const hooks = registerHooks({
 
 const createUrl = './route.ts?family-routes-test'
 const generateUrl = './[id]/generate/route.ts?family-routes-test'
+const { GET: listFamilies } = (await import(createUrl)) as typeof import('./route.ts')
 const { POST: createFamily } = (await import(createUrl)) as typeof import('./route.ts')
 const { POST: generateVariants } = (await import(generateUrl)) as typeof import('./[id]/generate/route.ts')
 test.after(() => test.after(() => hooks.deregister()))
@@ -72,6 +74,18 @@ test('POST /api/item-families with the feature off is refused before any write',
 
   assert.equal(response.status, 404)
   assert.deepEqual(state.engineCalls, [])
+})
+
+test('GET /api/item-families returns catalog options when the feature is on', async () => {
+  reset()
+  state.featureEnabled = true
+  const response = await listFamilies(new Request('http://openbooks.test/api/item-families'))
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    options: [{ value: 'family-1', label: 'TEE · Classic Tee' }],
+  })
+  assert.deepEqual(state.engineCalls, ['listItemFamilies'])
 })
 
 test('POST /api/item-families/[id]/generate with the feature off is refused before any write', async () => {
