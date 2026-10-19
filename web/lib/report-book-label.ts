@@ -7,6 +7,7 @@ export function withReportBookColumn(data: ExportData, book: { label: string; va
     columns: [book.label, ...group.columns],
     rows: group.rows.map((row) => [book.value, ...row]),
     ...(group.money ? { money: [false, ...group.money] } : {}),
+    ...(group.numberFormats ? { numberFormats: [null, ...group.numberFormats] } : {}),
     ...(group.align ? { align: ['left' as const, ...group.align] } : {}),
   })) }
 }

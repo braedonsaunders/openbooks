@@ -61,6 +61,16 @@ export function safeName(name: string): string {
     .slice(0, 120)
 }
 
+/**
+ * A report export's download name: the report slug and the date its figures
+ * stand on — the as-of date of a point-in-time report (a cap table as of
+ * 2025-10-01 is named for 2025-10-01, whenever it is exported), otherwise the
+ * business date it was produced on.
+ */
+export function reportExportFilename(slug: string, dates: { asOf?: string | null; producedOn: string }): string {
+  return `${safeName(slug)}-${dates.asOf || dates.producedOn}`
+}
+
 /** RFC 5987 filename with a header-safe ASCII fallback for Web Headers. */
 export function contentDisposition(
   disposition: 'inline' | 'attachment',

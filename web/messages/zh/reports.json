@@ -3377,6 +3377,41 @@
       "age_08_30": "8–30 天",
       "age_31_90": "31–90 天",
       "age_91_plus": "超过 90 天"
+    },
+    "columnValues": {
+      "equity_compensation_run_lines": {
+        "security_kind": {
+          "option": "期权",
+          "rsu": "RSU"
+        }
+      },
+      "equity_securities_register": {
+        "security_kind": {
+          "share": "股票凭证",
+          "option": "期权",
+          "rsu": "RSU",
+          "warrant": "认股权证",
+          "safe": "SAFE",
+          "note": "可转换票据"
+        }
+      },
+      "equity_cap_table_positions": {
+        "class_kind": {
+          "common": "普通股",
+          "preferred": "优先股"
+        },
+        "position_kind": {
+          "share": "股份",
+          "award": "奖励",
+          "pool": "未分配期权池"
+        },
+        "security_kind": {
+          "share": "股票凭证",
+          "option": "期权",
+          "rsu": "RSU",
+          "warrant": "认股权证"
+        }
+      }
     }
   },
   "operators": {

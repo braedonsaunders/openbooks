@@ -1,6 +1,7 @@
 import "server-only";
 import { getTranslations } from "next-intl/server";
 import type { ReportRunLabels, ReportEntity } from "@openbooks/reports";
+import { reportEnumLabel } from "./report-enum-label";
 
 /**
  * Bridge between the request locale and the custom-report executor's
@@ -47,7 +48,7 @@ export async function reportRunLabels(): Promise<PagedExportLabels> {
     subtotal: (level: string) => t("run.subtotal", { level }),
     grandTotalsTitle: () => t("run.grandTotals"),
     bool: (v) => t(v ? "run.yes" : "run.no"),
-    enumValue: (v) => (t.has(`catalog.enumValues.${v}`) ? t(`catalog.enumValues.${v}`) : null),
+    enumValue: (v, scope) => reportEnumLabel(t, v, scope),
     entityLabel: (entity) => entity.key.startsWith('custom:') ? entity.label : t(`catalog.entities.${entity.key}.label`),
     exportTruncated: (shown, total) => t("run.exportTruncated", { shown, total }),
   };

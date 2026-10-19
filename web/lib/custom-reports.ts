@@ -435,6 +435,8 @@ type ExportPageSlot = {
   columns: string[]
   /** Per-column money flags from the first page that declared the slot. */
   money?: boolean[]
+  /** Per-column quantity typing from the first page that declared the slot. */
+  numberFormats?: ReportGroup['numberFormats']
   /** Emitted-prefix row count (drives subtitles and width sampling). */
   count: number
   /** Per-column max display length over the header + first 400 prefix rows. */
@@ -606,6 +608,7 @@ export async function streamPagedReportXlsx(
           title: group.title,
           columns: group.columns,
           money: group.money,
+          numberFormats: group.numberFormats,
           count: 0,
           widths: group.columns.map((c) => xlsxExportCellLength(c)),
         })
@@ -656,6 +659,7 @@ export async function streamPagedReportXlsx(
       columns: slot.columns,
       widths: slot.widths.map((w) => xlsxColumnWidth(w)),
       money: slot.money,
+      numberFormats: slot.numberFormats,
     })),
   })
 

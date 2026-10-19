@@ -48,7 +48,7 @@ export const BANKING_REPORT_ENTITIES: ReportEntity[] = [
         options: ["draft", "posted", "void"],
       },
       { key: "currency", label: "Currency", kind: "text", expr: "b.currency" },
-      { key: "line_number", label: "Line", kind: "number", expr: "l.line_number" },
+      { key: "line_number", label: "Line", kind: "number", identifier: true, expr: "l.line_number" },
       { key: "line_kind", label: "Line kind", kind: "text", expr: "l.kind" },
       { key: "line_amount", label: "Line amount", kind: "money", expr: "l.amount", txnCurrency: true },
       {

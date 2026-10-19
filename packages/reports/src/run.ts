@@ -34,6 +34,7 @@ import {
   type ReportCustomQuery,
   type ReportGroup,
   type ReportMeasure,
+  type ReportNumberFormat,
   type ReportRunResult,
   type ReportRowScopeRule,
   type ReportTemporalBin,
@@ -85,9 +86,10 @@ export type ReportRunLabels = {
   grandTotalsTitle?: () => string
   /** Boolean enum cell text (fallback: 'yes'/'no'). */
   bool?: (v: boolean) => string
-  /** Enum cell text (e.g. 'vendor_bill' → 'Bill'). Return null/undefined to
-   *  fall back to the humanized raw value. */
-  enumValue?: (v: string) => string | null | undefined
+  /** Enum cell text (e.g. 'vendor_bill' → 'Bill'), given the source column
+   *  the value came from. Return null/undefined to fall back to the
+   *  humanized raw value. */
+  enumValue?: (v: string, scope: { entity: string; column: string }) => string | null | undefined
   /** Display label for the entity itself (the summary band's Source value). */
   entityLabel?: (entity: ReportEntity) => string
   /** Localized explanation used when a formula is undefined. */
@@ -392,6 +394,8 @@ function shapeRowsResult(
     const kind = entity.columns.find((col) => col.key === c)?.kind
     return kind === 'money' || kind === 'number' ? ('right' as const) : ('left' as const)
   })
+  const numberFlags = requestedColumns.map((c) => columnNumberFormat(entity, c))
+  const numberFormats = numberFlags.some(Boolean) ? { numberFormats: numberFlags } : {}
   const cellLinkByColumn = new Map(
     (entity.cellLinks ?? [])
       .filter((link) => requestedColumns.includes(link.column))
@@ -428,7 +432,7 @@ function shapeRowsResult(
       byKey.set(k, list)
     }
     if (byKey.size === 0) {
-      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true, money, align })
+      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true, money, align, ...numberFormats })
     } else {
       for (const [k, list] of [...byKey.entries()].sort()) {
         const cellLinks = linkedCells(list)
@@ -442,6 +446,7 @@ function shapeRowsResult(
           rows: list.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
           money,
           align,
+          ...numberFormats,
           groupKey: { field: groupBy, value: k },
           ...(cellLinks ? { cellLinks } : {}),
         })
@@ -458,6 +463,7 @@ function shapeRowsResult(
       isEmpty: dataRows.length === 0,
       money,
       align,
+      ...numberFormats,
       ...(cellLinks ? { cellLinks } : {}),
     })
   }
@@ -573,6 +579,7 @@ export function shapeSummarizeRows(
     ...breakouts.map(() => 'left' as const),
     ...visibleMeasures.map(() => 'right' as const),
   ]
+  const numberFlags = [...breakouts.map(() => null), ...visibleMeasures.map((m) => measureNumberFormat(entity, m))]
 
   // A derived footer row (e.g. Net pay = earnings − deductions) over a set of
   // raw aggregate rows: per summable measure, plus-bucket sum minus
@@ -625,6 +632,7 @@ export function shapeSummarizeRows(
     const sectionColumns = drop(columns) as string[]
     const sectionMoney = drop(moneyFlags) as boolean[]
     const sectionAlign = drop(alignFlags) as ('left' | 'right')[]
+    const sectionNumbers = drop(numberFlags) as (ReportNumberFormat | null)[]
     // Which measure columns can honestly total. Additive aggregates sum, and
     // so do 'latest' running figures: each row carries the END value of a
     // disjoint per-bucket series (one employee's component YTD), so the sum
@@ -737,6 +745,7 @@ export function shapeSummarizeRows(
       undefinedCells: bucket.undefinedCells,
       money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
       align: sectionAlign,
+      ...(sectionNumbers.some(Boolean) ? { numberFormats: sectionNumbers } : {}),
       rowKeys: bucket.keys,
       ...(bucket.totalRows.length ? { totalRows: bucket.totalRows } : {}),
     }))
@@ -812,6 +821,7 @@ export function shapeSummarizeRows(
         undefinedCells: grandUndefinedCells,
         money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
         align: sectionAlign,
+        ...(sectionNumbers.some(Boolean) ? { numberFormats: sectionNumbers } : {}),
         rowKeys: grandKeys,
         ...(grandTotalRows.length ? { totalRows: grandTotalRows } : {}),
       })
@@ -831,6 +841,8 @@ export function shapeSummarizeRows(
         undefinedCells: dataRows.map((row) => undefinedByRow.get(row) ?? columns.map(() => null)),
         isEmpty: dataRows.length === 0,
         money: moneyFlags.some(Boolean) ? moneyFlags : undefined,
+        align: alignFlags,
+        ...(numberFlags.some(Boolean) ? { numberFormats: numberFlags } : {}),
         rowKeys,
       },
     ]
@@ -863,6 +875,7 @@ export function shapeSummarizeRows(
           `Total ${measureLabel(entity, m).toLowerCase()}`,
         value: m.fn === 'count' ? Number(total) : formatExactNumber(total) ?? total,
         money: measureIsMoney(m),
+        ...(m.fn !== 'count' && measureNumberFormat(entity, m) === 'number' ? { number: true } : {}),
       })
     }
   })
@@ -886,6 +899,7 @@ export function shapeSummarizeRows(
         ? labels.undefinedFormula?.() ?? 'Undefined — divides by zero'
         : formatMeasureValue(entity, measure, result.value) ?? result.value),
       money: measure.format === 'money',
+      ...(result.undefinedLabel == null && result.value !== null && measureNumberFormat(entity, measure) === 'number' ? { number: true } : {}),
     })
   })
 
@@ -1259,6 +1273,22 @@ function formatBreakoutValue(v: unknown, bin?: ReportTemporalBin, fiscalStartMon
 /** Cell value for display: enum/boolean columns print humanised (underscores →
  *  spaces, true/false through the locale's yes/no), everything else through
  *  formatCustomValue. */
+/** A rows-mode column's quantity typing: number columns that measure (not
+ *  identifiers such as a tax year or line number) read as numbers. */
+function columnNumberFormat(entity: ReportEntity, column: string): ReportNumberFormat | null {
+  const meta = entityColumn(entity, column)
+  return meta?.kind === 'number' && meta.identifier !== true ? 'number' : null
+}
+
+/** A summarize measure's quantity typing. Counts and aggregates of measuring
+ *  number columns are numbers; money stays on the money flag; a percent
+ *  formula keeps its spelled-out percent text; date aggregates are dates. */
+function measureNumberFormat(entity: ReportEntity, measure: ReportMeasure): ReportNumberFormat | null {
+  if (measure.fn === 'formula') return measure.format === 'number' || measure.format === 'ratio' ? 'number' : null
+  if (measure.fn === 'count' || measure.fn === 'count_distinct') return 'number'
+  return measure.column ? columnNumberFormat(entity, measure.column) : null
+}
+
 function formatCellValue(
   entity: ReportEntity,
   column: string,
@@ -1268,7 +1298,7 @@ function formatCellValue(
   const kind = entityColumn(entity, column)?.kind
   if (kind === 'enum' || kind === 'boolean') {
     if (typeof v === 'boolean') return labels.bool?.(v) ?? (v ? 'yes' : 'no')
-    if (typeof v === 'string') return labels.enumValue?.(v) ?? formatLabel(v)
+    if (typeof v === 'string') return labels.enumValue?.(v, { entity: entity.key, column }) ?? formatLabel(v)
   }
   // Date columns come back as Date objects at LOCAL midnight (pg's date
   // parser) — print local date parts; toISOString would shift a day east of

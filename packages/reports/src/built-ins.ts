@@ -578,6 +578,9 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     // The position ledger is a point-in-time source: the viewer's as-of date
     // (today when none is chosen) bounds the movements summed per class,
     // position and holder, and those sums are the cap table on that date.
+    // Positions fully exercised, forfeited or transferred before the date sum
+    // to zero and are omitted; lines read by class, then shares before awards
+    // before the pool, then holder.
     slug: 'equity-cap-table',
     name: 'Cap table as of a date',
     description: 'Outstanding and fully diluted shares by class and holder on the chosen date.',
@@ -595,6 +598,12 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
         { fn: 'sum', column: 'pool_available', label: 'Pool available' },
         { fn: 'sum', column: 'fully_diluted', label: 'Fully diluted' },
       ],
+      sorts: [
+        { column: 'share_class', direction: 'asc' },
+        { column: 'position_kind', direction: 'asc' },
+        { column: 'holder', direction: 'asc' },
+      ],
+      omitZeroRows: true,
       filters: null, groupBy: null, limit: 1000,
     },
   },

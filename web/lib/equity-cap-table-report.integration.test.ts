@@ -7,8 +7,8 @@ import type { Authz } from './authz.ts'
 const { withOrgContext } = await import('@openbooks/engine/platform/db')
 const { businessToday } = await import('@openbooks/engine/platform/business-date/module')
 const { dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
-const { seedPositionScenario, setupEquityWorld } = await import('@openbooks/engine/testing/equity-world')
-const { issueSecurity, loadCapTableView } = await import('@openbooks/engine/equity')
+const { seedHolder, seedPositionScenario, setupEquityWorld } = await import('@openbooks/engine/testing/equity-world')
+const { issueSecurity, loadCapTableView, recordSecurityEvent } = await import('@openbooks/engine/equity')
 const { BUILT_IN_REPORT_DEFINITION_MAP, addDays } = await import('@openbooks/reports')
 
 const DB = !!process.env.OPENBOOKS_DB_URL
@@ -69,6 +69,53 @@ test('the Reports-hub cap table with no date chosen reads as of today, not every
     assert.deepEqual(totals(await run({ ...definition.query, asOf: later }), labels), expectedLater)
     const custom = await withOrgContext(w.org.orgId, () => withReportAuthz(reader, () => resolveReportAsOf({ period: 'custom', from: later, to: later })))
     assert.equal(custom.to, later)
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId)
+  }
+})
+
+test('the Reports-hub cap table omits positions that are zero on the date and lists class, then shares, awards and pool, then holder', { skip: !DB }, async () => {
+  const w = await setupEquityWorld()
+  try {
+    await seedPositionScenario(w)
+    // Shares issued to the wrong holder and voided: a position on the issue
+    // date that is zero in every measure once the void takes effect.
+    const leaverId = await seedHolder(w.org.orgId, 'Voided Holder')
+    const leaver = await issueSecurity({
+      orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, kind: 'share', holderPartyId: leaverId, issueDate: '2026-07-10',
+      shareClassId: w.commonClassId, quantity: '2500', pricePerShare: '0.0001', considerationAccountId: w.org.accounts.bank,
+    })
+    await recordSecurityEvent({ orgId: w.org.orgId, actorId: w.managerId, securityId: leaver.id, kind: 'void', effectiveOn: '2026-07-20', reason: 'Issued to the wrong holder' })
+    const { executeReport } = await import('./custom-reports.ts')
+    const { withReportAuthz } = await import('./report-execution-context.ts')
+    const reader: Authz = {
+      user: {
+        id: w.managerId, email: 'equity.reader@example.test', name: 'Equity Reader', roles: [], orgId: w.org.orgId, envKind: 'production',
+        productionOrgId: w.org.orgId, homeUserId: w.managerId, homeOrgId: w.org.orgId, isSuperAdmin: false,
+      },
+      permissions: new Set(['reports.read', 'equity.read']),
+      allowedSubsidiaryIds: null,
+    } as Authz
+    const definition = BUILT_IN_REPORT_DEFINITION_MAP['equity-cap-table']!
+    const run = (asOf: string) => withOrgContext(w.org.orgId, () => withReportAuthz(reader, () => executeReport(w.org.orgId, { ...definition.query, asOf }, undefined, {}))) as Promise<Result>
+    const holders = (result: Result) => result.groups[0]!.rows.map((row) => row[2])
+
+    assert.ok(holders(await run('2026-07-15')).includes('Voided Holder'), 'the position exists between issue and void')
+    const after = await run('2026-12-31')
+    assert.ok(!holders(after).includes('Voided Holder'), 'a position that is zero in every measure is omitted')
+    const rows = after.groups[0]!.rows
+    assert.ok(rows.length > 0)
+    for (const row of rows) assert.ok(row.slice(3).some((cell) => String(cell ?? '0') !== '0'), `no all-zero line: ${JSON.stringify(row)}`)
+    // Class, then shares before awards before the pool, then holder.
+    const rank = (cell: unknown) => ['share', 'award', 'pool'].findIndex((kind, index) => cell === kind || cell === ['Shares', 'Awards', 'Unallocated pool'][index])
+    for (let i = 1; i < rows.length; i++) {
+      const [prior, row] = [rows[i - 1]!, rows[i]!]
+      assert.ok(rank(row[1]) >= 0, `position type reads as a known label: ${String(row[1])}`)
+      const order = String(prior[0]) < String(row[0]) ? -1 : String(prior[0]) > String(row[0]) ? 1
+        : rank(prior[1]) !== rank(row[1]) ? rank(prior[1]) - rank(row[1])
+          : String(prior[2] ?? '\uffff').localeCompare(String(row[2] ?? '\uffff'))
+      assert.ok(order <= 0, `ordered: ${JSON.stringify(prior.slice(0, 3))} before ${JSON.stringify(row.slice(0, 3))}`)
+    }
   } finally {
     await dropScratchOrgReporting(w.org.orgId)
   }

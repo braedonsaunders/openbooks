@@ -148,6 +148,8 @@ export type PdfDocumentInput = {
   title: string
   /** Human label for the date range the document covers (e.g. "FY2025"). */
   dateRangeLabel: string
+  /** When the document was produced. A business date (a civil date carried
+   *  as UTC midnight) prints as the date alone. */
   generatedAt: Date
   branding: PdfBranding
   /** Key-figures band under the header. Omit to hide. */

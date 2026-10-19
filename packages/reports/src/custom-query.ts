@@ -929,26 +929,45 @@ function compileSummarize(
     // shifting both fiscal labels and source-record drill boundaries by a day.
     return `${b.bin ? `to_char(${dimension}, 'YYYY-MM-DD')` : dimension} AS "d${i}"`
   })
-  const measSelect = hasSemiAdditive
-    ? measures.map((m, i) => `${semiAdditiveMeasureExpr(m, i, measureFilters[i] ?? null)} AS "m${i}"`)
-    : measures.map((m, i) => `${measureExpr(entity, m, measureFilters[i] ?? null)} AS "m${i}"`)
+  const measureSql = hasSemiAdditive
+    ? measures.map((m, i) => semiAdditiveMeasureExpr(m, i, measureFilters[i] ?? null))
+    : measures.map((m, i) => measureExpr(entity, m, measureFilters[i] ?? null))
+  const measSelect = measureSql.map((expr, i) => `${expr} AS "m${i}"`)
 
   // Order: sectioned summaries read as a ledger — enum dims follow their
   // CATALOG option order (a payroll journal lists earnings before deductions
-  // before employer contributions), other dims alphabetically; a temporal
-  // trend reads chronologically; otherwise rank by the first measure (top-N).
+  // before employer contributions), other dims alphabetically; otherwise the
+  // plan's own sort levels apply; a temporal trend reads chronologically;
+  // otherwise rank by the first measure (top-N).
   const firstMeasureOrdinal = breakouts.length + 1
   const sectioned = !!q.groupBy && breakouts.some((b) => b.column === q.groupBy)
-  const sectionedDimOrder = (b: ReportBreakout, i: number): string => {
+  const sectionedDimOrder = (b: ReportBreakout, i: number, direction: 'ASC' | 'DESC' = 'ASC'): string => {
     const column = entityColumn(entity, b.column)
     if (!b.bin && (column?.kind === 'enum' || column?.kind === 'boolean') && column.options?.length) {
       // Options are server-authored catalog constants, single-quoted safely.
       const list = column.options.map((option) => `'${option.replace(/'/g, "''")}'`).join(', ')
       const ref = hasSemiAdditive ? `"d${i}"` : columnRef(entity, b.column)
-      return `array_position(ARRAY[${list}]::text[], ${ref}) ASC NULLS LAST`
+      return `array_position(ARRAY[${list}]::text[], ${ref}) ${direction} NULLS LAST`
     }
-    return `${i + 1} ASC`
+    return `${i + 1} ${direction}`
   }
+  // Explicit sort levels over breakouts and aggregate measures (formula
+  // measures sort through their own expression below). Unsorted breakouts
+  // follow in ascending order so equal sort keys still list deterministically.
+  const explicitSortTerms = (q.sorts ?? []).flatMap((sort) => {
+    const direction = sort.direction === 'asc' ? 'ASC' as const : 'DESC' as const
+    const breakoutIndex = breakouts.findIndex((b) => b.column === sort.column)
+    if (breakoutIndex >= 0) return [{ breakoutIndex, term: sectionedDimOrder(breakouts[breakoutIndex]!, breakoutIndex, direction) }]
+    const measureIndex = measures.findIndex((m) => m.fn !== 'formula' && !!m.key && m.key === sort.column)
+    if (measureIndex >= 0) return [{ breakoutIndex: -1, term: `${breakouts.length + measureIndex + 1} ${direction} NULLS LAST` }]
+    return []
+  })
+  const explicitOrderSql = explicitSortTerms.length
+    ? `ORDER BY ${[
+      ...explicitSortTerms.map((sort) => sort.term),
+      ...breakouts.flatMap((b, i) => explicitSortTerms.some((sort) => sort.breakoutIndex === i) ? [] : [sectionedDimOrder(b, i)]),
+    ].join(', ')}`
+    : null
   const explicitFormulaSort = q.sorts?.find((sort) => measures.some((measure) => measure.fn === 'formula' && measure.key === sort.column))
   const formulaSort = explicitFormulaSort ?? (measures[0]?.fn === 'formula' && measures[0].key
     ? { column: measures[0].key, direction: 'desc' as const }
@@ -963,11 +982,21 @@ function compileSummarize(
       ? ''
       : sectioned
         ? `ORDER BY ${breakouts.map((b, i) => sectionedDimOrder(b, i)).join(', ')}`
-        : breakouts[0]?.bin
+        : explicitOrderSql
+          ? explicitOrderSql
+          : breakouts[0]?.bin
           ? 'ORDER BY 1 ASC'
           : `ORDER BY ${firstMeasureOrdinal} DESC NULLS LAST`
 
   const limit = resolveLimit(q.limit, opts.maxRows)
+
+  // A group whose every aggregate is zero (or empty) is omitted when the plan
+  // asks for it; formula measures derive from those aggregates, so they are
+  // zero or undefined on exactly the omitted groups.
+  const zeroTests = q.omitZeroRows === true
+    ? measures.flatMap((m, i) => (m.fn === 'formula' ? [] : [`COALESCE(${measureSql[i]}, 0) = 0`]))
+    : []
+  const havingSql = zeroTests.length ? `HAVING NOT (${zeroTests.join(' AND ')})` : ''
 
   // Inline denomination census over the plan's own FROM/WHERE — shared with
   // the insights compiler (buildDenominationCensus) so both surfaces probe
@@ -1017,6 +1046,7 @@ function compileSummarize(
     `FROM ${semiAdditiveCte ? '__temporal_rows' : from}`,
     semiAdditiveCte ? '' : `WHERE ${whereParts.join(' AND ')}`,
     breakouts.length > 0 ? `GROUP BY ${breakouts.map((_, i) => i + 1).join(', ')}` : '',
+    havingSql,
     orderSql,
     `LIMIT ${limit}`,
   ]

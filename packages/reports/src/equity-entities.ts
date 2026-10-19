@@ -68,6 +68,10 @@ export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
     orgColumn: 's.org_id',
     subsidiaryScope: { column: 's.subsidiary_id' },
     timeKey: 'issue_date',
+    // The register as of a date is every security issued on or before it:
+    // the as-of date bounds the issue date from above, and no fiscal window
+    // ever hides securities issued in earlier years.
+    asOfField: 'issue_date',
     columns: [
       { key: 'issue_date', label: 'Issue date', kind: 'date', expr: 's.issue_date' },
       { key: 'security_number', label: 'Security', kind: 'text', expr: 's.security_number' },

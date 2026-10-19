@@ -15,6 +15,7 @@ import {
   type ReportRuleGroup,
 } from '@openbooks/reports'
 import { DateField } from '@/components/date-field'
+import { reportEnumLabel } from '@/lib/report-enum-label'
 
 const PRESET_GROUP_ORDER: PeriodPresetGroup[] = [
   'fiscal_year',
@@ -162,7 +163,7 @@ function RuleRow({
   // (e.g. "Type is any of Bill, Expense Report…").
   const options = column?.options
   const enumLabel = (v: string) =>
-    tReports.has(`catalog.enumValues.${v}`) ? tReports(`catalog.enumValues.${v}`) : v.replace(/_/g, ' ')
+    reportEnumLabel(tReports, v, column ? { entity: entity.key, column: column.key } : undefined) ?? v.replace(/_/g, ' ')
 
   const changeField = (field: string) => {
     const col = entity.columns.find((c) => c.key === field)

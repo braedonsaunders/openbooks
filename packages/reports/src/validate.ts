@@ -464,6 +464,19 @@ export function validateCustomQuery(
   if (sorts.length > MAX_SORT_LEVELS) {
     throw new ReportQueryValidationError(`A query can have at most ${MAX_SORT_LEVELS} sort levels; this one has ${sorts.length}.`)
   }
+  // Omitting zero rows compares every aggregate with zero, so it needs a
+  // summary whose aggregates are all quantities.
+  const omitZeroRows = q.omitZeroRows === true
+  if (omitZeroRows) {
+    if (mode !== 'summarize') {
+      throw new ReportQueryValidationError('Omitting zero rows applies to summarized reports; summarize the report or turn the option off')
+    }
+    const nonNumeric = measures.find((measure) => measure.fn !== 'formula' && measure.fn !== 'count' && measure.fn !== 'count_distinct'
+      && !['number', 'money'].includes(entityColumn(entityMeta, measure.column ?? '')?.kind ?? ''))
+    if (nonNumeric) {
+      throw new ReportQueryValidationError(`Omitting zero rows needs numeric measures; '${nonNumeric.label ?? nonNumeric.column ?? nonNumeric.fn}' is not a number — remove it or turn the option off`)
+    }
+  }
   // Column-label overrides: only for columns actually selected, trimmed + capped.
   const columnLabels: Record<string, string> = {}
   if (q.columnLabels && typeof q.columnLabels === 'object' && !Array.isArray(q.columnLabels)) {
@@ -488,6 +501,7 @@ export function validateCustomQuery(
     groupBy,
     ...(totals && Object.keys(totals).length ? { totals } : {}),
     ...(sorts.length ? { sorts } : {}),
+    ...(omitZeroRows ? { omitZeroRows } : {}),
     ...(Object.keys(columnLabels).length ? { columnLabels } : {}),
     limit,
   }

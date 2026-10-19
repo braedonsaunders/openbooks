@@ -131,6 +131,12 @@ export type ReportEntityColumn = {
    * across time) carry the same flag: a snapshot never sums.
    */
   snapshot?: boolean
+  /**
+   * True on a number column that names rather than measures (a tax year, a
+   * line, session or version number): it prints as written, never with
+   * thousands separators, and spreadsheets keep it as written.
+   */
+  identifier?: boolean
 }
 
 /** Server-owned normalization metadata for governed metric rows. The
@@ -466,7 +472,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: TRANSACTION_STATUSES },
       { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
       { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'd.party_id' },
-      { key: 'line_number', label: 'Line #', kind: 'number', expr: 'dl.line_number' },
+      { key: 'line_number', label: 'Line #', kind: 'number', identifier: true, expr: 'dl.line_number' },
       { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
       { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
       { key: 'family_name', label: 'Family', kind: 'text', expr: 'fam.name' },
@@ -660,7 +666,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'document_number', label: 'Order #', kind: 'text', expr: 'd.document_number' },
       { key: 'document_date', label: 'Order date', kind: 'date', expr: 'd.document_date' },
       { key: 'party_name', label: 'Customer', kind: 'text', expr: 'p.display_name' },
-      { key: 'line_number', label: 'Line #', kind: 'number', expr: 'dl.line_number' },
+      { key: 'line_number', label: 'Line #', kind: 'number', identifier: true, expr: 'dl.line_number' },
       { key: 'item_code', label: 'Item code', kind: 'text', expr: 'it.code' },
       { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
       { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
@@ -959,7 +965,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'pay_date', label: 'Pay date', kind: 'date', expr: 's.pay_date' },
       { key: 'period_start', label: 'Period start', kind: 'date', expr: 'r.period_start' },
       { key: 'period_end', label: 'Period end', kind: 'date', expr: 'r.period_end' },
-      { key: 'tax_year', label: 'Tax year', kind: 'number', expr: 's.tax_year' },
+      { key: 'tax_year', label: 'Tax year', kind: 'number', identifier: true, expr: 's.tax_year' },
       { key: 'province', label: 'Province / state', kind: 'text', expr: 's.province' },
       {
         key: 'run_status', label: 'Run status', kind: 'enum', expr: 'r.run_status',
@@ -1052,7 +1058,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       },
       { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
       { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'tax_year', label: 'Tax year', kind: 'number', expr: 's.tax_year' },
+      { key: 'tax_year', label: 'Tax year', kind: 'number', identifier: true, expr: 's.tax_year' },
       { key: 'province', label: 'Province / state', kind: 'text', expr: 's.province' },
       { key: 'stub_id', label: 'Stub (id)', kind: 'uuid', expr: 's.id' },
       { key: 'component_id', label: 'Component (id)', kind: 'uuid', expr: 'l.component_id' },
@@ -1365,7 +1371,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         key: 'rule_mode', label: 'Rule mode', kind: 'enum', expr: 'rule.mode',
         options: ['entry', 'post', 'period'],
       },
-      { key: 'version_no', label: 'Version #', kind: 'number', expr: 'v.version_no' },
+      { key: 'version_no', label: 'Version #', kind: 'number', identifier: true, expr: 'v.version_no' },
       { key: 'period', label: 'Period', kind: 'text', expr: 'p.name' },
       { key: 'period_start', label: 'Period start', kind: 'date', expr: 'p.starts_on' },
       { key: 'period_end', label: 'Period end', kind: 'date', expr: 'p.ends_on' },
@@ -1519,7 +1525,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     columns: [
       { key: 'opportunity_number', label: 'Opportunity #', kind: 'text', expr: 'o.opportunity_number' },
       { key: 'opportunity_title', label: 'Opportunity title', kind: 'text', expr: 'o.title' },
-      { key: 'line_number', label: 'Line #', kind: 'number', expr: 'ol.line_number' },
+      { key: 'line_number', label: 'Line #', kind: 'number', identifier: true, expr: 'ol.line_number' },
       { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
       { key: 'item_code', label: 'Item code', kind: 'text', expr: 'it.code' },
       { key: 'description', label: 'Description', kind: 'text', expr: 'ol.description' },
@@ -1801,7 +1807,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'document_date', label: 'Invoice date', kind: 'date', expr: 'd.document_date' },
       { key: 'status', label: 'Invoice status', kind: 'enum', expr: 'd.status', options: TRANSACTION_STATUSES },
       { key: 'party_name', label: 'Customer', kind: 'text', expr: 'p.display_name' },
-      { key: 'line_number', label: 'Line #', kind: 'number', expr: 'dl.line_number' },
+      { key: 'line_number', label: 'Line #', kind: 'number', identifier: true, expr: 'dl.line_number' },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'd.currency' },
       { key: 'amount', label: 'Amount', kind: 'money', expr: 'dl.amount', txnCurrency: true },
       { key: 'run_id', label: 'Rating run (id)', kind: 'uuid', expr: "dl.custom->'rating'->>'runId'" },

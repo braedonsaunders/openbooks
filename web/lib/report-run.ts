@@ -211,9 +211,12 @@ export class ReportResolutionError extends Error {
   }
 }
 
+/** A resolved statement. `asOf` is the date a point-in-time statement (a
+ *  balance sheet, trial balance, aging) reports balances on; period
+ *  statements carry none. */
 export type ResolvedReport =
-  | { render: 'view'; view: StatementView; title: string; periodPhrase: string; requiredPermissions?: string[] }
-  | { render: 'data'; data: ExportData; requiredPermissions?: string[] }
+  | { render: 'view'; view: StatementView; title: string; periodPhrase: string; requiredPermissions?: string[]; asOf?: string }
+  | { render: 'data'; data: ExportData; requiredPermissions?: string[]; asOf?: string }
 
 /**
  * Content permissions a line-level ledger statement requires. Journal and
@@ -458,7 +461,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     }
     if (!view) throw new ReportResolutionError('no data')
     if (selectedBook) periodPhrase = `${selectedBook.name} · ${periodPhrase}`
-    return { render: 'view', view, title, periodPhrase }
+    return { render: 'view', view, title, periodPhrase, ...(kind === 'balance-sheet' ? { asOf: period.to } : {}) }
   }
 
   // --- Detail reports (flat tables) -----------------------------------------
@@ -521,6 +524,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
         render: 'data',
         data: await intercompanyReconciliationExportData(orgId, authz.allowedSubsidiaryIds, period.to, period.label),
         requiredPermissions: ['intercompany.read'],
+        asOf: period.to,
       }
     case 'project-profitability':
       return {
@@ -545,7 +549,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   const to = p.get('to') ?? period.to
   switch (kind) {
     case 'trial-balance':
-      return { render: 'data', data: trialBalanceExportData(localizeAccountRows(await trialBalance(asOf, dims, orgId, detailBookId), await exportAccountLabels(orgId, p, asOf, q.subsidiaryId)), asOf, t) }
+      return { render: 'data', data: trialBalanceExportData(localizeAccountRows(await trialBalance(asOf, dims, orgId, detailBookId), await exportAccountLabels(orgId, p, asOf, q.subsidiaryId)), asOf, t), asOf }
     case 'book-differences': {
       try {
         // Each book states the view in its own currency for the subsidiaries in it.
@@ -560,6 +564,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
             primaryCurrency: primaryView.currency ?? base,
             compareCurrency: compareView.currency ?? base,
           }),
+          asOf,
         }
       } catch (error) {
         if (error instanceof BookDifferenceSelectionError) throw new ReportResolutionError(error.message)
@@ -574,7 +579,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       // flipping to payables.
       const raw = p.get('kind') ?? p.get('side')
       const s = (raw === 'receivable' ? 'receivable' : 'payable') as 'receivable' | 'payable'
-      return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId, asOf, detailBookId, dims, canSeePayroll), t) }
+      return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId, asOf, detailBookId, dims, canSeePayroll), t), asOf }
     }
     case 'aging': {
       // Bare export hits default to the screen's as-of (today) through the
@@ -599,11 +604,13 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
         return {
           render: 'data',
           data: agingDetailExportData(side, await agingDetail(side, agingAsOf, dims, orgId, agingOpts), t),
+          asOf: agingAsOf,
         }
       }
       return {
         render: 'data',
         data: agingExportData(side, await agingByParty(side, agingAsOf, dims, orgId, agingOpts), t),
+        asOf: agingAsOf,
       }
     }
     case 'cash-flow':
@@ -667,7 +674,7 @@ export async function resolveDefinitionToExportData(
   p: URLSearchParams,
   ctx: ResolveReportCtx,
   options: { extraFilters?: ReportRuleGroup | null } = {},
-): Promise<ExportData & { requiredPermissions: string[]; expenseRows?: ReportArtifactExpenseRows }> {
+): Promise<ExportData & { requiredPermissions: string[]; expenseRows?: ReportArtifactExpenseRows; asOf?: string }> {
   const { row, authz } = await loadAuthorizedDefinition(orgId, id)
 
   if (row.report_type === 'statement') {
@@ -681,20 +688,21 @@ export async function resolveDefinitionToExportData(
     // payroll-bearing journal/GL names payroll.read here); the scheduled
     // render stamps it onto the run snapshot and downloads enforce it.
     const requiredPermissions = resolved.requiredPermissions ?? []
+    const asOf = resolved.asOf ? { asOf: resolved.asOf } : {}
     if (resolved.render === 'view') {
       return { ...statementViewToExportData(resolved.view, {
         title: resolved.title,
         dateRangeLabel: resolved.periodPhrase,
         accountLabel: ctx.t('export.columns.accountName'),
-      }), requiredPermissions }
+      }), requiredPermissions, ...asOf }
     }
-    return { ...resolved.data, requiredPermissions }
+    return { ...resolved.data, requiredPermissions, ...asOf }
   }
 
   // query-type definition → entity engine → ExportData. An explicit period in
   // the request replaces the plan's stored date window (same as the report
   // screen's picker); absent params — e.g. scheduled runs — keep the plan.
-  const { query, title, dateRangeLabel } = await planDefinitionQuery(row, authz, p, ctx, options)
+  const { query, title, dateRangeLabel, asOf } = await planDefinitionQuery(row, authz, p, ctx, options)
   // Pageable entity exports deliberately collect every causally stable page;
   // they never inherit the interactive page or the engine's legacy 10k cap.
   const result = await executeReportAllPages(orgId, query)
@@ -703,14 +711,15 @@ export async function resolveDefinitionToExportData(
   return { ...runResultToExportData(result, {
     title,
     dateRangeLabel,
-  }), requiredPermissions: entityPermission ? [entityPermission] : [], ...(expenseRows ? { expenseRows } : {}) }
+  }), requiredPermissions: entityPermission ? [entityPermission] : [], ...(expenseRows ? { expenseRows } : {}), ...(asOf ? { asOf } : {}) }
 }
 
 /**
  * Build the executable entity plan for a query-type definition: validate the
  * saved plan against the catalog, layer schedule overrides, bind built-in URL
  * filters, and apply an explicit request period. Shared by the buffered and
- * streaming runners so both execute the same plan.
+ * streaming runners so both execute the same plan. `asOf` is the date a
+ * point-in-time source was read as of, which also dates its exported file.
  */
 async function planDefinitionQuery(
   row: ReportDefinitionRecord,
@@ -718,7 +727,7 @@ async function planDefinitionQuery(
   p: URLSearchParams,
   ctx: ResolveReportCtx,
   options: { extraFilters?: ReportRuleGroup | null } = {},
-): Promise<{ query: ReportCustomQuery; title: string; dateRangeLabel: string }> {
+): Promise<{ query: ReportCustomQuery; title: string; dateRangeLabel: string; asOf: string | null }> {
   if (!row.query) throw new ReportResolutionError('report has no query')
   const entityMap = await reportEntityCatalog(authz)
   let query = mergeReportFilters(validateCatalogReportQuery(row.query, entityMap), options.extraFilters, entityMap)
@@ -746,6 +755,7 @@ async function planDefinitionQuery(
     query,
     title: builtIn ? ctx.t(`builtIns.${row.slug}.name`) : row.name,
     dateRangeLabel: periodField ? ctx.period.label ?? '' : asOf ? ctx.t('balanceSheet.asOf', { date: asOf.to }) : '',
+    asOf: asOf?.to ?? null,
   }
 }
 
@@ -770,6 +780,7 @@ export async function streamDefinitionExport(
   rowCount: number
   totalRows: number
   truncated: boolean
+  asOf?: string
 }> {
   const { row, authz } = await loadAuthorizedDefinition(orgId, id)
   if (row.report_type === 'statement') throw new ReportResolutionError('Streaming export needs a query definition')
@@ -786,7 +797,7 @@ export async function streamDefinitionExport(
       generatedAt: opts.generatedAt,
       rowCap: opts.rowCap,
     })
-    return { format: 'csv' as const, ...out }
+    return { format: 'csv' as const, ...out, ...(plan.asOf ? { asOf: plan.asOf } : {}) }
   }
   const out = await streamPagedReportXlsx(orgId, plan.query, {
     title: plan.title,
@@ -794,5 +805,5 @@ export async function streamDefinitionExport(
     generatedAt: opts.generatedAt,
     rowCap: opts.rowCap,
   })
-  return { format: 'xlsx' as const, ...out }
+  return { format: 'xlsx' as const, ...out, ...(plan.asOf ? { asOf: plan.asOf } : {}) }
 }

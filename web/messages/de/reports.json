@@ -3377,6 +3377,41 @@
       "age_08_30": "8–30 Tage",
       "age_31_90": "31–90 Tage",
       "age_91_plus": "Über 90 Tage"
+    },
+    "columnValues": {
+      "equity_compensation_run_lines": {
+        "security_kind": {
+          "option": "Option",
+          "rsu": "RSU"
+        }
+      },
+      "equity_securities_register": {
+        "security_kind": {
+          "share": "Anteilszertifikat",
+          "option": "Option",
+          "rsu": "RSU",
+          "warrant": "Optionsschein",
+          "safe": "SAFE",
+          "note": "Wandeldarlehen"
+        }
+      },
+      "equity_cap_table_positions": {
+        "class_kind": {
+          "common": "Stammanteile",
+          "preferred": "Vorzugsanteile"
+        },
+        "position_kind": {
+          "share": "Anteile",
+          "award": "Zuteilungen",
+          "pool": "Nicht zugeteilter Pool"
+        },
+        "security_kind": {
+          "share": "Anteilszertifikat",
+          "option": "Option",
+          "rsu": "RSU",
+          "warrant": "Optionsschein"
+        }
+      }
     }
   },
   "operators": {

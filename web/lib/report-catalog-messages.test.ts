@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { allReportEntities } from '@openbooks/reports'
 import './resourcing/report-facts.ts'
+import { reportEnumLabel } from './report-enum-label.ts'
 
 /**
  * Every report entity and every one of its columns must have a heading.
@@ -25,6 +26,8 @@ type ReportsCatalog = {
   catalog: {
     entities: Record<string, unknown>
     columns: Record<string, Record<string, string>>
+    enumValues: Record<string, string>
+    columnValues?: Record<string, Record<string, Record<string, string>>>
   }
 }
 
@@ -69,4 +72,40 @@ test('every report column has a heading, or the report renders its key path', ()
     [],
     `these would render as raw key paths in the column header:\n${missing.join('\n')}`,
   )
+})
+
+test('source-specific enum labels name real enum options and cover every equity enum in every locale', () => {
+  const problems: string[] = []
+  const equityEnums = reportEntities.filter((entity) => entity.featureKey === 'equity')
+    .flatMap((entity) => (entity.columns ?? []).filter((column) => column.kind === 'enum').map((column) => ({ entity, column })))
+  assert.ok(equityEnums.length >= 5, 'the equity sources declare their enum columns')
+  for (const locale of LOCALES) {
+    const scoped = catalogs[locale].catalog.columnValues ?? {}
+    for (const [entityKey, columns] of Object.entries(scoped)) {
+      const entity = reportEntities.find((candidate) => candidate.key === entityKey)
+      for (const [columnKey, values] of Object.entries(columns)) {
+        const column = entity?.columns?.find((candidate) => candidate.key === columnKey)
+        for (const [value, label] of Object.entries(values)) {
+          if (!column?.options?.includes(value)) problems.push(`${locale}: ${entityKey}.${columnKey}.${value} is not an option of that column`)
+          if (!label.trim()) problems.push(`${locale}: ${entityKey}.${columnKey}.${value} is blank`)
+        }
+      }
+    }
+    for (const { entity, column } of equityEnums) {
+      for (const option of column.options ?? []) {
+        if (!scoped[entity.key]?.[column.key]?.[option]) problems.push(`${locale}: ${entity.key}.${column.key}.${option} has no label`)
+      }
+    }
+  }
+  assert.deepEqual(problems, [], problems.join('\n'))
+})
+
+test('an enum value reads with its source column label first, then the shared label, else falls back', () => {
+  const messages = catalogs.de
+  const lookup = (key: string): string | undefined => key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], messages) as string | undefined
+  const t = Object.assign((key: string) => lookup(key) ?? key, { has: (key: string) => typeof lookup(key) === 'string' })
+  assert.equal(reportEnumLabel(t, 'note', { entity: 'equity_securities_register', column: 'security_kind' }), 'Wandeldarlehen')
+  assert.equal(reportEnumLabel(t, 'pool', { entity: 'equity_cap_table_positions', column: 'position_kind' }), 'Nicht zugeteilter Pool')
+  assert.equal(reportEnumLabel(t, 'posted', { entity: 'equity_securities_register', column: 'security_kind' }), messages.catalog.enumValues.posted)
+  assert.equal(reportEnumLabel(t, 'not_a_value'), null)
 })

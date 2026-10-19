@@ -404,6 +404,13 @@ function stampFooters(
   }
 }
 
-function formatStamp(d: Date): string {
-  return d.toISOString().slice(0, 19).replace('T', ' ') + ' UTC'
+/**
+ * The generated stamp. Exports are stamped with the organization's business
+ * date — a civil date carried as UTC midnight — and that prints as the date
+ * alone; only a stamp that carries a time of day prints one.
+ */
+export function formatStamp(d: Date): string {
+  const iso = d.toISOString()
+  if (iso.endsWith('T00:00:00.000Z')) return iso.slice(0, 10)
+  return iso.slice(0, 19).replace('T', ' ') + ' UTC'
 }

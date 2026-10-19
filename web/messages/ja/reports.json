@@ -3377,6 +3377,41 @@
       "age_08_30": "8～30日",
       "age_31_90": "31～90日",
       "age_91_plus": "90日超"
+    },
+    "columnValues": {
+      "equity_compensation_run_lines": {
+        "security_kind": {
+          "option": "オプション",
+          "rsu": "RSU"
+        }
+      },
+      "equity_securities_register": {
+        "security_kind": {
+          "share": "株券",
+          "option": "オプション",
+          "rsu": "RSU",
+          "warrant": "ワラント",
+          "safe": "SAFE",
+          "note": "コンバーティブルノート"
+        }
+      },
+      "equity_cap_table_positions": {
+        "class_kind": {
+          "common": "普通株式",
+          "preferred": "優先株式"
+        },
+        "position_kind": {
+          "share": "株式",
+          "award": "アワード",
+          "pool": "未割当プール"
+        },
+        "security_kind": {
+          "share": "株券",
+          "option": "オプション",
+          "rsu": "RSU",
+          "warrant": "ワラント"
+        }
+      }
     }
   },
   "operators": {

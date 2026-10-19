@@ -11,6 +11,7 @@ import { Writable } from 'node:stream'
 import {
   guardCsvCell,
   reportResultToCsv as _reportResultToCsv,
+  type ReportNumberFormat,
   type ReportRunResult,
 } from '@openbooks/reports'
 
@@ -98,6 +99,59 @@ function xlsxMoneyNumberFormat(money: boolean | undefined): string | undefined {
   return money === true ? XLSX_MONEY_NUMBER_FORMAT : undefined
 }
 
+/** Excel keeps 15 significant decimal digits in a numeric cell. */
+const XLSX_SIGNIFICANT_DIGITS = 15
+
+/**
+ * A quantity cell of a number- or percent-typed column as a spreadsheet
+ * number with a thousands-separated format at the value's own decimal places
+ * (percent columns hold percentage points and print a literal %). A decimal
+ * with more significant digits than a numeric cell keeps — or any text that
+ * is not a plain decimal — returns null and the caller stores the text, so
+ * the workbook never shows a rounded figure.
+ */
+export function xlsxQuantityCell(
+  raw: string | number | null | undefined,
+  format: ReportNumberFormat | null | undefined,
+): { value: number; numFmt: string } | null {
+  if (!format || raw === null || raw === undefined) return null
+  const text = typeof raw === 'number' ? (Number.isFinite(raw) ? String(raw) : '') : raw.trim()
+  const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(text)
+  if (!match) return null
+  const fraction = match[3] ?? ''
+  const significant = `${match[2]}${fraction}`.replace(/^0+/, '').replace(/0+$/, '')
+  if (significant.length > XLSX_SIGNIFICANT_DIGITS) return null
+  const places = fraction.length
+  const pattern = `#,##0${places > 0 ? `.${'0'.repeat(places)}` : ''}`
+  const value = Number(text)
+  return { value: Object.is(value, -0) ? 0 : value, numFmt: format === 'percent' ? `${pattern}"%"` : pattern }
+}
+
+/** Write one data cell: typed quantities become numbers, every other value
+ *  keeps the shared formula guard and the money/General formats. Shared by
+ *  the buffered and streaming writers so both produce the same cells. */
+function writeXlsxDataCell(
+  cell: ExcelJS.Cell,
+  raw: string | number | null | undefined,
+  money: boolean | undefined,
+  numberFormat: ReportNumberFormat | null | undefined,
+): void {
+  const quantity = money === true ? null : xlsxQuantityCell(raw, numberFormat)
+  if (quantity) {
+    cell.value = quantity.value
+    cell.alignment = { horizontal: 'right' }
+    cell.numFmt = quantity.numFmt
+    return
+  }
+  const v = guardCsvCell(raw)
+  cell.value = v === null || v === undefined ? '' : v
+  if (typeof cell.value === 'number') {
+    cell.alignment = { horizontal: 'right' }
+    const numFmt = xlsxMoneyNumberFormat(money)
+    if (numFmt) cell.numFmt = numFmt
+  }
+}
+
 /**
  * Build an .xlsx workbook from a run result: one sheet per section group,
  * each with a title block (rows 1–3) + a frozen bold header (row 4) + data.
@@ -148,14 +202,7 @@ export async function reportResultToXlsx(
     let dataRow = headerRowNum + 1
     for (const row of group.rows) {
       for (let i = 0; i < group.columns.length; i++) {
-        const v = guardCsvCell(row[i])
-        const cell = ws.getCell(dataRow, i + 1)
-        cell.value = v === null || v === undefined ? '' : v
-        if (typeof cell.value === 'number') {
-          cell.alignment = { horizontal: 'right' }
-          const numFmt = xlsxMoneyNumberFormat(group.money?.[i])
-          if (numFmt) cell.numFmt = numFmt
-        }
+        writeXlsxDataCell(ws.getCell(dataRow, i + 1), row[i], group.money?.[i], group.numberFormats?.[i])
       }
       dataRow++
     }
@@ -256,6 +303,8 @@ export type StreamingXlsxGroup = {
   widths: number[]
   /** Per-column money flags from the report engine (see xlsxMoneyNumberFormat). */
   money?: boolean[]
+  /** Per-column quantity typing from the report engine (see xlsxQuantityCell). */
+  numberFormats?: (ReportNumberFormat | null)[]
 }
 
 export type StreamingXlsxWriter = {
@@ -317,7 +366,7 @@ export function createStreamingXlsxExport(opts: {
     group.widths.forEach((width, i) => {
       ws.getColumn(i + 1).width = width
     })
-    return { ws, columns: group.columns.length, money: group.money, nextRow: XLSX_HEADER_ROW + 1, index }
+    return { ws, columns: group.columns.length, money: group.money, numberFormats: group.numberFormats, nextRow: XLSX_HEADER_ROW + 1, index }
   })
 
   return {
@@ -326,14 +375,7 @@ export function createStreamingXlsxExport(opts: {
       if (!sheet) throw new Error(`Streaming XLSX export has no group ${groupIndex}`)
       for (const row of rows) {
         for (let i = 0; i < sheet.columns; i++) {
-          const v = guardCsvCell(row[i])
-          const cell = sheet.ws.getCell(sheet.nextRow, i + 1)
-          cell.value = v === null || v === undefined ? '' : v
-          if (typeof cell.value === 'number') {
-            cell.alignment = { horizontal: 'right' }
-            const numFmt = xlsxMoneyNumberFormat(sheet.money?.[i])
-            if (numFmt) cell.numFmt = numFmt
-          }
+          writeXlsxDataCell(sheet.ws.getCell(sheet.nextRow, i + 1), row[i], sheet.money?.[i], sheet.numberFormats?.[i])
         }
         sheet.nextRow++
       }

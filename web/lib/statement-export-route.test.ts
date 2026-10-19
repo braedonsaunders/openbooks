@@ -12,6 +12,7 @@ const routeState = {
   // P&L and balance-sheet exports need the ledger grant as well as reports.read.
   permissions: new Set(['reports.read', 'gl.read']),
   resolved: [] as string[],
+  filenames: [] as string[],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
@@ -64,7 +65,7 @@ const mockSources = new Map<string, string>([
       export async function resolveReport(kind) {
         state.resolved.push(kind)
         if (kind === 'balance-sheet') {
-          return { render: 'view', view: { columns: [] }, title: 'Balance sheet', periodPhrase: 'FY26' }
+          return { render: 'view', view: { columns: [] }, title: 'Balance sheet', periodPhrase: 'FY26', asOf: '2025-10-01' }
         }
         if (kind !== 'pnl' && kind !== 'resourcing-capacity-demand') throw new Error('unexpected report fixture: ' + kind)
         return { render: 'data', data: { title: 'P&L', dateRangeLabel: 'FY26', groups: [], summary: [] } }
@@ -80,10 +81,11 @@ const mockSources = new Map<string, string>([
   [
     'mock:export',
     `
-      export function csvResponse() { return new Response('') }
-      export function pdfResponse() { return new Response('') }
-      export function safeName(value) { return value }
-      export function xlsxResponse() { return new Response('') }
+      export { reportExportFilename } from '${new URL('./export.ts', import.meta.url).href}'
+      const state = globalThis[Symbol.for('openbooks.statement-export-route-test')]
+      export function csvResponse(body, filename) { state.filenames.push(filename); return new Response('') }
+      export function pdfResponse(body, filename) { state.filenames.push(filename); return new Response('') }
+      export function xlsxResponse(body, filename) { state.filenames.push(filename); return new Response('') }
     `,
   ],
   ['mock:business-date', `export * from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
@@ -199,5 +201,14 @@ test('resourcing export with explicit permission reaches the renderer', async ()
     assert.deepEqual(routeState.resolved, ['resourcing-capacity-demand'])
   } finally {
     routeState.permissions = new Set(['reports.read', 'gl.read'])
+  }
+})
+
+test('a point-in-time statement is named for its as-of date and a period statement for the day it was produced', async () => {
+  for (const format of ['pdf', 'xlsx', 'csv']) {
+    routeState.filenames = []
+    await GET(new Request(`http://openbooks.test/api/reports/statement/balance-sheet/export?format=${format}`), { params: Promise.resolve({ kind: 'balance-sheet' }) })
+    await GET(new Request(`http://openbooks.test/api/reports/statement/pnl/export?format=${format}`), { params: Promise.resolve({ kind: 'pnl' }) })
+    assert.deepEqual(routeState.filenames, ['balance-sheet-2025-10-01', 'pnl-2026-08-28'], format)
   }
 })

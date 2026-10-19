@@ -26,6 +26,7 @@ import {
 import type {
   ReportGroup,
   ReportLayoutConfig,
+  ReportNumberFormat,
   ReportRunLabels,
   ReportSummaryItem,
 } from '@openbooks/reports'
@@ -34,6 +35,7 @@ import { resolveOrgId } from './org-scope'
 import { resolveLocale } from './locale'
 import { pdfMoney } from './report-pdf-detail'
 import { formatDecimal } from './money-format'
+import { formatExactPercent } from './format'
 export { generalLedgerExportData } from './report-pdf-detail'
 
 /**
@@ -47,13 +49,20 @@ export { generalLedgerExportData } from './report-pdf-detail'
  * past 2^53; see report-pdf-detail.ts. Excel/CSV retain those strings verbatim;
  * .xlsx uses text cells when a decimal cannot be represented exactly as a
  * binary float. Counts stay plain numbers.
+ *
+ * Quantity columns (share counts, hours, percentages) carry per-group
+ * `numberFormats` (mirroring ReportGroup.numberFormats): the PDF formats them
+ * per the viewer's locale and right-aligns them, Excel stores them as numeric
+ * cells with a thousands-separated format, and CSV keeps the exact plain
+ * value so the file stays machine-readable.
  */
 
 export type Translator = (key: string, values?: Record<string, string | number>) => string
 
 /** PdfTableGroup plus per-column currency markers: flagged columns hold exact
- *  ledger decimal strings that must reach print without an IEEE-754 round-trip. */
-type ExportTableGroup = PdfTableGroup & { money?: boolean[] }
+ *  ledger decimal strings that must reach print without an IEEE-754 round-trip.
+ *  `numberFormats` types the non-money quantity columns the same way. */
+type ExportTableGroup = PdfTableGroup & { money?: boolean[]; numberFormats?: (ReportNumberFormat | null)[] }
 
 export type ExportData = {
   title: string
@@ -107,23 +116,47 @@ function pdfNum(v: number, locale = 'en'): string {
   return formatDecimal(locale, String(v), { maximumFractionDigits: Number.isInteger(v) ? 0 : 2 })
 }
 
-function pdfCell(v: string | number | null | undefined, locale: string, isMoney = false): string {
+const EXACT_QUANTITY_TEXT = /^-?\d+(?:\.(\d+))?$/
+
+/** An exact quantity for print, in the locale's digits and separators at the
+ *  value's own decimal places; percent values are percentage points. Text
+ *  that is not a plain decimal (an undefined-formula label) prints as is. */
+export function pdfQuantity(v: string, locale: string, format: ReportNumberFormat): string {
+  const text = v.trim()
+  const match = EXACT_QUANTITY_TEXT.exec(text)
+  if (!match) return v
+  const places = match[1]?.length ?? 0
+  return format === 'percent'
+    ? formatExactPercent(text, locale, places)
+    : formatDecimal(locale, text, { minimumFractionDigits: places, maximumFractionDigits: places })
+}
+
+function pdfCell(v: string | number | null | undefined, locale: string, isMoney = false, numberFormat: ReportNumberFormat | null = null): string {
   if (v === null || v === undefined) return ''
-  if (typeof v === 'number') return pdfNum(v, locale)
+  if (typeof v === 'number') return numberFormat === 'percent' ? pdfQuantity(String(v), locale, numberFormat) : pdfNum(v, locale)
   // pdfMoney self-guards: non-numeric text in a flagged column renders raw.
   if (isMoney) return pdfMoney(v, locale)
+  if (numberFormat) return pdfQuantity(v, locale, numberFormat)
   return String(v)
 }
 
-function formattedPdfCell(cell: PdfTableCell, locale: string, isMoney: boolean): PdfTableCell {
+function formattedPdfCell(cell: PdfTableCell, locale: string, isMoney: boolean, numberFormat: ReportNumberFormat | null): PdfTableCell {
   if (cell !== null && typeof cell === 'object') {
     return {
       ...cell,
-      text: pdfCell(cell.text, locale, isMoney),
-      ...(cell.segments ? { segments: cell.segments.map(segment => ({ ...segment, text: pdfCell(segment.text, locale, isMoney) })) } : {}),
+      text: pdfCell(cell.text, locale, isMoney, numberFormat),
+      ...(cell.segments ? { segments: cell.segments.map(segment => ({ ...segment, text: pdfCell(segment.text, locale, isMoney, numberFormat) })) } : {}),
     }
   }
-  return pdfCell(cell, locale, isMoney)
+  return pdfCell(cell, locale, isMoney, numberFormat)
+}
+
+/** Column alignment for print: the group's own, else money and quantity
+ *  columns right-aligned and everything else left. */
+function pdfGroupAlign(g: ExportTableGroup): PdfColumnAlign[] | undefined {
+  if (g.align) return g.align
+  if (!g.money?.some(Boolean) && !g.numberFormats?.some(Boolean)) return undefined
+  return g.columns.map((_, i) => (g.money?.[i] === true || g.numberFormats?.[i] ? 'right' : 'left'))
 }
 
 function pdfSummary(s: ReportSummaryItem, locale: string): { label: string; value: string } {
@@ -133,7 +166,9 @@ function pdfSummary(s: ReportSummaryItem, locale: string): { label: string; valu
       ? pdfNum(s.value, locale)
       : s.money === true
         ? pdfMoney(s.value, locale)
-        : String(s.value),
+        : s.number === true
+          ? pdfQuantity(s.value, locale, 'number')
+          : String(s.value),
   }
 }
 
@@ -153,7 +188,8 @@ export function runResultToExportData(
       columns: g.columns,
       rows: g.rows,
       ...(g.money ? { money: g.money } : {}),
-      align: undefined,
+      ...(g.numberFormats ? { numberFormats: g.numberFormats } : {}),
+      align: g.align,
       isEmpty: g.isEmpty,
     })),
   }
@@ -185,6 +221,7 @@ export function exportDataToRunResult(data: ExportData): ReportRunResult {
     columns: g.columns,
     rows: g.rows.map((row) => row.map(cell => cell !== null && typeof cell === 'object' ? cell.text : cell)),
     ...(g.money ? { money: g.money } : {}),
+    ...(g.numberFormats ? { numberFormats: g.numberFormats } : {}),
     isEmpty: g.isEmpty,
   }))
   const rowCount = data.groups.reduce((n, g) => n + g.rows.length, 0)
@@ -210,8 +247,8 @@ export function exportDataToPdfInput(
     title: g.title,
     subtitle: g.subtitle,
     columns: g.columns,
-    rows: g.rows.map((row) => row.map((cell, i) => formattedPdfCell(cell, locale, g.money?.[i] === true))),
-    align: g.align,
+    rows: g.rows.map((row) => row.map((cell, i) => formattedPdfCell(cell, locale, g.money?.[i] === true, g.numberFormats?.[i] ?? null))),
+    align: pdfGroupAlign(g),
     isEmpty: g.isEmpty,
   }))
   return {

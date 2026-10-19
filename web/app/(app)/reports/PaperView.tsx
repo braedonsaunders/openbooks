@@ -1,10 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useFormatter } from 'next-intl'
+import { useFormatter, useLocale } from 'next-intl'
 import { useMoney } from '@/components/money-provider'
+import { formatExactPercent } from '@/lib/format'
+import { formatDecimal } from '@/lib/money-format'
 import { cn } from '@openbooks/ui'
-import type { ReportCellLink } from '@openbooks/reports'
+import type { ReportCellLink, ReportNumberFormat } from '@openbooks/reports'
 import { ReportPaper } from './ReportPaper'
 import { ReportDrillLink } from './ReportDrillLink'
 import { TxnLink } from './TxnLink'
@@ -29,8 +31,9 @@ import {
  * so standard and custom reports look identical.
  *
  * Fidelity for statement pages: optional per-cell drill `links`, per-column
- * `money` flags (currency-formatted; counts/percents left plain), and negative
- * colouring — so a flattened page keeps its drill-through and polish.
+ * `money` flags (currency-formatted), per-column `numberFormats` (exact
+ * quantities in the viewer's digits and separators), and negative colouring —
+ * so a flattened page keeps its drill-through and polish.
  */
 
 export type PaperCell = string | number | null | undefined
@@ -45,6 +48,8 @@ export type PaperGroup = {
   align?: ('left' | 'right' | 'center')[]
   /** Per-column: format the cell as currency (else plain number/text). */
   money?: boolean[]
+  /** Per-column: an exact quantity ('number') or percentage points ('percent'). */
+  numberFormats?: (ReportNumberFormat | null)[]
   /** Per-cell drill href (parallel to `rows`); null/absent ⇒ plain cell. */
   links?: (string | null | undefined)[][]
   /** Per-cell report drill target (parallel to `rows`). */
@@ -65,7 +70,7 @@ export type PaperData = {
   title: string
   periodPhrase?: string
   note?: string
-  summary?: { label: string; value: PaperCell; money?: boolean }[]
+  summary?: { label: string; value: PaperCell; money?: boolean; number?: boolean }[]
   groups: PaperGroup[]
   /** Custom reports use one source-row drill target for every numeric result. */
   defaultDrillTarget?: ReportDrillTarget
@@ -75,6 +80,21 @@ function isNumericCell(v: PaperCell): boolean {
   if (typeof v === 'number') return true
   if (typeof v !== 'string') return false
   return /^-?[$(]?-?[\d,]+(\.\d+)?\)?%?$/.test(v.trim())
+}
+
+const EXACT_QUANTITY = /^-?\d+(?:\.(\d+))?$/
+
+/** An exact quantity in the viewer's locale at its own decimal places, or
+ *  null when the cell is not a plain decimal (it then renders as written). */
+export function paperQuantity(value: PaperCell, locale: string, format: ReportNumberFormat): string | null {
+  if (value === null || value === undefined) return null
+  const text = String(value).trim()
+  const match = EXACT_QUANTITY.exec(text)
+  if (!match) return null
+  const places = match[1]?.length ?? 0
+  return format === 'percent'
+    ? formatExactPercent(text, locale, places)
+    : formatDecimal(locale, text, { minimumFractionDigits: places, maximumFractionDigits: places })
 }
 
 export function PaperView({
@@ -89,10 +109,13 @@ export function PaperView({
   currency?: string
 }) {
   const format = useFormatter()
+  const locale = useLocale()
   const { money } = useMoney()
-  const fmt = (value: PaperCell, isMoney: boolean): string => {
+  const fmt = (value: PaperCell, isMoney: boolean, numberFormat?: ReportNumberFormat | null): string => {
     if (value === null || value === undefined || value === '') return ''
     if (isMoney) return money(value, { currency: currency || undefined, accounting: true })
+    const quantity = numberFormat ? paperQuantity(value, locale, numberFormat) : null
+    if (quantity !== null) return quantity
     if (typeof value === 'number') return format.number(value, { maximumFractionDigits: 2 })
     return value
   }
@@ -107,9 +130,9 @@ export function PaperView({
               <div className="truncate font-semibold tabular-nums">
                 {data.defaultDrillTarget && isNumericCell(item.value) ? (
                   <ReportDrillLink target={data.defaultDrillTarget} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
-                    {fmt(item.value, item.money === true)}
+                    {fmt(item.value, item.money === true, item.number === true ? 'number' : null)}
                   </ReportDrillLink>
-                ) : fmt(item.value, item.money === true)}
+                ) : fmt(item.value, item.money === true, item.number === true ? 'number' : null)}
               </div>
             </div>
           ))}
@@ -163,7 +186,7 @@ export function PaperView({
                             const undefinedLabel = group.undefinedCells?.[ri]?.[ci] ?? undefined
                             const drill = group.drills?.[ri]?.[ci]
                               ?? (isNumericCell(cell) ? group.drillTarget ?? data.defaultDrillTarget : undefined)
-                            const text = fmt(cell, isMoney)
+                            const text = fmt(cell, isMoney, group.numberFormats?.[ci])
                             return (
                               <TableCell
                                 key={ci}

@@ -19,7 +19,7 @@ import {
   resolveLayout,
   type Translator,
 } from '../../../../../../lib/report-pdf'
-import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
+import { csvResponse, pdfResponse, reportExportFilename, xlsxResponse } from '../../../../../../lib/export'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 
 export const runtime = 'nodejs'
@@ -56,7 +56,7 @@ export const GET = defineRoute({
         customTo: url.searchParams.get('to') ?? undefined,
       })
     const stamp = await businessToday(user.orgId)
-    const filename = `${safeName(def.slug)}-${stamp}`
+    const filename = (asOf?: string) => reportExportFilename(def.slug, { asOf, producedOn: stamp })
     const streamQuery = def.report_type === 'query' && def.query && def.query.mode === 'rows'
         ? (REPORT_ENTITY_MAP[def.query.entity]?.pagination ? def.query : null)
         : null
@@ -67,8 +67,8 @@ export const GET = defineRoute({
             sectionHeader: (await reportCsvOptions()).sectionHeader,
             generatedAt: new Date(`${stamp}T00:00:00Z`),
           })
-          if (out.format === 'csv') return csvResponse(out.csv, filename)
-          return xlsxResponse(out.xlsx, filename)
+          if (out.format === 'csv') return csvResponse(out.csv, filename(out.asOf))
+          return xlsxResponse(out.xlsx, filename(out.asOf))
         } catch (err) {
           // Typed refusals (currency basis, a drifted saved query failing
           // ReportQueryValidationError) answer 422 intact, like the run route;
@@ -87,7 +87,7 @@ export const GET = defineRoute({
       }
     if (format === 'csv') {
         const { sectionHeader } = await reportCsvOptions()
-        return csvResponse(exportDataToCsv(data, { sectionHeader }), filename)
+        return csvResponse(exportDataToCsv(data, { sectionHeader }), filename(data.asOf))
       }
     if (format === 'xlsx') {
         const buf = await exportDataToXlsx(data, {
@@ -95,7 +95,7 @@ export const GET = defineRoute({
           dateRangeLabel: data.dateRangeLabel,
           generatedAt: new Date(`${stamp}T00:00:00Z`),
         })
-        return xlsxResponse(buf, filename)
+        return xlsxResponse(buf, filename(data.asOf))
       }
     const { page, showSummary } = resolveLayout(def.layout as Record<string, unknown> | null)
     const branding = await orgBranding()
@@ -103,6 +103,6 @@ export const GET = defineRoute({
         showSummary,
         generatedAt: new Date(`${stamp}T00:00:00Z`),
       })
-    return pdfResponse(pdf, filename)
+    return pdfResponse(pdf, filename(data.asOf))
   },
 });

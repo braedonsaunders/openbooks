@@ -30,20 +30,22 @@ export function capTableExportHref(subsidiaryId: string, asOf: string, filters: 
  * The as-of cap table as export data, built from the same layout the page
  * renders for the same filters: its lines, its columns and its totals row.
  * Share counts and percentages travel as the exact strings the engine
- * computed; nothing crosses a float.
+ * computed, typed as quantities: the PDF prints them in the viewer's locale,
+ * Excel stores numeric cells, and CSV keeps the plain values (percentages as
+ * percentage points under a "%" heading).
  */
 export function capTableExportData(view: CapTableView, filters: CapTableFilters, labels: CapTableExportLabels): ExportData {
   const { table } = view
   const layout = capTableLayout(table, filters, view.parties)
   const classes = new Map(table.classes.map((row) => [row.shareClassId, row]))
   const header = (column: CapTableColumn) => ('code' in column ? column.code : labels.column(column.key as Exclude<CapTableColumn['key'], `class:${string}`>))
-  const value = (column: CapTableColumn, raw: string | undefined) => (raw === undefined ? '' : column.kind === 'percent' ? `${raw}%` : raw)
+  const value = (raw: string | undefined) => raw ?? ''
   const rows = layout.lines.map((line) => {
     const shareClass = line.shareClassId ? classes.get(line.shareClassId) : undefined
     const lead = shareClass
       ? `${shareClass.code} · ${shareClass.name} (${labels.kind(shareClass.kind)})`
       : view.parties[line.holderPartyId ?? ''] ?? line.holderPartyId ?? ''
-    return [lead, ...layout.columns.map((column) => value(column, line.values[column.key]))]
+    return [lead, ...layout.columns.map((column) => value(line.values[column.key]))]
   })
   const totals = layout.lines.length > 0 && Object.keys(layout.totals).length > 0
     ? [[labels.total, ...layout.columns.map((column) => layout.totals[column.key] ?? '')]]
@@ -58,6 +60,7 @@ export function capTableExportData(view: CapTableView, filters: CapTableFilters,
       columns: [filters.dimension === 'class' ? labels.class : labels.holder, ...layout.columns.map(header)],
       rows: [...rows, ...totals],
       align: ['left', ...layout.columns.map(() => 'right' as const)],
+      numberFormats: [null, ...layout.columns.map((column) => (column.kind === 'percent' ? 'percent' as const : 'number' as const))],
     }],
   }
 }

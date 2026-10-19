@@ -33,6 +33,7 @@ import { InsightResultView } from '@openbooks/analytics/viz'
 import { Badge, Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { MeasureEditor } from '../reports/query-config'
 import { VIZ_META } from './viz-meta'
+import { reportEnumLabel } from '@/lib/report-enum-label'
 import type { CardRow } from '../../api/insights/_lib'
 
 const field = 'space-y-1.5'
@@ -136,8 +137,8 @@ export function CardStudio({
   // Insight sources ARE the report entities, so their labels come from the
   // shared report catalog namespace — one wording per field, everywhere.
   const fieldLabel = (key: string) => tCatalog(`catalog.columns.${sourceKey}.${key}`)
-  const enumLabel = (v: string) =>
-    tCatalog.has(`catalog.enumValues.${v}`) ? tCatalog(`catalog.enumValues.${v}`) : v.replace(/_/g, ' ')
+  const enumLabel = (v: string, field: string) =>
+    reportEnumLabel(tCatalog, v, { entity: sourceKey, column: field }) ?? v.replace(/_/g, ' ')
   const dimensionFields = useMemo(() => source?.fields.filter((f) => f.canDimension) ?? [], [source])
   const allFields = source?.fields ?? []
 
@@ -762,7 +763,7 @@ export function CardStudio({
                           <option value="">{t('cardStudio.filterPlaceholderValue')}</option>
                           {f.options.map((v) => (
                             <option key={v} value={v}>
-                              {f.valueKind === 'boolean' ? t(`viz.values.${v === 'true' ? 'yes' : 'no'}`) : enumLabel(v)}
+                              {f.valueKind === 'boolean' ? t(`viz.values.${v === 'true' ? 'yes' : 'no'}`) : enumLabel(v, f.key)}
                             </option>
                           ))}
                         </Select>
@@ -789,7 +790,7 @@ export function CardStudio({
                                     : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300')
                                 }
                               >
-                                {f.valueKind === 'boolean' ? t(`viz.values.${v === 'true' ? 'yes' : 'no'}`) : enumLabel(v)}
+                                {f.valueKind === 'boolean' ? t(`viz.values.${v === 'true' ? 'yes' : 'no'}`) : enumLabel(v, f.key)}
                               </button>
                             )
                           })}

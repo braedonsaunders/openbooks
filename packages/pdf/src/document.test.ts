@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { PDFDocument as ParsedPdf } from 'pdf-lib'
-import { renderPdfDocument } from './document'
+import { formatStamp, renderPdfDocument } from './document'
 import { resolvePdfPageSetup } from './types'
 
 test('footer stamping does not append blank pages', async () => {
@@ -59,3 +59,9 @@ test('oversized segmented cells refuse even in generic ellipsis groups instead o
     layout: resolvePdfPageSetup({ paperSize: 'letter', orientation: 'portrait', marginMm: 15 }),
   }), /no report evidence was truncated/);
 });
+
+test('a business-date stamp prints as the date alone and a real time keeps its clock', () => {
+  assert.equal(formatStamp(new Date('2026-10-19T00:00:00Z')), '2026-10-19')
+  assert.equal(formatStamp(new Date('2026-10-19T14:05:09Z')), '2026-10-19 14:05:09 UTC')
+  assert.equal(formatStamp(new Date('2026-10-19T00:00:00.250Z')), '2026-10-19 00:00:00 UTC')
+})

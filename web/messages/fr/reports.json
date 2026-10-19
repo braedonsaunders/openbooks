@@ -3377,6 +3377,41 @@
       "age_08_30": "8 à 30 jours",
       "age_31_90": "31 à 90 jours",
       "age_91_plus": "Plus de 90 jours"
+    },
+    "columnValues": {
+      "equity_compensation_run_lines": {
+        "security_kind": {
+          "option": "Option",
+          "rsu": "RSU"
+        }
+      },
+      "equity_securities_register": {
+        "security_kind": {
+          "share": "Certificat d’actions",
+          "option": "Option",
+          "rsu": "RSU",
+          "warrant": "Bon de souscription",
+          "safe": "SAFE",
+          "note": "Obligation convertible"
+        }
+      },
+      "equity_cap_table_positions": {
+        "class_kind": {
+          "common": "Ordinaires",
+          "preferred": "De préférence"
+        },
+        "position_kind": {
+          "share": "Actions",
+          "award": "Attributions",
+          "pool": "Réserve non attribuée"
+        },
+        "security_kind": {
+          "share": "Certificat d’actions",
+          "option": "Option",
+          "rsu": "RSU",
+          "warrant": "Bon de souscription"
+        }
+      }
     }
   },
   "operators": {

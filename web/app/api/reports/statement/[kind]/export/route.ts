@@ -22,7 +22,7 @@ import { resolvePdfPageSetup } from '@openbooks/pdf'
 import { resolvePeriod } from '../../../../../../lib/periods'
 import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { reportCsvOptions } from '../../../../../../lib/report-labels'
-import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
+import { csvResponse, pdfResponse, reportExportFilename, xlsxResponse } from '../../../../../../lib/export'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
@@ -85,7 +85,7 @@ export const GET = defineRoute({
     const t = (await getTranslations('reports')) as unknown as Translator
     const stamp = await businessToday(gate.user.orgId)
     const generatedAt = new Date()
-    const filename = `${safeName(kind)}-${stamp}`
+    let filename = reportExportFilename(kind, { producedOn: stamp })
     const branding = await orgBranding()
     let csvBook: { label: string; value: string } | undefined
     const emitData = async (data: ExportData) => {
@@ -111,6 +111,8 @@ export const GET = defineRoute({
         const q = parseReportQuery(p)
         const period = await resolvePeriod(q.period, { customFrom: p.get('from'), customTo: p.get('to') })
         const resolved = await resolveReport(kind as ReportKind, p, { orgId: gate.user.orgId, t, period, query: q })
+        // A point-in-time statement is named for the date it reports on.
+        filename = reportExportFilename(kind, { asOf: resolved.asOf, producedOn: stamp })
         const bookKinds = new Set(['pnl', 'balance-sheet', 'general-ledger', 'journal', 'registers', 'partner-statement', 'project-profitability', 'trial-balance', 'partners', 'cash-flow', 'cash-flow-indirect'])
         const selection = bookKinds.has(kind) ? await reportBookSelection(gate.user.orgId, p.get('book')) : null
         if (selection && selection.books.length > 1) {

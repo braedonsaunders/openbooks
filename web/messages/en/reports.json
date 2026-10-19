@@ -3377,6 +3377,41 @@
       "age_08_30": "8–30 days",
       "age_31_90": "31–90 days",
       "age_91_plus": "Over 90 days"
+    },
+    "columnValues": {
+      "equity_compensation_run_lines": {
+        "security_kind": {
+          "option": "Option",
+          "rsu": "RSU"
+        }
+      },
+      "equity_securities_register": {
+        "security_kind": {
+          "share": "Share certificate",
+          "option": "Option",
+          "rsu": "RSU",
+          "warrant": "Warrant",
+          "safe": "SAFE",
+          "note": "Convertible note"
+        }
+      },
+      "equity_cap_table_positions": {
+        "class_kind": {
+          "common": "Common",
+          "preferred": "Preferred"
+        },
+        "position_kind": {
+          "share": "Shares",
+          "award": "Awards",
+          "pool": "Unallocated pool"
+        },
+        "security_kind": {
+          "share": "Share certificate",
+          "option": "Option",
+          "rsu": "RSU",
+          "warrant": "Warrant"
+        }
+      }
     }
   },
   "operators": {

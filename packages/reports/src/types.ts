@@ -147,8 +147,13 @@ export type ReportCustomQuery = {
   filters?: ReportRuleGroup | null
   /** Rows mode: bucket detail rows into titled sections by this column. */
   groupBy?: string | null
-  /** Ordered sort levels; the validator refuses plans above its configured limit. */
+  /** Ordered sort levels; the validator refuses plans above its configured
+   *  limit. Summarize mode orders by the levels that name a breakout column
+   *  (enum breakouts in their catalog option order) or a measure key. */
   sorts?: { column: string; direction: 'asc' | 'desc' }[] | null
+  /** Summarize mode: omit groups whose every aggregate measure is zero, so a
+   *  point-in-time balance lists only the positions that exist on the date. */
+  omitZeroRows?: boolean
   /** Rows mode: per-column display-label overrides, keyed by column key. */
   columnLabels?: Record<string, string> | null
   /** Requested result rows. Full runs honour this; previews apply their own clamp. */
@@ -238,6 +243,13 @@ export type ReportGroup = {
   undefinedCells?: (string | null)[][]
   /** Per-column: format as currency in viewers (money-kind columns/measures). */
   money?: boolean[]
+  /** Per-column quantity typing for the columns that are not money: 'number'
+   *  cells are exact decimal strings (or numbers) that viewers and print
+   *  format per locale and spreadsheets store as numeric cells; 'percent'
+   *  cells are percentage points (47.25 is 47.25%). Text in such a column (an
+   *  undefined-formula explanation) stays text. CSV keeps the exact,
+   *  machine-readable value. */
+  numberFormats?: (ReportNumberFormat | null)[]
   /** Per-column alignment (text left, numeric/money right). Viewers fall back
    *  to first-column-left/rest-right when absent. */
   align?: ('left' | 'right' | 'center')[]
@@ -266,7 +278,12 @@ export type ReportRowScopeRule =
   | { field: string; from: string; to: string }
   | { field: string; empty: true }
 
-export type ReportSummaryItem = { label: string; value: string | number; money?: boolean }
+/** How a non-money quantity column reads; see ReportGroup.numberFormats. */
+export type ReportNumberFormat = 'number' | 'percent'
+
+/** One summary-band figure. `money` values format as currency; `number`
+ *  values are exact decimal quantities formatted per locale. */
+export type ReportSummaryItem = { label: string; value: string | number; money?: boolean; number?: boolean }
 
 /** Native record navigation carried alongside a report cell. `entryId` is
  *  always present because the transaction link can also open a ledger entry

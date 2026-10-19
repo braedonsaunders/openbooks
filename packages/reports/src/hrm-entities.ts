@@ -213,7 +213,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'effective_to', label: 'Effective to', kind: 'date', expr: 'ev.effective_to' },
       { key: 'recorded_at', label: 'Recorded at', kind: 'timestamp', expr: 'ev.recorded_at' },
       { key: 'recorded_until', label: 'Recorded until', kind: 'timestamp', expr: 'ev.recorded_until' },
-      { key: 'version_no', label: 'Version', kind: 'number', expr: 'ev.version_no' },
+      { key: 'version_no', label: 'Version', kind: 'number', identifier: true, expr: 'ev.version_no' },
       { key: 'change_reason', label: 'Change reason', kind: 'text', expr: 'c.reason' },
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'ev.employment_id' },
       { key: 'worker_id', label: 'Person (id)', kind: 'uuid', expr: 'e.worker_party_id' },

@@ -54,7 +54,7 @@ export function customRecordEntities(definition: CustomRecordDefinition): Report
     ...entity, key: `${entity.key}:${s.id}`, label: `${definition.name} — ${s.title || s.id}`,
     description: 'One row per sublist line. Parent values repeat for each line.',
     from: `custom_records r CROSS JOIN LATERAL jsonb_array_elements(COALESCE(r.data -> ${queryLiteral(s.id)}, '[]'::jsonb)) WITH ORDINALITY AS line(data, ordinal)`,
-    columns: [...base, ...fields, { key: 'line_number', label: 'Line number', kind: 'number' as const, expr: 'line.ordinal' },
+    columns: [...base, ...fields, { key: 'line_number', label: 'Line number', kind: 'number' as const, identifier: true, expr: 'line.ordinal' },
       ...(Array.isArray(s.fields) ? s.fields : []).flatMap((f: Parameters<typeof customFieldColumn>[0]) => { const c = customFieldColumn(f, 'line.data', 'line_'); return c ? [c] : [] })],
   }))]
 }

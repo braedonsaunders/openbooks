@@ -25,6 +25,7 @@ export function resultGroupsForPaper(
     rows: group.rows,
     undefinedCells: group.undefinedCells,
     money: group.money,
+    numberFormats: group.numberFormats,
     align: group.align,
     totalRows: group.totalRows,
     cellLinks: group.cellLinks,

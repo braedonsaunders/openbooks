@@ -179,3 +179,43 @@ test('statement XLSX keeps adjacent large 4dp amounts distinct instead of collap
   assert.equal(worksheet.getCell(6, 2).value, 600000000000.0002)
   assert.equal(worksheet.getCell(7, 2).value, '600000000000.0003')
 })
+
+test('report XLSX stores typed quantities as numeric cells in both writers, and keeps text it cannot hold exactly', async () => {
+  const group = {
+    kind: 'results' as const,
+    title: 'Cap table',
+    columns: ['Holder', 'Shares', 'Fully diluted %', 'Price', 'Amount', 'Note'],
+    rows: [
+      ['Avery Quinn', '4500000', '42.4528', '0.0625', '125.0000', '12'],
+      ['Large holder', '9007199254740993', 'n/a', '-3.50', '1.00', '-12.5'],
+    ] as (string | number | null)[][],
+    money: [false, false, false, false, true, false],
+    numberFormats: [null, 'number', 'percent', 'number', null, null] as ('number' | 'percent' | null)[],
+  }
+  const opts = { reportName: 'Cap table', generatedAt: new Date('2026-10-19T00:00:00Z') }
+  const buffered = await reportResultToXlsx({ groups: [structuredClone(group)], summary: [], rowCount: 2 }, opts)
+  const writer = createStreamingXlsxExport({ ...opts, groups: [{ title: group.title, columns: group.columns, widths: group.columns.map(() => 12), money: group.money, numberFormats: group.numberFormats }] })
+  writer.appendRows(0, group.rows)
+  const streamed = await writer.finish()
+
+  for (const [name, buffer] of [['buffered', buffered], ['streamed', streamed]] as const) {
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer)
+    const ws = workbook.worksheets[0]!
+    assert.equal(ws.getCell(5, 2).value, 4500000, `${name} share count`)
+    assert.equal(ws.getCell(5, 2).numFmt, '#,##0', `${name} share format`)
+    assert.equal(ws.getCell(5, 3).value, 42.4528, `${name} percent`)
+    assert.equal(ws.getCell(5, 3).numFmt, '#,##0.0000"%"', `${name} percent format`)
+    assert.equal(ws.getCell(5, 4).value, 0.0625, `${name} price`)
+    assert.equal(ws.getCell(5, 4).numFmt, '#,##0.0000', `${name} price format`)
+    assert.equal(ws.getCell(6, 4).value, -3.5, `${name} negative quantity`)
+    assert.equal(ws.getCell(6, 4).numFmt, '#,##0.00', `${name} negative format`)
+    // Beyond Excel's 15 significant digits a count stays exact text, and so
+    // does text in a quantity column.
+    assert.equal(ws.getCell(6, 2).value, '9007199254740993', `${name} oversized count`)
+    assert.equal(ws.getCell(6, 3).value, 'n/a', `${name} quantity-column text`)
+    // Untyped columns keep their text: exact money and numeric-looking notes.
+    assert.equal(ws.getCell(5, 5).value, '125.0000', `${name} money`)
+    assert.equal(ws.getCell(6, 6).value, '-12.5', `${name} untyped`)
+  }
+})
