@@ -382,5 +382,15 @@
     "postingDateFallback": "为空时按 {date} 入账",
     "noPaymentTerms": "{name}没有付款条件 — 请在客户或公司默认值中设置",
     "unnamedParty": "此往来方"
+  },
+  "moneyInput": {
+    "empty": "{field} 为空。",
+    "emptyRemedy": "请输入金额，例如 {example}。",
+    "ambiguous": "{field} 有歧义：“{value}” 可能表示 {grouped} 或 {dotted}。",
+    "ambiguousRemedy": "请在“{decimal}”之后写小数（例如 {example}），或不加分组直接输入数字。",
+    "scale": "{field} 最多允许 {places, plural, other {# 位小数}}。",
+    "scaleRemedy": "请将“{value}”四舍五入到不超过 {places, plural, other {# 位小数}}。",
+    "unreadable": "{field} 不是金额：“{value}”。",
+    "unreadableRemedy": "请输入数字，小数前使用“{decimal}”，例如 {example}。"
   }
 }

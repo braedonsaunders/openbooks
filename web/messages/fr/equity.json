@@ -492,10 +492,10 @@
       "safe_cash_out_none_only": "Ne reçoit rien : le produit n’atteint pas son montant de remboursement de {entitlement}."
     },
     "invalid": {
-      "exit": "La valeur de sortie doit être un montant décimal d’au plus quatre décimales.",
-      "exitRemedy": "Saisissez la valeur de sortie sans séparateurs, par exemple 25000000.",
-      "fees": "Les frais de transaction doivent être un montant décimal d’au plus quatre décimales.",
-      "feesRemedy": "Saisissez les frais payés sur la sortie, par exemple 750000, ou laissez le champ vide."
+      "exit": "La valeur de sortie ne peut pas être négative.",
+      "exitRemedy": "Saisissez la valeur de sortie sous forme de montant, par exemple {example}.",
+      "fees": "Les frais de transaction ne peuvent pas être négatifs.",
+      "feesRemedy": "Saisissez les frais payés sur la sortie, par exemple {example}, ou laissez le champ vide."
     },
     "curveTitle": "Produit selon la valeur de sortie",
     "curveHint": "De zéro au double de cette sortie",

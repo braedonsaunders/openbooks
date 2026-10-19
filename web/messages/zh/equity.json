@@ -492,10 +492,10 @@
       "safe_cash_out_none_only": "未获得任何分配：收益不足以覆盖 {entitlement} 的现金赎回金额。"
     },
     "invalid": {
-      "exit": "退出价值必须是最多四位小数的金额。",
-      "exitRemedy": "请输入不带分隔符的退出价值，例如 25000000。",
-      "fees": "交易费用必须是最多四位小数的金额。",
-      "feesRemedy": "请输入从退出中支付的费用，例如 750000，或留空。"
+      "exit": "退出价值不能为负数。",
+      "exitRemedy": "请以金额输入退出价值，例如 {example}。",
+      "fees": "交易费用不能为负数。",
+      "feesRemedy": "请输入从退出中支付的费用，例如 {example}，或留空。"
     },
     "curveTitle": "不同退出价值下的收益",
     "curveHint": "从零到本次退出的两倍",

@@ -189,6 +189,18 @@ export function formatDecimal(locale: string, value: MoneyValue, options: Decima
   }).format(number as never))
 }
 
+/**
+ * The grouping and decimal separators formatDecimal writes for a locale, so
+ * a field can read back the text it displays.
+ */
+export function decimalSeparators(locale: string): { group: string; decimal: string } {
+  const resolvedLocale = Intl.getCanonicalLocales(locale)[0] ?? 'en'
+  const parts = new Intl.NumberFormat(resolvedLocale, { style: 'decimal', useGrouping: true, minimumFractionDigits: 1 }).formatToParts('1234567.5' as never)
+  const group = visibleSpaces(parts.find((part) => part.type === 'group')?.value ?? ',')
+  const decimal = parts.find((part) => part.type === 'decimal')?.value ?? '.'
+  return { group, decimal }
+}
+
 export function createMoneyFormatter(locale: string, defaultCurrency: string): MoneyFormatter {
   const resolvedLocale = Intl.getCanonicalLocales(locale)[0] ?? 'en'
   const resolvedDefaultCurrency = normalizedCurrency(defaultCurrency)

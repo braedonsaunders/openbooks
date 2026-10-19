@@ -492,10 +492,10 @@
       "safe_cash_out_none_only": "Não recebe nada: os recursos não alcançam o valor de resgate de {entitlement}."
     },
     "invalid": {
-      "exit": "O valor de saída deve ser um valor decimal com no máximo quatro casas decimais.",
-      "exitRemedy": "Informe o valor de saída sem separadores, por exemplo 25000000.",
-      "fees": "Os custos da transação devem ser um valor decimal com no máximo quatro casas decimais.",
-      "feesRemedy": "Informe os custos pagos com a saída, por exemplo 750000, ou deixe em branco."
+      "exit": "O valor de saída não pode ser negativo.",
+      "exitRemedy": "Informe o valor de saída como um valor, como {example}.",
+      "fees": "As taxas da transação não podem ser negativas.",
+      "feesRemedy": "Informe as taxas pagas com a saída, como {example}, ou deixe em branco."
     },
     "curveTitle": "Recursos por valor de saída",
     "curveHint": "De zero ao dobro desta saída",

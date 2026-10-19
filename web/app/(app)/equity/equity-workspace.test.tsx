@@ -314,7 +314,8 @@ test('the waterfall opens computed on the latest post-money, with preset multipl
     const exit = screen.host.querySelector<HTMLInputElement>('input[inputmode=decimal]')!
     assert.equal(exit.value, '67,200,000.00', 'the exit reads as a localized amount')
     await act(async () => { exit.focus() })
-    assert.equal(exit.value, '67200000', 'editing shows the amount as typed, without separators or ledger zeros')
+    assert.equal(exit.value, '67200000', 'editing shows the digits without grouping or ledger zeros')
+    assert.deepEqual([exit.selectionStart, exit.selectionEnd], [0, 8], 'selected, so typing replaces the amount')
     await act(async () => { exit.blur() })
     const body = text(screen.host)
     for (const label of ['Proceeds to holders', 'Per common share', 'Payment cascade', 'Conversion decisions', 'As of']) assert.ok(body.includes(label), label)

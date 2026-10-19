@@ -9,7 +9,7 @@ import { add, cmp, formatMoney as fixedPlaces, isZero, neg, sum } from '@openboo
 import { RegisteredListTable } from '@/components/registered-list-table'
 import { ListFilterSelect } from '@/components/list-filter-select'
 import { HomePanel, HomeStatTile } from '@/components/module-home/client'
-import { MoneyInput } from '@/components/money-input'
+import { MoneyInput, useGroupedAmountRefusal } from '@/components/money-input'
 import { MoneyProvider, useMoney } from '@/components/money-provider'
 import { ApiResponseError, apiJson } from '@/lib/api-error'
 import { toChartNumber } from '@/lib/chart-number'
@@ -82,6 +82,7 @@ export function EquityWaterfallPanel({ view }: { view: WaterfallViewData | null 
 function WaterfallScenarioView({ view }: { view: WaterfallViewData }) {
   const t = useTranslations('equity')
   const { money, locale } = useMoney()
+  const amountRefusal = useGroupedAmountRefusal()
   const { context } = view
   const [inputs, setInputs] = useState<Inputs>(() => ({
     ...view.inputs,
@@ -227,12 +228,21 @@ function WaterfallScenarioView({ view }: { view: WaterfallViewData }) {
     />
   )
 
+  // The field's own reading of what was typed names the cause in the
+  // viewer's notation; an amount it reads but the scenario cannot take (a
+  // negative one) is refused by the waterfall's own rule.
+  const inputRefusal = (field: 'exit' | 'fees'): ScenarioRefusal => {
+    const raw = field === 'exit' ? inputs.exitValue : inputs.transactionFees
+    const example = formatDecimal(locale, field === 'exit' ? '25000000' : '750000', { maximumFractionDigits: 0 })
+    return amountRefusal(t(field === 'exit' ? 'waterfall.exitValue' : 'waterfall.fees'), raw)
+      ?? { message: t(`waterfall.invalid.${field}`), remedy: t(`waterfall.invalid.${field}Remedy`, { example }) }
+  }
   const prompt = <EmptyState title={t('waterfall.promptTitle')} description={view.anchor ? t('waterfall.prompt') : t('waterfall.promptNoRound', { currency: context.currency })} />
   // One body at a time: the results answer exactly the inputs shown, and a
   // refusal (from the inputs or from the computation) takes their place.
   let body: ReactNode
   if (exitBlank) body = prompt
-  else if (invalid) body = <Refusal refusal={{ message: t(`waterfall.invalid.${invalid}`), remedy: t(`waterfall.invalid.${invalid}Remedy`) }} />
+  else if (invalid) body = <Refusal refusal={inputRefusal(invalid)} />
   else if (outcome.refusal) body = <div className={cn('transition-opacity', pending && 'opacity-60')} aria-busy={pending}><Refusal refusal={outcome.refusal} /></div>
   else if (outcome.scenario) body = <WaterfallResults scenario={outcome.scenario} pending={pending} payoutsBy={payoutsBy} onPayoutsBy={choosePayouts} />
   else body = prompt

@@ -382,5 +382,15 @@
     "postingDateFallback": "Bucht {date}, wenn leer",
     "noPaymentTerms": "Keine Zahlungsbedingungen für {name} — hinterlegen Sie sie beim Kunden oder als Firmenstandard",
     "unnamedParty": "diesen Geschäftspartner"
+  },
+  "moneyInput": {
+    "empty": "{field} ist leer.",
+    "emptyRemedy": "Geben Sie einen Betrag ein, z. B. {example}.",
+    "ambiguous": "{field} ist mehrdeutig: „{value}“ kann {grouped} oder {dotted} bedeuten.",
+    "ambiguousRemedy": "Schreiben Sie Nachkommastellen nach „{decimal}“, z. B. {example}, oder geben Sie die Ziffern ohne Gruppierung ein.",
+    "scale": "{field} erlaubt höchstens {places, plural, one {# Nachkommastelle} other {# Nachkommastellen}}.",
+    "scaleRemedy": "Runden Sie „{value}“ auf {places, plural, one {# Nachkommastelle} other {# Nachkommastellen}} oder weniger.",
+    "unreadable": "{field} ist kein Betrag: „{value}“.",
+    "unreadableRemedy": "Geben Sie Ziffern ein, mit „{decimal}“ vor Nachkommastellen, z. B. {example}."
   }
 }

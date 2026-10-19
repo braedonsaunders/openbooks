@@ -269,16 +269,48 @@ test('a refused recompute replaces the stale results until the inputs compute ag
   }
 })
 
+test('an exit value tabbed into and retyped, or pasted grouped, replaces the old one and computes on the exact amount', async () => {
+  const requests: { exitValue: string }[] = []
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+    requests.push(JSON.parse(String(init?.body)) as { exitValue: string })
+    return new Response(JSON.stringify(scenarioOf(current)), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }) as typeof fetch
+  const screen = await mount(<EquityWaterfallPanel view={viewOf(scenarioOf(current), { exitValue: '74424261.56' })} />, `/equity?view=waterfall&sub=${SUB}&exit=74424261.56`)
+  try {
+    const exit = screen.host.querySelector<HTMLInputElement>('input[inputmode=decimal]')!
+    assert.equal(exit.value, '74,424,261.56')
+    await act(async () => { exit.focus() })
+    assert.deepEqual([exit.selectionStart, exit.selectionEnd], [0, exit.value.length], 'focus selects the amount')
+    await act(async () => setJsdomInput(exit, '5000000'))
+    assert.equal(new URL(window.location.href).searchParams.get('exit'), '5000000', 'the typed amount replaced the old one')
+    await settle()
+    await act(async () => setJsdomInput(exit, '20,000,000.50'))
+    assert.equal(new URL(window.location.href).searchParams.get('exit'), '20000000.5', 'a grouped paste reads as the amount it shows')
+    await settle()
+    assert.deepEqual(requests.map((body) => body.exitValue), ['5000000', '20000000.5'])
+    assert.ok(!text(screen.host).includes('is not an amount'))
+    await act(async () => { exit.blur() })
+    assert.equal(exit.value, '20,000,000.50')
+  } finally {
+    globalThis.fetch = realFetch
+    await screen.close()
+  }
+})
+
 test('input the waterfall cannot compute replaces the results with what to correct', async () => {
   const screen = await mount(<EquityWaterfallPanel view={viewOf(scenarioOf(current))} />, `/equity?view=waterfall&sub=${SUB}`)
   try {
     const exit = screen.host.querySelector<HTMLInputElement>('input[inputmode=decimal]')!
-    await act(async () => setJsdomInput(exit, '25,000,000'))
+    await act(async () => setJsdomInput(exit, '25,00,000'))
     const body = text(screen.host)
-    assert.ok(body.includes('The exit value must be a decimal amount with at most four places.'))
-    assert.ok(body.includes('Enter the exit value without separators, such as 25000000.'))
+    assert.ok(body.includes('Exit value is not an amount: “25,00,000”.'), body)
+    assert.ok(body.includes('Enter digits, with “.” before any decimals, such as 1,234,567.89.'), 'the remedy is written the way the field displays amounts')
+    assert.ok(!/without separators|thousands separator/.test(body), 'nothing asks to omit the grouping the field itself shows')
     assert.ok(!body.includes('Payment cascade'))
     assert.equal(exit.getAttribute('aria-invalid'), 'true')
+    await act(async () => setJsdomInput(exit, '-5'))
+    assert.ok(text(screen.host).includes('The exit value cannot be negative.') && text(screen.host).includes('Enter the exit value as an amount, such as 25,000,000.'))
     await act(async () => setJsdomInput(exit, ''))
     assert.ok(text(screen.host).includes('Enter an exit value'), 'a blank exit asks for one')
   } finally {

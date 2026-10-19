@@ -492,10 +492,10 @@
       "safe_cash_out_none_only": "Receives nothing: the proceeds do not reach its {entitlement} cash-out amount."
     },
     "invalid": {
-      "exit": "The exit value must be a decimal amount with at most four places.",
-      "exitRemedy": "Enter the exit value without separators, such as 25000000.",
-      "fees": "The transaction fees must be a decimal amount with at most four places.",
-      "feesRemedy": "Enter the fees paid from the exit, such as 750000, or leave them blank."
+      "exit": "The exit value cannot be negative.",
+      "exitRemedy": "Enter the exit value as an amount, such as {example}.",
+      "fees": "The transaction fees cannot be negative.",
+      "feesRemedy": "Enter the fees paid from the exit, such as {example}, or leave them blank."
     },
     "curveTitle": "Proceeds across exit values",
     "curveHint": "From zero to twice this exit",

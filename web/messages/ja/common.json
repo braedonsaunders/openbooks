@@ -382,5 +382,15 @@
     "postingDateFallback": "空欄の場合は{date}に計上",
     "noPaymentTerms": "{name}に支払条件がありません — 顧客か会社の既定値に設定してください",
     "unnamedParty": "この取引先"
+  },
+  "moneyInput": {
+    "empty": "{field} が未入力です。",
+    "emptyRemedy": "{example} のように金額を入力してください。",
+    "ambiguous": "{field} があいまいです。「{value}」は {grouped} とも {dotted} とも読めます。",
+    "ambiguousRemedy": "小数は「{decimal}」の後に書くか（例: {example}）、桁区切りなしで数字を入力してください。",
+    "scale": "{field} の小数は最大 {places, plural, other {# 桁}} です。",
+    "scaleRemedy": "「{value}」を小数 {places, plural, other {# 桁}}以下に丸めてください。",
+    "unreadable": "{field} は金額ではありません: 「{value}」",
+    "unreadableRemedy": "数字を入力し、小数の前には「{decimal}」を使ってください（例: {example}）。"
   }
 }

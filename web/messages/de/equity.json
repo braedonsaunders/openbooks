@@ -492,10 +492,10 @@
       "safe_cash_out_none_only": "Erhält nichts: Der Erlös reicht nicht bis zum Auszahlungsbetrag von {entitlement}."
     },
     "invalid": {
-      "exit": "Der Exit-Wert muss ein Dezimalbetrag mit höchstens vier Nachkommastellen sein.",
-      "exitRemedy": "Geben Sie den Exit-Wert ohne Trennzeichen ein, zum Beispiel 25000000.",
-      "fees": "Die Transaktionskosten müssen ein Dezimalbetrag mit höchstens vier Nachkommastellen sein.",
-      "feesRemedy": "Geben Sie die aus dem Exit gezahlten Kosten ein, zum Beispiel 750000, oder lassen Sie das Feld leer."
+      "exit": "Der Exit-Wert darf nicht negativ sein.",
+      "exitRemedy": "Geben Sie den Exit-Wert als Betrag ein, z. B. {example}.",
+      "fees": "Die Transaktionskosten dürfen nicht negativ sein.",
+      "feesRemedy": "Geben Sie die aus dem Exit gezahlten Kosten ein, z. B. {example}, oder lassen Sie das Feld leer."
     },
     "curveTitle": "Erlöse über Exit-Werte",
     "curveHint": "Von null bis zum Doppelten dieses Exits",

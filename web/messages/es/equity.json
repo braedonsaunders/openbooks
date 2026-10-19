@@ -492,10 +492,10 @@
       "safe_cash_out_none_only": "No recibe nada: los ingresos no alcanzan su importe de reembolso de {entitlement}."
     },
     "invalid": {
-      "exit": "El valor de salida debe ser un importe decimal con un máximo de cuatro decimales.",
-      "exitRemedy": "Introduzca el valor de salida sin separadores, por ejemplo 25000000.",
-      "fees": "Los costes de la operación deben ser un importe decimal con un máximo de cuatro decimales.",
-      "feesRemedy": "Introduzca los costes pagados con la salida, por ejemplo 750000, o déjelos en blanco."
+      "exit": "El valor de salida no puede ser negativo.",
+      "exitRemedy": "Introduzca el valor de salida como importe, como {example}.",
+      "fees": "Los costes de la transacción no pueden ser negativos.",
+      "feesRemedy": "Introduzca los costes pagados con la salida, como {example}, o déjelos en blanco."
     },
     "curveTitle": "Ingresos según el valor de salida",
     "curveHint": "De cero al doble de esta salida",

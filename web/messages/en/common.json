@@ -382,5 +382,15 @@
     "postingDateFallback": "Posts {date} when empty",
     "noPaymentTerms": "No payment terms on {name} — set terms on the customer or a company default",
     "unnamedParty": "this counterparty"
+  },
+  "moneyInput": {
+    "empty": "{field} is empty.",
+    "emptyRemedy": "Enter an amount, such as {example}.",
+    "ambiguous": "{field} is ambiguous: “{value}” could mean {grouped} or {dotted}.",
+    "ambiguousRemedy": "Write any decimals after “{decimal}”, such as {example}, or type the digits without grouping.",
+    "scale": "{field} allows at most {places, plural, one {# decimal place} other {# decimal places}}.",
+    "scaleRemedy": "Round “{value}” to {places, plural, one {# decimal place} other {# decimal places}} or fewer.",
+    "unreadable": "{field} is not an amount: “{value}”.",
+    "unreadableRemedy": "Enter digits, with “{decimal}” before any decimals, such as {example}."
   }
 }

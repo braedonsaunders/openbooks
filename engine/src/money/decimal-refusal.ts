@@ -12,7 +12,7 @@
  * once, never beside a caller. This module lives in `money` (no database, no
  * floats) so engine code can import it without an upward edge.
  */
-import { canonicalDecimal } from "./exact-decimal.ts";
+import { canonicalDecimal, compareDecimal } from "./exact-decimal.ts";
 import { wholeDigits } from "./money.ts";
 
 /**
@@ -171,4 +171,62 @@ export function decimalNullRefusal(field: string, noun: string, raw: unknown, ma
     case 'not-a-number':
       return `${field} must be ${noun} — ${shown} is not a number`
   }
+}
+
+/** The grouping and decimal separators of the locale a value was written in. */
+export interface LocaleSeparators {
+  group: string
+  decimal: string
+}
+
+/**
+ * How text typed in a known locale reads as an exact decimal: the value, an
+ * ambiguity naming both readings, a scale refusal, or no number at all.
+ */
+export type LocaleDecimalReading =
+  | { kind: 'value'; value: string }
+  | { kind: 'ambiguous'; grouped: string; dotted: string }
+  | { kind: 'scale'; decimals: number }
+  | { kind: 'unreadable' }
+
+const SPACE_GROUPS = [' ', '\u00a0', '\u202f', '\u2009']
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Read an amount typed where the viewer's locale is known, e.g. a field that
+ * displays its value grouped in that locale. This is the one reader for that
+ * case, beside the locale-blind classifier above: it accepts the locale's own
+ * grouping in its exact positions ("74,424,261.56" in en, "74.424.261,56" in
+ * de, "74 424 261,56" in fr) and the plain dotted form every boundary
+ * accepts ("74424261.56"). Grouping is read only in groups of three after a
+ * leading group of one to three digits, so a mistyped group is refused rather
+ * than folded into the number. When both readings parse and disagree ("1.234"
+ * in a locale grouping with "."), it names both instead of choosing: a wrong
+ * guess there is a thousandfold money error.
+ */
+export function readLocaleDecimal(raw: string, separators: LocaleSeparators, maxScale: number): LocaleDecimalReading {
+  const text = raw.trim()
+  const groups = SPACE_GROUPS.includes(separators.group)
+    ? SPACE_GROUPS
+    : separators.group === '\u2019' ? ['\u2019', "'"] : [separators.group]
+  const group = `(?:${groups.map(escapeRegExp).join('|')})`
+  const decimal = escapeRegExp(separators.decimal)
+  const shape = new RegExp(`^([+-]?)(\\d{1,3}(?:${group}\\d{3})+|\\d+)?(?:${decimal}(\\d+))?$`)
+  const match = separators.decimal === separators.group ? null : shape.exec(text)
+  let localized: string | null = null
+  let localizedScale: number | null = null
+  if (match && (match[2] !== undefined || match[3] !== undefined)) {
+    const whole = (match[2] ?? '0').replace(new RegExp(group, 'g'), '')
+    const plain = `${match[1]}${whole}${match[3] !== undefined ? `.${match[3]}` : ''}`
+    localized = canonicalDecimal(plain, maxScale)
+    if (localized === null) localizedScale = match[3]?.length ?? 0
+  }
+  const dotted = canonicalDecimal(text, maxScale)
+  if (localized !== null && dotted !== null && compareDecimal(localized, dotted) !== 0) return { kind: 'ambiguous', grouped: localized, dotted }
+  if (localized !== null) return { kind: 'value', value: localized }
+  if (dotted !== null) return { kind: 'value', value: dotted }
+  if (localizedScale !== null) return { kind: 'scale', decimals: localizedScale }
+  const cause = text === '' ? null : decimalNullCause(text)
+  if (cause?.cause === 'scale') return { kind: 'scale', decimals: cause.decimals }
+  return { kind: 'unreadable' }
 }

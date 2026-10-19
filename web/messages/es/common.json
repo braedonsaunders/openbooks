@@ -382,5 +382,15 @@
     "postingDateFallback": "Contabiliza el {date} si está vacío",
     "noPaymentTerms": "Sin condiciones de pago para {name} — defínalas en el cliente o por defecto en la empresa",
     "unnamedParty": "este tercero"
+  },
+  "moneyInput": {
+    "empty": "{field} está vacío.",
+    "emptyRemedy": "Introduzca un importe, como {example}.",
+    "ambiguous": "{field} es ambiguo: «{value}» puede significar {grouped} o {dotted}.",
+    "ambiguousRemedy": "Escriba los decimales después de «{decimal}», como {example}, o introduzca los dígitos sin agrupar.",
+    "scale": "{field} admite como máximo {places, plural, one {# decimal} other {# decimales}}.",
+    "scaleRemedy": "Redondee «{value}» a {places, plural, one {# decimal} other {# decimales}} o menos.",
+    "unreadable": "{field} no es un importe: «{value}».",
+    "unreadableRemedy": "Introduzca dígitos, con «{decimal}» antes de los decimales, como {example}."
   }
 }

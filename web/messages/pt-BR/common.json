@@ -382,5 +382,15 @@
     "postingDateFallback": "Lança em {date} quando vazio",
     "noPaymentTerms": "Sem condições de pagamento para {name} — defina-as no cliente ou como padrão da empresa",
     "unnamedParty": "este terceiro"
+  },
+  "moneyInput": {
+    "empty": "{field} está vazio.",
+    "emptyRemedy": "Informe um valor, como {example}.",
+    "ambiguous": "{field} é ambíguo: “{value}” pode significar {grouped} ou {dotted}.",
+    "ambiguousRemedy": "Escreva as casas decimais depois de “{decimal}”, como {example}, ou digite os dígitos sem agrupamento.",
+    "scale": "{field} aceita no máximo {places, plural, one {# casa decimal} other {# casas decimais}}.",
+    "scaleRemedy": "Arredonde “{value}” para {places, plural, one {# casa decimal} other {# casas decimais}} ou menos.",
+    "unreadable": "{field} não é um valor: “{value}”.",
+    "unreadableRemedy": "Digite os dígitos, com “{decimal}” antes das casas decimais, como {example}."
   }
 }
