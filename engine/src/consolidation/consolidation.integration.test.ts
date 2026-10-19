@@ -397,7 +397,7 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
         (${foreignSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb),
         (${eliminationSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Eliminations', 'CAD', 'CA', '{}'::jsonb, true, true, '{}'::jsonb)`);
     await db.execute(sql`
-      update accounts set eliminate = true
+      update accounts set eliminate = false
        where id in (${org.accounts.ar}, ${org.accounts.ap})`);
     await db.execute(sql`
       insert into consolidated_fx_rates
@@ -420,18 +420,22 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
         (${org.orgId}, ${cadEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '-120.0000', 'CAD', '-120.0000', '1'),
         (${org.orgId}, ${usdEntry}, 1, ${org.accounts.ap}, ${foreignSubsidiaryId}, '-100.0000', 'USD', '-100.0000', '1'),
         (${org.orgId}, ${usdEntry}, 2, ${org.accounts.bank}, ${foreignSubsidiaryId}, '100.0000', 'USD', '100.0000', '1')`);
+    await db.execute(sql`
+      update journal_lines set eliminate = true
+       where org_id = ${org.orgId} and entry_id in (${cadEntry}, ${usdEntry})
+         and account_id in (${org.accounts.ar}, ${org.accounts.ap})`);
     await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id in (${cadEntry}, ${usdEntry})`);
 
     const first = await runAutoElimination(org.orgId, org.periodId, actorId);
     assert.equal(first.lineCount, 2);
-    const firstLines = (await db.execute<{ number: string; amount: string }>(sql`
-      select a.number, l.amount
+    const firstLines = (await db.execute<{ number: string; amount: string; eliminate: boolean }>(sql`
+      select a.number, l.amount, l.eliminate
         from journal_lines l join accounts a on a.id = l.account_id
        where l.entry_id = ${first.entryId}
        order by a.number`));
     assert.deepEqual(firstLines.rows, [
-      { number: "1100", amount: "-120.0000" },
-      { number: "2000", amount: "120.0000" },
+      { number: "1100", amount: "-120.0000", eliminate: true },
+      { number: "2000", amount: "120.0000", eliminate: true },
     ]);
     // The entry number keys on the stored period name; the memo names the
     // period by its canonical fiscal label.
@@ -1099,11 +1103,10 @@ test("auto-elimination aggregates only the destination book's own activity", { s
     await db.execute(sql`
       update accounts set eliminate = true
        where id in (${org.accounts.ar}, ${org.accounts.ap})`);
-
     const secondaryBookId = randomUUID();
     await db.execute(sql`
-      insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-      values (${secondaryBookId}, ${org.orgId}, 'SEC', 'Secondary statutory', false, true, true)`);
+      insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode, replication_from)
+      values (${secondaryBookId}, ${org.orgId}, 'SEC', 'Secondary statutory', false, true, true, 'full', ${org.date})`);
 
     const postPair = async (bookId: string, tag: string) => {
       const entry = randomUUID();

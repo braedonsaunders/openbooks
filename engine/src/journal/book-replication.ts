@@ -51,6 +51,7 @@ export const BOOK_MEASURED_ORIGINS = [
   "expense_amortization",
   "account_merge",
   "book_opening",
+  "net_investment_oci",
 ] as const;
 
 /** Origins that remeasure the functional ledger (left out of translated subsidiaries). */

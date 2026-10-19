@@ -1465,6 +1465,7 @@ async function runAutoEliminationIn(
   const postingLines = translatedActivity.map((row) => ({
     accountId: row.accountId,
     amount: neg(row.total),
+    eliminate: true,
     memo: row.subsidiaryId === elim.id
       ? "Retranslates earlier eliminations at the period's current rate"
       : `Eliminates ${ctx.byId.get(row.subsidiaryId)?.name ?? row.subsidiaryId}`,
@@ -1480,6 +1481,7 @@ async function runAutoEliminationIn(
     postingLines.push({
       accountId: ctaAccountId,
       amount: translationDifference,
+      eliminate: true,
       memo: "Translation difference on intercompany balances",
     });
   }
@@ -1518,6 +1520,7 @@ async function runAutoEliminationIn(
       periodId,
       memo: `Reversal of ${p.entryNumber}`,
       origin: "intercompany",
+      replicate: false,
       reversesEntryId: p.id,
       actorId: userId,
       currency: elim.baseCurrency,
@@ -1528,6 +1531,7 @@ async function runAutoEliminationIn(
         currency: line.currency,
         txnAmount: neg(line.txn_amount),
         fxRate: line.fx_rate,
+        eliminate: true,
         memo: `Reversal of ${p.entryNumber}`,
         lineNumber: line.line_number,
       })),
@@ -1578,6 +1582,7 @@ async function runAutoEliminationIn(
     periodId,
     memo: `Auto-elimination ${period.label}`,
     origin: "intercompany",
+    replicate: false,
     actorId: userId,
     currency: elim.baseCurrency,
     auditAction: "insert",
