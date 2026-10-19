@@ -286,6 +286,8 @@ test("can() honors exact and wildcard grants", () => {
   assert.equal(can(authzWith(["ap.*"]), "ap.post"), true);
   assert.equal(can(authzWith(["ap.*"]), "ar.post"), false);
   assert.equal(can(authzWith(["*"]), "admin.users.manage"), true);
+  assert.equal(can(authzWith(["*"]), "purchase_orders.create"), true);
+  assert.equal(can(authzWith(["items.*"]), "items.post"), true);
 });
 
 test("assertCan throws ForbiddenError only when can() is false", () => {

@@ -310,7 +310,7 @@ export async function ManufacturingWorkspacePage({
         initialValues={{producedItemId:initialItemId,subsidiaryId:initialEntityId,quantityOrdered:value(searchParams.quantityOrdered)}}
         canManage={can(authz, "manufacturing.manage")}
         canPost={can(authz, "items.post")}
-        canBuy={authz.permissions.has("ap.create")}
+        canBuy={can(authz, "purchase_orders.create")}
         canSubcontract={await manufacturingFeatureEnabled(authz.user.orgId,"manufacturingSubcontract")} canReadQuality={can(authz,"items.read")}
         canReadJournal={can(authz, "gl.read")}
         canGovernRevisions={canGovernRevisions}
