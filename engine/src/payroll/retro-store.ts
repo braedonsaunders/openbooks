@@ -400,7 +400,7 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
            and r.run_status = 'committed'
            and r.run_type = 'regular'
            and r.tax_year = ${input.taxYear}
-           and sch.subsidiary_id = d.subsidiary_id
+           and (sch.subsidiary_id is null or sch.subsidiary_id = d.subsidiary_id)
            and ${payrollEmploymentOverlapsPeriod({
          org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
          employer: sql`d.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,

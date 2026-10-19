@@ -67,10 +67,11 @@ test(
       await seedPayrollComponents(org.orgId, actorId);
 
       const scheduleId = randomUUID();
+      // An organization-wide schedule is owned by the root subsidiary on each run.
       await db.execute(sql`
         insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                   pay_date_offset_days, is_active, created_by, updated_by)
-        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-08-15', 3, true,
+                                   pay_date_offset_days, subsidiary_id, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-08-15', 3, null, true,
                 ${actorId}, ${actorId})`);
 
       const hire = async (name: string, hiredOn: string) => {
