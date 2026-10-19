@@ -180,7 +180,7 @@ export async function loadAnomalyChecks(
   const kind = sp.kind && (ANOMALY_KINDS as readonly string[]).includes(sp.kind) ? sp.kind : undefined;
   const [open, acknowledged, falsePositives] = await Promise.all([
     listFlags(db, { orgId, actorId, severity, kind, status: 'open' }),
-    listFlags(db, { orgId, actorId, status: 'acknowledged' }),
+    listFlags(db, { orgId, actorId, severity, kind, status: 'acknowledged' }),
     listFlags(db, { orgId, actorId, status: 'false_positive' }),
   ]);
   const flags = status === 'open' ? open : status === 'acknowledged' ? acknowledged : await listFlags(db, { orgId, actorId, severity, kind, status });
@@ -262,7 +262,7 @@ export async function loadAnomalyChecks(
     dialogFlag,
     dialogCloseHref: '/payroll/anomalies',
     dialogOpen: dialogFlag !== null,
-    canScan: authz.permissions.has('payroll.manage'),
+    canScan: can(authz, 'payroll.manage') && authz.allowedSubsidiaryIds === null,
     finalizeHref: '/payroll/runs',
   };
 }

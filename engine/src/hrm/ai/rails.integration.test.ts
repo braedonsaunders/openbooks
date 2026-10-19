@@ -759,6 +759,14 @@ test("flag reads and transitions see only the flag employment's employer", { ski
     await assert.rejects(runAnomalyScan({
       orgId: org.orgId, actorId: scopedPayrollA, periodFrom: "2026-09-01", periodTo: "2026-09-30",
     }), /unrestricted subsidiary access/);
+    await assert.rejects(
+      computeAnomalyBaselines({ orgId: org.orgId, actorId: scopedPayrollA, windowPeriods: 2 }),
+      /unrestricted subsidiary access/,
+    );
+    await assert.rejects(runAnomalyScan({
+      orgId: org.orgId, actorId: scopedTime, periodFrom: "2026-09-01", periodTo: "2026-09-30",
+      options: { timeOnly: true },
+    }), /unrestricted subsidiary access/);
     const flagsAfterScan = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`)).rows[0]?.count;
     assert.equal(flagsAfterScan, flagsBeforeScan, "a restricted scan refuses before creating cross-entity duplicate-bank flags");

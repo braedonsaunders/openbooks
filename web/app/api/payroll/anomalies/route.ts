@@ -1,22 +1,33 @@
 import { defineRoute } from '@/lib/api/route'
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { listFlags, runAnomalyScan } from "@openbooks/engine/hrm/ai/anomalies";
 import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
-import { can } from "../../../../lib/authz";
+import { can, getAuthz } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { notFound } from "@/lib/api/responses";
+import { isCivilDate } from "@openbooks/engine/hrm/temporal";
 
 
 export const runtime = "nodejs";
 
 const scanBody = z.object({
   action: z.enum(["scan", "compute_baselines"]).default("scan"),
-  periodFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
-  periodTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
+  periodFrom: z.string().refine(isCivilDate, "must be a valid calendar date in YYYY-MM-DD format").optional(),
+  periodTo: z.string().refine(isCivilDate, "must be a valid calendar date in YYYY-MM-DD format").optional(),
   timeOnly: z.boolean().optional(),
   windowPeriods: z.number().int().min(2).max(24).optional(),
+}).superRefine((body, context) => {
+  if (body.action !== "scan") return;
+  if (body.periodFrom === undefined) {
+    context.addIssue({ code: "custom", path: ["periodFrom"], message: "required for a scan" });
+  }
+  if (body.periodTo === undefined) {
+    context.addIssue({ code: "custom", path: ["periodTo"], message: "required for a scan" });
+  }
+  if (body.periodFrom !== undefined && body.periodTo !== undefined && body.periodTo < body.periodFrom) {
+    context.addIssue({ code: "custom", path: ["periodTo"], message: "must be on or after periodFrom" });
+  }
 });
 
 /**
@@ -62,13 +73,32 @@ export const GET = defineRoute({
 })
 
 export const POST = defineRoute({
-  permission: "payroll.manage",
-  // Payroll checks are part of Payroll.
-  feature: "payroll",
-  handler: async ({ request: req, authz: gate }) => {
-    const parsedBody = await parseJsonBody(req, scanBody);
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data;
+  authorize: async ({ request }) => {
+    const gate = await getAuthz();
+    if (!gate) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    let requestBody: unknown;
+    try {
+      requestBody = await request.clone().json();
+    } catch {
+      requestBody = undefined;
+    }
+    const body = typeof requestBody === "object" && requestBody !== null
+      ? requestBody as { action?: unknown; timeOnly?: unknown }
+      : undefined;
+    const timeOnly = (body?.action === undefined || body.action === "scan") && body.timeOnly === true;
+    const payrollManager = can(gate, "payroll.manage");
+    const timeApprover = can(gate, "time.approve");
+    if (timeOnly ? !(payrollManager || timeApprover) : !payrollManager) {
+      return NextResponse.json({ error: `missing permission: ${timeOnly ? "time.approve or payroll.manage" : "payroll.manage"}` }, { status: 403 });
+    }
+    const feature = timeOnly ? "timeTracking" : "payroll";
+    if (!(await isFeatureEnabled(gate.user.orgId, feature))) return notFound("route");
+    return gate;
+  },
+  feature: { none: "Payroll or time anomaly scans select permissions and feature gates from the validated action." },
+  body: scanBody,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body }) => {
     try {
       if (body.action === "compute_baselines") {
         const { computeAnomalyBaselines } = await import("@openbooks/engine/hrm/ai/anomalies");
@@ -82,8 +112,8 @@ export const POST = defineRoute({
       const summary = await runAnomalyScan({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
-        periodFrom: body.periodFrom,
-        periodTo: body.periodTo,
+        periodFrom: body.periodFrom!,
+        periodTo: body.periodTo!,
         options: body.timeOnly === true ? { timeOnly: true } : undefined,
       });
       return NextResponse.json({ summary });

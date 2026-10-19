@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { isCivilDate } from "../temporal.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
@@ -169,15 +170,13 @@ interface PendingFlag {
 }
 
 async function assertScanScope(exec: SqlExecutor, orgId: string, actorId: string, timeOnly: boolean): Promise<void> {
-  if (await actorHasPermission(exec, orgId, actorId, "payroll.manage")) {
-    if ((await actorAllowedSubsidiaryIds(exec, orgId, actorId)) !== null) {
-      throw new AiRailsError(
-        "ai_forbidden",
-        "running organization-wide payroll checks needs a payroll manager with unrestricted subsidiary access — ask an unrestricted payroll administrator to run the scan",
-      );
-    }
-    return;
+  if ((await actorAllowedSubsidiaryIds(exec, orgId, actorId)) !== null) {
+    throw new AiRailsError(
+      "ai_forbidden",
+      "anomaly scans read and write organization-wide flags and require unrestricted subsidiary access — ask an unrestricted payroll administrator or time approver to run the scan",
+    );
   }
+  if (await actorHasPermission(exec, orgId, actorId, "payroll.manage")) return;
   if (timeOnly && await actorHasPermission(exec, orgId, actorId, "time.approve")) return;
   throw new AiRailsError(
     "ai_forbidden",
@@ -864,6 +863,18 @@ export async function listFlags(
     readonly employmentId?: string;
   },
 ): Promise<FlagRow[]> {
+  if (input.periodFrom !== undefined && !isCivilDate(input.periodFrom)) {
+    throw new AiRailsError("ai_invalid_input", "periodFrom must be a valid calendar date in YYYY-MM-DD format — choose a valid period start");
+  }
+  if (input.periodTo !== undefined && !isCivilDate(input.periodTo)) {
+    throw new AiRailsError("ai_invalid_input", "periodTo must be a valid calendar date in YYYY-MM-DD format — choose a valid period end");
+  }
+  if (input.periodFrom !== undefined && input.periodTo !== undefined && input.periodTo < input.periodFrom) {
+    throw new AiRailsError("ai_invalid_input", "periodTo must be on or after periodFrom — choose a valid anomaly period");
+  }
+  if (input.employmentId !== undefined && !isUuid(input.employmentId)) {
+    throw new AiRailsError("ai_invalid_input", "employmentId must be a valid UUID — select a saved employment");
+  }
   const capabilities = await assertFlagReadScope(exec, input.orgId, input.actorId);
   // Employment flags follow their legal employer; run-wide flags follow
   // the identified payroll document. Unattributed flags fail closed for
@@ -1052,12 +1063,8 @@ export async function computeBaselines(
 ): Promise<{ computed: number; windowPayDates: string[]; cohortKey: string }> {
   const { orgId, actorId } = input;
   const windowPeriods = input.windowPeriods ?? 6;
-  if (!(await actorHasPermission(exec, orgId, actorId, "payroll.manage"))) {
-    throw new AiRailsError(
-      "ai_forbidden",
-      "recomputing anomaly baselines needs the payroll manager — ask a payroll administrator",
-    );
-  }
+  await assertScanScope(exec, orgId, actorId, false);
+  await assertAnomalyFeature(exec, orgId, false);
   const settings = await loadAiRailsSettings(exec, orgId);
   const cohortKey = settings.cohortKey === "pay_schedule" || settings.cohortKey === "job_level"
     ? "subsidiary"
