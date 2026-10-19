@@ -16,6 +16,7 @@ export {
   convertItemToFamily,
   createFamilyWithVariants,
   getItemFamily,
+  listItemFamilies,
   renderVariantCode,
   slugifyCodeSegment,
   variantDisplayName,
