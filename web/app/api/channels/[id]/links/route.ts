@@ -96,6 +96,7 @@ export const POST = defineRoute({
         gate.user.id,
         {
           channelId: id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
           provider: key.provider,
           externalAccount: key.externalAccount,
           objectType: body.objectType,

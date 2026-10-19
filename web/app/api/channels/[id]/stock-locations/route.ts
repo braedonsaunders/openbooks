@@ -6,6 +6,7 @@ import { notFound } from "@/lib/api/responses";
 import { db, withOrgContext } from "@openbooks/engine/platform/database";
 import { isUuid } from "@/lib/list-params";
 import { guardChannelScope } from "@/lib/channel-scope";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 
 export const runtime = "nodejs";
 
@@ -25,7 +26,10 @@ export const GET = defineRoute({
           select sl.id as value, concat_ws(' ', nullif(l.name, ''), concat('(', sl.code, ')')) as label
             from stock_locations sl
             join locations l on l.org_id = sl.org_id and l.id = sl.location_id
+            join sales_channels c on c.org_id = sl.org_id and c.id = ${id}
            where sl.org_id = ${gate.user.orgId} and sl.is_active
+             and (l.subsidiary_id is null or l.subsidiary_id = c.subsidiary_id)
+             ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
            order by l.name, sl.code limit 2000`),
       )
     ).rows;

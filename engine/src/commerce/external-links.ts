@@ -10,11 +10,13 @@ import {
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
 import { db, withOrg } from "../platform/db.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 
 export type ExternalLinkFeature = "salesChannels" | "usageBilling";
 
 export interface ExternalLinkInput {
   channelId?: string | null;
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
   provider: string;
   externalAccount: string;
   objectType: string;
@@ -107,6 +109,57 @@ async function requireFeature(orgId: string, feature: ExternalLinkFeature): Prom
   }
 }
 
+interface NativeTargetRow extends Record<string, unknown> {
+  id: string;
+  subsidiary_id: string | null;
+  org_wide_null: boolean;
+}
+
+async function findNativeTarget(orgId: string, nativeTable: string, nativeId: string): Promise<NativeTargetRow | undefined> {
+  if (nativeTable === "parties") {
+    return (await db.execute<NativeTargetRow>(sql`
+      select p.id, p.subsidiary_id, true as org_wide_null from parties p
+       where p.org_id = ${orgId} and p.id = ${nativeId} for share`)).rows[0];
+  }
+  if (nativeTable === "documents") {
+    return (await db.execute<NativeTargetRow>(sql`
+      select d.id, d.subsidiary_id, false as org_wide_null from documents d
+       where d.org_id = ${orgId} and d.id = ${nativeId} for share`)).rows[0];
+  }
+  if (nativeTable === "stock_locations") {
+    return (await db.execute<NativeTargetRow>(sql`
+      select sl.id, l.subsidiary_id, true as org_wide_null
+        from stock_locations sl
+        join locations l on l.org_id = sl.org_id and l.id = sl.location_id
+       where sl.org_id = ${orgId} and sl.id = ${nativeId}
+       for share of sl, l`)).rows[0];
+  }
+  if (nativeTable === "stored_value_accounts") {
+    return (await db.execute<NativeTargetRow>(sql`
+      select a.id, a.subsidiary_id, false as org_wide_null from stored_value_accounts a
+       where a.org_id = ${orgId} and a.id = ${nativeId} for share`)).rows[0];
+  }
+  if (nativeTable === "subscriptions") {
+    return (await db.execute<NativeTargetRow>(sql`
+      select s.id, p.subsidiary_id, true as org_wide_null
+        from subscriptions s
+        join parties p on p.org_id = s.org_id and p.id = s.customer_id
+       where s.org_id = ${orgId} and s.id = ${nativeId}
+       for share of s, p`)).rows[0];
+  }
+  if (nativeTable === "subscription_usage_links") {
+    return (await db.execute<NativeTargetRow>(sql`
+      select l.id, p.subsidiary_id, true as org_wide_null
+        from subscription_usage_links l
+        join parties p on p.org_id = l.org_id and p.id = l.customer_id
+       where l.org_id = ${orgId} and l.id = ${nativeId}
+       for share of l, p`)).rows[0];
+  }
+  return (await db.execute<NativeTargetRow>(sql`
+    select id, null::uuid as subsidiary_id, true as org_wide_null
+      from ${sql.raw(`"${nativeTable}"`)} where org_id = ${orgId} and id = ${nativeId}`)).rows[0];
+}
+
 /**
  * Record one external identity. Either unique side colliding refuses by name,
  * identifying both records: the operator decides which mapping is correct
@@ -150,9 +203,10 @@ export async function linkExternal(
         "channelId",
       );
     }
+    let channelSubsidiaryId: string | null = null;
     if (input.channelId) {
-      const channel = (await db.execute<{ id: string; kind: string }>(sql`
-        select id, kind from sales_channels where org_id = ${orgId} and id = ${input.channelId}`)).rows[0];
+      const channel = (await db.execute<{ id: string; kind: string; subsidiary_id: string | null }>(sql`
+        select id, kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${input.channelId} for share`)).rows[0];
       if (!channel) {
         refuse(
           "channel_not_found",
@@ -161,6 +215,7 @@ export async function linkExternal(
           "channelId",
         );
       }
+      channelSubsidiaryId = channel.subsidiary_id;
       if (channel.kind !== provider) {
         refuse(
           "external_link_provider_mismatch",
@@ -169,14 +224,21 @@ export async function linkExternal(
           "provider",
         );
       }
+      if (input.allowedSubsidiaryIds !== undefined
+          && !subsidiaryScopeAllows(input.allowedSubsidiaryIds, channel.subsidiary_id)) {
+        refuse(
+          "channel_not_found",
+          "The sales channel does not belong to a subsidiary available to this role.",
+          "Choose a channel in one of your subsidiaries, or ask an administrator with access to that subsidiary.",
+          "channelId",
+        );
+      }
     }
     // The link target must exist: a link to a deleted record would resolve
     // forever to nothing. The table name is an enum-validated identifier
     // above, never raw input, so the fragment cannot escape its quotes;
     // org and record travel as bound parameters.
-    const target = (await db.execute<{ id: string }>(sql`
-      select id from ${sql.raw(`"${nativeTable}"`)}
-       where org_id = ${orgId} and id = ${nativeId}`)).rows[0];
+    const target = await findNativeTarget(orgId, nativeTable, nativeId);
     if (!target) {
       refuse(
         "external_link_target_missing",
@@ -184,6 +246,20 @@ export async function linkExternal(
         "Choose an existing record in this organization for the link target.",
         "nativeId",
       );
+    }
+    if (input.channelId) {
+      const sameChannelEntity = target.subsidiary_id === channelSubsidiaryId
+        || (target.org_wide_null && target.subsidiary_id === null);
+      const inCallerScope = input.allowedSubsidiaryIds === undefined
+        || subsidiaryScopeAllows(input.allowedSubsidiaryIds, target.subsidiary_id, { orgWideNull: target.org_wide_null });
+      if (!sameChannelEntity || !inCallerScope) {
+        refuse(
+          "external_link_target_out_of_scope",
+          `The ${nativeTable} record is not available to this channel or role.`,
+          "Choose a target in the channel's subsidiary or an organization-wide record your role can access.",
+          "nativeId",
+        );
+      }
     }
     const existing = (await db.execute<LinkDbRow>(sql`
       select ${LINK_COLUMNS} from external_links

@@ -201,6 +201,7 @@ async function runCommandBody(
       if (!parsed.success) throw invalidCommandBody();
       return upsertChannelLocation(orgId, actorId, {
         channelId: parsed.data.channelId,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
         externalLocationId: parsed.data.externalLocationId,
         externalName: parsed.data.externalName,
         stockLocationId: parsed.data.stockLocationId ?? null,
