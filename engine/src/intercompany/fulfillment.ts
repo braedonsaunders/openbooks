@@ -14,6 +14,7 @@ import { PostingError } from "../journal/posting-contracts.ts";
 import { InventoryError } from "../inventory/contracts.ts";
 import { issueInventory } from "../inventory/movements.ts";
 import { inventoryPostingEffectKey } from "../inventory/document-lines.ts";
+import { postedReturnQuantity } from "../inventory/return-quantities.ts";
 import type {
   CrossSubsidiaryFulfillmentHandler,
   CrossSubsidiaryIssueRequest,
@@ -37,7 +38,8 @@ import { transferPricingPolicyInEffect, transferUnitPrice, type TransferPricingP
  * with the due-to/due-from legs of their pair: consolidated, the sale carries
  * the group's actual cost and the intercompany margin eliminates. Returns
  * restore the fulfilling entity's stock at the cost it left at and reverse
- * the cross-charge in proportion; a voided shipment reverses it entirely.
+ * the cross-charge in proportion; reverse those returns before voiding the
+ * shipment so its inventory and full cross-charge can be restored together.
  */
 
 class FulfillmentRefusal extends InventoryError {}
@@ -69,17 +71,24 @@ type ChargeRow = {
   transfer_unit_price: string;
   transfer_amount: string;
   entry_id: string;
+  department_id: string | null;
+  project_id: string | null;
 };
 
 async function chargeForMovement(runner: SqlExecutor, orgId: string, movementId: string): Promise<ChargeRow | null> {
   return (await runner.execute<ChargeRow>(sql`
-    select id, fulfillment_document_id, fulfillment_line_id, selling_subsidiary_id, fulfilling_subsidiary_id,
-           policy_id, item_id, stock_location_id, quantity::text as quantity, cost_amount::text as cost_amount,
-           cost_currency, transfer_currency, transfer_unit_price::text as transfer_unit_price,
-           transfer_amount::text as transfer_amount, entry_id
-      from intercompany_fulfillment_charges
-     where org_id = ${orgId} and movement_id = ${movementId} and kind = 'fulfillment'
-     for update`)).rows[0] ?? null;
+    select charge.id, charge.fulfillment_document_id, charge.fulfillment_line_id,
+           charge.selling_subsidiary_id, charge.fulfilling_subsidiary_id, charge.policy_id,
+           charge.item_id, charge.stock_location_id, charge.quantity::text as quantity,
+           charge.cost_amount::text as cost_amount, charge.cost_currency, charge.transfer_currency,
+           charge.transfer_unit_price::text as transfer_unit_price,
+           charge.transfer_amount::text as transfer_amount, charge.entry_id,
+           line.department_id, line.project_id
+      from intercompany_fulfillment_charges charge
+      left join document_lines line
+        on line.org_id = charge.org_id and line.id = charge.fulfillment_line_id
+     where charge.org_id = ${orgId} and charge.movement_id = ${movementId} and charge.kind = 'fulfillment'
+     for update of charge`)).rows[0] ?? null;
 }
 
 /**
@@ -357,8 +366,8 @@ async function returned(runner: SqlExecutor, request: CrossSubsidiaryReturnReque
       memo: "Intercompany fulfillment return",
       idempotencyKey: `intercompany-fulfillment-return:${request.creditLineId}:${request.returnMovementId}`,
       sourceDocumentId: request.creditDocumentId,
-      departmentId: null,
-      projectId: null,
+      departmentId: charge.department_id,
+      projectId: charge.project_id,
     });
   }
   if (!entryId) refuse("the returned quantity carries no transfer amount to reverse");
@@ -380,6 +389,24 @@ async function returned(runner: SqlExecutor, request: CrossSubsidiaryReturnReque
 async function voided(runner: SqlExecutor, request: CrossSubsidiaryVoidRequest): Promise<void> {
   const charge = await chargeForMovement(runner, request.orgId, request.issueMovementId);
   if (!charge) return;
+  const returned = await postedReturnQuantity(runner, request.orgId, {
+    returnKind: "receipt",
+    evidenceKey: "sourceIssueMovementId",
+    sourceMovementId: request.issueMovementId,
+  });
+  if (toUnits(returned) > 0n) {
+    refuse("this shipment has customer-credit returns; reverse those credits before voiding the shipment");
+  }
+  const liveReturnCharge = (await runner.execute<{ id: string }>(sql`
+    select returned.id
+      from intercompany_fulfillment_charges returned
+      join journal_entries entry on entry.org_id = returned.org_id and entry.id = returned.entry_id
+     where returned.org_id = ${request.orgId} and returned.kind = 'return'
+       and returned.reverses_charge_id = ${charge.id} and entry.status = 'posted'
+     limit 1`)).rows[0];
+  if (liveReturnCharge) {
+    refuse("this cross-subsidiary shipment has a live customer-credit charge return; reverse that credit before voiding the shipment");
+  }
   const status = (await runner.execute<{ status: string; entry_number: string }>(sql`
     select status, entry_number from journal_entries where org_id = ${request.orgId} and id = ${charge.entry_id}`)).rows[0];
   if (!status || status.status !== "posted") return;

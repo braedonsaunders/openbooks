@@ -10,6 +10,7 @@ import { DownstreamConsumptionError, InventoryError, type Runner } from "./contr
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { assertInventoryAccountsPostable } from "./journal.ts";
 import { lockInventoryPosition, assertInventoryDate } from "./position.ts";
+import { postedReturnQuantity } from "./return-quantities.ts";
 
 // ---------------------------------------------------------------------------
 // Controlled reversal
@@ -471,6 +472,19 @@ export async function reverseInventoryMovement(
         entryId: first.journal_entry_id,
         alreadyReversed: true,
       };
+    }
+
+    if (requested.kind === "issue") {
+      const returned = await postedReturnQuantity(tx, orgId, {
+        returnKind: "receipt",
+        evidenceKey: "sourceIssueMovementId",
+        sourceMovementId: requested.id,
+      });
+      if (toUnits(returned) > 0n) {
+        throw new InventoryError(
+          "this shipment has customer-credit returns; reverse those credits before voiding the shipment",
+        );
+      }
     }
 
     let sources: ReversibleMovement[];

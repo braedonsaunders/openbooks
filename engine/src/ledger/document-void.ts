@@ -25,9 +25,10 @@ import {
 import { assertBillingReleasable, billedCostSourceRefusal, BillingReleaseRefusedError, liveInvoicesBillingDocument, releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance } from "./billing-provenance.ts";
 import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { reverseFieldTicketProgressInTransaction } from "../projects/progress.ts";
-import { add, cmp, neg } from "../money/money.ts";
+import { add, cmp, neg, toUnits } from "../money/money.ts";
 import { DownstreamConsumptionError, InventoryError } from "../inventory/contracts.ts";
 import { reverseInventoryJournal, reverseInventoryMovement } from "../inventory/reversal.ts";
+import { postedReturnQuantity } from "../inventory/return-quantities.ts";
 import { listReceiptVoidBlockers } from "../inventory/receipt-void-dependents.ts";
 import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
 import { crossSubsidiaryFulfillmentHandler, crossSubsidiaryShipment } from "../inventory/cross-subsidiary.ts";
@@ -1135,6 +1136,20 @@ async function reverseOrderShipment(
        order by movement.id
        for update of movement
     `));
+    if (input.voidKind === "sales_fulfillment") {
+      for (const movement of liveMovements.rows) {
+        const returned = await postedReturnQuantity(tx, input.orgId, {
+          returnKind: "receipt",
+          evidenceKey: "sourceIssueMovementId",
+          sourceMovementId: movement.id,
+        });
+        if (toUnits(returned) > 0n) {
+          throw new DocumentVoidError(
+            "this shipment has customer-credit returns; reverse those credits before voiding the shipment",
+          );
+        }
+      }
+    }
     for (const movement of liveMovements.rows) {
       try {
         await reverseInventoryMovement(input.orgId, input.actorId, {
