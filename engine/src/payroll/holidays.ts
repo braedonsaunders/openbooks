@@ -1315,13 +1315,6 @@ export interface StatutoryHolidayPayInput {
    * construction path runs; never inferred from a lookback.
    */
   periodRegularEarnings?: string;
-  /**
-   * The calculation's once-resolved holiday-schema availability. The catalog
-   * probe is identical for every stub, so the driver resolves it once per
-   * run and hands it down — other callers omit it and probe once for their
-   * own transaction.
-   */
-  obligationsAvailable?: boolean | null;
 }
 
 /**
@@ -1672,7 +1665,6 @@ export async function resolveStatutoryHolidayPay(
   const ownedEntitlementDates = await approvedHolidayOccurrenceDates(tx, {
     orgId: input.orgId, employeePartyId: input.employeePartyId, employmentId: input.employmentId, subsidiaryId: input.subsidiaryId,
     from: input.periodStart, to: input.periodEnd,
-    obligationsAvailable: input.obligationsAvailable,
   });
   for (const holiday of holidays) {
     const hiredOn = spellOn(holiday.date)!.from;

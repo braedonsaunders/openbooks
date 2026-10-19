@@ -1,7 +1,7 @@
 import { lockCompensationPackageConfiguration } from "./compensation-package-store.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import assert from "node:assert/strict";
-import { CompensationPackageUnavailableError, compensationPackageSchemaRefusal } from './compensation-package-error.ts';
+import { compensationPackageSchemaRefusal } from './compensation-package-error.ts';
 import test from "node:test";
 import { evaluateCompensationPackage, validateCompensationPackage, compensationPackagePattern, type CompensationPackageDefinition } from "./compensation-package.ts";
 import { PayrollError } from "./error.ts";
@@ -118,18 +118,16 @@ test('native currency precision admits zero through four payable places and refu
   for (const invalid of [-1,5,NaN]) assert.throws(()=>validateCompensationPackageCurrencyRounding(definition,invalid),/CAD has no supported payable precision/);
 });
 
-test("unused pre-upgrade packages preserve payroll while adopted and partial storage refuse", async () => {
-  for (const [enabled, present, mode, expected] of [
-    [false, 0, "read", null], [true, 0, "read", "refuse"], [false, 0, "write", "refuse"],
-    [false, 1, "read", "refuse"], [false, 4, "read", "refuse"], [false, undefined, "read", "refuse"],
-    [false, 5, "read", "7"], [true, 5, "read", "7"],
-  ] as const) {
-    const responses = [[{ features: { payroll: true, compensationPackages: enabled } }], [{ present }], [{ revision: "7" }]];
-    let calls = 0;
-    const tx = { execute: async () => ({ rows: responses[calls++] ?? [] }) } as unknown as SqlExecutor;
-    const result = lockCompensationPackageConfiguration(tx, orgId, mode);
-    if (expected === "refuse") await assert.rejects(result, CompensationPackageUnavailableError);
-    else assert.equal(await result, expected);
-    assert.equal(calls, present === 5 ? 3 : 2, "absent package storage must not be queried");
+test("native compensation configuration is required with authoring enabled or disabled", async () => {
+  for (const enabled of [false, true]) for (const mode of ["read", "write"] as const) {
+    for (const configured of [false, true]) {
+      const responses = [[{ features: { payroll: true, compensationPackages: enabled } }], configured ? [{ revision: "7" }] : []];
+      let calls = 0;
+      const tx = { execute: async () => ({ rows: responses[calls++] ?? [] }) } as unknown as SqlExecutor;
+      const result = lockCompensationPackageConfiguration(tx, orgId, mode);
+      if (configured) assert.equal(await result, "7");
+      else await assert.rejects(result, /Compensation configuration is missing/);
+      assert.equal(calls, 2);
+    }
   }
 });

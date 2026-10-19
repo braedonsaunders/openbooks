@@ -207,7 +207,7 @@ test('unpaid employer coverage enters the native owe bank and recovers two actua
     const draft=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,periodStart:'2026-08-02',periodEnd:'2026-08-08',employeePartyIds:[worker]});
     assert.deepEqual((await calculatePayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:draft.documentId})).errors,[]);
     const draftState=(await db.execute<{run_status:string}>(sql`select run_status from pay_runs where org_id=${fx.orgId} and document_id=${draft.documentId}`)).rows[0]!;
-    assert.equal(draftState.run_status,'draft');
+    assert.equal(draftState.run_status,'calculated');
     const draftMovements=(await db.execute<{kind:string}>(sql`select kind from entitlement_ledger
       where org_id=${fx.orgId} and plan_id=${bank} and employee_party_id=${worker} and pay_run_document_id=${draft.documentId}`)).rows;
     assert.ok(draftMovements.length>0,'calculation writes entitlement movements before run commit');

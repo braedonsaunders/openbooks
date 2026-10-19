@@ -193,21 +193,6 @@ export async function capturePayRunCalculationEvidence(
   orgId: string,
   documentId: string,
 ): Promise<CapturedPayRunCalculationEvidence | null> {
-  // The holiday and compensation calculation tables belong to capabilities
-  // a tenant may not have adopted; the engine resolves their absence as an
-  // empty result there, and the capture follows the same rule. A partial
-  // holiday schema is refused by the caller's own availability probe.
-  const availability = (await tx.execute<{
-    holidayAllocations: boolean;
-    compensationCalculations: boolean;
-  }>(sql`
-    select to_regclass('public.pay_run_holiday_allocations') is not null as "holidayAllocations",
-           to_regclass('public.payroll_compensation_calculations') is not null as "compensationCalculations"
-  `)).rows[0];
-  if (!availability) {
-    throw new PayrollError("the calculation evidence schema could not be resolved — retry the calculation");
-  }
-
   const main = (await tx.execute<{
     runStatus: string;
     calculatedAt: string | null;
@@ -235,8 +220,8 @@ export async function capturePayRunCalculationEvidence(
   `)).rows[0];
   if (!main) return null;
 
-  let holidayAllocationsText = "[]";
-  if (availability.holidayAllocations) {
+  let holidayAllocationsText: string;
+  {
     const captured = (await tx.execute<{ evidence: string }>(sql`
       select coalesce((
         select jsonb_agg(allocation_value order by allocation_id)
@@ -263,8 +248,8 @@ export async function capturePayRunCalculationEvidence(
     holidayAllocationsText = captured.evidence;
   }
 
-  let compensationCalculationsText = "[]";
-  if (availability.compensationCalculations) {
+  let compensationCalculationsText: string;
+  {
     const captured = (await tx.execute<{ evidence: string }>(sql`
       select coalesce((
         select jsonb_agg(calculation_value order by calculation_id)

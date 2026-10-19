@@ -593,9 +593,9 @@ test(
       const filingAccountId = randomUUID();
       const filingAccount = await db.execute<{ id: string }>(sql`
         insert into payroll_filing_accounts
-          (id, org_id, country, program_type, account_number, name, remitter_type, is_default)
+          (id, org_id, country, program_type, account_number, name, remitter_type, is_default, subsidiary_id)
         values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0089',
-          'CRA remittance account', 'regular', true)
+          'CRA remittance account', 'regular', true, ${org.subsidiaryId})
         returning id`);
       assert.equal(filingAccount.rows.length, 1, "CRA remittance must have a filing account before payroll calculation");
       await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId,

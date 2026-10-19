@@ -16,7 +16,6 @@ const input: StatutoryHolidayPayInput = {
   employeeName: "Holiday Worker", country: "CA", jurisdiction: "CA-ON",
   periodStart: "2026-04-01", periodEnd: "2026-04-15", hourlyRate: "25.00",
   holidayComponentId: OTHER, premiumComponentId: OTHER, excludeDocumentId: OTHER,
-  obligationsAvailable: false,
 };
 
 type Version = {
@@ -187,7 +186,7 @@ test("work-triggered holidays and construction premiums are also scoped to emplo
 test("approved occurrence ownership binds the selected employment, employer, employee and retained date", async () => {
   const dialect = new PgDialect();
   const occurrenceInput = { orgId: ORG, employeePartyId: WORKER, employmentId: EMPLOYMENT,
-    subsidiaryId: EMPLOYER, from: "2026-04-01", to: "2026-04-15", obligationsAvailable: true };
+    subsidiaryId: EMPLOYER, from: "2026-04-01", to: "2026-04-15" };
   const instruction = { employeePartyId: WORKER, holidayDates: ["2026-04-03"], hours: "8.00",
     assessedOn: "2026-04-10", wageBasisDate: "2026-04-10", paymentDate: "2026-04-16",
     instructionKey: "approved-holiday", sourceReference: "Approved holiday evidence", sourceDigest: "a".repeat(64) };

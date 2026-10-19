@@ -577,6 +577,9 @@ export async function createCategorizingJournal(
   if (subsidiaryId === undefined) {
     throw new BankRuleRefusal('Bank account not found; refresh Match Bank Data and select an active bank account', 404)
   }
+  if (subsidiaryId === null) {
+    throw new BankRuleRefusal('The bank account has no legal entity; assign its legal entity in Chart of Accounts before applying categorizing rules', 422)
+  }
   const documentNumber = await nextDocumentNumber(orgId, 'journal', 'JE-')
   const [doc] = await db
     .insert(schema.documents)

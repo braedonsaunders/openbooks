@@ -1,6 +1,6 @@
 import type { CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
 import { payrollEmploymentOverlapsPeriod, payrollEpisodeDate, lockPayrollEmploymentRoster } from "./employment-roster.ts";
-import { clearCalculatedHolidayAllocations, holidayObligationsAvailable as holidayObligationsAvailableProbe } from "./holiday-obligation-source.ts";
+import { clearCalculatedHolidayAllocations } from "./holiday-obligation-source.ts";
 import { requireCompensationPackageConfiguration, clearCompensationPackageCalculations } from './compensation-package-payroll.ts';
 import { applyEmployeeEmployerAssignmentHistory, lockEmployerAssignmentProfiles } from './employer-assignment-history.ts';
 import { recurringBenefitsRunSource } from './benefit-plan-inputs.ts';
@@ -387,12 +387,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
 
     if (input.simulate) await tx.execute(sql`set constraints pay_run_benefit_allocations_line_tenant_fkey deferred`);
     if (!input.simulate) await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
-    // The holiday-schema catalog probe is identical for every stub, so it is
-    // resolved ONCE here and handed to every stub — it was observed firing
-    // per stub (three to_regclass probes each) for the whole run. Resolved
-    // before the clear below so even the clear reuses it.
-    const holidayObligationsAvailable = await holidayObligationsAvailableProbe(tx);
-    if (!input.simulate) await clearCalculatedHolidayAllocations(tx, orgId, documentId, holidayObligationsAvailable);
+    if (!input.simulate) await clearCalculatedHolidayAllocations(tx, orgId, documentId);
     // Movements are deleted with the stubs that produced them, on the same
     // key, so an employee who has dropped OFF the run (excluded, terminated,
     // moved schedule) leaves no orphaned bank movement behind. Per-employee
@@ -542,7 +537,6 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           statutoryRatesFor,
           eftFallbackToCheque,
           statHolidayPay,
-          holidayObligationsAvailable,
           holidayEligibility: input.holidayEligibility,
           simulate: input.simulate === true,
           allowedSubsidiaryIds: input.allowedSubsidiaryIds,

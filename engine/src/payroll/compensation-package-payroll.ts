@@ -221,7 +221,8 @@ export async function persistCompensationPackageCalculations(tx: SqlExecutor, pr
 export async function clearCompensationPackageCalculations(tx: SqlExecutor, context: {
   orgId: string; documentId: string; simulate: boolean;
 }): Promise<void> {
-  if (context.simulate || await lockCompensationPackageConfiguration(tx, context.orgId) === null) return;
+  if (context.simulate) return;
+  await lockCompensationPackageConfiguration(tx, context.orgId);
   // Empty evidence is expected for a first calculation or a run without assignments.
   // The schema's lifecycle trigger independently refuses removal from posted history.
   await tx.execute(sql`delete from payroll_compensation_calculations

@@ -367,9 +367,6 @@ describe("run-entitlement-hours-payout", () => {
         code: 'FOREIGN-SICK-PAY', name: 'Foreign sick bank payout', kind: 'earning', systemKey: null,
         basis: 'fixed_amount', isActive: true, createdBy: actorId, updatedBy: actorId,
       });
-      await db.execute(sql`insert into pay_component_statutory_treatments
-        (org_id, pay_component_id, effective_from, program_exclusions, vacationable)
-        values (${org.orgId}, ${payoutComponentId}, '2026-01-01', '{}', true)`);
       const planId = randomUUID();
       await db.execute(sql`
         insert into entitlement_plans (id, org_id, code, name, system_key, unit, direction,
@@ -387,8 +384,7 @@ describe("run-entitlement-hours-payout", () => {
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
         runType: "termination", employeePartyIds: [employeeId],
       });
-      const result = assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
-      assert.deepEqual(result.errors, []);
+      assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
       const line = (await db.execute<{ amount: string }>(sql`
         select l.amount::text as amount from pay_stub_lines l
           join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id

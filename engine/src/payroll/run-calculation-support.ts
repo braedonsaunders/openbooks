@@ -292,12 +292,6 @@ export type StubComputationInput = {
   statutoryRatesFor: (country: string, taxYear: number) => Promise<StatutoryRateResolution>;
   /** orgs.settings.payroll.eftFallbackToCheque, read once for the run. */
   eftFallbackToCheque: boolean;
-  /**
-   * Holiday-schema availability, resolved once per calculation by the
-   * driver: the to_regclass probe is identical for every stub, so it must
-   * not repeat per employee (it was observed firing per stub line).
-   */
-  holidayObligationsAvailable: boolean;
   /** orgs.settings.payroll.statutoryHolidayPay, read once for the run. */
   statHolidayPay: boolean;
   /** Authoritative statutory holiday eligibility facts by employee. */

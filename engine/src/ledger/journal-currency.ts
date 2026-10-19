@@ -12,6 +12,7 @@ import { JournalInstructionError } from "./journal-instruction-error.ts";
 /** Canonical header-currency equivalents balance an advanced journal without discarding the original line currencies. */
 export async function normalizeJournalCurrencyLines(runner: SqlExecutor, doc: Pick<Doc,"id" | "orgId" | "kind" | "subsidiaryId" | "currency" | "fxRate" | "postingDate" | "documentDate"> & { journalMode?: string; accountingBookId?: string | null }, lines: KernelLine[]): Promise<KernelLine[]> {
   if (doc.kind !== "journal" || doc.journalMode === "statistical" || doc.journalMode === "currency_adjustment") return lines;
+  if (!doc.subsidiaryId) throw new JournalInstructionError("The journal has no accounting entity.", "Choose its active entity and accounting book.");
   const normalized: KernelLine[] = [];
   const bookId=doc.accountingBookId ?? await activePostingPrimaryBookId(doc.orgId,runner);
   const bases = (await runner.execute<{id:string;currency:string}>(sql`select id,public.accounting_book_currency(${doc.orgId},${bookId},id) as currency

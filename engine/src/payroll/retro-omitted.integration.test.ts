@@ -129,10 +129,18 @@ test(
       );
 
       // ---- Pay ----------------------------------------------------------------
-      const retro = await createRetroPayRun({
+      const create = () => createRetroPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-09-19",
         allowedSubsidiaryIds: null,
       });
+      const attempts = await Promise.allSettled([create(), create()]);
+      const created = attempts.filter(result => result.status === "fulfilled");
+      assert.equal(created.length, 1, "competing creators may retain only one retro settlement");
+      const refused = attempts.find(result => result.status === "rejected");
+      assert.ok(refused && refused.status === "rejected");
+      assert.match(refused.reason.message, /already settles|sources changed concurrently/);
+      assert.equal(created[0]!.status, "fulfilled");
+      const retro = created[0]!.value;
       assert.equal(retro.settlements, 1);
       assert.equal(retro.employees, 1);
       assert.equal(retro.total, "3000.0000");

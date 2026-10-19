@@ -31,3 +31,9 @@ test("statistical and typed currency-adjustment lines do not acquire monetary tr
  assert.equal(await normalizeJournalCurrencyLines(runner,{...document,journalMode:"currency_adjustment"},residual),residual);
 });
 
+
+test("a monetary journal without a header entity refuses before querying currency scopes", async () => {
+  const noQueries = { execute: async () => { assert.fail("a missing accounting entity must refuse before database queries"); } } as unknown as SqlExecutor;
+  await assert.rejects(normalizeJournalCurrencyLines(noQueries, { ...document, subsidiaryId: null },
+    [{ accountId: "expense", amount: parseMoney("10") }]), /no accounting entity/);
+});

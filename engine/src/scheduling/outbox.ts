@@ -11,7 +11,7 @@ import {
   processAllocationRunOutboxRow,
 } from "../allocations/scheduling.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
-import { db, type SqlExecutor, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { db, orgContext, type SqlExecutor, withBypassContext, withOrgContext } from "../platform/db.ts";
 import {
   MAX_SCHEDULER_OUTBOX_ATTEMPTS,
   parseFlowEmailPayload,
@@ -438,13 +438,12 @@ async function resolveScanFailureNotices(kind: string): Promise<void> {
 
 /**
  * Surface per-org scan failures where the operator looks: one deduped
- * notice per failed org, and a thrown summary the outbox claim records on
- * the row (visible failure with backoff, terminal evidence at the ceiling).
+ * notice per failed org, and a retryable summary on the shared scan row.
+ * Tenant failures never exhaust delivery for healthy organizations.
  * A clean scan resolves the kind's notices instead. A notice that cannot be
  * stored is logged, never fatal — the thrown row error still carries every
  * failure.
  */
-/** Tenant configuration failures remain retryable without exhausting shared scan delivery. */
 export class SchedulerScanOrganizationError extends Error {
   readonly name = "SchedulerScanOrganizationError";
 }
@@ -1075,6 +1074,9 @@ export async function replayTerminalSchedulerOutbox(input: {
   if (reason.length < 10 || reason.length > 1000) {
     throw new SchedulerOutboxReplayError("replay reason must be between 10 and 1000 characters");
   }
+  if (orgContext.getStore()?.txDb) {
+    throw new SchedulerOutboxReplayError("Run scheduler replay outside the current transaction so its authorization and evidence own one atomic command");
+  }
   const now = input.now ?? new Date();
   // bypass: cross-org-by-design — one replay command handles tenant work and system scans after live actor authorization.
   await withBypassContext(() => db.transaction(async (tx) => {
@@ -1132,6 +1134,10 @@ export async function replayTerminalSchedulerOutbox(input: {
     // guard enforces this ordering by refusing the stamp-clearing UPDATE
     // unless both precede it inside this transaction.
     await insertSchedulerOutboxReplayAudit(tx, before, { reason, actorId: input.actorId, at: now });
+    if (before.org_id === null) {
+      // The native predicate requires both the privileged login and its explicit scope.
+      await tx.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
+    }
     await tx.execute(sql`
       select set_config('openbooks.scheduler_outbox_replay_org', ${before.org_id ?? '__system__'}::text, true)
     `);

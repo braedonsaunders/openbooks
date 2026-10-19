@@ -268,7 +268,7 @@ const consolidatedRows = [
                   where org_id = \${org.orgId} and key = 'admin'\`);
                 await db.execute(sql\`
                   update accounts
-                     set reconcilable = true, currency_restriction = 'CAD'
+                     set reconcilable = true, currency_restriction = 'CAD', subsidiary_id = \${org.subsidiaryId}
                    where id = \${org.accounts.bank} and org_id = \${org.orgId}
                 \`);
 
@@ -324,6 +324,16 @@ const consolidatedRows = [
                      1, true, \${actorId})
                 \`);
 
+                await db.execute(sql\`update accounts set subsidiary_id=null
+                  where org_id=\${org.orgId} and id=\${org.accounts.bank}\`);
+                await assert.rejects(applyRuleToLine(org.orgId, actorId, {
+                  statementLineId, ruleId, reconciliationId,
+                }, null), /bank account has no legal entity/);
+                assert.equal((await db.execute(sql\`select id from documents
+                  where org_id=\${org.orgId} and kind='journal'\`)).rows.length, 0,
+                  "a missing entity must retain no categorizing journal");
+                await db.execute(sql\`update accounts set subsidiary_id=\${org.subsidiaryId}
+                  where org_id=\${org.orgId} and id=\${org.accounts.bank}\`);
                 const attempts = await Promise.allSettled([
                   applyRuleToLine(org.orgId, actorId, {
                     statementLineId,

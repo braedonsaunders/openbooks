@@ -822,6 +822,16 @@ export async function createRetroPayRun(
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payroll-retro-create:${orgId}:${input.payScheduleId}`}, 0))`);
     return createRetroPayRunLocked(input, tx);
+  }, { isolationLevel: "serializable" }).catch((error: unknown) => {
+    const seen = new Set<object>();
+    let cause = error;
+    while (cause && typeof cause === "object" && !seen.has(cause)) {
+      seen.add(cause);
+      const failure = cause as { code?: string; cause?: unknown };
+      if (failure.code === "40001") throw new RetroPayError("Retroactive pay sources changed concurrently; reload the review and create the run again.");
+      cause = failure.cause;
+    }
+    throw error;
   });
 }
 

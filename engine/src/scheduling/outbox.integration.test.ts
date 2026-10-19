@@ -1803,7 +1803,7 @@ test("tenant scan failures remain retryable and system recovery requires live pl
       await processDueSchedulerOutbox(new Date(), 200, async (row) => {
         if (row.id === rowId) throw new SchedulerScanOrganizationError("One organization must configure its billing policy");
       });
-      const retained = (await db.execute<{attempt_count:number;terminal_failed_at:Date|null;error:string}>(sql`
+      const retained: {attempt_count:number;terminal_failed_at:Date|null;error:string} = (await db.execute<{attempt_count:number;terminal_failed_at:Date|null;error:string}>(sql`
         select attempt_count,terminal_failed_at,error from scheduler_outbox where id=${rowId}`)).rows[0]!;
       assert.equal(retained.attempt_count, 0);
       assert.equal(retained.terminal_failed_at, null);
@@ -1822,6 +1822,11 @@ test("tenant scan failures remain retryable and system recovery requires live pl
       assert.equal(allowed.allowed, false, "a tenant connection cannot authorize system replay by setting a scope pin");
     });
     await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:operator,reason:"Infrastructure has recovered and delivery can resume"}), /platform administrator/);
+    assert.equal((await readTerminalEvidence(rowId)).length, 1);
+    await withOrgTransaction(org.orgId, async () => {
+      await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:platformAdmin,
+        reason:"Infrastructure has recovered and delivery can resume"}), /outside the current transaction/);
+    });
     assert.equal((await readTerminalEvidence(rowId)).length, 1);
     await replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:platformAdmin,reason:"Infrastructure has recovered and delivery can resume"});
     assert.equal((await readTerminalEvidence(rowId)).length, 2);
