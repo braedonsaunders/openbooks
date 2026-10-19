@@ -95,7 +95,7 @@ test("subcontract inputs enforce currency and subsidiary availability in the ser
       await db.execute(sql`
         insert into vendor_roles(org_id, party_id, is_active, currency)
         values (${org.orgId}, ${org.vendorId}, true, 'USD')
-        on conflict (org_id, party_id) do update set is_active = true, currency = excluded.currency
+        on conflict (party_id) do update set is_active = true, currency = excluded.currency
       `);
       await db.execute(sql`
         insert into parties(id, org_id, kind, display_name, is_active)
