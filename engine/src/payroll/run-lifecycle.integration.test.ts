@@ -358,6 +358,9 @@ describe("run-entitlement-hours-payout", () => {
         code: 'FOREIGN-SICK-PAY', name: 'Foreign sick bank payout', kind: 'earning', systemKey: null,
         basis: 'fixed_amount', isActive: true, createdBy: actorId, updatedBy: actorId,
       });
+      await db.execute(sql`insert into pay_component_statutory_treatments
+        (org_id, pay_component_id, effective_from, program_exclusions, vacationable)
+        values (${org.orgId}, ${payoutComponentId}, '2026-01-01', '{}'::jsonb, true)`);
       const planId = randomUUID();
       await db.execute(sql`
         insert into entitlement_plans (id, org_id, code, name, system_key, unit, direction,
