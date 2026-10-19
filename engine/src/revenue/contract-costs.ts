@@ -42,7 +42,7 @@ import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { addMonthsStart, daysInCivilMonth, startOfMonth } from "../platform/civil-date.ts";
-import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
 
 export type ContractCostType = "commission" | "fulfilment";
 export type ContractCostMethod = "straight_line" | "pattern";
@@ -374,9 +374,13 @@ export async function assetCarryingMinor(
   assetId: string,
 ): Promise<bigint> {
   const asset = (await runner.execute<{ currency: string }>(sql`
-    select currency from contract_cost_assets
-     where org_id = ${orgId} and id = ${assetId}`)).rows[0];
-  if (!asset) return 0n;
+    select currency from contract_cost_assets where org_id = ${orgId} and id = ${assetId}`)).rows[0];
+  if (!asset) {
+    throw new ContractCostError("The contract cost asset does not exist in this organization.", {
+      code: "contract_cost_asset_unknown",
+      remedy: "Open the asset from Contract costs; it may belong to another organization.",
+    });
+  }
   const exponent = await currencyExponent(runner, asset.currency);
   const row = (await runner.execute<{ carrying: string }>(sql`
     select coalesce(round(sum(jl.amount) * power(10::numeric, ${exponent})), 0)::text as carrying
@@ -578,6 +582,12 @@ async function patternWeights(
   contractId: string,
   months: string[],
 ): Promise<{ periodIds: (string | null)[]; weights: bigint[]; totalWeight: bigint }> {
+  const periodIds: (string | null)[] = [];
+  for (const month of months) {
+    const period = await resolveCoveringPeriod(runner, orgId, `${month}-01`);
+    periodIds.push(period?.id ?? null);
+  }
+  const bookId = await postingBookId(runner, orgId);
   const rows = (await runner.execute<{ period_id: string; planned: string }>(sql`
     select line.period_id, sum(line.planned_amount)::text as planned
       from recognition_schedule_lines line
@@ -585,23 +595,23 @@ async function patternWeights(
         on schedule.org_id = line.org_id and schedule.id = line.schedule_id
       join performance_obligations obligation
         on obligation.org_id = schedule.org_id and obligation.id = schedule.obligation_id
+      join accounting_books book
+        on book.org_id = schedule.org_id and book.id = schedule.book_id
      where line.org_id = ${orgId} and obligation.contract_id = ${contractId}
+       and schedule.book_id = ${bookId}
+       and obligation.status <> 'cancelled'
+       and line.superseded_by_change_id is null
+       and line.reversal_journal_entry_id is null
      group by line.period_id`)).rows;
   const byPeriod = new Map(rows.map((r) => [r.period_id, toUnits(r.planned)]));
-  const totalWeight = [...byPeriod.values()].reduce((acc, w) => acc + w, 0n);
+  const weights = periodIds.map((id) => (id ? byPeriod.get(id) ?? 0n : 0n));
+  const totalWeight = weights.reduce((acc, w) => acc + w, 0n);
   if (totalWeight <= 0n) {
     throw new ContractCostError("The contract's revenue schedule carries no planned amounts.", {
       code: "contract_cost_pattern_no_schedule",
       remedy:
         "Build the revenue schedule for the contract (Revenue → contract → Build schedule), or capitalize with straight-line amortization.",
     });
-  }
-  const periodIds: (string | null)[] = [];
-  const weights: bigint[] = [];
-  for (const month of months) {
-    const period = await resolveCoveringPeriod(runner, orgId, `${month}-01`);
-    periodIds.push(period?.id ?? null);
-    weights.push(period ? (byPeriod.get(period.id) ?? 0n) : 0n);
   }
   return { periodIds, weights, totalWeight };
 }
@@ -860,6 +870,7 @@ export interface AssetScheduleLine {
 interface StoredAsset {
   id: string;
   revenueContractId: string | null;
+  costType: ContractCostType;
   amountMinor: bigint;
   currency: string;
   capitalizedOn: string;
@@ -875,6 +886,7 @@ async function loadAsset(runner: SqlExecutor, orgId: string, assetId: string): P
   const row = (await runner.execute<{
     id: string;
     revenue_contract_id: string | null;
+    cost_type: ContractCostType;
     amount_minor: string;
     currency: string;
     capitalized_on: string;
@@ -885,7 +897,7 @@ async function loadAsset(runner: SqlExecutor, orgId: string, assetId: string): P
     capitalize_entry_id: string | null;
     source: Record<string, unknown>;
   }>(sql`
-    select id, revenue_contract_id, amount_minor::text, currency,
+    select id, revenue_contract_id, cost_type, amount_minor::text, currency,
            capitalized_on::text, amort_start_on::text, amort_end_on::text, method, status,
            capitalize_entry_id, source
       from contract_cost_assets where org_id = ${orgId} and id = ${assetId}`)).rows[0];
@@ -898,6 +910,7 @@ async function loadAsset(runner: SqlExecutor, orgId: string, assetId: string): P
   return {
     id: row.id,
     revenueContractId: row.revenue_contract_id,
+    costType: row.cost_type,
     amountMinor: BigInt(row.amount_minor),
     currency: row.currency,
     capitalizedOn: row.capitalized_on,
@@ -912,10 +925,9 @@ async function loadAsset(runner: SqlExecutor, orgId: string, assetId: string): P
 
 /**
  * The full amortization plan for an asset: one line per window month with
- * its covering period and planned minor units. Straight-line shares are
- * fixed at capitalization; pattern shares follow the contract's live
- * revenue schedule, so a rebuilt schedule reweights the remaining plan —
- * the run always caps at the remaining carrying amount.
+ * its covering period and planned minor units. Posted months retain their
+ * recorded amounts; remaining carrying is redistributed over unposted months
+ * using the current live revenue pattern or a straight-line remainder.
  */
 export async function scheduleForAsset(
   runner: SqlExecutor,
@@ -927,32 +939,55 @@ export async function scheduleForAsset(
     monthStartOf(asset.startOn),
     monthsBetweenInclusive(monthStartOf(asset.startOn), monthStartOf(asset.endOn)),
   ).map((m) => m.slice(0, 7));
-  const postedMonths = new Set(
-    (await runner.execute<{ month: string }>(sql`
-      select to_char(p.starts_on, 'YYYY-MM') as month
+  const postedRows = (await runner.execute<{ month: string; amount: string }>(sql`
+      select to_char(p.starts_on, 'YYYY-MM') as month,
+             sum(a.amount_minor)::text as amount
         from contract_cost_amortization a
         join accounting_periods p on p.org_id = a.org_id and p.id = a.period_id
-       where a.org_id = ${orgId} and a.asset_id = ${assetId}`)).rows.map((r) => r.month),
-  );
+       where a.org_id = ${orgId} and a.asset_id = ${assetId}
+       group by to_char(p.starts_on, 'YYYY-MM')`)).rows;
+  const postedByMonth = new Map(postedRows.map((row) => [row.month, BigInt(row.amount)]));
+  const postedMonths = new Set(postedByMonth.keys());
+  const remainingMonths = months.filter((month) => !postedMonths.has(month));
+  const remainingCarrying = asset.status === "expensed"
+    ? 0n
+    : asset.capitalizeEntryId
+      ? await assetCarryingMinor(runner, orgId, assetId)
+      : asset.amountMinor;
+  const futureAmounts = new Map<string, bigint>();
+  const periodIdsByMonth = new Map<string, string | null>();
+  for (const month of months) {
+    const period = await resolveCoveringPeriod(runner, orgId, `${month}-01`);
+    periodIdsByMonth.set(month, period?.id ?? null);
+  }
+  if (remainingCarrying > 0n && remainingMonths.length > 0) {
+    let amounts: bigint[];
+    if (asset.method === "pattern" && asset.revenueContractId) {
+      const pattern = await patternWeights(runner, orgId, asset.revenueContractId, remainingMonths);
+      amounts = allocateMinorUnits(remainingCarrying, pattern.weights);
+      remainingMonths.forEach((month, index) => {
+        periodIdsByMonth.set(month, pattern.periodIds[index] ?? null);
+      });
+    } else {
+      amounts = projectAmortizationSchedule(remainingCarrying, remainingMonths.length);
+    }
+    remainingMonths.forEach((month, index) => futureAmounts.set(month, amounts[index]!));
+  }
   if (asset.method === "pattern" && asset.revenueContractId) {
-    const { periodIds, weights } = await patternWeights(runner, orgId, asset.revenueContractId, months);
-    const amounts = allocateMinorUnits(asset.amountMinor, weights.map((w) => (w === 0n ? 0n : w)));
     return months.map((month, i) => ({
       month,
-      periodId: periodIds[i] ?? null,
-      amountMinor: amounts[i]!,
+      periodId: periodIdsByMonth.get(month) ?? null,
+      amountMinor: postedByMonth.get(month) ?? futureAmounts.get(month) ?? 0n,
       posted: postedMonths.has(month),
     }));
   }
-  const amounts = projectAmortizationSchedule(asset.amountMinor, months.length);
   const out: AssetScheduleLine[] = [];
-  for (let i = 0; i < months.length; i++) {
-    const period = await resolveCoveringPeriod(runner, orgId, `${months[i]}-01`);
+  for (const month of months) {
     out.push({
-      month: months[i]!,
-      periodId: period?.id ?? null,
-      amountMinor: amounts[i]!,
-      posted: postedMonths.has(months[i]!),
+      month,
+      periodId: periodIdsByMonth.get(month) ?? null,
+      amountMinor: postedByMonth.get(month) ?? futureAmounts.get(month) ?? 0n,
+      posted: postedMonths.has(month),
     });
   }
   return out;
@@ -1273,9 +1308,11 @@ export async function recognizeContractCostImpairment(input: {
         },
       ],
     });
+    const remainingCarrying = carrying - writeDown;
+    const nextStatus: ContractCostStatus = remainingCarrying === 0n ? "impaired" : "active";
     const updated = (await db.execute<{ id: string }>(sql`
       update contract_cost_assets
-         set status = 'impaired', updated_by = ${actorId}, updated_at = now()
+         set status = ${nextStatus}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${assetId} and status = 'active'
       returning id`)).rows;
     if (updated.length !== 1) {
@@ -1287,7 +1324,7 @@ export async function recognizeContractCostImpairment(input: {
     await writeAudit(db, orgId, "contract_cost_assets", assetId, "impair", actorId, {
       event: "cost_impaired",
       before: { status: "active", carryingMinor: carrying.toString() },
-      after: { status: "impaired", carryingMinor: (carrying - writeDown).toString() },
+      after: { status: nextStatus, carryingMinor: remainingCarrying.toString() },
       impairmentMinor: writeDown.toString(),
       remainingConsiderationMinor: input.remainingConsiderationMinor.toString(),
       costsNotYetRecognizedMinor: input.costsNotYetRecognizedMinor.toString(),
@@ -1356,10 +1393,78 @@ export async function linkContractCostAsset(input: {
       });
     }
     const policy = await activePolicy(db, orgId, locked.capitalized_on);
+    const asset = await loadAsset(db, orgId, assetId);
+    const contract = (await db.execute<{ id: string }>(sql`
+      select id from revenue_contracts
+       where org_id = ${orgId} and id = ${revenueContractId}`)).rows[0];
+    if (!contract) {
+      throw new ContractCostError("The revenue contract does not exist in this organization.", {
+        code: "contract_cost_contract_unknown",
+        remedy: "Select a revenue contract from this organization, then link the cost again.",
+      });
+    }
+    const capitalizes = asset.costType === "fulfilment"
+      ? policy.capitalizeFulfilment
+      : policy.capitalizeCommissions;
+    if (!capitalizes) {
+      const updated = (await db.execute<{ id: string }>(sql`
+        update contract_cost_assets
+           set revenue_contract_id = ${revenueContractId}, status = 'expensed',
+               updated_by = ${actorId}, updated_at = now()
+         where org_id = ${orgId} and id = ${assetId} and status = 'active'
+        returning id`)).rows;
+      if (updated.length !== 1) {
+        throw new ContractCostError("Linking the contract matched no rows; nothing was saved.", {
+          code: "contract_cost_status_race",
+          remedy: "Reopen the asset and try again; a concurrent run may have changed it.",
+        });
+      }
+      await writeAudit(db, orgId, "contract_cost_assets", assetId, "expense", actorId, {
+        event: "cost_expensed_policy_excluded",
+        costType: asset.costType,
+        amountMinor: asset.amountMinor.toString(),
+        revenueContractId,
+        reason: "The policy does not capitalize this cost type, so the cost stays in its original account.",
+      });
+      return { assetId, months: [asset.capitalizedOn.slice(0, 7)] };
+    }
+    const baseCurrency = await orgBaseCurrency(db, orgId);
+    if (asset.currency !== baseCurrency) {
+      throw new ContractCostError(
+        `Contract costs post in the organization base currency ${baseCurrency}; ${asset.currency} would need conversion.`,
+        {
+          code: "contract_cost_currency_mismatch",
+          remedy: `Record the cost in ${baseCurrency}, or convert it at the day rate before capitalizing.`,
+        },
+      );
+    }
     const window = await resolveBenefitWindow(
       db, orgId, policy, revenueContractId, locked.capitalized_on, undefined, BigInt(locked.amount_minor),
     );
-    const asset = await loadAsset(db, orgId, assetId);
+    if (policy.practicalExpedient && window.months.length <= 12) {
+      const updated = (await db.execute<{ id: string }>(sql`
+        update contract_cost_assets
+           set revenue_contract_id = ${revenueContractId}, status = 'expensed',
+               amort_start_on = ${`${window.months[0]}-01`},
+               amort_end_on = ${lastDayOfMonth(`${window.months[window.months.length - 1]}-01`)},
+               updated_by = ${actorId}, updated_at = now()
+         where org_id = ${orgId} and id = ${assetId} and status = 'active'
+        returning id`)).rows;
+      if (updated.length !== 1) {
+        throw new ContractCostError("Linking the contract matched no rows; nothing was saved.", {
+          code: "contract_cost_status_race",
+          remedy: "Reopen the asset and try again; a concurrent run may have changed it.",
+        });
+      }
+      await writeAudit(db, orgId, "contract_cost_assets", assetId, "expense", actorId, {
+        event: "cost_expensed_practical_expedient",
+        months: window.months.length,
+        amountMinor: asset.amountMinor.toString(),
+        revenueContractId,
+        reason: "The one-year practical expedient applies: the benefit period is twelve months or less.",
+      });
+      return { assetId, months: window.months };
+    }
     // An asset recorded without a contract carries no capitalization
     // journal yet: linking posts it now, so the ledger always holds the
     // debit before amortization credits it.
@@ -1479,33 +1584,35 @@ export async function importCommissionCosts(input: {
     const out: CommissionImportResult[] = [];
     for (const row of rows) {
       try {
-        let contractId: string | null = null;
-        if (row.contractNumber) {
-          const found = (await db.execute<{ id: string }>(sql`
-            select id from revenue_contracts
-             where org_id = ${orgId} and contract_number = ${row.contractNumber}`)).rows[0];
-          contractId = found?.id ?? null;
-        }
-        // Unknown or missing contract references become unlinked queue
-        // assets inside the shared path — never a dropped row.
-        const capitalized = await capitalizeOnRunner(db, orgId, actorId, subsidiaryId, {
-          orgId,
-          actorId,
-          revenueContractId: contractId,
-          repPartyId: row.repPartyId ?? null,
-          customerPartyId: row.customerPartyId ?? null,
-          costType: row.costType ?? "commission",
-          amountMinor: row.amountMinor,
-          currency: row.currency,
-          capitalizedOn: row.date,
-          method: row.method ?? "straight_line",
-          originalExpenseAccountId: row.originalExpenseAccountId,
-          renewalCommissionMinor: row.renewalCommissionMinor,
-          source: {
-            kind: "import",
-            ref: row.ref ?? null,
-            contractNumber: row.contractNumber ?? null,
-          },
+        const capitalized = await withTransactionSavepoint(db, async () => {
+          let contractId: string | null = null;
+          if (row.contractNumber) {
+            const found = (await db.execute<{ id: string }>(sql`
+              select id from revenue_contracts
+               where org_id = ${orgId} and contract_number = ${row.contractNumber}`)).rows[0];
+            contractId = found?.id ?? null;
+          }
+          // Unknown or missing contract references become unlinked queue
+          // assets inside the shared path — never a dropped row.
+          return capitalizeOnRunner(db, orgId, actorId, subsidiaryId, {
+            orgId,
+            actorId,
+            revenueContractId: contractId,
+            repPartyId: row.repPartyId ?? null,
+            customerPartyId: row.customerPartyId ?? null,
+            costType: row.costType ?? "commission",
+            amountMinor: row.amountMinor,
+            currency: row.currency,
+            capitalizedOn: row.date,
+            method: row.method ?? "straight_line",
+            originalExpenseAccountId: row.originalExpenseAccountId,
+            renewalCommissionMinor: row.renewalCommissionMinor,
+            source: {
+              kind: "import",
+              ref: row.ref ?? null,
+              contractNumber: row.contractNumber ?? null,
+            },
+          });
         });
         out.push({ assetId: capitalized.assetId, ok: true });
       } catch (error) {
