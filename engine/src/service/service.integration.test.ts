@@ -282,7 +282,7 @@ test("rejecting a completion removes submitted labor from a later invoice", enab
   assert.equal(first.reviewStatus, "pending");
   const firstGate = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     select id from flow_gates where org_id = ${f.org.orgId} and subject_kind = 'service_visit_completion' and subject_id = ${visitId} and status = 'pending'`))).rows[0]!;
-  await withBypassContext(() => decideGate({ gateId: firstGate.id, decision: "rejected", userId: f.dispatcher, comment: "Correct the work record" }));
+  await withOrgContext(f.org.orgId, () => withBypassContext(() => decideGate({ gateId: firstGate.id, decision: "rejected", userId: f.dispatcher, comment: "Correct the work record" })));
   const rejectedLabor = (await withBypassContext(() => db.execute<{ status: string; rejectionReason: string | null }>(sql`
     select status, rejection_reason as "rejectionReason" from time_entries where org_id = ${f.org.orgId} and id = ${first.laborEntryIds[0]}`))).rows[0]!;
   assert.deepEqual(rejectedLabor, { status: "rejected", rejectionReason: "Correct the work record" });
@@ -294,7 +294,7 @@ test("rejecting a completion removes submitted labor from a later invoice", enab
   assert.equal(second.reviewStatus, "pending");
   const secondGate = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     select id from flow_gates where org_id = ${f.org.orgId} and subject_kind = 'service_visit_completion' and subject_id = ${visitId} and status = 'pending'`))).rows[0]!;
-  await withBypassContext(() => decideGate({ gateId: secondGate.id, decision: "approved", userId: f.dispatcher }));
+  await withOrgContext(f.org.orgId, () => withBypassContext(() => decideGate({ gateId: secondGate.id, decision: "approved", userId: f.dispatcher })));
   await withBypassContext(() => db.execute(sql`update time_entries set status = 'approved', approved_by = ${f.dispatcher}, approved_at = now()
     where org_id = ${f.org.orgId} and id = ${second.laborEntryIds[0]}`));
 
