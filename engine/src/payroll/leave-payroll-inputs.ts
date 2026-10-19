@@ -165,7 +165,7 @@ async function resolveLeaveEntitlementPlan(
     select m.id::text as mapping_id, m.is_active, m.entitlement_plan_id::text as plan_id,
            p.updated_at::text as plan_updated_at, p.unit, p.direction, p.system_key, p.is_active as plan_active
       from hrm_leave_payroll_entitlement_mappings m
-      left join entitlement_plans p on p.org_id = m.org_id and p.id = m.entitlement_plan_id
+      join entitlement_plans p on p.org_id = m.org_id and p.id = m.entitlement_plan_id
      where m.org_id = ${input.orgId} and m.leave_type_id = ${input.leaveTypeId}
        and m.effective_from <= ${input.absenceDate}::date
      order by m.effective_from desc
@@ -423,7 +423,9 @@ export async function leavePayrollInputProblems(
     select count(*)::int as n
       from hrm_payroll_inputs i
       left join lateral (
-        select m.entitlement_plan_id, m.is_active, p.is_active as plan_active, p.unit, p.direction, p.system_key
+        select m.id::text as mapping_id, m.entitlement_plan_id, m.is_active,
+               p.updated_at::text as plan_updated_at, p.is_active as plan_active,
+               p.unit, p.direction, p.system_key
           from hrm_leave_payroll_entitlement_mappings m
           left join entitlement_plans p on p.org_id = m.org_id and p.id = m.entitlement_plan_id
          where m.org_id = i.org_id and m.leave_type_id = i.leave_type_id
