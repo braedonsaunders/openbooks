@@ -23,10 +23,6 @@ test("asset lifecycle entries honor the subsidiary assets close on its effective
   const org = await createScratchOrg();
   try {
     const { actorId, assetId } = await seedAsset(org);
-    const source = await remeasureAsset(org.orgId, assetId, {
-      actorId, date: org.date, newCarryingValue: "800",
-    });
-    const sourceEventId = await eventFor(org.orgId, source.entryId);
     const calendarId = randomUUID();
     const periodId = randomUUID();
     await db.execute(sql`insert into fiscal_calendars (id,org_id,name,is_active,is_default)
@@ -38,6 +34,10 @@ test("asset lifecycle entries honor the subsidiary assets close on its effective
     await db.execute(sql`insert into subsidiary_accounting_preferences
       (org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason)
       values (${org.orgId},${org.subsidiaryId},'2026-07-01',${calendarId},'Use the entity asset calendar')`);
+    const source = await remeasureAsset(org.orgId, assetId, {
+      actorId, date: org.date, newCarryingValue: "800",
+    });
+    const sourceEventId = await eventFor(org.orgId, source.entryId);
     await db.execute(sql`insert into period_locks
       (org_id,period_id,book_id,subsidiary_id,module,state,reason)
       values (${org.orgId},${periodId},${org.bookId},${org.subsidiaryId},'assets','closed','Asset period close')`);

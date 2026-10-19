@@ -6,6 +6,7 @@ import { db, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, grantScratchPermissions, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
 import { sum, toUnits, fromUnits, neg } from "../money/money.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
+import { installEngineSeams } from "../composition/install.ts";
 import { AssetRefusal } from "./asset-refusal.ts";
 import { postCapitalizationEntry } from "./capitalization-journal.ts";
 import {
@@ -235,6 +236,7 @@ test("capitalization uses the subsidiary period and honors the assets close fenc
 test("capitalization result excludes appended department-balancing legs", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    installEngineSeams();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const departments = [randomUUID(), randomUUID()];
     await withOrgContext(org.orgId, async () => {
