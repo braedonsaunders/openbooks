@@ -107,3 +107,70 @@ test('a cost draft uses the shared decimal fields and cannot close without disca
   assert.deepEqual(state.pushes, [])
   assert.ok(document.querySelector('[data-testid="rebate-drawer"]'), 'the drawer remains open when discard is declined')
 })
+
+test('settlement documents open in their customer or vendor document workspace', async (t) => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (_input, init) => {
+    const request = JSON.parse(String(init?.body)) as { claimId: string }
+    const side = request.claimId.endsWith('customer') ? 'customer' : 'vendor'
+    return new Response(JSON.stringify({
+      documentId: 'settlement-document',
+      kind: side === 'customer' ? 'customer_credit' : 'vendor_credit',
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  for (const side of ['customer', 'vendor'] as const) {
+    state.pushes.length = 0
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    const data = {
+      ...drawerData,
+      agreement: { ...drawerData.agreement, side },
+      claim: {
+        id: `claim-${side}`, status: 'approved', amount: '12.00', cutoff_on: '2026-08-31',
+        settlement_document_id: null,
+      },
+    }
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <MoneyProvider currency="USD"><RebateDrawer data={data as never} /></MoneyProvider>
+        </NextIntlClientProvider>,
+      )
+    })
+    try {
+      const prepare = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Prepare'))
+      assert.ok(prepare)
+      await act(async () => prepare.click())
+      assert.deepEqual(state.pushes, [side === 'customer'
+        ? '/ar/invoices?doc=settlement-document'
+        : '/ap/bills?doc=settlement-document'])
+    } finally {
+      await act(async () => root.unmount())
+      host.remove()
+    }
+
+    const settledData = {
+      ...data,
+      claim: { ...data.claim!, status: 'settled', settlement_document_id: 'settled-document' },
+    }
+    const settledHost = document.createElement('div')
+    document.body.appendChild(settledHost)
+    const settledRoot = createRoot(settledHost)
+    await act(async () => {
+      settledRoot.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <MoneyProvider currency="USD"><RebateDrawer data={settledData as never} /></MoneyProvider>
+        </NextIntlClientProvider>,
+      )
+    })
+    try {
+      assert.ok(settledHost.querySelector(`a[href="${side === 'customer' ? '/ar/invoices' : '/ap/bills'}?doc=settled-document"]`))
+    } finally {
+      await act(async () => settledRoot.unmount())
+      settledHost.remove()
+    }
+  }
+})
