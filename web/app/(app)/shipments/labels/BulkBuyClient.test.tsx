@@ -15,9 +15,10 @@ const { BulkBuyClient } = await import('./BulkBuyClient')
 const words = messages.fulfillment.shipping.bulk
 const tick = () => new Promise(resolve => setTimeout(resolve, 20))
 
-async function mount(canBuy: boolean) {
+async function mount(canBuy: boolean, failFirstCandidateLoad = false) {
   const calls: { url: string; body: Record<string, unknown> | null }[] = []
   let purchased = false
+  let candidateFailures = failFirstCandidateLoad ? 1 : 0
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = String(input)
@@ -28,6 +29,10 @@ async function mount(canBuy: boolean) {
       return Response.json({ rows: [{ shipmentId: 'shipment-a', handlingUnitId: 'unit-a', ok: true, labelId: 'label-a', trackingNumber: 'TRACK-A', duplicate: false }], merged: { pages: 1, pdfBase64: 'cGRm' } })
     }
     if (init?.method === 'POST') return Response.json({ rows: [{ shipmentId: 'shipment-a', handlingUnitId: 'unit-a', documentNumber: 'SHIP-101', ok: true, providerRateId: 'rate-a', carrier: 'Carrier', service: 'Ground', amount: '21.05', currency: 'USD', deliveryDate: null }] })
+    if (candidateFailures > 0) {
+      candidateFailures -= 1
+      throw new TypeError('Network unavailable')
+    }
     return Response.json({ candidates: purchased ? [] : [{ shipmentId: 'shipment-a', handlingUnitId: 'unit-a', handlingUnitCode: 'HU-1', documentNumber: 'SHIP-101', customerName: 'Customer', promisedDate: null, labelCount: 0 }] })
   }) as typeof fetch
   const host = document.createElement('div')
@@ -58,7 +63,7 @@ test('shipment selection, rates and purchased labels replace each other and reta
     assert.match(view.host.textContent ?? '', /\$21\.05/)
     assert.equal(view.calls.filter(call => call.url.endsWith('/buy')).length, 0, 'previewing never purchases a label')
     await click(view.host, words.tabs.shipments)
-    assert.equal(view.host.querySelector<HTMLInputElement>('input[aria-label="SHIP-101 · HU-1"]')?.checked, true, 'tab switching retains selected shipments')
+    assert.equal(view.host.querySelector<HTMLInputElement>('input[aria-label="Select SHIP-101 Customer"]')?.checked, true, 'tab switching retains selected shipments')
     await click(view.host, words.tabs.rates)
     await click(view.host, words.buy)
     assert.equal(view.host.querySelectorAll('table').length, 0, 'purchase results replace rate and shipment tables')
@@ -76,5 +81,16 @@ test('a shipping reader can inspect rates without gaining a purchase action', as
     const buy = [...view.host.querySelectorAll('button')].find(node => node.textContent?.trim() === words.buy)
     assert.ok(buy?.disabled)
     assert.equal(view.calls.filter(call => call.url.endsWith('/buy')).length, 0)
+  } finally { await view.close() }
+})
+
+test('a failed candidate load offers retry instead of looking like an empty shipment list', async () => {
+  const view = await mount(true, true)
+  try {
+    assert.match(view.host.textContent ?? '', /Shipments could not be loaded/)
+    assert.doesNotMatch(view.host.textContent ?? '', /No shipments need labels/)
+    await click(view.host, messages.common.actions.retry)
+    assert.equal(view.host.querySelectorAll('table').length, 1)
+    assert.equal(view.host.querySelector('[role="alert"]'), null)
   } finally { await view.close() }
 })
