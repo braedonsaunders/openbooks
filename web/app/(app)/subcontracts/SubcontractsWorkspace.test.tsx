@@ -1,16 +1,10 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// The whole workspace was hard-coded English with zero i18n. Mounts
-// the real SubcontractsWorkspace under jsdom and asserts the chrome renders
-// through the catalog (en) and a failed load toasts the translated
-// fallback with the status.
 const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
 await bootJsdomEnvironment({ url: 'http://localhost:4800/subcontracts', matchMediaMatches: false })
 
-const script = {
-  errors: [] as string[],
-}
+const script = { requests: [] as string[] }
 Object.assign(globalThis, {
   __subcontractsTestRouter: {
     push() {},
@@ -19,17 +13,17 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
+  __subcontractsSearchParams: '',
 })
 const { stubModules } = await import('../../../testing/stub-modules')
 stubModules({
   navigation:
-    'export function useRouter(){return globalThis.__subcontractsTestRouter}export function usePathname(){return "/subcontracts"}export function useSearchParams(){return new URLSearchParams()}',
+    'export function useRouter(){return globalThis.__subcontractsTestRouter}export function usePathname(){return "/subcontracts"}export function useSearchParams(){return new URLSearchParams(globalThis.__subcontractsSearchParams ?? "")}',
   intl: false,
   authz: false,
   features: false,
   extra: {
-    sonner:
-      'export const toast={success(){},error(m){(globalThis.__subcontractsErrorToasts ?? []).push(String(m))}};export function Toaster(){return null}',
+    sonner: 'export const toast={success(){},error(){}};export function Toaster(){return null}',
   },
 })
 
@@ -45,11 +39,14 @@ const { SubcontractsWorkspace } = await import('./SubcontractsWorkspace')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
-async function mount(t: TestContext, responder: () => Response): Promise<void> {
-  script.errors = []
-  ;(globalThis as Record<string, unknown>).__subcontractsErrorToasts = script.errors
+async function mount(t: TestContext, searchParams: string): Promise<void> {
+  script.requests = []
+  ;(globalThis as Record<string, unknown>).__subcontractsSearchParams = searchParams
   const prior = globalThis.fetch
-  globalThis.fetch = (async () => responder()) as typeof fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    script.requests.push(String(input))
+    return new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } })
+  }) as typeof fetch
   t.after(() => {
     globalThis.fetch = prior
   })
@@ -57,9 +54,7 @@ async function mount(t: TestContext, responder: () => Response): Promise<void> {
   document.body.appendChild(host)
   const rootHandle = createRoot(host)
   t.after(async () => {
-    await act(async () => {
-      rootHandle.unmount()
-    })
+    await act(async () => rootHandle.unmount())
     host.remove()
     for (const node of [...document.body.children]) node.remove()
   })
@@ -83,24 +78,23 @@ async function mount(t: TestContext, responder: () => Response): Promise<void> {
   })
 }
 
-test('the register chrome renders translated with an empty list', async (t) => {
-  await mount(t, () => Response.json({ subcontracts: [] }))
-  const text = document.body.textContent ?? ''
-  assert.ok(text.includes('Original and revised commitments remain visible'), 'the collection guidance must render')
-  assert.ok(text.includes('No subcontracts yet'), 'the empty title must render')
-  assert.ok(text.includes('New subcontract'), 'the create action must render')
-  assert.ok(
-    !/register\.|columns\.|tabs\.|toasts\.|statusNames\./.test(text),
-    'no untranslated key path may leak into the chrome',
-  )
+test('the workspace does not fetch the server-loaded register in the browser', async (t) => {
+  await mount(t, '')
+  assert.deepEqual(script.requests, [])
 })
 
-test('a failed list load toasts the translated fallback with the status', async (t) => {
-  await mount(t, () => new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }))
-  assert.deepEqual(script.errors, ['Could not load subcontracts (status 502)'])
-})
+test('a URL-addressed detail drawer shows inline load errors and retries the requested record', async (t) => {
+  const id = '6f7de97f-0807-4f47-b6a2-e0e3c6ae8c2d'
+  await mount(t, `subcontract=${id}&tab=changes`)
 
-test('a refusal without an error field never toasts an empty message', async (t) => {
-  await mount(t, () => Response.json({ ok: false }, { status: 403 }))
-  assert.deepEqual(script.errors, ['Could not load subcontracts (status 403)'])
+  assert.deepEqual(script.requests, [`/api/subcontracts?id=${id}`])
+  assert.ok(document.body.textContent?.includes('Could not load subcontract (status 502)'))
+  const retry = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Retry'))
+  assert.ok(retry, 'the failed drawer request exposes a retry action')
+
+  await act(async () => {
+    retry?.click()
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  assert.deepEqual(script.requests, [`/api/subcontracts?id=${id}`, `/api/subcontracts?id=${id}`])
 })
