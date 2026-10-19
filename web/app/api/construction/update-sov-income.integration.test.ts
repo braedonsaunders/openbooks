@@ -32,20 +32,30 @@ test('updateSov accepts an income-account-only change on an application-used lin
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'Billing controller', 'reviewer')
+    const approver = await createScratchUser(org.orgId, 'Billing approver', 'reviewer')
     await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
     session.user = { id: actor, orgId: org.orgId, name: 'Billing controller', email: 'billing@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
 
     const sov = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'schedule_of_values')!
     const typeId = randomUUID(), project = randomUUID(), line = randomUUID()
+    const foreignSubsidiaryId = randomUUID()
     await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
       values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`)
     await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
       values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'sov income fixture')`)
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values (${foreignSubsidiaryId},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`)
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
       values (${project},${org.orgId},${org.subsidiaryId},'SOVINC','SOV income test job',${org.customerId},${typeId},'active',true)`)
     const altIncome = randomUUID()
+    const balanceSheetAccount = randomUUID()
+    const foreignIncome = randomUUID()
     await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${altIncome}, ${org.orgId}, '4999', 'Alt Service Revenue', 'income', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+    await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${balanceSheetAccount}, ${org.orgId}, '1101', 'Construction Clearing', 'asset', false, true, false, false, '[]'::jsonb, '{}'::jsonb, false)`)
+    await db.execute(sql`insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${foreignIncome}, ${org.orgId}, '4998', 'Other Entity Revenue', 'income', ${foreignSubsidiaryId}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, false)`)
     await db.execute(sql`insert into sov_lines(id,org_id,project_id,item_no,description,scheduled_value,retainage_percent,income_account_id,sort_order) values (${line},${org.orgId},${project},'01-MOB','Mobilization','50000','10',${org.accounts.revenue},1)`)
 
     const created = await post(construction.POST, org.orgId, { action: 'createPayApp', projectId: project, periodEnd: org.date })
@@ -67,11 +77,33 @@ test('updateSov accepts an income-account-only change on an application-used lin
     assert.equal(stored.income_account_id, altIncome)
     assert.equal(stored.description, 'Mobilization')
 
+    for (const [incomeAccountId, label] of [
+      [balanceSheetAccount, 'balance-sheet'],
+      [foreignIncome, 'cross-subsidiary'],
+    ] as const) {
+      const refused = await post(construction.POST, org.orgId, {
+        action: 'updateSov', id: line, itemNo: '01-MOB', description: 'Mobilization',
+        scheduledValue: '50000', retainagePercent: '10', incomeAccountId,
+      })
+      assert.equal(refused.status, 422, `${label}: ${await refused.clone().text()}`)
+      assert.match((await refused.json() as { error: string }).error, /Income|income|subsidiary/)
+      assert.equal((await db.execute<{ income_account_id: string }>(sql`select income_account_id from sov_lines where org_id=${org.orgId} and id=${line}`)).rows[0]!.income_account_id, altIncome)
+    }
+
     const repriced = await post(construction.POST, org.orgId, {
       action: 'updateSov', id: line, itemNo: '01-MOB', description: 'Mobilization repriced',
       scheduledValue: '60000', retainagePercent: '10', incomeAccountId: altIncome,
     })
     assert.equal(repriced.status, 422)
     assert.match((await repriced.json() as { error: string }).error, /immutable|change order/i)
+
+    session.user = { id: approver, orgId: org.orgId, name: 'Billing approver', email: 'approver@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: approver }
+    const approved = await post(construction.POST, org.orgId, { action: 'approvePayApp', payApplicationId: appId })
+    assert.equal(approved.status, 200, JSON.stringify(await approved.clone().json()))
+    await db.execute(sql`update sov_lines set income_account_id=${balanceSheetAccount} where org_id=${org.orgId} and id=${line}`)
+    const invoiceRefused = await post(construction.POST, org.orgId, { action: 'billPayApp', payApplicationId: appId })
+    assert.equal(invoiceRefused.status, 422, JSON.stringify(await invoiceRefused.clone().json()))
+    assert.match((await invoiceRefused.json() as { error: string }).error, /Income or Other Income account/i)
+    assert.deepEqual((await db.execute<{ status: string; invoice_document_id: string | null }>(sql`select status, invoice_document_id from pay_applications where org_id=${org.orgId} and id=${appId}`)).rows[0], { status: 'approved', invoice_document_id: null })
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
