@@ -241,6 +241,10 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
          where org_id = ${org.orgId} and project_id = ${duplicate}`);
       assert.equal(left.rows[0]?.n, "0", table);
     }
+    const movedPattern = await db.execute<{ project_id: string; revision: number }>(sql`
+      select project_id, revision from schedule_patterns
+       where org_id = ${org.orgId} and code = 'MERGE-PATTERN'`);
+    assert.deepEqual(movedPattern.rows, [{ project_id: survivor, revision: 2 }]);
     const customLeft = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from documents
        where org_id = ${org.orgId} and custom ->> 'job_ref' = ${duplicate}`);

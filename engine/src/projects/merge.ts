@@ -1007,10 +1007,17 @@ export async function mergeProjects(
         // keep this update guard so a concurrent append cannot reach its
         // immutable storage trigger as a raw error.
         if (table === "journal_lines" || APPEND_ONLY_PROJECT_REF_TABLES.has(table)) continue;
-        const updated = (await tx.execute<{ id: string }>(sql`
-          update ${sql.identifier(table)} set ${sql.identifier(column)} = ${opts.survivorId}
-           where org_id = ${orgId} and ${sql.identifier(column)} = ${opts.duplicateId}
-          returning id`)).rows;
+        const updated = table === "schedule_patterns"
+          ? (await tx.execute<{ id: string }>(sql`
+              update schedule_patterns
+                 set project_id = ${opts.survivorId}, revision = revision + 1,
+                     updated_at = now(), updated_by = ${opts.actorId}
+               where org_id = ${orgId} and project_id = ${opts.duplicateId}
+              returning id`)).rows
+          : (await tx.execute<{ id: string }>(sql`
+              update ${sql.identifier(table)} set ${sql.identifier(column)} = ${opts.survivorId}
+               where org_id = ${orgId} and ${sql.identifier(column)} = ${opts.duplicateId}
+              returning id`)).rows;
         if (updated.length > 0) movedCounts[table] = updated.length;
       }
       const journalLinesMoved = await moveJournalLinesForProjectMerge(
