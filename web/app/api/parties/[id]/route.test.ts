@@ -341,3 +341,14 @@ test('an unknown party kind is still refused before any write', async () => {
   assert.equal(response.status, 400)
   assert.equal(writeCalls().length, 0)
 })
+
+test('an edited email no message could be sent to is refused by field before any write', async () => {
+  reset()
+
+  const response = await patch({ email: 'not-an-email' })
+
+  assert.equal(response.status, 422)
+  const body = await response.json() as { fieldErrors?: Record<string, string> }
+  assert.match(body.fieldErrors?.email ?? '', /valid email address/)
+  assert.equal(writeCalls().length, 0)
+})

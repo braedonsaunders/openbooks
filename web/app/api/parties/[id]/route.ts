@@ -21,6 +21,7 @@ import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { emitCustomerUpdated } from '@openbooks/engine/webhooks'
 import { wholeDigits } from '@openbooks/engine/money'
 import { assignEmployeeWorkerCompGroup } from '@openbooks/engine/payroll/setup'
+import { PARTY_EMAIL_REFUSAL, partyEmailInvalid } from '../../../../lib/party-email'
 
 
 export const runtime = 'nodejs'
@@ -453,6 +454,7 @@ export const PATCH = defineRoute({
   if (website && !/^https?:\/\/|^[\w.-]+\.[a-z]{2,}/i.test(website)) {
     return bad('Website must be a URL or domain')
   }
+  if (body.email !== undefined && partyEmailInvalid(body.email)) return bad(PARTY_EMAIL_REFUSAL, { email: PARTY_EMAIL_REFUSAL })
 
   const subsidiaryId = body.subsidiaryId !== undefined ? uuidOrNull(body.subsidiaryId) : undefined
   if (subsidiaryId === 'invalid') return bad('Invalid subsidiary')

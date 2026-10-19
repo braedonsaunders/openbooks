@@ -17,6 +17,7 @@ import { loadParty } from './_lib'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../lib/exact-decimal'
 import { notFound } from "@/lib/api/responses";
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
+import { PARTY_EMAIL_REFUSAL, partyEmailInvalid } from '../../../lib/party-email'
 import { wholeDigits } from "@openbooks/engine/money";
 
 
@@ -232,6 +233,7 @@ export const POST = defineRoute({
   if (website && !/^https?:\/\/|^[\w.-]+\.[a-z]{2,}/i.test(website)) {
     return bad('Website must be a URL or domain', 'website')
   }
+  if (partyEmailInvalid(body.email)) return bad(PARTY_EMAIL_REFUSAL, 'email')
 
   const subsidiaryId = body.subsidiaryId !== undefined ? uuidOrNull(body.subsidiaryId) : null
   if (subsidiaryId === 'invalid') return bad('Invalid subsidiary', 'subsidiaryId')

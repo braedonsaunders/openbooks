@@ -303,6 +303,24 @@ test("a nameless party and the draft sentinels are refused before any write", as
   }
 });
 
+test("an email no message could be sent to is refused by field before any write", async () => {
+  for (const email of ["not-an-email", "qa beta@example.com", "a@@example.com", "@example.com"]) {
+    reset();
+    const response = await post("00000000-0000-4000-8000-00000000b00a", { displayName: "QA Tester Alpha", kind: "person", email });
+    assert.equal(response.status, 422, email);
+    const body = await response.json() as { error: string; field?: string };
+    assert.equal(body.field, "email");
+    assert.match(body.error, /valid email address/);
+    assert.ok(!state.transactionQueries.some((q) => q.includes("insert into parties")), `no party row for ${email}`);
+  }
+  reset();
+  const accepted = await post("00000000-0000-4000-8000-00000000b00b", { displayName: "QA Tester Beta", kind: "person", email: "qa.beta@example.com" });
+  assert.equal(accepted.status, 201, "a valid address saves");
+  reset();
+  const blank = await post("00000000-0000-4000-8000-00000000b00c", { displayName: "QA Tester Gamma", kind: "person", email: "  " });
+  assert.equal(blank.status, 201, "a blank address is no address");
+});
+
 test("a foreign role reference is refused as unknown, never persisted", async () => {
   reset();
   state.refExists = false;
