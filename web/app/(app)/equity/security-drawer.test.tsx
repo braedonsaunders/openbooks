@@ -152,6 +152,109 @@ test('a refused event pins its refusal and remedy beside the form until the next
   }
 })
 
+const SAFE = 's0000000-0000-4000-8000-000000000007'
+const VOIDED_SOURCE = 's0000000-0000-4000-8000-000000000008'
+const REVERSED_SOURCE = 's0000000-0000-4000-8000-000000000009'
+const VOID_ELECTION = 'e0000000-0000-4000-8000-000000000001'
+
+/** An MFN SAFE whose election adopted the terms of an instrument since voided. */
+function mfnSafe(): DrawerProps {
+  const props = restrictedCertificate({
+    security: {
+      id: SAFE, security_number: 'SAFE-0003', kind: 'safe', issue_date: '2025-02-01', currency: 'USD', fx_rate: '1', consideration_amount: '500000.0000',
+      mfn: true, valuation_cap: null, discount_percent: null, safe_type: 'post_money',
+    },
+    restricted: null, state: null, vesting: [], events: [],
+    convertible: {
+      status: 'outstanding', principal: '500000.0000', accruedInterest: '0.0000', convertingAmount: '500000.0000', endedOn: null, convertedOn: null, outstanding: '500000.0000',
+      resultingSecurityId: null, resultingSecurityNumber: null, valuationCap: null, discountPercent: null, safeType: 'post_money', electionId: null,
+      issuedTerms: { valuationCap: null, discountPercent: null, safeType: 'post_money' }, invalidConversionTerms: null,
+    },
+    mfn: {
+      candidates: [],
+      elections: [
+        {
+          id: 'e-old', kind: 'mfn_election', effectiveOn: '2025-04-01', sourceSecurityId: REVERSED_SOURCE, sourceSecurityNumber: 'SAFE-0001',
+          valuationCap: '40000000.0000', discountPercent: null, safeType: 'post_money', before: { valuationCap: null, discountPercent: null, safeType: 'post_money' },
+          reversesAmendmentId: null, standing: 'reversed', reversedOn: '2025-05-01', reason: 'Adopted in error',
+        },
+        {
+          id: 'e-old-reversal', kind: 'mfn_reversal', effectiveOn: '2025-05-01', sourceSecurityId: REVERSED_SOURCE, sourceSecurityNumber: 'SAFE-0001',
+          valuationCap: null, discountPercent: null, safeType: 'post_money', before: { valuationCap: '40000000.0000', discountPercent: null, safeType: 'post_money' },
+          reversesAmendmentId: 'e-old', standing: null, reversedOn: null, reason: 'Adopted in error',
+        },
+        {
+          id: VOID_ELECTION, kind: 'mfn_election', effectiveOn: '2025-06-15', sourceSecurityId: VOIDED_SOURCE, sourceSecurityNumber: 'SAFE-0005',
+          valuationCap: '60000000.0000', discountPercent: '20.0000', safeType: 'post_money', before: { valuationCap: null, discountPercent: null, safeType: 'post_money' },
+          reversesAmendmentId: null, standing: 'source_void', reversedOn: null, reason: 'Holder elected the better cap',
+        },
+      ],
+    },
+  })
+  return { ...props, releases: [], context: { ...props.context, asOf: '2026-10-19' } }
+}
+
+async function reverseVoidSourceElection(response: { status: number; body: unknown }) {
+  const requests: { url: string; body: Record<string, unknown> }[] = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    requests.push({ url: String(url), body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+    return new Response(JSON.stringify(response.body), { status: response.status, headers: { 'Content-Type': 'application/json' } })
+  }) as typeof fetch
+  const screen = await mount(<SecurityDrawer {...mfnSafe()} />, `/equity?sub=${SUB}&view=securities&security=${SAFE}`)
+  try {
+    const mfnTab = [...dialog().querySelectorAll('nav button[aria-pressed]')].find((tab) => text(tab).startsWith('MFN')) as HTMLButtonElement
+    await act(async () => { mfnTab.click() })
+    const rows = [...dialog().querySelectorAll('tbody tr')]
+    const reversed = rows.find((row) => text(row).includes('SAFE-0001') && text(row).includes('Reversed'))!
+    assert.equal([...reversed.querySelectorAll('button')].length, 0, 'a reversed election offers no second reversal')
+    const voided = rows.find((row) => text(row).includes('SAFE-0005'))!
+    assert.ok(text(voided).includes('Source void'), text(voided))
+    const reverse = [...voided.querySelectorAll('button')].find((button) => text(button) === 'Reverse election') as HTMLButtonElement
+    assert.ok(reverse, 'an election whose source is void offers the reversal its conversion refusal prescribes')
+    await act(async () => { reverse.click() })
+    assert.ok(text(dialog()).includes('SAFE-0005 was voided'), 'the form says why this election is reversed')
+    const submit = [...dialog().querySelectorAll('button')].filter((button) => text(button) === 'Reverse election').at(-1) as HTMLButtonElement
+    assert.equal(submit.disabled, true, 'a reversal needs its reason first')
+    const reason = [...dialog().querySelectorAll('textarea')].at(-1) as HTMLTextAreaElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(reason, 'Source SAFE-0005 was voided')
+      reason.dispatchEvent(new window.Event('input', { bubbles: true }))
+    })
+    await act(async () => { submit.click(); await new Promise((resolve) => setTimeout(resolve, 20)) })
+    return { requests, body: text(dialog()) }
+  } finally {
+    globalThis.fetch = originalFetch
+    await screen.close()
+  }
+}
+
+test('an MFN election whose source is void reverses from the MFN terms through the governed reversal', async () => {
+  const { requests, body } = await reverseVoidSourceElection({ status: 201, body: { amendmentId: 'r1', replayed: false, status: 'applied', requestId: 'q1' } })
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0]!.url, `/api/equity/securities/${SAFE}/mfn-elections/${VOID_ELECTION}/reversal`)
+  assert.equal(requests[0]!.body.effectiveOn, '2026-10-19', 'the reversal is dated on the as-of date, after every recorded election')
+  assert.equal(requests[0]!.body.reason, 'Source SAFE-0005 was voided')
+  assert.match(String(requests[0]!.body.idempotencyKey), new RegExp(`^${VOID_ELECTION}:mfn-reversal:`))
+  assert.ok(!body.includes('was voided, so its terms no longer stand'), 'the form closes once the reversal applies')
+})
+
+test('a reversal an Equity action Flow holds for approval closes the form and refuses nothing', async () => {
+  const { requests, body } = await reverseVoidSourceElection({ status: 202, body: { amendmentId: null, replayed: false, status: 'pending_approval', requestId: 'q2' } })
+  assert.equal(requests.length, 1)
+  assert.equal(body.includes('The election could not be reversed.'), false, body)
+  assert.ok(!body.includes('was voided, so its terms no longer stand'), 'the form closes once the Flow holds the reversal')
+})
+
+test('a refused reversal keeps the form open with the refusal and its remedy', async () => {
+  const { body } = await reverseVoidSourceElection({
+    status: 409, body: { error: 'A later MFN election on SAFE-0003 is recorded from 2026-07-01.', remedy: 'Reverse the election of 2026-07-01 first, latest first.', code: 'equity_mfn_reversal_has_dependents' },
+  })
+  assert.ok(body.includes('A later MFN election on SAFE-0003'), body)
+  assert.ok(body.includes('Reverse the election of 2026-07-01 first'), 'the remedy stays beside the form')
+  assert.ok(body.includes('was voided, so its terms no longer stand'), 'the form stays open for another attempt')
+})
+
 const { NewRecordDrawer } = await import('./NewRecordDrawer')
 
 test('a new stakeholder with an address no message could be sent to is held at the form, with the reason beside the field', async () => {

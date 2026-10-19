@@ -744,6 +744,7 @@
     "reverse": "Reverter eleição",
     "reverseTitle": "Reverter a eleição de {date} que adota as condições de {source}",
     "reverseHelp": "A partir da data de reversão, o SAFE volta às condições vigentes antes da eleição. Um Flow pode exigir aprovação antes de ser aplicada.",
+    "reverseHelpSourceVoid": "{source} foi anulado, portanto seus termos não valem mais. A partir da data da reversão, o SAFE volta a ter os termos vigentes antes da eleição e converte por eles. Um Flow pode exigir aprovação antes que seja aplicada.",
     "reversed": "Eleição NMF revertida",
     "reverseFailed": "Não foi possível reverter a eleição."
   },

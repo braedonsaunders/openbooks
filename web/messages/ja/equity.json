@@ -744,6 +744,7 @@
     "reverse": "選択を取り消す",
     "reverseTitle": "{date}の{source}の条件を採用した選択を取り消す",
     "reverseHelp": "取消日以降、SAFEは選択前の条件に戻ります。適用前にFlowによる承認が必要な場合があります。",
+    "reverseHelpSourceVoid": "{source} は無効化されたため、その条件はもう適用されません。取消日以降、SAFE は選択前に有効だった条件に戻り、その条件で転換されます。適用前に Flow による承認が必要な場合があります。",
     "reversed": "MFN選択を取り消しました",
     "reverseFailed": "選択を取り消せませんでした。"
   },

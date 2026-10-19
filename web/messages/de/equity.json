@@ -744,6 +744,7 @@
     "reverse": "Wahl zurücknehmen",
     "reverseTitle": "Wahl vom {date} zur Übernahme der Bedingungen von {source} zurücknehmen",
     "reverseHelp": "Ab dem Rücknahmedatum gelten für den SAFE wieder die Bedingungen vor der Wahl. Ein Flow kann eine Genehmigung verlangen, bevor sie wirksam wird.",
+    "reverseHelpSourceVoid": "{source} wurde storniert, seine Bedingungen gelten daher nicht mehr. Ab dem Rückabwicklungsdatum gelten für den SAFE wieder die Bedingungen vor der Wahl, und er wandelt zu diesen. Ein Flow kann eine Genehmigung verlangen, bevor dies wirksam wird.",
     "reversed": "MFN-Wahl zurückgenommen",
     "reverseFailed": "Die Wahl konnte nicht zurückgenommen werden."
   },

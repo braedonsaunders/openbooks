@@ -744,6 +744,7 @@
     "reverse": "撤销选择",
     "reverseTitle": "撤销{date}采用{source}条款的选择",
     "reverseHelp": "自撤销日起，SAFE恢复选择前的有效条款。生效前可能需经Flow审批。",
+    "reverseHelpSourceVoid": "{source} 已作废，其条款不再有效。自撤销日起，该 SAFE 恢复选择前有效的条款，并按其转换。生效前可能需要 Flow 审批。",
     "reversed": "已撤销最惠国选择",
     "reverseFailed": "无法撤销该选择。"
   },

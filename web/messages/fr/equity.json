@@ -744,6 +744,7 @@
     "reverse": "Annuler le choix",
     "reverseTitle": "Annuler le choix du {date} reprenant les conditions de {source}",
     "reverseHelp": "À compter de la date d'annulation, le SAFE reprend les conditions en vigueur avant le choix. Un Flow peut exiger une approbation avant son application.",
+    "reverseHelpSourceVoid": "{source} a été annulé : ses conditions ne s’appliquent plus. À compter de la date d’annulation de l’option, le SAFE reprend les conditions en vigueur avant l’option et se convertit selon celles-ci. Un Flow peut exiger une approbation avant son application.",
     "reversed": "Choix NPF annulé",
     "reverseFailed": "Le choix n'a pas pu être annulé."
   },

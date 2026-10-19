@@ -402,6 +402,13 @@ function ReversalForm({ securityId, target, asOf, onDone }: { securityId: string
 
 type MfnRecord = NonNullable<SecurityDrawerData['detail']['mfn']>['elections'][number]
 
+/**
+ * An election still in force, or one whose source instrument was voided
+ * (whose adopted terms the SAFE can no longer convert on), is reversed
+ * through the governed reversal; a reversed or superseded one is history.
+ */
+const REVERSIBLE_STANDINGS = new Set<MfnRecord['standing']>(['in_force', 'source_void'])
+
 /** The terms an MFN record leaves the SAFE with, beside those before it. */
 function useMfnTerms(currency: string) {
   const t = useTranslations('equity')
@@ -437,12 +444,20 @@ function MfnHistoryRow({ election, currency, params, actionColumn }: { election:
 }
 
 /** The governed reversal of an MFN election recorded in error. */
-function MfnReversalForm({ securityId, election, asOf, onDone }: { securityId: string; election: MfnRecord; asOf: string; onDone: () => void }) {
+function MfnReversalForm({ securityId, election, asOf, latestRecorded, onDone }: {
+  securityId: string
+  election: MfnRecord
+  asOf: string
+  /** The latest MFN election or reversal recorded on the SAFE: a reversal cannot be dated before it. */
+  latestRecorded: string
+  onDone: () => void
+}) {
   const t = useTranslations('equity')
   const date = useCivilDate()
   const router = useRouter()
   const { busy, refusal, execute } = useAppAction()
-  const [form, setForm] = useState({ effectiveOn: asOf < election.effectiveOn ? election.effectiveOn : asOf, reason: '' })
+  const floor = latestRecorded > election.effectiveOn ? latestRecorded : election.effectiveOn
+  const [form, setForm] = useState({ effectiveOn: asOf < floor ? floor : asOf, reason: '' })
   async function submit() {
     await execute(() => postCommand(`/api/equity/securities/${securityId}/mfn-elections/${election.id}/reversal`, {
       effectiveOn: form.effectiveOn, reason: form.reason, idempotencyKey: `${election.id}:mfn-reversal:${crypto.randomUUID()}`,
@@ -458,7 +473,9 @@ function MfnReversalForm({ securityId, election, asOf, onDone }: { securityId: s
   return (
     <section className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
       <h3 className="text-sm font-semibold">{t('mfn.reverseTitle', { source: election.sourceSecurityNumber, date: date(election.effectiveOn) })}</h3>
-      <p className="text-sm text-slate-500 dark:text-slate-400">{t('mfn.reverseHelp')}</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {election.standing === 'source_void' ? t('mfn.reverseHelpSourceVoid', { source: election.sourceSecurityNumber }) : t('mfn.reverseHelp')}
+      </p>
       <div className="grid grid-cols-2 gap-3">
         <Field label={t('fields.effectiveOn')}><DateField value={form.effectiveOn} onChange={(value) => setForm({ ...form, effectiveOn: value })} /></Field>
       </div>
@@ -587,7 +604,7 @@ function MfnPanel({ securityId, mfn, asOf, canRecord, currency, params }: {
                   <TableCell>{row.standing ? <Badge variant={row.standing === 'in_force' ? 'success' : 'outline'}>{t(`mfn.standing.${row.standing}`)}</Badge> : '—'}</TableCell>
                   {canRecord && (
                     <TableCell className="text-right">
-                      {row.kind === 'mfn_election' && row.standing === 'in_force' && (
+                      {row.kind === 'mfn_election' && REVERSIBLE_STANDINGS.has(row.standing) && (
                         <Button size="sm" variant="ghost" onClick={() => setReversing(row)}>{t('mfn.reverse')}</Button>
                       )}
                     </TableCell>
@@ -596,7 +613,12 @@ function MfnPanel({ securityId, mfn, asOf, canRecord, currency, params }: {
               ))}
             </TableBody>
           </Table>
-          {reversing && <MfnReversalForm securityId={securityId} election={reversing} asOf={asOf} onDone={() => setReversing(null)} />}
+          {reversing && (
+            <MfnReversalForm
+              securityId={securityId} election={reversing} asOf={asOf} onDone={() => setReversing(null)}
+              latestRecorded={mfn.elections.map((row) => row.effectiveOn).sort().at(-1) ?? reversing.effectiveOn}
+            />
+          )}
         </section>
       )}
     </div>

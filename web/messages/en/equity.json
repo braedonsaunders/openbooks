@@ -744,6 +744,7 @@
     "reverse": "Reverse election",
     "reverseTitle": "Reverse the election adopting {source}'s terms on {date}",
     "reverseHelp": "From the reversal date the SAFE carries the terms in force before the election again. A Flow may require approval before it applies.",
+    "reverseHelpSourceVoid": "{source} was voided, so its terms no longer stand. From the reversal date the SAFE carries the terms in force before the election again and converts on them. A Flow may require approval before it applies.",
     "reversed": "MFN election reversed",
     "reverseFailed": "The election could not be reversed."
   },
