@@ -15,6 +15,7 @@ import { addCalendarDays, isIsoCalendarDate } from '@openbooks/engine/platform/c
 import { normalizeMoney, cmp } from '@openbooks/engine/money'
 import { auditSetupChange } from '@/lib/setup/audit'
 import { claimIdempotentCreate, resolveIdempotentReplay } from '@/lib/api/idempotency'
+import { assertScheduleScope } from './schedule-scope'
 
 export const runtime = 'nodejs'
 
@@ -246,6 +247,7 @@ export async function postSchedule(request: Request, actor: ScheduleActor, subje
   if (!isUuid(requestId)) return unprocessable('invalid_idempotency_key', { status: 400 })
   const parsed = parseSchedule(body as Record<string, unknown>)
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
+  assertScheduleScope(actor.allowedSubsidiaryIds, parsed.customerId)
   try {
     const columns = subjectColumns(subject)
     const match = {
@@ -384,6 +386,7 @@ export async function patchSchedule(request: Request, actor: ScheduleActor, subj
          where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} for update`))
         .rows[0] as LockedSchedule | undefined
       if (!locked) return { kind: 'missing' as const }
+      assertScheduleScope(actor.allowedSubsidiaryIds, parsed.customerId, locked.customer_id)
       await requireCustomerVisible(tx, actor.orgId, locked.customer_id, actor.allowedSubsidiaryIds)
       // The row is locked BEFORE it is read: the revision comparison, the
       // lifecycle checks, the mutation and the audit are one serialized
@@ -529,6 +532,7 @@ export async function deleteSchedule(request: Request, actor: ScheduleActor, sub
        where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} for update`))
       .rows[0] as LockedSchedule | undefined
     if (!locked) return { kind: 'missing' as const }
+    assertScheduleScope(actor.allowedSubsidiaryIds, locked.customer_id)
     await requireCustomerVisible(tx, actor.orgId, locked.customer_id, actor.allowedSubsidiaryIds)
     if (Number(locked.revision) !== expectedRevision) {
       return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }

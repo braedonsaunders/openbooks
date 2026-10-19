@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '@/lib/authz'
+import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
 import {
@@ -12,52 +12,58 @@ import {
 
 export const runtime = 'nodejs'
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.read')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  const data = await getSchedules(
-    { orgId: gate.user.orgId, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
-    { kind: 'item', id },
-  )
-  if (!data) return notFound('record')
-  return NextResponse.json(data)
+const itemParams = z.object({ id: z.string() })
+
+function actorOf(gate: {
+  user: { orgId: string; id: string }
+  allowedSubsidiaryIds: ReadonlySet<string> | null
+}) {
+  return {
+    orgId: gate.user.orgId,
+    actorId: gate.user.id,
+    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+  }
 }
 
-export const POST = defineRoute({
-  permission: 'items.manage',
-  feature: { none: 'Item price schedules are catalog data governed by items.manage; no feature key gates them.' },
-  body: priceScheduleBody,
-  handler: async ({ request, authz, params, body }) => {
-    const gate = authz
-    const { id } = (await params) as { id: string }
-    return postSchedule(
-      request,
-      { orgId: gate.user.orgId, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
-      { kind: 'item', id },
-      body,
-    )
+const ITEM_SCHEDULE_FEATURE = {
+  none: 'Item price schedules are catalog data governed by items.manage; no feature key gates them.',
+} as const
+
+export const GET = defineRoute({
+  permission: 'items.read',
+  feature: ITEM_SCHEDULE_FEATURE,
+  params: itemParams,
+  handler: async ({ authz: gate, params: { id } }) => {
+    const data = await getSchedules(actorOf(gate), { kind: 'item', id })
+    if (!data) return notFound('record')
+    return NextResponse.json(data)
   },
 })
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.manage')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  return patchSchedule(
-    request,
-    { orgId: gate.user.orgId, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
-    { kind: 'item', id },
-  )
-}
+export const POST = defineRoute({
+  permission: 'items.manage',
+  feature: ITEM_SCHEDULE_FEATURE,
+  params: itemParams,
+  body: priceScheduleBody,
+  handler: async ({ request, authz: gate, params: { id }, body }) => {
+    return postSchedule(request, actorOf(gate), { kind: 'item', id }, body)
+  },
+})
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.manage')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  return deleteSchedule(
-    request,
-    { orgId: gate.user.orgId, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
-    { kind: 'item', id },
-  )
-}
+export const PATCH = defineRoute({
+  permission: 'items.manage',
+  feature: ITEM_SCHEDULE_FEATURE,
+  params: itemParams,
+  handler: async ({ request, authz: gate, params: { id } }) => {
+    return patchSchedule(request, actorOf(gate), { kind: 'item', id })
+  },
+})
+
+export const DELETE = defineRoute({
+  permission: 'items.manage',
+  feature: ITEM_SCHEDULE_FEATURE,
+  params: itemParams,
+  handler: async ({ request, authz: gate, params: { id } }) => {
+    return deleteSchedule(request, actorOf(gate), { kind: 'item', id })
+  },
+})

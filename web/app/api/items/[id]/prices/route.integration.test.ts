@@ -114,6 +114,22 @@ test('a foreign price level is refused before schedule or audit insertion', asyn
   }
 })
 
+test('a subsidiary-restricted actor cannot create an organization-wide price-level schedule', async () => {
+  const f = await fixture()
+  const key = randomUUID()
+  try {
+    const response = await post(f, key, '12.3400', new Set([f.subsidiaryId]))
+    assert.equal(response.status, 403)
+    assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
+    const count = (await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from item_price_schedules where org_id=${f.orgId} and id=${key}
+    `)).rows[0]
+    assert.equal(count?.count, 0, 'the refused create leaves no organization-wide schedule')
+  } finally {
+    await dropScratchOrgReporting(f.orgId)
+  }
+})
+
 test('customer price schedules and picker entries stay hidden outside the actor subsidiary scope', async () => {
   const f = await fixture()
   const customerId = randomUUID()

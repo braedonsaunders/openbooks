@@ -5,7 +5,7 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.item-price-history-test')
-const routeState: { authz: { user: { orgId: string; id: string } } | null } = { authz: null }
+const routeState: { authz: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null } = { authz: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
 const hooks = registerHooks({
@@ -81,8 +81,8 @@ function scheduleBody(f: Fixture, effectiveFrom: string, unitPrice: string, extr
   }
 }
 
-async function postSchedule(f: Fixture, effectiveFrom: string, unitPrice: string) {
-  routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
+async function postSchedule(f: Fixture, effectiveFrom: string, unitPrice: string, allowedSubsidiaryIds: Set<string> | null = null) {
+  routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, allowedSubsidiaryIds }
   const response = await POST(new Request(`http://openbooks.test/api/items/${f.itemId}/prices`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'Idempotency-Key': randomUUID() },
@@ -92,8 +92,8 @@ async function postSchedule(f: Fixture, effectiveFrom: string, unitPrice: string
   return String((await response.json()).id)
 }
 
-async function patchSchedule(f: Fixture, body: Record<string, unknown>) {
-  routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
+async function patchSchedule(f: Fixture, body: Record<string, unknown>, allowedSubsidiaryIds: Set<string> | null = null) {
+  routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, allowedSubsidiaryIds }
   return PATCH(new Request(`http://openbooks.test/api/items/${f.itemId}/prices`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
@@ -101,8 +101,8 @@ async function patchSchedule(f: Fixture, body: Record<string, unknown>) {
   }), { params: Promise.resolve({ id: f.itemId }) })
 }
 
-async function deleteSchedule(f: Fixture, scheduleId: string, revision?: number, reason?: string) {
-  routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
+async function deleteSchedule(f: Fixture, scheduleId: string, revision?: number, reason?: string, allowedSubsidiaryIds: Set<string> | null = null) {
+  routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, allowedSubsidiaryIds }
   const params = new URLSearchParams({ schedule: scheduleId })
   if (revision !== undefined) params.set('revision', String(revision))
   if (reason !== undefined) params.set('reason', reason)
@@ -125,6 +125,33 @@ async function breakPrices(f: Fixture, scheduleId: string) {
 }
 
 test.after(() => hooks.deregister())
+test('subsidiary-restricted actors cannot modify or delete organization-wide price-level schedules', async () => {
+  const f = await fixture()
+  try {
+    const effectiveFrom = shift(await today(), 30)
+    const scheduleId = await postSchedule(f, effectiveFrom, '100.0000')
+    const restrictedScope = new Set([randomUUID()])
+
+    const changed = await patchSchedule(
+      f,
+      { id: scheduleId, revision: 0, ...scheduleBody(f, effectiveFrom, '70.0000') },
+      restrictedScope,
+    )
+    assert.equal(changed.status, 403)
+    assert.deepEqual(await changed.json(), { error: 'requires unrestricted subsidiary access' })
+
+    const deleted = await deleteSchedule(f, scheduleId, 0, undefined, restrictedScope)
+    assert.equal(deleted.status, 403)
+    assert.deepEqual(await deleted.json(), { error: 'requires unrestricted subsidiary access' })
+    const stored = await scheduleRows(f)
+    assert.equal(stored.length, 1, 'the schedule remains after refused writes')
+    assert.equal(stored[0]?.is_active, true)
+    assert.equal(stored[0]?.effective_to, null)
+  } finally {
+    await dropScratchOrgReporting(f.orgId)
+  }
+})
+
 test('a retroactive price change without a reason is refused and changes nothing', async () => {
   const f = await fixture()
   try {
