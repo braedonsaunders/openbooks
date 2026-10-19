@@ -35,10 +35,10 @@ test('late rows and independently styled evidence determine minimum widths', () 
   const doc = document()
   try {
     const rows: PdfTableGroup['rows'] = Array.from({ length: 201 }, () => ['A', 'B'])
-    rows.push(['CERT-0000123456789', { text: 'Unused summary text', segments: [{ text: 'Ausstehend', bold: true }] }])
+    rows.push(['ÄKT-0000123456789', { text: 'Unused summary text', segments: [{ text: 'Ausstehend', bold: true }] }])
     const widths = computeColumnWidths(doc, group(['Reference', 'Status'], rows), 400, theme)
     doc.font(theme.font).fontSize(theme.table)
-    assert.ok(widths[0]! >= doc.widthOfString('CERT-0000123456789') + 12)
+    assert.ok(widths[0]! >= doc.widthOfString('ÄKT-0000123456789') + 12)
     doc.font(theme.fontBold)
     assert.ok(widths[1]! >= doc.widthOfString('Ausstehend') + 12)
   } finally { doc.end() }
@@ -47,7 +47,7 @@ test('late rows and independently styled evidence determine minimum widths', () 
 test('impossible automatic and weighted grids refuse with an actionable 422', () => {
   const doc = document()
   try {
-    const data = group(['Reference', 'Reference'], [['CERT-0000123456789', 'CERT-0000123456789']])
+    const data = group(['Reference', 'Reference'], [['ÄKT-0000123456789', 'ÄKT-0000123456789']])
     for (const configured of [data, { ...data, columnWeights: [1, 1] }]) {
       assert.throws(() => computeColumnWidths(doc, configured, 100, theme), (error: unknown) => {
         assert.ok(error instanceof PdfLayoutError)

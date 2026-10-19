@@ -52,7 +52,7 @@ function textWidths(doc: InstanceType<typeof PDFKit>, text: string): { preferred
   }
   // Compact identifiers are read and reconciled as a unit, even when Unicode
   // would permit a line break at their hyphen.
-  for (const match of text.matchAll(/\b[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+\b/g)) {
+  for (const match of text.matchAll(/[\p{L}\p{N}]+(?:[-_][\p{L}\p{N}]+)+/gu)) {
     minimum = Math.max(minimum, doc.widthOfString(match[0]))
   }
   const preferred = Math.max(0, ...text.split(/\r?\n/).map(line => doc.widthOfString(line)))
