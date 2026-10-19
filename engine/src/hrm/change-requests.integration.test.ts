@@ -682,6 +682,74 @@ test("draft edits bump the revision and move the digest; submit freezes both", {
   });
 });
 
+test("draft change-request edits retain their original authoring kind", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
+    const selfActor = await createScratchUser(h.org.orgId, "Self-service employee", "change_request_self");
+    await grantPermissions(h.org.orgId, selfActor, ["hrm.self.read", "hrm.self.request"]);
+    const ownParty = await linkPerson(h.org.orgId, selfActor);
+    const ownEmployment = await seedEmployment(h.org.orgId, h.org.subsidiaryId, {
+      workerPartyId: ownParty,
+      withVersion: false,
+      employeeRole: true,
+    });
+    await addLiveVersion(h.org.orgId, ownEmployment.employmentId, {
+      status: "active",
+      from: "2026-01-01",
+      sourceRef: "self-service-seed",
+    });
+
+    const employmentDraft = await createChangeRequestDraft({
+      orgId: h.org.orgId,
+      actorId: h.submitterId,
+      employmentId: ownEmployment.employmentId,
+      payload: { kind: "status_change", status: "on_leave", effectiveFrom: "2026-09-01" },
+    });
+    await assert.rejects(
+      updateChangeRequestPayload({
+        orgId: h.org.orgId,
+        actorId: selfActor,
+        requestId: employmentDraft.id,
+        payload: { kind: "profile_change", phone: "+1 555 0110" },
+      }),
+    );
+    await assert.rejects(
+      updateChangeRequestPayload({
+        orgId: h.org.orgId,
+        actorId: h.submitterId,
+        requestId: employmentDraft.id,
+        payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
+      }),
+      (error: unknown) => error instanceof HrmChangeRequestError && error.code === "BAD_STATE",
+    );
+
+    const profileDraft = await createChangeRequestDraft({
+      orgId: h.org.orgId,
+      actorId: selfActor,
+      employmentId: ownEmployment.employmentId,
+      payload: { kind: "profile_change", phone: "+1 555 0109" },
+    });
+    await assert.rejects(
+      updateChangeRequestPayload({
+        orgId: h.org.orgId,
+        actorId: h.submitterId,
+        requestId: profileDraft.id,
+        payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
+      }),
+    );
+
+    const stored = (await db.execute<{ id: string; kind: string; request_revision: number }>(sql`
+      select id::text, payload->>'kind' as kind, request_revision
+        from hrm_employment_change_requests
+       where org_id = ${h.org.orgId} and id in (${employmentDraft.id}, ${profileDraft.id})
+       order by id
+    `)).rows;
+    assert.deepEqual(new Map(stored.map((row) => [row.id, [row.kind, row.request_revision]])), new Map([
+      [employmentDraft.id, ["status_change", 1]],
+      [profileDraft.id, ["profile_change", 1]],
+    ]));
+  });
+});
+
 // OM-19: the drawer re-sends the stored payload on submit-for-approval
 // without touching a field. That re-send used to bump request_revision on a
 // touch-only row, the 0185 guard refused it, and the PATCH 500'd — so the
