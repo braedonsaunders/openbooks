@@ -38,8 +38,20 @@
     "details": "Détail du fonds",
     "code": "Code",
     "kind": "Nature",
+    "kinds": {
+      "operating": "Fonctionnement",
+      "restricted": "Affecté",
+      "endowment": "Fonds de dotation",
+      "plant": "Immobilisations",
+      "board_designated": "Désigné par le conseil"
+    },
     "restrictionClass": "Classe de restriction",
     "budgetaryControl": "Contrôle budgétaire",
+    "controlModes": {
+      "off": "Désactivé",
+      "advisory": "Consultatif",
+      "hard": "Strict"
+    },
     "status": "Statut",
     "active": "Actif",
     "archived": "Archivé",

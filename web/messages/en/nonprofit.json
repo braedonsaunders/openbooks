@@ -38,8 +38,20 @@
     "details": "Fund details",
     "code": "Code",
     "kind": "Kind",
+    "kinds": {
+      "operating": "Operating",
+      "restricted": "Restricted",
+      "endowment": "Endowment",
+      "plant": "Plant",
+      "board_designated": "Board designated"
+    },
     "restrictionClass": "Restriction class",
     "budgetaryControl": "Budgetary control",
+    "controlModes": {
+      "off": "Off",
+      "advisory": "Advisory",
+      "hard": "Hard"
+    },
     "status": "Status",
     "active": "Active",
     "archived": "Archived",

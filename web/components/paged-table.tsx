@@ -298,6 +298,7 @@ export function PagedTable<T>({
                   <input
                     type="checkbox"
                     className={checkboxClass}
+                    aria-label={`${t('actions.select')} ${rowLabel?.(row) ?? selection.getId(row)}`}
                     checked={selected?.has(selection.getId(row)) ?? false}
                     disabled={selection.disabled}
                     onChange={() => selection.onToggle(selection.getId(row))}

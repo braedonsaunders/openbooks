@@ -40,6 +40,7 @@ export const NONPROFIT_SETUP_ENTITIES: SetupEntity[] = [
         { value: 'us_asc958', label: 'US ASC 958' },
         { value: 'ew_sorp_frs102', label: 'England and Wales Charities SORP (FRS 102)' },
       ] },
+      { key: 'reason', kind: 'text', required: true, resetOnEdit: true },
     ],
   },
   {
@@ -117,6 +118,7 @@ export const NONPROFIT_SETUP_ENTITIES: SetupEntity[] = [
       { key: 'programKey', kind: 'text' },
       { key: 'effectiveFrom', kind: 'date', required: true },
       { key: 'effectiveTo', kind: 'date' },
+      { key: 'reason', kind: 'text', required: true, resetOnEdit: true },
     ],
   },
 ]

@@ -15,11 +15,12 @@ import {
 } from "@openbooks/engine/payments/acceptance/operations";
 import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { normalizeMoney } from "@openbooks/engine/money/money";
-import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
+import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
+import { readPaymentProviderSetupData } from '@/lib/setup/payment-providers-data'
 
 const surchargeMoney = (field: string) => z.string().superRefine((value, ctx) => {
   if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
@@ -102,140 +103,8 @@ function postgresErrorCode(error: unknown): string | undefined {
 
 /** Provider acceptance configuration. Secrets are write-only — responses only
  *  ever report their presence. */
-async function legacyGET() {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
-  const orgId = gate.user.orgId;
-  // Account pickers disclose account names and numbers: a restricted caller
-  // sees the shared chart plus their own subsidiaries' accounts, never
-  // another entity's. NULL-subsidiary accounts are the shared chart (readable
-  // by all); entity-owned accounts stay inside their entity.
-  const scope = gate.allowedSubsidiaryIds;
-  const accountScope = scope === null
-    ? sql``
-    : sql` and (subsidiary_id is null or subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[]))`;
-  const [configs, automationConfigs, banks, rules, incomeAccounts, postingAccounts] = await Promise.all([
-    db.execute(sql`
-      select provider, display_name as "displayName", is_enabled as "isEnabled",
-             acceptance_enabled as "acceptanceEnabled", default_bank_account_id as "defaultBankAccountId",
-             publishable_key as "publishableKey", surcharge_rule_id as "surchargeRuleId", settings,
-             (secrets is not null) as "hasSecrets", last_error as "lastError",
-             coalesce(refund_policy, 'automatic') as "refundPolicy",
-             default_disputed_funds_account_id as "defaultDisputedFundsAccountId",
-             default_chargeback_loss_account_id as "defaultChargebackLossAccountId",
-             default_dispute_fee_account_id as "defaultDisputeFeeAccountId"
-        from psp_provider_configs
-       where org_id = ${orgId} and provider in ('stripe', 'adyen', 'gocardless')
-       order by provider
-    `),
-    // PayPal, Shopify Payments and Square never take hosted checkout: their
-    // rows carry only the settlement-automation half (policy, dispute
-    // accounts, pull state), saved through the settlements configuration
-    // endpoint.
-    db.execute(sql`
-      select provider, display_name as "displayName", is_enabled as "isEnabled",
-             refund_policy as "refundPolicy", pull_enabled as "pullEnabled",
-             default_disputed_funds_account_id as "defaultDisputedFundsAccountId",
-             default_chargeback_loss_account_id as "defaultChargebackLossAccountId",
-             default_dispute_fee_account_id as "defaultDisputeFeeAccountId"
-        from psp_provider_configs
-       where org_id = ${orgId} and provider in ('paypal', 'shopify_payments', 'square')
-       order by provider
-    `),
-    db.execute(sql`
-      select id, number, name from accounts
-       where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
-       ${accountScope}
-       order by number nulls last, name
-    `),
-    db.execute(sql`
-      select id, name, calculation, percent, fixed_amount as "fixedAmount", cap_amount as "capAmount",
-             fee_income_account_id as "feeIncomeAccountId", provider, payment_method as "paymentMethod",
-             effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo", is_active as "isActive"
-        from payment_surcharge_rules where org_id = ${orgId}
-       order by effective_from desc
-    `),
-    db.execute(sql`
-      select id, number, name from accounts
-       where org_id = ${orgId} and type in ('income', 'income_other') and is_active and not is_summary
-       ${accountScope}
-       order by number nulls last, name
-    `),
-    // Dispute posting accounts accept any postable account (clearing, loss,
-    // fee), so the automation pickers read the same population settlement
-    // posting validates against.
-    db.execute(sql`
-      select id, number, name from accounts
-       where org_id = ${orgId} and is_active and not is_summary
-       ${accountScope}
-       order by number nulls last, name
-    `),
-  ]);
-  // The config rows are org-wide, but their settlement-bank reference would
-  // hand a restricted caller the exact account to target: mask references
-  // outside their scope (the picker above already hides those rows). Dispute
-  // account references mask the same way.
-  const disputeAccountKeys = [
-    "defaultDisputedFundsAccountId",
-    "defaultChargebackLossAccountId",
-    "defaultDisputeFeeAccountId",
-  ] as const;
-  let configRows = configs.rows as Array<Record<string, unknown>>;
-  let automationRows = automationConfigs.rows as Array<Record<string, unknown>>;
-  let surchargeRows = rules.rows as Array<Record<string, unknown>>;
-  if (scope !== null) {
-    configRows = configRows.map(row => {
-      const settings = { ...(row.settings as Record<string, unknown> ?? {}) };
-      delete settings.processorReceiptPolicies;
-      return { ...row, settings };
-    });
-    const referenced = [...new Set([
-      ...configRows.map((c) => c.defaultBankAccountId),
-      ...configRows.flatMap((c) => disputeAccountKeys.map((key) => c[key])),
-      ...automationRows.flatMap((c) => disputeAccountKeys.map((key) => c[key])),
-      ...surchargeRows.map((r) => r.feeIncomeAccountId),
-    ].filter((id) => typeof id === "string"))] as string[];
-    if (referenced.length > 0) {
-      const subs = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
-        select id, subsidiary_id from accounts
-         where org_id = ${orgId} and id = any(${`{${referenced.join(",")}}`}::uuid[])
-      `);
-      const visible = new Set(
-        subs.rows.filter((r) => r.subsidiary_id === null || scope.has(r.subsidiary_id)).map((r) => r.id),
-      );
-      const maskDisputeAccounts = (row: Record<string, unknown>) => {
-        let masked = row;
-        for (const key of disputeAccountKeys) {
-          if (typeof masked[key] === "string" && !visible.has(masked[key] as string)) {
-            masked = { ...masked, [key]: null };
-          }
-        }
-        return masked;
-      };
-      configRows = configRows.map((c) => {
-        const masked = maskDisputeAccounts(c);
-        return typeof c.defaultBankAccountId === "string" && !visible.has(c.defaultBankAccountId)
-          ? { ...masked, defaultBankAccountId: null }
-          : masked;
-      });
-      automationRows = automationRows.map(maskDisputeAccounts);
-      surchargeRows = surchargeRows.map((rule) =>
-        typeof rule.feeIncomeAccountId === "string" && !visible.has(rule.feeIncomeAccountId)
-          ? { ...rule, feeIncomeAccountId: null }
-          : rule,
-      );
-    }
-  }
-  return NextResponse.json({
-    configs: configRows,
-    automationConfigs: automationRows,
-    bankAccounts: banks.rows,
-    surchargeRules: surchargeRows,
-    incomeAccounts: incomeAccounts.rows,
-    postingAccounts: postingAccounts.rows,
-    featureEnabled: await isFeatureEnabled(orgId, "onlinePayments"),
-    bankingEnabled: await isFeatureEnabled(orgId, "banking"),
-  });
+async function legacyGET(authz: Parameters<typeof readPaymentProviderSetupData>[0]) {
+  return NextResponse.json(await readPaymentProviderSetupData(authz));
 }
 
 
@@ -243,7 +112,7 @@ async function legacyGET() {
 export const GET = defineRoute({
   permission: "admin.setup.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  handler: async () => legacyGET(),
+  handler: async ({ authz }) => withOrgTransaction(authz.user.orgId, () => legacyGET(authz)),
 });
 
 export const POST = defineRoute({

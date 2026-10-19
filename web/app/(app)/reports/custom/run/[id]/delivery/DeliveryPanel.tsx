@@ -6,6 +6,8 @@ import { Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Badge, Button } from '@openbooks/ui'
+import { PagedTable } from '@/components/paged-table'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { readApiErrorMessage } from '../../../../../../../lib/api-error'
 import { ScheduleEditor, type ScheduleRow } from '../../../../ScheduleEditor'
 
@@ -59,6 +61,7 @@ export function DeliveryPanel({
   const tk = useTranslations('reports.custom')
   const tc = useTranslations('common')
   const router = useRouter()
+  const viewerFormat = useViewerFormat()
   const [running, setRunning] = useState(false)
 
   // Records a run row + CSV artifact — the report screen itself never does.
@@ -118,76 +121,71 @@ export function DeliveryPanel({
             <Play size={15} /> {running ? tk('running') : t('runNow')}
           </Button>
         </div>
-        {recentRuns.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('emptyHint')}</p>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
-                <tr>
-                  <th className="px-3 py-2 font-medium">{tc('labels.status')}</th>
-                  <th className="px-3 py-2 font-medium">{t('columns.trigger')}</th>
-                  <th className="px-3 py-2 font-medium">{t('columns.rows')}</th>
-                  <th className="px-3 py-2 font-medium">{t('columns.finished')}</th>
-                  <th className="px-3 py-2 font-medium">{t('columns.delivery')}</th>
-                  <th className="px-3 py-2 font-medium">{tc('actions.download')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentRuns.map((run) => (
-                  <tr key={run.id} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="px-3 py-2">
-                      <Badge variant={RUN_VARIANT[run.status] ?? 'secondary'}>
-                        {RUN_STATUS_KEY[run.status] ? t(RUN_STATUS_KEY[run.status]!) : run.status}
-                      </Badge>
-                      {run.error ? (
-                        <span className="ml-2 text-xs text-red-600 dark:text-red-400">{run.error}</span>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
-                      {RUN_TRIGGER_KEY[run.trigger] ? t(RUN_TRIGGER_KEY[run.trigger]!) : run.trigger}
-                    </td>
-                    <td className="px-3 py-2 tabular-nums text-slate-600 dark:text-slate-300">
-                      {run.row_count ?? '—'}
-                    </td>
-                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
-                      {run.finished_at ? String(run.finished_at).slice(0, 19).replace('T', ' ') : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
-                      {run.trigger !== 'scheduled' ? '—' : t('deliveryEvidence', {
-                        sent: run.delivery_sent,
-                        total: run.delivery_total,
-                        failed: run.delivery_failed,
-                        suppressed: run.delivery_suppressed,
-                      })}
-                    </td>
-                    <td className="px-3 py-2">
-                      {run.artifact_available ? (
-                        <button
-                          type="button"
-                          onClick={() => void downloadArtifact(`/api/reports/runs/${run.id}/artifact`)}
-                          className="text-teal-700 hover:underline dark:text-teal-300"
-                        >
-                          {t('pdf')}
-                        </button>
-                      ) : run.status === 'succeeded' && run.row_count != null ? (
-                        <button
-                          type="button"
-                          onClick={() => void downloadArtifact(`/api/reports/runs/${run.id}/csv`)}
-                          className="text-teal-700 hover:underline dark:text-teal-300"
-                        >
-                          {t('csv')}
-                        </button>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <PagedTable<RunRow>
+          source="report_delivery_runs"
+          rows={recentRuns}
+          rowKey={(run) => run.id}
+          searchable
+          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('emptyHint')}</p>}
+          columns={[
+            {
+              key: 'status',
+              header: tc('labels.status'),
+              cell: (run) => (
+                <>
+                  <Badge variant={RUN_VARIANT[run.status] ?? 'secondary'}>
+                    {RUN_STATUS_KEY[run.status] ? t(RUN_STATUS_KEY[run.status]!) : run.status}
+                  </Badge>
+                  {run.error ? <span className="ml-2 text-xs text-red-600 dark:text-red-400">{run.error}</span> : null}
+                </>
+              ),
+              search: (run) => `${run.status} ${run.error ?? ''}`,
+            },
+            {
+              key: 'trigger',
+              header: t('columns.trigger'),
+              cell: (run) => RUN_TRIGGER_KEY[run.trigger] ? t(RUN_TRIGGER_KEY[run.trigger]!) : run.trigger,
+              search: (run) => run.trigger,
+            },
+            { key: 'rows', header: t('columns.rows'), cell: (run) => run.row_count ?? '—' },
+            {
+              key: 'finished',
+              header: t('columns.finished'),
+              cell: (run) => run.finished_at ? viewerFormat.dateTime(new Date(run.finished_at)) : '—',
+            },
+            {
+              key: 'delivery',
+              header: t('columns.delivery'),
+              cell: (run) => run.trigger !== 'scheduled' ? '—' : t('deliveryEvidence', {
+                sent: run.delivery_sent,
+                total: run.delivery_total,
+                failed: run.delivery_failed,
+                suppressed: run.delivery_suppressed,
+              }),
+            },
+            {
+              key: 'download',
+              header: tc('actions.download'),
+              cell: (run) => run.artifact_available ? (
+                <button
+                  type="button"
+                  onClick={() => void downloadArtifact(`/api/reports/runs/${run.id}/artifact`)}
+                  className="text-teal-700 hover:underline dark:text-teal-300"
+                >
+                  {t('pdf')}
+                </button>
+              ) : run.status === 'succeeded' && run.row_count != null ? (
+                <button
+                  type="button"
+                  onClick={() => void downloadArtifact(`/api/reports/runs/${run.id}/csv`)}
+                  className="text-teal-700 hover:underline dark:text-teal-300"
+                >
+                  {t('csv')}
+                </button>
+              ) : '—',
+            },
+          ]}
+        />
       </section>
     </div>
   )

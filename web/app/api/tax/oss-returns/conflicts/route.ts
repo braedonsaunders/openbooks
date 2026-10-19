@@ -15,6 +15,7 @@ export const runtime = 'nodejs'
 export const GET = defineRoute({
   permission: 'reports.read',
   feature: 'crossBorderTax',
+  scope: 'unrestricted',
   handler: async ({ authz: routeAuthz }) => {
     try {
       const conflicts = await findSupplyEvidenceConflicts(db, routeAuthz.user.orgId)

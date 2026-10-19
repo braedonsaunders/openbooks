@@ -25,5 +25,210 @@
       "createdLinkOnly": "{name} criada. Copie agora o link de uso único do administrador para definir a senha.",
       "requestFailed": "Não foi possível criar a organização."
     }
+  },
+  "nav": {
+    "access": "Acesso entre organizações",
+    "accessDescription": "Gerencie o acesso controlado entre identidades de login e organizações.",
+    "overview": "Visão geral",
+    "organizations": "Organizações",
+    "users": "Usuários",
+    "feedback": "Relato de problemas",
+    "emailLog": "Registro de e-mails",
+    "group": "Plataforma",
+    "overviewDescription": "Operações, identidades, controles de acesso e evidências de entrega de toda a implantação.",
+    "organizationsDescription": "Organizações de produção, ambientes de teste e prévias.",
+    "usersDescription": "Identidades de login, funções da organização e privilégios de plataforma em produção.",
+    "feedbackDescription": "Configure onde os relatos de problemas do aplicativo são enviados.",
+    "emailLogDescription": "Evidências de entrega de todas as organizações.",
+    "workspace": "Espaço de trabalho da organização"
+  },
+  "hub": {
+    "title": "Plataforma",
+    "description": "Operações, identidades, controles de acesso e evidências de entrega de toda a implantação.",
+    "organizationsDetail": "{production} em produção · {nonProduction} fora de produção",
+    "superAdminsDetail": "{count, plural, one {# superadministrador} other {# superadministradores}}",
+    "activeGrantsDetail": "Concessões explícitas ativas",
+    "failedDeliveriesDetail": "Entregas com falha que precisam de atenção"
+  },
+  "notice": {
+    "title": "Espaço de trabalho da plataforma",
+    "description": "Este espaço ignora os limites entre organizações para operadores autorizados. Cada alteração de controle de acesso é validada e registrada no histórico de auditoria imutável."
+  },
+  "access": {
+    "title": "Acesso entre organizações",
+    "description": "Mapeamentos controlados entre identidades de login e organizações. Superadministradores não precisam de concessões.",
+    "backToPlatform": "Voltar à plataforma",
+    "grantAccess": "Conceder acesso",
+    "emptyFiltered": "Nenhuma concessão corresponde a esses filtros.",
+    "empty": "Ainda não há concessões. Conceda a uma identidade de login acesso a outra organização.",
+    "searchPlaceholder": "Buscar membro, organização ou usuário que atuará…",
+    "status": "Situação",
+    "statuses": {
+      "active": "Ativa",
+      "revoked": "Revogada"
+    },
+    "columns": {
+      "member": "Membro",
+      "organization": "Organização",
+      "actingUser": "Atua como",
+      "lastChanged": "Última alteração"
+    },
+    "historyPreserved": "Histórico preservado",
+    "revoke": "Revogar",
+    "mutation": {
+      "revoked": "Acesso entre organizações revogado",
+      "requestFailed": "Não foi possível alterar o acesso.",
+      "working": "Processando…"
+    },
+    "grant": {
+      "title": "Conceder acesso entre organizações",
+      "description": "Selecione a identidade do membro, a organização de destino e o usuário ativo cujas permissões serão aplicadas lá.",
+      "memberHelp": "A identidade de login da organização de origem. Ela continua responsável quando acessa outra organização.",
+      "member": "Identidade do membro",
+      "selectMember": "Selecione um membro…",
+      "organizationHelp": "A organização de produção que o membro poderá acessar. O acesso à organização de origem já é implícito.",
+      "organization": "Organização de destino",
+      "selectOrganization": "Selecione uma organização…",
+      "actingUserHelp": "O usuário ativo cujas funções e permissões se aplicam enquanto o membro trabalha na organização de destino.",
+      "actingUser": "Atua como",
+      "selectActingUser": "Selecione um usuário que atuará…",
+      "granting": "Concedendo…",
+      "submit": "Conceder acesso",
+      "success": "Acesso entre organizações concedido",
+      "requestFailed": "Não foi possível conceder o acesso."
+    }
+  },
+  "users": {
+    "title": "Usuários",
+    "description": "Identidades de login, funções da organização e privilégios de plataforma em produção.",
+    "backToPlatform": "Voltar à plataforma",
+    "emptyFiltered": "Nenhum usuário corresponde a esses filtros.",
+    "empty": "Ainda não há usuários.",
+    "searchPlaceholder": "Buscar nome, e-mail ou organização…",
+    "status": "Situação",
+    "statuses": {
+      "active": "Ativo",
+      "inactive": "Inativo",
+      "superAdmin": "Superadministrador"
+    },
+    "columns": {
+      "user": "Usuário",
+      "homeOrganization": "Organização de origem",
+      "roles": "Funções",
+      "grants": "Concessões",
+      "lastLogin": "Último login"
+    },
+    "explicitGrants": "{count, plural, one {# explícita} other {# explícitas}}",
+    "homeOnly": "Somente origem",
+    "never": "Nunca",
+    "manage": "Gerenciar",
+    "drawerDescription": "{email} · organização {organization}",
+    "drawerTabsLabel": "Detalhes do usuário",
+    "tabs": {
+      "overview": "Visão geral",
+      "grants": "Concessões entre organizações"
+    },
+    "currentOperator": "Operador atual",
+    "revokeSuperAdmin": "Revogar superadministrador",
+    "makeSuperAdmin": "Tornar superadministrador",
+    "mutation": {
+      "superAdminRevoked": "Privilégios de superadministrador revogados",
+      "superAdminGranted": "Privilégios de superadministrador concedidos",
+      "requestFailed": "Não foi possível concluir a alteração da plataforma.",
+      "working": "Processando…"
+    },
+    "facts": {
+      "email": "E-mail",
+      "homeOrganization": "Organização de origem",
+      "roles": "Funções",
+      "lastLogin": "Último login",
+      "created": "Criado em",
+      "accountId": "ID da conta"
+    },
+    "noGrants": "Nenhuma concessão explícita entre organizações. Esta identidade acessa sua organização de origem, a menos que seja superadministradora."
+  },
+  "tenants": {
+    "title": "Organizações",
+    "description": "Todas as empresas de produção, ambientes de teste e prévias. Abra uma organização para entrar em seu espaço de trabalho.",
+    "backToPlatform": "Voltar à plataforma",
+    "emptyFiltered": "Nenhuma organização corresponde a esses filtros.",
+    "empty": "Ainda não há organizações.",
+    "searchPlaceholder": "Buscar organizações…",
+    "environment": "Ambiente",
+    "environments": {
+      "production": "Em produção",
+      "sandbox": "Teste",
+      "preview": "Prévia"
+    },
+    "columns": {
+      "organization": "Organização",
+      "locale": "Região",
+      "users": "Usuários",
+      "sandboxes": "Ambientes de teste"
+    },
+    "parentNote": "de {name}",
+    "open": "Abrir",
+    "productionOnly": "Somente organizações de produção podem ser abertas aqui."
+  },
+  "emailLog": {
+    "title": "Registro de e-mails",
+    "description": "Evidências de entrega de todas as organizações.",
+    "backToPlatform": "Voltar à plataforma",
+    "emptyFiltered": "Nenhuma entrega corresponde a esses filtros.",
+    "empty": "Ainda não há entregas registradas.",
+    "searchPlaceholder": "Buscar assunto, destinatário ou organização…",
+    "status": "Situação",
+    "statuses": {
+      "queued": "Na fila",
+      "sent": "Enviado",
+      "failed": "Falhou",
+      "suppressed": "Suprimido",
+      "uncertain": "Incerto"
+    },
+    "columns": {
+      "subject": "Assunto",
+      "organization": "Organização",
+      "recipient": "Destinatário",
+      "delivery": "Entrega",
+      "logged": "Registrado"
+    },
+    "unknownProvider": "Provedor desconhecido"
+  },
+  "feedback": {
+    "title": "Relato de problemas",
+    "description": "Destino dos relatos de produto no aplicativo para esta implantação.",
+    "backToPlatform": "Voltar à plataforma",
+    "saved": "Configurações de relatos salvas",
+    "settingsDescription": "Um destino atende a toda a implantação. É possível relatar problemas em qualquer página; dados pessoais e da empresa são removidos antes da abertura de uma ocorrência.",
+    "tokenHelp": "Requer Issues: Read and write (granular) ou repo (clássico). Deixe em branco para manter o token salvo. Quando os relatos estão ativos, o token é verificado no repositório ao salvar.",
+    "storedToken": "Token de acesso salvo",
+    "storedTokenDescription": "Remover o token também desativa os relatos, pois não é possível abrir ocorrências sem credenciais. As ocorrências existentes não são afetadas.",
+    "tokenRemoved": "Token de acesso removido",
+    "removeToken": "Remover token"
+  },
+  "mutations": {
+    "requestFailed": "Não foi possível concluir a alteração da plataforma.",
+    "working": "Processando…"
+  },
+  "actions": {
+    "invalidUser": "O identificador do usuário é inválido.",
+    "cannotRevokeOwn": "Você não pode revogar seus próprios privilégios de superadministrador.",
+    "userNotFound": "Usuário não encontrado.",
+    "finalSuperAdmin": "O último superadministrador ativo não pode ser revogado.",
+    "superAdminFailed": "Não foi possível concluir a alteração da plataforma.",
+    "invalidMember": "O identificador do membro é inválido.",
+    "invalidOrganization": "O identificador da organização é inválido.",
+    "invalidActingUser": "O identificador do usuário que atuará é inválido.",
+    "grantIdentityNotFound": "Membro, organização ou usuário que atuará não foi encontrado.",
+    "memberMustBeProduction": "A identidade do membro precisa pertencer a uma organização de produção.",
+    "targetMustBeProduction": "O acesso explícito só pode ter como destino uma organização de produção.",
+    "homeAccessAlreadyImplicit": "O membro já tem acesso implícito à organização de origem.",
+    "actingUserMustBelongToTarget": "O usuário que atuará precisa pertencer à organização de destino.",
+    "actingUserMustBeActive": "O usuário que atuará precisa estar ativo.",
+    "grantCouldNotSave": "Não foi possível salvar a concessão de acesso.",
+    "grantFailed": "Não foi possível conceder o acesso.",
+    "invalidGrant": "O identificador da concessão de acesso é inválido.",
+    "grantNotFound": "Concessão de acesso não encontrada.",
+    "revokeFailed": "Não foi possível revogar o acesso entre organizações."
   }
 }

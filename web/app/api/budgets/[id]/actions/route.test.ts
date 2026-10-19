@@ -100,6 +100,10 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.budget-actions-route-test')]
       const sqlText = globalThis.openbooksBudgetSqlText
       export const db = {
+        async execute(query) {
+          state.queries.push(sqlText(query))
+          return { rows: [] }
+        },
         async transaction(work) {
           return work({
             async execute(query) {
@@ -168,6 +172,7 @@ if (process.env.VITEST) {
   const { vi } = await import(vitestModule)
   vi['mock']('@openbooks/engine/platform/db', () => ({
     db: {
+      execute: async (query: unknown) => mockedQuery(query),
       transaction: async (work: (tx: { execute: (query: unknown) => Promise<{ rows: Record<string, unknown>[] }> }) => unknown) =>
         work({ execute: async (query) => mockedQuery(query) }),
     },

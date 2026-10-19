@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
@@ -21,9 +22,10 @@ import type { EquityError } from "./errors.ts";
 import { recordSecurityEvent } from "./events.ts";
 import { postInterestRun, previewInterestRun } from "./interest-run.ts";
 import { electMfnTerms } from "./mfn.ts";
-import { loadCapTableView, loadSecurityDetail } from "./read-model.ts";
+import { loadCapTableView, loadSecurityDetail, loadStructure } from "./read-model.ts";
 import { issueSecurity } from "./securities.ts";
 import { amendShareClass, createPlan, createRound, createShareClass, recordSplit } from "./structure.ts";
+import { loadEquityOverview } from "./overview.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -120,6 +122,12 @@ test("note interest accrues by idempotent runs on its day count and a conversion
     const converted = await recordSecurityEvent({ ...manage(w), securityId: issued.id, kind: "convert", effectiveOn: "2026-08-31", roundId: round.id });
     assert.ok(converted.accrualEntryId, "the interest since the last run accrues on the conversion date");
     assert.deepEqual((await entryLines(w.org.orgId, converted.accrualEntryId!)).map((line) => line.amount), ["679.4600", "-679.4600"]);
+    const structure = await loadStructure({ ...manage(w), subsidiaryId: w.org.subsidiaryId, asOf: "2026-08-31" });
+    const structureRound = structure.rounds.find((row) => row.id === round.id);
+    assert.ok(structureRound);
+    assert.deepEqual([structureRound.raised, structureRound.sharesIssued], ["0.0000", "0"], "conversion certificates are not new cash proceeds or priced-round shares");
+    const overviewAtConversion = await loadEquityOverview({ ...manage(w), subsidiaryId: w.org.subsidiaryId, asOf: "2026-08-31", yearStart: "2026-01-01" });
+    assert.equal(overviewAtConversion.latestRound?.raised, "0.0000", "post-money excludes note conversion proceeds");
     const lines = await entryLines(w.org.orgId, converted.journalEntryId!);
     assert.equal(linesBalance(lines), 0n);
     assert.deepEqual(lines.map((line) => [line.account_id, line.amount]), [
@@ -133,6 +141,14 @@ test("note interest accrues by idempotent runs on its day count and a conversion
     const certificate = await loadSecurityDetail({ ...manage(w), securityId: converted.resultingSecurityId!, asOf: "2026-08-31" });
     assert.equal(certificate.security.quantity, "101336", "101,336.99 converts at 1.00 into whole shares");
     await assert.rejects(postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" }), refusal("equity_run_nothing_due"), "a converted note stops accruing, so no run is due");
+    await recordSecurityEvent({ ...manage(w), securityId: converted.resultingSecurityId!, kind: "void", effectiveOn: "2026-10-01", reason: "Conversion certificate recorded in error" });
+    const accrual = (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where org_id = ${w.org.orgId} and id = ${converted.accrualEntryId}`)).rows[0]!;
+    assert.equal(accrual.status, "reversed", "voiding a conversion reverses its settlement-date interest accrual");
+    const resumed = applied(await withSimClock("2026-12-31", () =>
+      postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-10-31" }),
+    ));
+    assert.equal(resumed.total, "2016.4400", "the note resumes accruing without counting the voided settlement accrual");
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
   }
@@ -153,6 +169,18 @@ test("a note is repaid with its accrued interest, a SAFE repays only its purchas
     assert.equal(await accountBalance(w.org.orgId, w.accounts.accruedInterest), "0.0000");
     assert.equal(await accountBalance(w.org.orgId, w.accounts.interestExpense), "346.5800");
     await assert.rejects(recordSecurityEvent({ ...manage(w), ...repayment, amount: "1" }), refusal("equity_convertible_settled"));
+    await recordSecurityEvent({
+      ...manage(w), securityId: issued.id, kind: "reverse", effectiveOn: "2026-08-01", reversesEventId: repaid.eventId,
+      reason: "Repayment was recorded in error",
+    });
+    const settlementAccrual = (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where org_id = ${w.org.orgId} and id = ${repaid.accrualEntryId}`)).rows[0]!;
+    assert.equal(settlementAccrual.status, "reversed", "reversing a settlement also reverses its interest accrual entry");
+    const historicalRun = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-15" }));
+    assert.equal(historicalRun.total, "115.0700", "a later reversed settlement does not block an earlier interest run");
+    const repaidAgain = await recordSecurityEvent({ ...manage(w), ...repayment, effectiveOn: "2026-08-02", amount: "50263.01" });
+    assert.ok(repaidAgain.accrualEntryId);
+    assert.deepEqual((await entryLines(w.org.orgId, repaidAgain.accrualEntryId!)).map((line) => line.amount), ["147.9400", "-147.9400"], "settlement only tops up interest still accrued after reversals");
 
     const instrument = await safe(w, { considerationAmount: "25000" });
     await assert.rejects(
@@ -238,6 +266,10 @@ test("an early exercise issues restricted stock, holds the deposit, releases it 
       [w.accounts.deposit, "1000.0000"], [w.org.accounts.bank, "-500.0000"], [w.accounts.apic, "-500.0000"],
     ]);
     assert.equal(await accountBalance(w.org.orgId, w.accounts.deposit), "-3400.0000");
+    const overview = await loadEquityOverview({ ...manage(w), subsidiaryId: w.org.subsidiaryId, asOf: "2026-10-31", yearStart: "2026-01-01" });
+    const restrictedDeposit = overview.attention.find((item) => item.kind === "restricted_deposit" && item.securityId === certificateId);
+    assert.ok(restrictedDeposit && restrictedDeposit.kind === "restricted_deposit");
+    assert.equal(restrictedDeposit.shares, (await loadSecurityDetail({ ...manage(w), securityId: certificateId, asOf: "2026-10-31" })).state?.unvested);
     const optionCost = await loadSecurityDetail({ ...manage(w), securityId: option.id, asOf: "2026-10-31" });
     assert.equal(
       BigInt(optionCost.compensation!.expectedAfterForfeitures.replace(".", "")),

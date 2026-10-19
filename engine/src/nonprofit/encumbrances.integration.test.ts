@@ -83,6 +83,7 @@ async function seedBudget(org: ScratchOrg & { fundId: string }, actorId: string,
 test("commitments and budget control preserve posting policy and derived balances", { skip: !DB }, async () => {
   const scratch = await withBypass(() => createScratchOrg());
   const org = scratch as ScratchOrg & { fundId: string };
+  let foreignOrg: ScratchOrg | null = null;
   clearBalancingLegProviders();
   try {
     const actorId = await withBypass(() => createScratchUser(org.orgId, "Budget Controller", "admin"));
@@ -112,6 +113,67 @@ test("commitments and budget control preserve posting policy and derived balance
       actorId,
     });
     org.fundId = fund.defaultFundId;
+    foreignOrg = await withBypass(() => createScratchOrg());
+    const otherSubsidiaryId = randomUUID();
+    const sourceDocuments = await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+      `);
+      const sourceDocument = async (orgId: string, subsidiaryId: string, kind: string, number: string, itemId: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into documents (id, org_id, kind, document_number, party_id, document_date, currency, status, subsidiary_id)
+          values (${id}, ${orgId}, ${kind}, ${number}, ${orgId === org.orgId ? org.vendorId : foreignOrg!.vendorId},
+            ${org.date}, 'CAD', 'draft', ${subsidiaryId})
+        `);
+        if (kind === 'purchase_order') {
+          await db.execute(sql`
+            insert into document_lines
+              (id, org_id, document_id, line_number, item_id, description, quantity, unit,
+               unit_price, amount, tax_amount, custom)
+            values (${randomUUID()}, ${orgId}, ${id}, 1, ${itemId}, 'Widget', 1, 'ea', 0, 0, 0, '{}'::jsonb)
+          `);
+          const approved = await db.execute(sql`
+            update documents set status = 'approved' where org_id = ${orgId} and id = ${id} returning id
+          `);
+          assert.equal(approved.rows.length, 1, 'the purchase order has a valid line before approval');
+        }
+        return id;
+      };
+      return {
+        valid: await sourceDocument(org.orgId, org.subsidiaryId, 'purchase_order', 'ENC-VALID-PO', org.items.fifo),
+        otherSubsidiary: await sourceDocument(org.orgId, otherSubsidiaryId, 'purchase_order', 'ENC-OTHER-SUB-PO', org.items.fifo),
+        wrongKind: await sourceDocument(org.orgId, org.subsidiaryId, 'vendor_bill', 'ENC-NOT-PO', org.items.fifo),
+        foreign: await sourceDocument(foreignOrg!.orgId, foreignOrg!.subsidiaryId, 'purchase_order', 'ENC-FOREIGN-PO', foreignOrg!.items.fifo),
+      };
+    });
+    const rejectSource = (sourceId: string) => createEncumbrance({
+      orgId: org.orgId, accountId: org.accounts.adjustment, subsidiaryId: org.subsidiaryId,
+      sourceKind: "purchase_order", sourceId, amount: "10.0000", extraDims: { fund: org.fundId }, actorId,
+    });
+    await assert.rejects(
+      createEncumbrance({ orgId: org.orgId, accountId: org.accounts.adjustment, subsidiaryId: org.subsidiaryId,
+        sourceKind: "manual", sourceId: sourceDocuments.valid, amount: "10.0000", extraDims: { fund: org.fundId }, actorId }),
+      (error) => error instanceof NonprofitError && error.code === "encumbrance_source_invalid",
+      "manual commitments cannot retain a source document reference",
+    );
+    for (const [name, sourceId] of [
+      ["another organization", sourceDocuments.foreign],
+      ["another subsidiary", sourceDocuments.otherSubsidiary],
+      ["a non-purchase-order document", sourceDocuments.wrongKind],
+    ] as const) {
+      await assert.rejects(rejectSource(sourceId),
+        (error) => error instanceof NonprofitError && error.code === "encumbrance_source_invalid",
+        `purchase order source must not resolve to ${name}`,
+      );
+    }
+    const validPurchaseOrder = await createEncumbrance({
+      orgId: org.orgId, accountId: org.accounts.adjustment, subsidiaryId: org.subsidiaryId,
+      sourceKind: "purchase_order", sourceId: sourceDocuments.valid, amount: "10.0000",
+      extraDims: { fund: org.fundId }, actorId,
+    });
+    assert.equal(validPurchaseOrder.status, "open");
     const scenarioId = await seedBudget(org, actorId, "1000.0000");
     await withOrgContext(org.orgId, () => db.execute(sql`
       update funds set budgetary_control = 'hard' where org_id = ${org.orgId} and id = ${org.fundId}
@@ -292,6 +354,67 @@ test("commitments and budget control preserve posting policy and derived balance
     }));
     assert.equal(voided.status, "voided");
     assert.equal(await openBalance(), "75.0000");
+  } finally {
+    clearBalancingLegProviders();
+    if (foreignOrg) await dropScratchOrg(foreignOrg.orgId);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("hard budget control includes later actuals when an expense is backdated", { skip: !DB }, async () => {
+  const scratch = await withBypass(() => createScratchOrg());
+  const org = scratch as ScratchOrg & { fundId: string };
+  clearBalancingLegProviders();
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Budget Controller", "admin"));
+    await withOrgContext(org.orgId, async () => {
+      const changed = await db.execute<{ id: string }>(sql`
+        update orgs set settings = jsonb_set(
+          coalesce(settings, '{}'::jsonb), '{features}',
+          coalesce(settings->'features', '{}'::jsonb) ||
+            '{"nonprofit":true,"fundAccounting":true,"budgets":true,"encumbrances":true}'::jsonb,
+          true
+        ) where id = ${org.orgId} returning id
+      `);
+      assert.equal(changed.rows.length, 1);
+    });
+    const fund = await provisionFundAccounting({
+      orgId: org.orgId,
+      defaultFund: { code: "OPERATING", name: "Operating Fund" },
+      classifications: { OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" } },
+      actorId,
+    });
+    org.fundId = fund.defaultFundId;
+    await seedBudget(org, actorId, "1000.0000");
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update funds set budgetary_control = 'hard' where org_id = ${org.orgId} and id = ${org.fundId}
+    `));
+    const periods = await withBypassContext(async () => {
+      const calendar = (await db.execute<{ id: string }>(sql`
+        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}
+      `)).rows[0]!.id;
+      const marchId = randomUUID();
+      const juneId = randomUUID();
+      await db.execute(sql`
+        insert into accounting_periods
+          (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values
+          (${marchId}, ${org.orgId}, 2026, 3, '2026-03', '2026-03-01', '2026-03-31', false, ${calendar}),
+          (${juneId}, ${org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${calendar})
+      `);
+      return { marchId, juneId };
+    });
+    installEngineSeams();
+    registerBalancingLegProvider("budgetary-control", budgetaryControlProvider);
+
+    await tenantPost({ ...posting(org, "LATER-DATED-BUDGET-ACTUAL", "900.0000"),
+      postingDate: "2026-06-15", periodId: periods.juneId });
+    await assert.rejects(
+      tenantPost({ ...posting(org, "BACKDATED-BUDGET-ACTUAL", "500.0000"),
+        postingDate: "2026-03-01", periodId: periods.marchId }),
+      (error) => error instanceof NonprofitPostingError && error.code === "budget_exceeded",
+      "a backdated expense cannot consume appropriation already used later in its fiscal year",
+    );
   } finally {
     clearBalancingLegProviders();
     await dropScratchOrg(org.orgId);

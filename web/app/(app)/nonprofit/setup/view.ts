@@ -14,6 +14,7 @@ import { getAuthz, assertCan } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
+import { mergeHref, setupSectionParams } from '../../../../lib/list-params'
 import { nonprofitGroupTabs } from '../../../../components/module-home/group-tabs'
 
 /**
@@ -37,9 +38,12 @@ export interface NonprofitSetupData {
   frameworkHint: string
   pairsHint: string
   mappingsHint: string
+  sectionParams: Record<string, string>
+  activeSection: 'framework' | 'pairs' | 'mappings' | null
+  sectionTabs: { href: string; label: string; active?: boolean }[]
 }
 
-export async function loadNonprofitSetup(): Promise<NonprofitSetupData> {
+export async function loadNonprofitSetup(sp: Record<string, string | string[] | undefined>): Promise<NonprofitSetupData> {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const orgId = authz.user.orgId
@@ -63,6 +67,22 @@ export async function loadNonprofitSetup(): Promise<NonprofitSetupData> {
   const showFramework = frameworkOn && SETUP_ENTITY_BY_KEY.get('nonprofit-frameworks') !== undefined
   const showPairs = pairsOn && SETUP_ENTITY_BY_KEY.get('fund-pairs') !== undefined
   const showMappings = mappingsOn && SETUP_ENTITY_BY_KEY.get('functional-mappings') !== undefined
+  const availableSections = [
+    ...(showFramework ? [{ key: 'framework' as const, label: t('setup.frameworkTitle') }] : []),
+    ...(showPairs ? [{ key: 'pairs' as const, label: t('setup.pairsTitle') }] : []),
+    ...(showMappings ? [{ key: 'mappings' as const, label: t('setup.mappingsTitle') }] : []),
+  ]
+  const requestedSection = typeof sp.section === 'string' ? sp.section : undefined
+  const activeSection = availableSections.find(({ key }) => key === requestedSection)?.key
+    ?? availableSections[0]?.key
+    ?? null
+  const sectionParams = setupSectionParams(sp, ['frow', 'prow', 'mrow'])
+  if (activeSection) sectionParams.section = activeSection
+  const sectionTabs = availableSections.map(({ key, label }) => ({
+    href: mergeHref('/nonprofit/setup', setupSectionParams(sp, ['frow', 'prow', 'mrow']), { section: key }),
+    label,
+    active: key === activeSection,
+  }))
 
   return {
     title: t('setup.title'),
@@ -74,6 +94,9 @@ export async function loadNonprofitSetup(): Promise<NonprofitSetupData> {
     frameworkHint: t('setup.frameworkHint'),
     pairsHint: t('setup.pairsHint'),
     mappingsHint: t('setup.mappingsHint'),
+    sectionParams,
+    activeSection,
+    sectionTabs,
   }
 }
 
@@ -91,34 +114,18 @@ export function nonprofitSetupSpec(data: NonprofitSetupData): PageSpec {
         actions: [widget('module-home-tabs', { tabs: data.tabs })],
       }),
     ],
-    body: [
-      {
-        ...widgetBlock('setup-section', {
-          entityKey: 'nonprofit-frameworks',
-          basePath: '/nonprofit/setup',
-          sp: { section: 'framework' },
-          rowParam: 'frow',
-        }),
-        when: f('showFramework'),
-      },
-      {
-        ...widgetBlock('setup-section', {
-          entityKey: 'fund-pairs',
-          basePath: '/nonprofit/setup',
-          sp: { section: 'pairs' },
-          rowParam: 'prow',
-        }),
-        when: f('showPairs'),
-      },
-      {
-        ...widgetBlock('setup-section', {
-          entityKey: 'functional-mappings',
-          basePath: '/nonprofit/setup',
-          sp: { section: 'mappings' },
-          rowParam: 'mrow',
-        }),
-        when: f('showMappings'),
-      },
-    ],
+    body: data.activeSection ? [
+      widgetBlock('module-home-tabs', { tabs: data.sectionTabs, placement: 'local' }),
+      widgetBlock('setup-section', {
+        entityKey: data.activeSection === 'framework'
+          ? 'nonprofit-frameworks'
+          : data.activeSection === 'pairs'
+            ? 'fund-pairs'
+            : 'functional-mappings',
+        basePath: '/nonprofit/setup',
+        sp: data.sectionParams,
+        rowParam: data.activeSection === 'framework' ? 'frow' : data.activeSection === 'pairs' ? 'prow' : 'mrow',
+      }),
+    ] : [],
   })
 }

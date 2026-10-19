@@ -10,7 +10,7 @@ import { installEngineSeams } from "../composition/install.ts";
 import { toUnits } from "../money/money.ts";
 import { createFund } from "./funds.ts";
 import { provisionFundAccounting } from "./provision.ts";
-import { bookPledge, cancelPledge, collectPledgeInstallments, createPledge, getPledgeSchedule, topUpPledgeAllowance, writeOffPledge } from "./pledges.ts";
+import { bookPledge, cancelPledge, collectPledgeInstallments, createPledge, getPledgeSchedule, runPledgeDiscountAmortization, topUpPledgeAllowance, writeOffPledge } from "./pledges.ts";
 import { createGift, receiptGift } from "./gifts.ts";
 import { NonprofitError } from "./errors.ts";
 
@@ -267,6 +267,37 @@ test("pledges book and reverse through the ledger while gifts receive engine num
       original_status: "reversed",
       reversal_status: "posted",
     });
+
+    const reversedPledge = await createPledge({ ...pledgeInput, totalAmount: "2000.0000",
+      installments: [{ dueOn: "2027-07-15", amount: "2000.0000" }] });
+    const reversedBooking = await bookPledge({ orgId: org.orgId, pledgeId: reversedPledge.id, postingDate: org.date,
+      receivableAccountId: accounts.receivable, discountAccountId: accounts.discount,
+      contributionsAccountId: org.accounts.revenue, reason: "Recognize the promise later corrected", actorId });
+    await withOrgTransaction(org.orgId, () => reverseProjectGlEntry(
+      org.orgId, actorId, reversedBooking.entryId, "Correct the erroneous pledge booking", reversalDate));
+    const reversedStateConflict = (error: unknown) =>
+      error instanceof NonprofitError && error.code === "pledge_state_conflict";
+    await assert.rejects(topUpPledgeAllowance({ orgId: org.orgId, pledgeId: reversedPledge.id, amount: "10.0000",
+      postingDate: reversalDate, contributionsAccountId: org.accounts.revenue, allowanceAccountId: accounts.allowance,
+      reason: "Reserve the doubtful promise", actorId }), reversedStateConflict,
+      "a reversed booking cannot authorize an allowance top-up");
+    await assert.rejects(writeOffPledge({ orgId: org.orgId, pledgeId: reversedPledge.id, amount: "10.0000",
+      postingDate: reversalDate, receivableAccountId: accounts.receivable, discountAccountId: accounts.discount,
+      allowanceAccountId: accounts.allowance, contributionsAccountId: org.accounts.revenue,
+      reason: "The donor cannot pay", actorId }), reversedStateConflict,
+      "a reversed booking cannot authorize a write-off");
+    await assert.rejects(getPledgeSchedule({ orgId: org.orgId, pledgeId: reversedPledge.id, asOfDate: reversalDate }),
+      (error) => error instanceof NonprofitError && error.code === "pledge_schedule_booking_reversed",
+      "a reversed booking has no active amortization schedule");
+    await runPledgeDiscountAmortization({ orgId: org.orgId, periodEnd: addCalendarDays(org.date, 62),
+      discountAccountId: accounts.discount, contributionsAccountId: org.accounts.revenue, actorId });
+    const reversedAmortization = await withOrgContext(org.orgId, () => db.execute<{ n: string }>(sql`
+      select count(*)::text as n from journal_entries
+       where org_id = ${org.orgId}
+         and custom #>> '{nonprofitPledge,pledgeId}' = ${reversedPledge.id}
+         and custom #>> '{nonprofitPledge,operation}' = 'discount_amortization'`));
+    assert.equal(reversedAmortization.rows[0]!.n, "0",
+      "a reversed booking earns no discount amortization");
 
     await assert.rejects(
       createGift({

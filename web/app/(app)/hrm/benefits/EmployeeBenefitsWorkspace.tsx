@@ -26,6 +26,8 @@ import { EnrollmentDrawer } from './EnrollmentDrawer'
 import { WindowsManagerDrawer } from './WindowsManagerDrawer'
 import { WindowDialog } from './WindowDialog'
 import { WindowDrawer } from './WindowDrawer'
+import { ModuleHomeTabs } from '../../../../components/module-home/ui'
+import { benefitsWorkspaceTabs } from '../../../../lib/hrm/benefits'
 
 /** A single native list presents program participation across existing employee records. */
 export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, string | undefined> }) {
@@ -35,6 +37,7 @@ export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, str
   if (sp.window && sp.window !== 'new' && !isUuid(sp.window)) notFound()
   if (sp.vacationTerms && sp.vacationTerms !== 'new' && !isUuid(sp.vacationTerms)) notFound()
   const [t, hrm, admin] = await Promise.all([getTranslations('hrm.employeeBenefits'), getTranslations('hrm'), getTranslations('admin')])
+  const tabs = benefitsWorkspaceTabs(hrm, 'employees')
   const canManage = can(authz, 'hrm.benefits.manage')
   return withOrgTransaction(authz.user.orgId, async () => {
     const employments = (await db.execute<{ value: string; label: string; employeePartyId: string }>(sql`select w.id as value,p.display_name as label,p.id::text as "employeePartyId" from worker_employments w join parties p on p.org_id=w.org_id and p.id=w.worker_party_id
@@ -107,6 +110,7 @@ export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, str
       <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} actions={<>
         <Button asChild variant="outline"><Link href={windowsHref as never}>{hrm('benefits.windowsTitle')}</Link></Button>
         {canManage ? <Button asChild><Link href={`${closeHref}&enrollment=new` as never}>{hrm('benefits.newEnrollment')}</Link></Button> : null}
+        <ModuleHomeTabs tabs={tabs} />
       </>} />}>
         <PreparedPagedTable source="hrm_employee_benefits" rows={filtered.map(row => ({ id: row.id,
           searchText: `${row.employeeName} ${row.programName} ${row.programTypeLabel} ${row.statusLabel}`,

@@ -7,7 +7,11 @@ import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
 import { asDate } from '../../../../lib/platform-console'
 import { ViewerDateTime } from '../../../../components/viewer-format'
-import type { PlatformUser } from '../../../../lib/platform-admin'
+import type { PlatformGrant, PlatformUser } from '../../../../lib/platform-admin'
+import { useTranslations } from 'next-intl'
+import { getTranslations } from 'next-intl/server'
+import { platformUserDrawerHref } from '../../../../lib/platform-console'
+import { PlatformUserDetailClient } from '../_components/PlatformUserDetailClient'
 
 /**
  * Composite cells in the platform users list.
@@ -23,13 +27,16 @@ export function UserIdentityCell({
   email,
   isSuperAdmin,
   isActive,
+  labels,
 }: {
   name: string
   href: string
   email: string
   isSuperAdmin: boolean
   isActive: boolean
+  labels?: { superAdmin: string; inactive: string }
 }) {
+  const t = useTranslations('platform.users')
   return (
     <>
       <div className="flex items-center gap-2">
@@ -41,10 +48,10 @@ export function UserIdentityCell({
         </Link>
         {isSuperAdmin ? (
           <Badge variant="warning" className="gap-1">
-            <ShieldAlert size={11} /> super admin
+            <ShieldAlert size={11} /> {labels?.superAdmin ?? t('statuses.superAdmin')}
           </Badge>
         ) : null}
-        {!isActive ? <Badge variant="secondary">inactive</Badge> : null}
+        {!isActive ? <Badge variant="secondary">{labels?.inactive ?? t('statuses.inactive')}</Badge> : null}
       </div>
       <div className="text-xs text-slate-500 dark:text-slate-400">{email}</div>
     </>
@@ -69,10 +76,11 @@ export function UserGrantsCell({ label, emphasised }: { label: string; emphasise
   return <span className="font-medium tabular-nums">{label}</span>
 }
 
-export function UserManageCell({ href }: { href: string }) {
+export function UserManageCell({ href, label }: { href: string; label?: string }) {
+  const t = useTranslations('platform.users')
   return (
     <Button asChild size="sm" variant="outline">
-      <Link href={href as never}>Manage</Link>
+      <Link href={href as never}>{label ?? t('manage')}</Link>
     </Button>
   )
 }
@@ -88,7 +96,7 @@ export function UserManageCell({ href }: { href: string }) {
  * status and page size all travel on the URL. The row cells stay the shared
  * cells above that the viewspec platform widgets also render.
  */
-export function UsersList({
+export async function UsersList({
   rows,
   total,
   page,
@@ -99,6 +107,7 @@ export function UsersList({
   statusCounts,
   basePath,
   currentParams,
+  detail,
 }: {
   rows: PlatformUser[]
   total: number
@@ -110,31 +119,42 @@ export function UsersList({
   statusCounts: Record<string, number>
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
+  detail: {
+    user: PlatformUser
+    grants: PlatformGrant[]
+    totalGrants: number
+    grantsPage: number
+    grantsPerPage: number
+    isSelf: boolean
+  } | null
 }) {
+  const t = await getTranslations('platform.users')
   const filtered = currentParams.q !== undefined || status !== undefined
+  const closeHref = platformUserDrawerHref(basePath, currentParams)
   return (
-    <ListPageLayout header={<PageHeader title="Users" description="Production login identities, organization roles, and platform privileges." back={{ href: '/platform', label: 'Back to platform' }} />}>
+    <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} back={{ href: '/platform', label: t('backToPlatform') }} />}>
       <div className="space-y-5">
 
         <ServerPagedTable
           rows={rows} rowKey={(row) => row.id}
           total={total} page={page} perPage={perPage}
           basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
-          empty={filtered ? 'No users match these filters.' : 'No users yet.'}
-          toolbar={<><SearchInput placeholder="Search name, email, or organization…" /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label="Status" options={[
-            { value: 'active', label: 'Active', count: Number(statusCounts.active ?? 0) },
-            { value: 'inactive', label: 'Inactive', count: Number(statusCounts.inactive ?? 0) },
-            { value: 'super', label: 'Super admin', count: Number(statusCounts.super ?? 0) },
+          empty={filtered ? t('emptyFiltered') : t('empty')}
+          toolbar={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label={t('status')} options={[
+            { value: 'active', label: t('statuses.active'), count: Number(statusCounts.active ?? 0) },
+            { value: 'inactive', label: t('statuses.inactive'), count: Number(statusCounts.inactive ?? 0) },
+            { value: 'super', label: t('statuses.superAdmin'), count: Number(statusCounts.super ?? 0) },
           ]} /></>}
           columns={[
-          { key: 'user', header: 'User', sortKey: 'name', cell: (user) => <UserIdentityCell name={user.name} href={`/platform/users/${user.id}`} email={user.email} isSuperAdmin={user.isSuperAdmin} isActive={user.isActive} /> },
-          { key: 'organization', header: 'Home organization', sortKey: 'organization', cell: (user) => user.orgName },
-          { key: 'roles', header: 'Roles', sortKey: 'role', cell: (user) => <UserRolesCell roles={user.roles} /> },
-          { key: 'grants', header: 'Grants', sortKey: 'grants', cell: (user) => <UserGrantsCell label={user.grantCount ? `${user.grantCount} explicit` : 'Home only'} emphasised={user.grantCount > 0} /> },
-          { key: 'lastLogin', header: 'Last login', sortKey: 'lastLogin', cell: (user) => asDate(user.lastLoginAt) ? <ViewerDateTime value={asDate(user.lastLoginAt)!} /> : 'Never' },
-          { key: 'manage', header: <span className="sr-only">Manage</span>, className: 'w-px whitespace-nowrap px-2 text-center', style: { width: 64 }, cell: (user) => <UserManageCell href={`/platform/users/${user.id}`} /> },
+          { key: 'user', header: t('columns.user'), sortKey: 'name', cell: (user) => <UserIdentityCell name={user.name} href={platformUserDrawerHref(basePath, currentParams, user.id)} email={user.email} isSuperAdmin={user.isSuperAdmin} isActive={user.isActive} labels={{ superAdmin: t('statuses.superAdmin'), inactive: t('statuses.inactive') }} /> },
+          { key: 'organization', header: t('columns.homeOrganization'), sortKey: 'organization', cell: (user) => user.orgName },
+          { key: 'roles', header: t('columns.roles'), sortKey: 'role', cell: (user) => <UserRolesCell roles={user.roles} /> },
+          { key: 'grants', header: t('columns.grants'), sortKey: 'grants', cell: (user) => <UserGrantsCell label={user.grantCount ? t('explicitGrants', { count: user.grantCount }) : t('homeOnly')} emphasised={user.grantCount > 0} /> },
+          { key: 'lastLogin', header: t('columns.lastLogin'), sortKey: 'lastLogin', cell: (user) => asDate(user.lastLoginAt) ? <ViewerDateTime value={asDate(user.lastLoginAt)!} /> : t('never') },
+          { key: 'manage', header: <span className="sr-only">{t('manage')}</span>, className: 'w-px whitespace-nowrap px-2 text-center', style: { width: 64 }, cell: (user) => <UserManageCell href={platformUserDrawerHref(basePath, currentParams, user.id)} label={t('manage')} /> },
         ]}
         />
+        {detail ? <PlatformUserDetailClient detail={detail} closeHref={closeHref} listParams={currentParams} /> : null}
       </div>
     </ListPageLayout>
   )

@@ -10,6 +10,7 @@ import { switchWorkspace, workspaceSwitchMessageKey } from '../../../../lib/work
 /** Opens the organization as the active workspace; the server decides access. */
 export function OpenOrganizationButton({ orgId }: { orgId: string }) {
   const tSwitch = useTranslations('shell.accountMenu')
+  const t = useTranslations('platform.tenants')
   const [pending, start] = useTransition()
   return (
     <Button
@@ -27,7 +28,7 @@ export function OpenOrganizationButton({ orgId }: { orgId: string }) {
         })
       }
     >
-      Open <ExternalLink size={14} />
+      {t('open')} <ExternalLink size={14} />
     </Button>
   )
 }

@@ -648,7 +648,7 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       const m = await import('../app/(app)/admin/setup/payment-providers/view')
       return {
         load: (input) => m.loadPaymentProviders(input.searchParams ?? {}),
-        spec: () => m.paymentProvidersSpec(),
+        spec: (data) => m.paymentProvidersSpec(data as never),
       }
     },
   },
@@ -2362,11 +2362,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/nonprofit/setup': {
     route: '/nonprofit/setup',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/nonprofit/setup/view')
       return {
-        load: () => m.loadNonprofitSetup(),
+        load: (input) => m.loadNonprofitSetup(input.searchParams ?? {}),
         spec: (data) => m.nonprofitSetupSpec(data as never),
       }
     },

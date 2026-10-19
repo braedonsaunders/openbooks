@@ -28,8 +28,11 @@ export const GET = defineRoute({
     const item = url.searchParams.get("item");
     const from = url.searchParams.get("from");
     const to = url.searchParams.get("to");
-    if ((!employee && !item) || !isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
+    if ((!employee && !item) || (employee && item) || !isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
       return NextResponse.json({ error: "employee or item, plus valid from/to calendar dates (from <= to) required" }, { status: 400 });
+    }
+    if ((employee && !isUuid(employee)) || (item && item !== "0" && !isUuid(item))) {
+      return NextResponse.json({ error: "employee or item must be a valid identifier" }, { status: 400 });
     }
     const limitRaw = url.searchParams.get("limit");
     const limit = limitRaw === null ? 500 : Math.floor(Number(limitRaw));
@@ -48,7 +51,11 @@ export const GET = defineRoute({
       cursor = { date: cursorDate, id: cursorId };
     }
 
-    const filter = employee ? sql`t.employee_party_id = ${employee}` : sql`t.item_id = ${item}`;
+    const filter = employee
+      ? sql`t.employee_party_id = ${employee}`
+      : item === "0"
+        ? sql`t.item_id is null`
+        : sql`t.item_id = ${item}`;
     // The same legal-entity population as the dashboard drill-down source
     // (utilization-data fetchTimeStats): an entry is visible when the caller's
     // scope admits coalesce(project, employee) subsidiary. Restricted callers

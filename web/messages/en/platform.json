@@ -25,5 +25,210 @@
       "createdLinkOnly": "{name} created. Copy the administrator's one-time set-password link now.",
       "requestFailed": "The organization could not be created."
     }
+  },
+  "nav": {
+    "access": "Cross-org access",
+    "accessDescription": "Manage controlled access between login identities and organizations.",
+    "overview": "Overview",
+    "organizations": "Organizations",
+    "users": "Users",
+    "feedback": "Issue reporting",
+    "emailLog": "Email log",
+    "group": "Platform",
+    "overviewDescription": "Deployment-wide operations, identities, access controls, and delivery evidence.",
+    "organizationsDescription": "Production organizations, sandboxes, and preview environments.",
+    "usersDescription": "Production login identities, organization roles, and platform privileges.",
+    "feedbackDescription": "Configure where in-app issue reports are filed.",
+    "emailLogDescription": "Delivery evidence across every organization.",
+    "workspace": "Organization workspace"
+  },
+  "hub": {
+    "title": "Platform",
+    "description": "Platform-wide operations, identities, access controls, and delivery evidence.",
+    "organizationsDetail": "{production} production · {nonProduction} non-production",
+    "superAdminsDetail": "{count, plural, one {# super administrator} other {# super administrators}}",
+    "activeGrantsDetail": "Active explicit grants",
+    "failedDeliveriesDetail": "Failed deliveries requiring attention"
+  },
+  "notice": {
+    "title": "Platform workspace",
+    "description": "This workspace bypasses organization boundaries for authorized operators. Every access-control mutation is validated and written to the immutable audit trail."
+  },
+  "access": {
+    "title": "Cross-org access",
+    "description": "Controlled mappings between login identities and organizations. Super admins do not require grants.",
+    "backToPlatform": "Back to platform",
+    "grantAccess": "Grant access",
+    "emptyFiltered": "No grants match these filters.",
+    "empty": "No grants yet. Grant access to map a login identity into another organization.",
+    "searchPlaceholder": "Search member, organization, or acting user…",
+    "status": "Status",
+    "statuses": {
+      "active": "Active",
+      "revoked": "Revoked"
+    },
+    "columns": {
+      "member": "Member",
+      "organization": "Organization",
+      "actingUser": "Acts as",
+      "lastChanged": "Last changed"
+    },
+    "historyPreserved": "History preserved",
+    "revoke": "Revoke",
+    "mutation": {
+      "revoked": "Cross-organization access revoked",
+      "requestFailed": "Access could not be changed.",
+      "working": "Working…"
+    },
+    "grant": {
+      "title": "Grant cross-organization access",
+      "description": "Choose the member identity, target organization, and active user whose permissions apply there.",
+      "memberHelp": "The person's home login identity. This remains the accountable member when they enter another organization.",
+      "member": "Member identity",
+      "selectMember": "Select a member…",
+      "organizationHelp": "The production organization the member will be allowed to enter. Home-organization access is already implicit.",
+      "organization": "Target organization",
+      "selectOrganization": "Select an organization…",
+      "actingUserHelp": "The active user record whose roles and permissions apply while the member is operating in the target organization.",
+      "actingUser": "Acts as",
+      "selectActingUser": "Select an acting user…",
+      "granting": "Granting…",
+      "submit": "Grant access",
+      "success": "Cross-organization access granted",
+      "requestFailed": "Access could not be granted."
+    }
+  },
+  "users": {
+    "title": "Users",
+    "description": "Production login identities, organization roles, and platform privileges.",
+    "backToPlatform": "Back to platform",
+    "emptyFiltered": "No users match these filters.",
+    "empty": "No users yet.",
+    "searchPlaceholder": "Search name, email, or organization…",
+    "status": "Status",
+    "statuses": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "superAdmin": "Super admin"
+    },
+    "columns": {
+      "user": "User",
+      "homeOrganization": "Home organization",
+      "roles": "Roles",
+      "grants": "Grants",
+      "lastLogin": "Last login"
+    },
+    "explicitGrants": "{count, plural, one {# explicit} other {# explicit}}",
+    "homeOnly": "Home only",
+    "never": "Never",
+    "manage": "Manage",
+    "drawerDescription": "{email} · {organization}",
+    "drawerTabsLabel": "User details",
+    "tabs": {
+      "overview": "Overview",
+      "grants": "Cross-org grants"
+    },
+    "currentOperator": "Current operator",
+    "revokeSuperAdmin": "Revoke super admin",
+    "makeSuperAdmin": "Make super admin",
+    "mutation": {
+      "superAdminRevoked": "Super-admin access revoked",
+      "superAdminGranted": "Super-admin access granted",
+      "requestFailed": "The platform change could not be completed.",
+      "working": "Working…"
+    },
+    "facts": {
+      "email": "Email",
+      "homeOrganization": "Home organization",
+      "roles": "Roles",
+      "lastLogin": "Last login",
+      "created": "Created",
+      "accountId": "Account ID"
+    },
+    "noGrants": "No explicit cross-organization grants. This identity has access to its home organization unless it is a super admin."
+  },
+  "tenants": {
+    "title": "Organizations",
+    "description": "Every production company, sandbox, and preview environment. Open an organization to enter it as the current workspace.",
+    "backToPlatform": "Back to platform",
+    "emptyFiltered": "No organizations match these filters.",
+    "empty": "No organizations yet.",
+    "searchPlaceholder": "Search organizations…",
+    "environment": "Environment",
+    "environments": {
+      "production": "Production",
+      "sandbox": "Sandbox",
+      "preview": "Preview"
+    },
+    "columns": {
+      "organization": "Organization",
+      "locale": "Locale",
+      "users": "Users",
+      "sandboxes": "Sandboxes"
+    },
+    "parentNote": "of {name}",
+    "open": "Open",
+    "productionOnly": "Only production organizations can be opened from here."
+  },
+  "emailLog": {
+    "title": "Email log",
+    "description": "Delivery evidence across every organization.",
+    "backToPlatform": "Back to platform",
+    "emptyFiltered": "No deliveries match these filters.",
+    "empty": "No deliveries logged yet.",
+    "searchPlaceholder": "Search subject, recipient, or organization…",
+    "status": "Status",
+    "statuses": {
+      "queued": "Queued",
+      "sent": "Sent",
+      "failed": "Failed",
+      "suppressed": "Suppressed",
+      "uncertain": "Uncertain"
+    },
+    "columns": {
+      "subject": "Subject",
+      "organization": "Organization",
+      "recipient": "Recipient",
+      "delivery": "Delivery",
+      "logged": "Logged"
+    },
+    "unknownProvider": "Unknown provider"
+  },
+  "feedback": {
+    "title": "Issue reporting",
+    "description": "Where in-app product reports are filed for this deployment.",
+    "backToPlatform": "Back to platform",
+    "saved": "Issue reporting settings saved",
+    "settingsDescription": "One destination serves the whole deployment. People can report from any page; reports are generalized to remove personal and company details before an issue is filed.",
+    "tokenHelp": "Requires Issues: Read and write (fine-grained) or repo (classic). Leave blank to keep the stored token. When reporting is enabled, saving verifies the token against the repository.",
+    "storedToken": "Stored access token",
+    "storedTokenDescription": "Removing the token also turns reporting off because reports cannot be filed without credentials. Existing issues are unaffected.",
+    "tokenRemoved": "Access token removed",
+    "removeToken": "Remove token"
+  },
+  "mutations": {
+    "requestFailed": "The platform change could not be completed.",
+    "working": "Working…"
+  },
+  "actions": {
+    "invalidUser": "The user identifier is invalid.",
+    "cannotRevokeOwn": "You cannot revoke your own super-admin access.",
+    "userNotFound": "User not found.",
+    "finalSuperAdmin": "The final active super administrator cannot be revoked.",
+    "superAdminFailed": "The platform change could not be completed.",
+    "invalidMember": "The member identifier is invalid.",
+    "invalidOrganization": "The organization identifier is invalid.",
+    "invalidActingUser": "The acting user identifier is invalid.",
+    "grantIdentityNotFound": "The member, organization, or acting user could not be found.",
+    "memberMustBeProduction": "The member identity must belong to a production organization.",
+    "targetMustBeProduction": "Explicit access can only target a production organization.",
+    "homeAccessAlreadyImplicit": "The member already has implicit access to their home organization.",
+    "actingUserMustBelongToTarget": "The acting user must belong to the target organization.",
+    "actingUserMustBeActive": "The acting user must be active.",
+    "grantCouldNotSave": "The access grant could not be saved.",
+    "grantFailed": "Access could not be granted.",
+    "invalidGrant": "The access grant identifier is invalid.",
+    "grantNotFound": "Access grant not found.",
+    "revokeFailed": "Cross-organization access could not be revoked."
   }
 }

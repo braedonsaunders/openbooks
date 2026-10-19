@@ -17,7 +17,10 @@ Object.assign(globalThis, { __budgetActionsState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') return virtual(`export async function getLocale() { return 'en' }`)
+    if (specifier === 'next-intl/server') return virtual(`
+      export async function getLocale() { return 'en' }
+      export async function getTranslations() { return (key) => key }
+    `)
     if (specifier === '../../../../../lib/feature-gates' || (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetActionsState;
@@ -163,6 +166,40 @@ test('apply_source refuses before its delete, keeping the target lines', async (
     const after = await scenarioState(targetId, org.orgId)
     assert.deepEqual(after, before, 'the refused apply keeps the target lines it would have deleted first')
   } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('apply_source refuses an out-of-scope source before clearing target lines', async () => {
+  const org = await seedOrg()
+  try {
+    const hidden = (await db.execute<{ id: string }>(sql`
+      insert into subsidiaries (org_id, parent_id, name, base_currency, country)
+      values (${org.orgId}, ${org.subsidiaryId}, 'Hidden budget entity', 'CAD', 'CA') returning id`)).rows[0]!.id
+    const sourceId = await seedScenario(org, 2026, 'Restricted source')
+    await seedLine(org, sourceId, org.periodId, '1200.0000')
+    await db.execute(sql`
+      insert into budget_lines
+        (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, created_by, updated_by)
+      values (${org.orgId}, ${sourceId}, ${org.cogsId}, ${org.periodId}, ${hidden}, '300.0000', ${state.actorId}, ${state.actorId})`)
+    const targetId = await seedScenario(org, 2027, 'Restricted target')
+    const targetPeriod = (await db.execute<{ id: string }>(sql`
+      select id from accounting_periods where org_id = ${org.orgId} and fiscal_year = 2027 and period_number = 1`)).rows[0]!.id
+    // Make every source period map so the subsidiary guard is the refusal.
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${randomUUID()}, ${org.orgId}, 2027, 7, '2027-07', '2027-07-01', '2027-07-31', false, ${org.calendarId})`)
+    await seedLine(org, targetId, targetPeriod, '100.0000')
+    const before = await scenarioState(targetId, org.orgId)
+
+    state.allowed = new Set([org.subsidiaryId])
+    const response = await post(targetId, { action: 'apply_source', sourceScenarioId: sourceId, expectedRevision: 1 })
+    assert.equal(response.status, 403)
+    assert.match(String((await response.json()).error), /Hidden budget entity/)
+    assert.deepEqual(await scenarioState(targetId, org.orgId), before, 'refusal preserves target budget rows and revision')
+  } finally {
+    state.allowed = null
     await dropScratchOrg(org.orgId)
   }
 })

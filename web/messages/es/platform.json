@@ -25,5 +25,210 @@
       "createdLinkOnly": "{name} creada. Copia ahora el enlace de un solo uso del administrador para establecer la contraseña.",
       "requestFailed": "No se pudo crear la organización."
     }
+  },
+  "nav": {
+    "access": "Acceso entre organizaciones",
+    "accessDescription": "Administra el acceso controlado entre identidades de inicio de sesión y organizaciones.",
+    "overview": "Resumen",
+    "organizations": "Organizaciones",
+    "users": "Usuarios",
+    "feedback": "Informes de incidencias",
+    "emailLog": "Registro de correo",
+    "group": "Plataforma",
+    "overviewDescription": "Operaciones, identidades, controles de acceso y pruebas de entrega de toda la implementación.",
+    "organizationsDescription": "Organizaciones de producción, entornos de pruebas y vistas previas.",
+    "usersDescription": "Identidades de inicio de sesión, roles de organización y privilegios de plataforma en producción.",
+    "feedbackDescription": "Configura dónde se presentan los informes de incidencias dentro de la aplicación.",
+    "emailLogDescription": "Pruebas de entrega de todas las organizaciones.",
+    "workspace": "Espacio de trabajo de la organización"
+  },
+  "hub": {
+    "title": "Plataforma",
+    "description": "Operaciones, identidades, controles de acceso y pruebas de entrega de toda la implementación.",
+    "organizationsDetail": "{production} de producción · {nonProduction} no productivas",
+    "superAdminsDetail": "{count, plural, one {# superadministrador} other {# superadministradores}}",
+    "activeGrantsDetail": "Permisos explícitos activos",
+    "failedDeliveriesDetail": "Entregas fallidas que requieren atención"
+  },
+  "notice": {
+    "title": "Espacio de trabajo de plataforma",
+    "description": "Este espacio omite los límites entre organizaciones para operadores autorizados. Cada cambio de control de acceso se valida y se registra en el historial de auditoría inmutable."
+  },
+  "access": {
+    "title": "Acceso entre organizaciones",
+    "description": "Asignaciones controladas entre identidades de inicio de sesión y organizaciones. Los superadministradores no necesitan permisos.",
+    "backToPlatform": "Volver a la plataforma",
+    "grantAccess": "Conceder acceso",
+    "emptyFiltered": "Ningún permiso coincide con estos filtros.",
+    "empty": "Aún no hay permisos. Concede a una identidad de inicio de sesión acceso a otra organización.",
+    "searchPlaceholder": "Buscar miembro, organización o usuario de actuación…",
+    "status": "Estado",
+    "statuses": {
+      "active": "Activo",
+      "revoked": "Revocado"
+    },
+    "columns": {
+      "member": "Miembro",
+      "organization": "Organización",
+      "actingUser": "Actúa como",
+      "lastChanged": "Último cambio"
+    },
+    "historyPreserved": "Historial conservado",
+    "revoke": "Revocar",
+    "mutation": {
+      "revoked": "Acceso entre organizaciones revocado",
+      "requestFailed": "No se pudo cambiar el acceso.",
+      "working": "Procesando…"
+    },
+    "grant": {
+      "title": "Conceder acceso entre organizaciones",
+      "description": "Elige la identidad del miembro, la organización de destino y el usuario activo cuyos permisos se aplicarán allí.",
+      "memberHelp": "La identidad de inicio de sesión de su organización de origen. Sigue siendo responsable cuando accede a otra organización.",
+      "member": "Identidad del miembro",
+      "selectMember": "Selecciona un miembro…",
+      "organizationHelp": "La organización de producción a la que podrá acceder el miembro. El acceso a su organización de origen ya está implícito.",
+      "organization": "Organización de destino",
+      "selectOrganization": "Selecciona una organización…",
+      "actingUserHelp": "El usuario activo cuyas funciones y permisos se aplican mientras el miembro opera en la organización de destino.",
+      "actingUser": "Actúa como",
+      "selectActingUser": "Selecciona un usuario de actuación…",
+      "granting": "Concediendo…",
+      "submit": "Conceder acceso",
+      "success": "Acceso entre organizaciones concedido",
+      "requestFailed": "No se pudo conceder el acceso."
+    }
+  },
+  "users": {
+    "title": "Usuarios",
+    "description": "Identidades de inicio de sesión, roles de organización y privilegios de plataforma en producción.",
+    "backToPlatform": "Volver a la plataforma",
+    "emptyFiltered": "Ningún usuario coincide con estos filtros.",
+    "empty": "Aún no hay usuarios.",
+    "searchPlaceholder": "Buscar nombre, correo u organización…",
+    "status": "Estado",
+    "statuses": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "superAdmin": "Superadministrador"
+    },
+    "columns": {
+      "user": "Usuario",
+      "homeOrganization": "Organización de origen",
+      "roles": "Funciones",
+      "grants": "Permisos",
+      "lastLogin": "Último acceso"
+    },
+    "explicitGrants": "{count, plural, one {# explícito} other {# explícitos}}",
+    "homeOnly": "Solo organización de origen",
+    "never": "Nunca",
+    "manage": "Administrar",
+    "drawerDescription": "{email} · Organización {organization}",
+    "drawerTabsLabel": "Detalles del usuario",
+    "tabs": {
+      "overview": "Resumen",
+      "grants": "Permisos entre organizaciones"
+    },
+    "currentOperator": "Operador actual",
+    "revokeSuperAdmin": "Revocar superadministrador",
+    "makeSuperAdmin": "Hacer superadministrador",
+    "mutation": {
+      "superAdminRevoked": "Privilegios de superadministrador revocados",
+      "superAdminGranted": "Privilegios de superadministrador concedidos",
+      "requestFailed": "No se pudo completar el cambio de plataforma.",
+      "working": "Procesando…"
+    },
+    "facts": {
+      "email": "Correo",
+      "homeOrganization": "Organización de origen",
+      "roles": "Funciones",
+      "lastLogin": "Último acceso",
+      "created": "Creado",
+      "accountId": "ID de cuenta"
+    },
+    "noGrants": "No hay permisos explícitos entre organizaciones. Esta identidad tiene acceso a su organización de origen, salvo que sea superadministrador."
+  },
+  "tenants": {
+    "title": "Organizaciones",
+    "description": "Todas las empresas de producción, entornos de pruebas y vistas previas. Abre una organización para entrar en su espacio de trabajo.",
+    "backToPlatform": "Volver a la plataforma",
+    "emptyFiltered": "Ninguna organización coincide con estos filtros.",
+    "empty": "Aún no hay organizaciones.",
+    "searchPlaceholder": "Buscar organizaciones…",
+    "environment": "Entorno",
+    "environments": {
+      "production": "En producción",
+      "sandbox": "Pruebas",
+      "preview": "Vista previa"
+    },
+    "columns": {
+      "organization": "Organización",
+      "locale": "Región",
+      "users": "Usuarios",
+      "sandboxes": "Entornos de pruebas"
+    },
+    "parentNote": "de {name}",
+    "open": "Abrir",
+    "productionOnly": "Desde aquí solo se pueden abrir organizaciones de producción."
+  },
+  "emailLog": {
+    "title": "Registro de correo",
+    "description": "Pruebas de entrega de todas las organizaciones.",
+    "backToPlatform": "Volver a la plataforma",
+    "emptyFiltered": "Ninguna entrega coincide con estos filtros.",
+    "empty": "Aún no se han registrado entregas.",
+    "searchPlaceholder": "Buscar asunto, destinatario u organización…",
+    "status": "Estado",
+    "statuses": {
+      "queued": "En cola",
+      "sent": "Enviado",
+      "failed": "Fallido",
+      "suppressed": "Suprimido",
+      "uncertain": "Incierto"
+    },
+    "columns": {
+      "subject": "Asunto",
+      "organization": "Organización",
+      "recipient": "Destinatario",
+      "delivery": "Entrega",
+      "logged": "Registrado"
+    },
+    "unknownProvider": "Proveedor desconocido"
+  },
+  "feedback": {
+    "title": "Informes de incidencias",
+    "description": "Destino de los informes de producto dentro de la aplicación para esta implementación.",
+    "backToPlatform": "Volver a la plataforma",
+    "saved": "Configuración de informes guardada",
+    "settingsDescription": "Un destino sirve a toda la implementación. Se pueden enviar informes desde cualquier página; se eliminan los datos personales y de la empresa antes de crear una incidencia.",
+    "tokenHelp": "Requiere Issues: Read and write (detallado) o repo (clásico). Déjalo vacío para conservar el token guardado. Si los informes están habilitados, al guardar se comprueba el token en el repositorio.",
+    "storedToken": "Token de acceso guardado",
+    "storedTokenDescription": "Al quitar el token también se desactivan los informes, ya que no se pueden presentar incidencias sin credenciales. Las incidencias existentes no se modifican.",
+    "tokenRemoved": "Token de acceso eliminado",
+    "removeToken": "Quitar token"
+  },
+  "mutations": {
+    "requestFailed": "No se pudo completar el cambio de plataforma.",
+    "working": "Procesando…"
+  },
+  "actions": {
+    "invalidUser": "El identificador del usuario no es válido.",
+    "cannotRevokeOwn": "No puedes revocar tus propios privilegios de superadministrador.",
+    "userNotFound": "No se encontró el usuario.",
+    "finalSuperAdmin": "No se puede revocar al último superadministrador activo.",
+    "superAdminFailed": "No se pudo completar el cambio de plataforma.",
+    "invalidMember": "El identificador del miembro no es válido.",
+    "invalidOrganization": "El identificador de la organización no es válido.",
+    "invalidActingUser": "El identificador del usuario de actuación no es válido.",
+    "grantIdentityNotFound": "No se encontró el miembro, la organización o el usuario de actuación.",
+    "memberMustBeProduction": "La identidad del miembro debe pertenecer a una organización de producción.",
+    "targetMustBeProduction": "Solo se puede conceder acceso explícito a una organización de producción.",
+    "homeAccessAlreadyImplicit": "El miembro ya tiene acceso implícito a su organización de origen.",
+    "actingUserMustBelongToTarget": "El usuario de actuación debe pertenecer a la organización de destino.",
+    "actingUserMustBeActive": "El usuario de actuación debe estar activo.",
+    "grantCouldNotSave": "No se pudo guardar el permiso de acceso.",
+    "grantFailed": "No se pudo conceder el acceso.",
+    "invalidGrant": "El identificador del permiso de acceso no es válido.",
+    "grantNotFound": "No se encontró el permiso de acceso.",
+    "revokeFailed": "No se pudo revocar el acceso entre organizaciones."
   }
 }

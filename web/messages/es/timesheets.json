@@ -251,6 +251,8 @@
     "rulesSaved": "Reglas guardadas.",
     "kiosksTitle": "Quioscos",
     "noKiosks": "Aún no hay quioscos registrados.",
+    "pinRequired": "PIN obligatorio",
+    "lastSeen": "Última actividad",
     "retired": "Retirado",
     "tokenIssued": "Enlace del dispositivo para {name} — cópialo ahora, no volverá a mostrarse:",
     "acknowledgeToken": "He copiado este enlace del dispositivo",

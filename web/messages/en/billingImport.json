@@ -54,5 +54,33 @@
   "status": "Status",
   "objects": "Objects",
   "loadFailed": "Could not load billing imports.",
-  "requestFailed": "The billing platform did not answer."
+  "requestFailed": "The billing platform did not answer.",
+  "backToSync": "Back to Sync",
+  "unknownValue": "Unknown",
+  "providers": {
+    "chargebee": "Chargebee",
+    "recurly": "Recurly",
+    "maxio": "Maxio",
+    "zuora": "Zuora"
+  },
+  "statuses": {
+    "draft": "Draft",
+    "preflight": "Preflight",
+    "ready": "Ready",
+    "running": "Running",
+    "reconciling": "Reconciling",
+    "complete": "Complete",
+    "failed": "Failed"
+  },
+  "attentionKinds": {
+    "plan": "Plan",
+    "currency": "Currency",
+    "tax_code": "Tax code",
+    "customer": "Customer"
+  },
+  "differenceKinds": {
+    "mrr": "Monthly recurring revenue (MRR)",
+    "open_ar": "Open accounts receivable",
+    "deferred_revenue": "Deferred revenue"
+  }
 }

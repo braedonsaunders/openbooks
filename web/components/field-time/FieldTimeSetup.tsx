@@ -3,9 +3,11 @@
 import { useCallback, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { Button, Input, Select } from '@openbooks/ui'
+import { Badge, Button, Input, SearchSelect, Select } from '@openbooks/ui'
 import { Field } from '@/components/field'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { PagedTable, type PagedColumn } from '@/components/paged-table'
+import { useViewerFormat } from '@/lib/viewer-format'
 
 export interface FieldTimeRuleSettings {
   roundingIncrement: number | null
@@ -28,6 +30,11 @@ export interface KioskRow {
   lastSeenAt: string | null
 }
 
+interface EmployeeOption {
+  value: string
+  label: string
+}
+
 /**
  * The field-time setup surface: declared rounding/break/auto-close/
  * signature/tolerance/photo rules, kiosk devices with token issue and
@@ -38,6 +45,7 @@ export interface KioskRow {
 export function FieldTimeSetup({
   initialSettings,
   kiosks,
+  employees = [],
   kioskLinkBase,
   // Optional for direct renders (which stay fully editable, as before);
   // the widget adapter resolves a missing flag to false, so only an
@@ -47,6 +55,7 @@ export function FieldTimeSetup({
 }: {
   initialSettings: FieldTimeRuleSettings
   kiosks: KioskRow[]
+  employees?: EmployeeOption[]
   kioskLinkBase: string
   /**
    * Loader-resolved from the kiosks API's own authority (time.kiosk.manage
@@ -62,6 +71,8 @@ export function FieldTimeSetup({
   canEditPolicy?: boolean
 }) {
   const t = useTranslations('timesheets')
+  const common = useTranslations('common')
+  const { dateTime } = useViewerFormat()
   const [settings, setSettings] = useState<FieldTimeRuleSettings>(initialSettings)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -163,6 +174,47 @@ export function FieldTimeSetup({
     }
   }, [pinWorker, pin, t])
 
+  const revokeDevice = useCallback(async (kioskId: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/time/kiosks', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'revoke', kioskId }),
+      })
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, t('field.sendFailed')))
+        return
+      }
+      setKioskRows((current) => current.map((row) => row.id === kioskId ? { ...row, isActive: false } : row))
+    } catch {
+      setError(t('field.sendFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }, [t])
+
+  const kioskColumns: PagedColumn<KioskRow>[] = [
+    { key: 'name', header: common('labels.name'), cell: (row) => row.name, search: (row) => row.name },
+    {
+      key: 'status',
+      header: t('field.statusLabel'),
+      cell: (row) => <Badge variant={row.isActive ? 'success' : 'secondary'}>{row.isActive ? t('field.activeBadge') : t('field.inactiveBadge')}</Badge>,
+      search: (row) => row.isActive ? t('field.activeBadge') : t('field.inactiveBadge'),
+    },
+    { key: 'pinRequired', header: t('field.pinRequired'), cell: (row) => row.pinRequired ? common('labels.yes') : common('labels.no') },
+    { key: 'photoRequired', header: t('field.flagPhoto'), cell: (row) => row.photoRequired ? common('labels.yes') : common('labels.no') },
+    { key: 'lastSeenAt', header: t('field.lastSeen'), cell: (row) => row.lastSeenAt ? dateTime(new Date(row.lastSeenAt)) : common('labels.notSet') },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      cell: (row) => row.isActive ? <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void revokeDevice(row.id)}>{common('actions.retire')}</Button> : null,
+    },
+  ]
+
   const num = (value: string): number | null => {
     if (value.trim() === '') return null
     const parsed = Number(value)
@@ -222,15 +274,14 @@ export function FieldTimeSetup({
       {canManageKiosks ? (
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-base font-semibold">{t('field.kiosksTitle')}</h2>
-        {kioskRows.length === 0 ? <p className="text-sm text-slate-500">{t('field.noKiosks')}</p> : null}
-        <ul className="space-y-2">
-          {kioskRows.map((kiosk) => (
-            <li key={kiosk.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-              <span className="font-medium">{kiosk.name}</span>
-              {!kiosk.isActive ? <span className="text-xs text-red-600">{t('field.retired')}</span> : null}
-            </li>
-          ))}
-        </ul>
+        <PagedTable
+          source="time_kiosks"
+          rows={kioskRows}
+          columns={kioskColumns}
+          rowKey={(row) => row.id}
+          searchable
+          empty={<span>{t('field.noKiosks')}</span>}
+        />
         {issued ? (
           <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800" role="status">
             <p>{t('field.tokenIssued', { name: issued.name })}</p>
@@ -251,8 +302,16 @@ export function FieldTimeSetup({
           </Button>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Field label={t('field.pinWorkerPlaceholder')}>
-            <Input value={pinWorker} onChange={(event) => setPinWorker(event.target.value)} placeholder={t('field.pinWorkerPlaceholder')} className="max-w-xs" />
+          <Field label={t('field.worker')}>
+            <SearchSelect
+              value={pinWorker}
+              onChange={setPinWorker}
+              options={employees}
+              placeholder={t('field.chooseWorker')}
+              searchPlaceholder={t('field.kioskSearchPlaceholder')}
+              emptyLabel={t('field.chooseWorker')}
+              className="max-w-xs"
+            />
           </Field>
           <Field label={t('field.pinPlaceholder')}>
             <Input value={pin} onChange={(event) => setPin(event.target.value)} placeholder={t('field.pinPlaceholder')} inputMode="numeric" autoComplete="off" className="max-w-40" />
@@ -267,7 +326,7 @@ export function FieldTimeSetup({
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-base font-semibold">{t('field.approvalRoutingTitle')}</h2>
         <p className="text-sm text-slate-500">{t('field.approvalRoutingHint')}</p>
-        <Link href="/flows" className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-400">
+        <Link href="/admin/flows" className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-400">
           {t('field.approvalRoutingLink')}
         </Link>
       </section>

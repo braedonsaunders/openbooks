@@ -13,6 +13,7 @@ import {
 import { auditSetupChange } from "../../../../lib/setup/audit";
 import {
   isVizType,
+  guardInsightCardQuery,
   normalizeAllowedRoles,
   normalizeQuery,
   normalizeVizSettings,
@@ -81,6 +82,8 @@ export const POST = defineRoute({
     } catch (e) {
       return bad(e instanceof Error ? e.message : "invalid query");
     }
+    const queryDenied = await guardInsightCardQuery(gate, query);
+    if (queryDenied) return queryDenied;
     const vizType = body.vizType ?? "bar";
     if (!isVizType(vizType)) return bad("invalid viz type");
     let vizSettings: ReturnType<typeof normalizeVizSettings>;

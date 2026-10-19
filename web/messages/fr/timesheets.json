@@ -251,6 +251,8 @@
     "rulesSaved": "Règles enregistrées.",
     "kiosksTitle": "Bornes",
     "noKiosks": "Aucune borne enregistrée.",
+    "pinRequired": "NIP requis",
+    "lastSeen": "Vu pour la dernière fois",
     "retired": "Retirée",
     "tokenIssued": "Lien de l'appareil pour {name} — copiez-le, il ne sera plus affiché :",
     "acknowledgeToken": "J'ai copié ce lien d'appareil",

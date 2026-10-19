@@ -22,12 +22,28 @@ function baseData(): Record<string, unknown> {
     refusal: null,
     balances: [],
     balancesEmpty: "No balances",
+    balancesTitle: "Balances",
+    availableLeaveLabel: "Available leave",
+    steps: [],
+    requests: [],
+    qualifications: [],
+    actionQueueRows: [],
+    stepsTitle: "My open steps",
+    stepsEmpty: "No open steps",
+    stepsEmptyDescription: "Checklist steps assigned to you list here.",
+    requestsTitle: "My pending requests",
+    requestsEmptyDescription: "Profile requests list here.",
+    qualificationsTitle: "Certifications needing action",
+    qualificationsEmptyDescription: "Renewals appear here.",
+    notAvailableLabel: "—",
+    latestNetPayLabel: "Net pay",
+    timeKindLabel: "Hours",
+    valueKindLabel: "Value",
+    unlimitedLabel: "Unlimited",
+    serviceStartUnknownLabel: "Unknown service start",
     extensions: [],
     extensionsTitle: "",
     payExplain: "",
-    timeKindLabel: "Time",
-    unlimitedLabel: "Unlimited",
-    valueKindLabel: "Value",
   } as unknown as Record<string, unknown>;
 }
 
@@ -49,4 +65,12 @@ test("the surfaces bind their rows with the tab strip in the header", () => {
   assert.ok(json.includes("/me"), "the strip links the overview surface");
   assert.ok(json.includes("\"hrm-leave-balances\""), "the balances widget renders");
   assert.ok(json.includes("No balances"), "the balances empty state resolves from its data");
+});
+
+test("the overview composes five vitals around one work queue and a summary rail", () => {
+  const json = specJson(baseData());
+  assert.equal((json.match(/"kind":"stat-tile"/g) ?? []).length, 5, "the cockpit carries five vitals");
+  assert.ok(json.includes('"me_action_queue"'), "open steps and pending requests share one work queue");
+  assert.ok(!json.includes('"me_overview_steps"') && !json.includes('"me_overview_requests"'), "the page does not stack separate work tables");
+  assert.ok(json.includes('"hrm-facts"') && json.includes('"directory-section"'), "employment facts and self-service destinations stay in the rail");
 });

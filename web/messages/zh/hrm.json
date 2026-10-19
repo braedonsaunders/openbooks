@@ -931,6 +931,7 @@
     "emptyTitle": "暂无申请",
     "emptyDescription": "提交第一条申请吧。",
     "balancesTitle": "余额",
+    "availableLeaveLabel": "可用休假",
     "balancesEmpty": "没有启用的休假类型。",
     "balanceEmployment": "{employer} · 雇佣关系 {employment}",
     "balancePerson": "个人级别",
@@ -1554,7 +1555,7 @@
         "rewards": "奖励",
         "incentives": "激励",
         "payouts": "发放",
-        "employees": "福利",
+        "employees": "员工",
         "delivery": "履行"
       }
     },

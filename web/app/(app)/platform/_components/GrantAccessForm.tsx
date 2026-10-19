@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from "sonner";
-import { Button, Card, FieldLabel, Select } from "@openbooks/ui";
+import { Button, FieldLabel, Select, UrlDrawer } from "@openbooks/ui";
 import type {
   PlatformOrganization,
   PlatformUser,
@@ -18,13 +20,19 @@ export function GrantAccessForm({
   members,
   organizations,
   actingUsers,
+  open,
+  closeHref,
   defaultMemberUserId = "",
 }: {
   members: UserOption[];
   organizations: Pick<PlatformOrganization, "id" | "name">[];
   actingUsers: UserOption[];
+  open: boolean;
+  closeHref: string;
   defaultMemberUserId?: string;
 }) {
+  const t = useTranslations('platform.access.grant')
+  const router = useRouter()
   const [memberUserId, setMemberUserId] = useState(defaultMemberUserId);
   const [orgId, setOrgId] = useState("");
   const [actingUserId, setActingUserId] = useState("");
@@ -45,15 +53,17 @@ export function GrantAccessForm({
         setOrgId("");
         setActingUserId("");
         if (!defaultMemberUserId) setMemberUserId("");
-        toast.success("Cross-organization access granted");
+        toast.success(t("success"));
+        router.replace(closeHref)
+        router.refresh()
       } catch {
-        toast.error("Access could not be granted");
+        toast.error(t("requestFailed"));
       }
     });
   }
 
   return (
-    <Card className="p-4">
+    <UrlDrawer open={open} closeHref={closeHref} size="lg" title={t('title')} description={t('description')}>
       <form
         action={submit}
         className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_auto] lg:items-end"
@@ -61,9 +71,9 @@ export function GrantAccessForm({
         <div className="space-y-1.5">
           <FieldLabel
             htmlFor="platform-member"
-            help="The person's home login identity. This remains the accountable member when they enter another organization."
+            help={t('memberHelp')}
           >
-            Member identity
+            {t('member')}
           </FieldLabel>
           <Select
             id="platform-member"
@@ -73,7 +83,7 @@ export function GrantAccessForm({
             required
             searchable
           >
-            <option value="">Select a member…</option>
+            <option value="">{t('selectMember')}</option>
             {members.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.name} · {user.email} ({user.orgName})
@@ -84,9 +94,9 @@ export function GrantAccessForm({
         <div className="space-y-1.5">
           <FieldLabel
             htmlFor="platform-target-org"
-            help="The production organization the member will be allowed to enter. Home-organization access is already implicit."
+            help={t('organizationHelp')}
           >
-            Target organization
+            {t('organization')}
           </FieldLabel>
           <Select
             id="platform-target-org"
@@ -99,7 +109,7 @@ export function GrantAccessForm({
             required
             searchable
           >
-            <option value="">Select an organization…</option>
+            <option value="">{t('selectOrganization')}</option>
             {organizations.map((organization) => (
               <option key={organization.id} value={organization.id}>
                 {organization.name}
@@ -110,9 +120,9 @@ export function GrantAccessForm({
         <div className="space-y-1.5">
           <FieldLabel
             htmlFor="platform-acting-user"
-            help="The active user record whose roles and permissions apply while the member is operating in the target organization."
+            help={t('actingUserHelp')}
           >
-            Acts as
+            {t('actingUser')}
           </FieldLabel>
           <Select
             id="platform-acting-user"
@@ -123,7 +133,7 @@ export function GrantAccessForm({
             required
             searchable
           >
-            <option value="">Select an acting user…</option>
+            <option value="">{t('selectActingUser')}</option>
             {eligibleActingUsers.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.name} · {user.email}
@@ -135,9 +145,9 @@ export function GrantAccessForm({
           type="submit"
           disabled={pending || !memberUserId || !orgId || !actingUserId}
         >
-          {pending ? "Granting…" : "Grant access"}
+          {pending ? t("granting") : t("submit")}
         </Button>
       </form>
-    </Card>
+    </UrlDrawer>
   );
 }

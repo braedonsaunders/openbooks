@@ -52,6 +52,7 @@ export const HRM_FIELD_TIME_WIDGETS = {
     <FieldTimeSetup
       initialSettings={(props.initialSettings as ComponentProps<typeof FieldTimeSetup>['initialSettings'])!}
       kiosks={(props.kiosks as ComponentProps<typeof FieldTimeSetup>['kiosks']) ?? []}
+      employees={(props.employees as ComponentProps<typeof FieldTimeSetup>['employees']) ?? []}
       kioskLinkBase={str(props, 'kioskLinkBase') ?? ''}
       canManageKiosks={props.canManageKiosks === true}
       canEditPolicy={props.canEditPolicy === true}

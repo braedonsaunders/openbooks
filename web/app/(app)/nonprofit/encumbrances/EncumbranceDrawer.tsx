@@ -138,7 +138,6 @@ function CreateEncumbranceForm({
 }) {
   const t = useTranslations('nonprofit')
   const [form, setForm] = useState({
-    sourceKind: 'manual',
     amount: '',
     accountId: drawer.accountOptions[0]?.id ?? '',
     subsidiaryId: drawer.subsidiaryOptions[0]?.id ?? '',
@@ -148,13 +147,7 @@ function CreateEncumbranceForm({
   if (!drawer.canManage) return <p className="text-sm text-slate-500">{t('encumbrances.manageRequired')}</p>
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field label={t('encumbrances.sourceKind')}>
-        <Select value={form.sourceKind} onChange={(e) => set('sourceKind')(e.target.value)}>
-          {['manual', 'purchase_order'].map((kind) => (
-            <option key={kind} value={kind}>{kind}</option>
-          ))}
-        </Select>
-      </Field>
+      <Field label={t('encumbrances.sourceKind')}><p className="text-sm">manual</p></Field>
       <Field label={t('encumbrances.amount')}><Input value={form.amount} onChange={(e) => set('amount')(e.target.value)} inputMode="decimal" /></Field>
       <Field label={t('encumbrances.account')}>
         <Select value={form.accountId} onChange={(e) => set('accountId')(e.target.value)}>
@@ -178,7 +171,7 @@ function CreateEncumbranceForm({
         </Select>
       </Field>
       <div className="sm:col-span-2">
-        <Button disabled={busy} onClick={() => onSubmit(form)}>{t('encumbrances.createAction')}</Button>
+        <Button disabled={busy} onClick={() => onSubmit({ ...form, sourceKind: 'manual' })}>{t('encumbrances.createAction')}</Button>
       </div>
     </div>
   )

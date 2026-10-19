@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import { isUuid } from "../../../../../lib/list-params";
 import {
   isVizType,
+  guardInsightCardQuery,
   loadCard,
   normalizeAllowedRoles,
   normalizeQuery,
@@ -142,6 +143,8 @@ export const PATCH = defineRoute({
       } catch (e) {
         return bad(e instanceof Error ? e.message : "invalid query");
       }
+      const queryDenied = await guardInsightCardQuery(gate, query);
+      if (queryDenied) return queryDenied;
     }
 
     if (body.vizType !== undefined && !isVizType(body.vizType))

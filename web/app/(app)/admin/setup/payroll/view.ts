@@ -244,11 +244,9 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
     header: [],
     body: [
       grid('space-y-5', [
-        // Custom header: the native page owns an `<header>` (h1 +
-        // description + launcher button) that no PageHeader block can
-        // express, so the whole row is one shared component over
-        // loader-resolved strings plus the launcher payload. The banner's
-        // `missing > 0` presence lives inside its shared component too.
+        // The shared header receives loader-resolved text and the optional
+        // launcher action. The banner's `missing > 0` presence lives inside
+        // its shared component too.
         widgetBlock('payroll-setup-header', {
           title: data.title,
           description: data.description,

@@ -246,9 +246,10 @@ export const SETUP_WIDGETS = {
   ),
 
   /* --- payment providers setup ------------------------------------------------------ */
-  /** No props: the island fetches its own providers, bank accounts and
-   *  surcharge rules and owns every form. */
-  'payment-providers-workspace': () => <PaymentProvidersClient />,
+  /** Authorized provider and account reads arrive with the server page. */
+  'payment-providers-workspace': (props) => (
+    <PaymentProvidersClient initialData={props.initialData as ComponentProps<typeof PaymentProvidersClient>['initialData']} />
+  ),
 
   /* --- security settings ------------------------------------------------------------ */
   /** No props. Every control is client state or a fetch to /api/auth/*. */
@@ -418,6 +419,7 @@ export const SETUP_WIDGETS = {
     <AutomationBuilder
       automation={props.automation as ComponentProps<typeof AutomationBuilder>['automation']}
       runs={props.runs as ComponentProps<typeof AutomationBuilder>['runs']}
+      scopeOptions={props.scopeOptions as ComponentProps<typeof AutomationBuilder>['scopeOptions']}
       canSimulate={props.canSimulate === true}
       canManage={props.canManage === true}
       saveFailed={str(props, 'saveFailed') ?? ''}

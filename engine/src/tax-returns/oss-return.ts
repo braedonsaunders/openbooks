@@ -111,6 +111,7 @@ function demandPeriod(scheme: OssScheme, from: string, to: string): void {
 
 type RegistrationRow = {
   id: string;
+  subsidiaryId: string | null;
   identificationState: string;
   registrationNumber: string;
 }
@@ -183,11 +184,13 @@ export async function computeOssReturn(
   demandPeriod(request.scheme, request.from, request.to);
   const registrations = (
     await runner.execute<RegistrationRow>(sql`
-      select id, identification_state as "identificationState", registration_number as "registrationNumber"
+      select id, subsidiary_id as "subsidiaryId", identification_state as "identificationState",
+             registration_number as "registrationNumber"
         from tax_oss_registrations
        where org_id = ${orgId}
          and scheme = ${request.scheme}
          and is_active
+         and effective_from is not null
          and effective_from <= ${request.to}::date
          and (effective_to is null or effective_to >= ${request.from}::date)
          ${request.registrationId ? sql`and id = ${request.registrationId}` : sql``}`)
@@ -230,8 +233,9 @@ export async function computeOssReturn(
           on corrected.org_id = d.org_id
          and corrected.id = correction_edge.to_document_id
        where d.org_id = ${orgId}
+         and d.subsidiary_id is not distinct from ${registration.subsidiaryId}
          and d.kind in ('customer_invoice', 'customer_credit')
-         and d.status = 'posted'
+         and (d.status = 'posted' or (d.status = 'voided' and d.voided_at::date > ${request.to}::date))
          and d.document_date between ${request.from}::date and ${request.to}::date
          and d.custom -> 'crossBorderSupply' ->> 'outcome' = 'customer_country'
          and component.calculation_type = 'standard'`)
@@ -283,6 +287,7 @@ export async function computeOssReturn(
         join document_line_tax_components component
           on component.org_id = d.org_id and component.document_line_id = line.id
        where d.org_id = ${orgId}
+         and d.subsidiary_id is not distinct from ${registration.subsidiaryId}
          and d.kind in ('customer_invoice', 'customer_credit')
          and d.status = 'voided'
          and d.voided_at::date between ${request.from}::date and ${request.to}::date

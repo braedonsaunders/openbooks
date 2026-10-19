@@ -53,6 +53,7 @@ type TableProps = {
   rows: Row[];
   columns: PagedColumn<Row>[];
   rowKey: (row: Row) => string;
+  rowLabel?: (row: Row) => string;
   empty: string;
   searchable: boolean;
   pageSize: number;
@@ -77,6 +78,7 @@ function renderTable(props: {
     rows: props.rows ?? ROWS,
     columns: COLUMNS,
     rowKey: (row: Row) => row.id,
+    rowLabel: (row: Row) => row.name,
     empty: "none",
     searchable: true,
     pageSize: 10,
@@ -141,6 +143,7 @@ test("paged-table: selection renders a header checkbox plus one per visible row"
   // 12 rows at pageSize 10: header + 10 visible rows.
   assert.equal(boxes.length, 11);
   const [, firstRow] = boxes;
+  assert.equal(firstRow?.getAttribute("aria-label"), "Select Asset 1");
   assert.equal(firstRow?.checked, true);
   await act(async () => {
     root.unmount();

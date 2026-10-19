@@ -1,5 +1,5 @@
 import { ServerPagedTable } from '../../../../components/server-paged-table'
-import { Badge, PageHeader } from '@openbooks/ui'
+import { Badge, Button, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
@@ -9,6 +9,10 @@ import { revokeAccessAction } from '../actions'
 import { GrantAccessForm } from '../_components/GrantAccessForm'
 import { PlatformMutationButton } from '../_components/PlatformMutationButton'
 import { ViewerDateTime } from '../../../../components/viewer-format'
+import { getTranslations } from 'next-intl/server'
+import Link from 'next/link'
+import { platformDrawerHref } from '../../../../lib/platform-console'
+import { useTranslations } from 'next-intl'
 
 /**
  * Two composite cells in the cross-org access list.
@@ -40,16 +44,19 @@ export function ActingCell({ name, email }: { name: string; email: string }) {
 }
 
 /** Revoke button while the grant is live; a history note once it is not. */
-export function AccessControlCell({ grantId, isActive }: { grantId: string; isActive: boolean }) {
-  if (!isActive) return <span className="text-xs text-slate-400">History preserved</span>
+export function AccessControlCell({ grantId, isActive, labels }: { grantId: string; isActive: boolean; labels?: { preserved: string; revoked: string; requestFailed?: string; working?: string; revoke?: string } }) {
+  const t = useTranslations('platform.access')
+  if (!isActive) return <span className="text-xs text-slate-400">{labels?.preserved ?? t('historyPreserved')}</span>
   return (
     <PlatformMutationButton
       action={revokeAccessAction.bind(null, grantId)}
-      success="Cross-organization access revoked"
+      success={labels?.revoked ?? t('mutation.revoked')}
+      fallbackError={labels?.requestFailed ?? t('mutation.requestFailed')}
+      pendingLabel={labels?.working ?? t('mutation.working')}
       size="sm"
       variant="ghost"
     >
-      Revoke
+      {labels?.revoke ?? t('revoke')}
     </PlatformMutationButton>
   )
 }
@@ -65,7 +72,7 @@ export function AccessControlCell({ grantId, isActive }: { grantId: string; isAc
  * the revoke control are unchanged client islands. The row cells stay the
  * shared cells above that the viewspec platform widgets also render.
  */
-export function AccessList({
+export async function AccessList({
   grants,
   total,
   page,
@@ -94,27 +101,30 @@ export function AccessList({
   organizations: Pick<PlatformOrganization, 'id' | 'name'>[]
   actingUsers: Pick<PlatformUser, 'id' | 'name' | 'email' | 'orgName' | 'orgId'>[]
 }) {
+  const t = await getTranslations('platform.access')
   const filtered = currentParams.q !== undefined || status !== undefined
+  const drawerOpen = (Array.isArray(currentParams.grant) ? currentParams.grant[0] : currentParams.grant) === 'new'
+  const drawerCloseHref = platformDrawerHref(basePath, currentParams, 'grant')
   return (
-    <ListPageLayout header={<PageHeader title="Cross-org access" description="Controlled mappings between login identities and organizations. Super admins do not require grants." back={{ href: '/platform', label: 'Back to platform' }} />}>
+    <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} back={{ href: '/platform', label: t('backToPlatform') }} actions={<Button asChild><Link href={platformDrawerHref(basePath, currentParams, 'grant', 'new') as never}>{t('grantAccess')}</Link></Button>} />}>
       <div className="space-y-5">
-        <GrantAccessForm members={members} organizations={organizations} actingUsers={actingUsers} />
+        {drawerOpen ? <GrantAccessForm open closeHref={drawerCloseHref} members={members} organizations={organizations} actingUsers={actingUsers} /> : null}
         <ServerPagedTable
           rows={grants} rowKey={(row) => row.id}
           total={total} page={page} perPage={perPage}
           basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
-          empty={filtered ? 'No grants match these filters.' : 'No grants. Grant access above to map a login into another organization.'}
-          toolbar={<><SearchInput placeholder="Search member, organization, or acting user…" /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label="Status" options={[
-            { value: 'active', label: 'Active', count: Number(statusCounts.active ?? 0) },
-            { value: 'inactive', label: 'Revoked', count: Number(statusCounts.inactive ?? 0) },
+          empty={filtered ? t('emptyFiltered') : t('empty')}
+          toolbar={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label={t('status')} options={[
+            { value: 'active', label: t('statuses.active'), count: Number(statusCounts.active ?? 0) },
+            { value: 'inactive', label: t('statuses.revoked'), count: Number(statusCounts.inactive ?? 0) },
           ]} /></>}
           columns={[
-          { key: 'member', header: 'Member', sortKey: 'member', cell: (grant) => <IdentityCell name={grant.memberName} detail={`${grant.memberEmail} · ${grant.memberOrgName}`} /> },
-          { key: 'organization', header: 'Organization', sortKey: 'organization', cell: (grant) => grant.orgName },
-          { key: 'actingUser', header: 'Acts as', sortKey: 'actingUser', cell: (grant) => <ActingCell name={grant.actingName} email={grant.actingEmail} /> },
-          { key: 'status', header: 'Status', cell: (grant) => <Badge variant={grant.isActive ? 'success' : 'secondary'}>{grant.isActive ? 'Active' : 'Revoked'}</Badge> },
-          { key: 'updated', header: 'Last changed', sortKey: 'updated', cell: (grant) => asDate(grant.updatedAt) ? <ViewerDateTime value={asDate(grant.updatedAt)!} /> : '—' },
-          { key: 'revoke', header: <span className="sr-only">Revoke</span>, className: 'w-px whitespace-nowrap px-2 text-center', style: { width: 64 }, cell: (grant) => <AccessControlCell grantId={grant.id} isActive={grant.isActive} /> },
+          { key: 'member', header: t('columns.member'), sortKey: 'member', cell: (grant) => <IdentityCell name={grant.memberName} detail={`${grant.memberEmail} · ${grant.memberOrgName}`} /> },
+          { key: 'organization', header: t('columns.organization'), sortKey: 'organization', cell: (grant) => grant.orgName },
+          { key: 'actingUser', header: t('columns.actingUser'), sortKey: 'actingUser', cell: (grant) => <ActingCell name={grant.actingName} email={grant.actingEmail} /> },
+          { key: 'status', header: t('status'), cell: (grant) => <Badge variant={grant.isActive ? 'success' : 'secondary'}>{grant.isActive ? t('statuses.active') : t('statuses.revoked')}</Badge> },
+          { key: 'updated', header: t('columns.lastChanged'), sortKey: 'updated', cell: (grant) => asDate(grant.updatedAt) ? <ViewerDateTime value={asDate(grant.updatedAt)!} /> : '—' },
+          { key: 'revoke', header: <span className="sr-only">{t('revoke')}</span>, className: 'w-px whitespace-nowrap px-2 text-center', style: { width: 64 }, cell: (grant) => <AccessControlCell grantId={grant.id} isActive={grant.isActive} labels={{ preserved: t('historyPreserved'), revoked: t('mutation.revoked'), requestFailed: t('mutation.requestFailed'), working: t('mutation.working'), revoke: t('revoke') }} /> },
         ]}
         />
       </div>

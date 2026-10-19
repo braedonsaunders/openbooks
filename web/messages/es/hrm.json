@@ -931,6 +931,7 @@
     "emptyTitle": "Sin solicitudes",
     "emptyDescription": "Registre su primera solicitud.",
     "balancesTitle": "Saldos",
+    "availableLeaveLabel": "Permiso disponible",
     "balancesEmpty": "Sin tipos de ausencia activos.",
     "balanceEmployment": "{employer} · Empleo {employment}",
     "balancePerson": "A nivel de persona",
@@ -1554,7 +1555,7 @@
         "rewards": "Recompensas",
         "incentives": "Incentivos",
         "payouts": "Pagos",
-        "employees": "Beneficios",
+        "employees": "Empleados",
         "delivery": "Entrega"
       }
     },

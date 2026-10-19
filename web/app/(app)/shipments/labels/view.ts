@@ -21,6 +21,7 @@ import type { ShippingAccountOption } from '../../_fulfillment/types'
 export interface BulkBuyData {
   title: string
   description: string
+  backLabel: string
   accounts: ShippingAccountOption[]
   canBuy: boolean
   currentParams: Record<string, string | string[] | undefined>
@@ -36,6 +37,7 @@ export async function loadBulkBuy(
   return {
     title: t('shipping.bulk.title'),
     description: t('shipping.bulk.description'),
+    backLabel: t('shipment.listTitle'),
     accounts: shipping.accounts,
     canBuy: shipping.canBuy,
     currentParams: sp,
@@ -52,6 +54,7 @@ export function bulkBuySpec(data: BulkBuyData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
+        back: { href: '/shipments', label: f('backLabel') },
       }),
     ],
     body: [

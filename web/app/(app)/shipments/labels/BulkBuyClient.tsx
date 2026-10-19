@@ -11,13 +11,8 @@ import {
   EmptyState,
   Label,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@openbooks/ui'
+import { PagedTable } from '@/components/paged-table'
 import { RecordTabs } from '@/components/module-home/record-tabs'
 import { useAppAction } from '@/lib/use-app-action'
 import { createMoneyFormatter } from '@/lib/money-format'
@@ -60,6 +55,8 @@ type PreviewRowView =
       remedy?: string
     }
 
+type SuccessfulPreviewRow = Extract<PreviewRowView, { ok: true }>
+
 type BuyRowView =
   | { shipmentId: string; handlingUnitId:string; ok: true; labelId: string; trackingNumber: string | null; duplicate: boolean }
   | { shipmentId: string; handlingUnitId:string; ok: false; code: string; message: string; remedy?: string }
@@ -80,6 +77,7 @@ export function BulkBuyClient({
   canBuy: boolean
 }) {
   const t = useTranslations('fulfillment')
+  const tCommon = useTranslations('common')
   const locale = useLocale()
   const { busy, refusal, execute, refuse } = useAppAction()
   const [activeTab, setActiveTab] = useState<'shipments' | 'rates' | 'labels'>('shipments')
@@ -125,11 +123,11 @@ export function BulkBuyClient({
     setActiveTab('shipments')
   }
 
-  function toggle(shipmentId: string) {
+  function toggle(handlingUnitId: string) {
     setSelected((current) => {
       const next = new Set(current)
-      if (next.has(shipmentId)) next.delete(shipmentId)
-      else next.add(shipmentId)
+      if (next.has(handlingUnitId)) next.delete(handlingUnitId)
+      else next.add(handlingUnitId)
       return next
     })
     setPreview(null)
@@ -137,23 +135,27 @@ export function BulkBuyClient({
     setMerged(null)
   }
 
-  function toggleAll() {
-    if (!candidates) return
-    setSelected((current) =>
-      current.size === candidates.length ? new Set() : new Set(candidates.map((candidate) => candidate.handlingUnitId)),
-    )
+  function toggleAll(ids: string[]) {
+    setSelected((current) => {
+      const allSelected = ids.every((id) => current.has(id))
+      const next = new Set(current)
+      for (const id of ids) {
+        if (allSelected) next.delete(id)
+        else next.add(id)
+      }
+      return next
+    })
     setPreview(null)
     setBought(null)
     setMerged(null)
   }
 
-  const readyRows = useMemo(() => (preview ?? []).filter((row) => row.ok), [preview])
+  const readyRows = useMemo(() => (preview ?? []).filter((row): row is SuccessfulPreviewRow => row.ok), [preview])
   const failedRows = useMemo(() => (preview ?? []).filter((row) => !row.ok), [preview])
 
   const totals = useMemo(() => {
     const sums = new Map<string, string>()
     for (const row of readyRows) {
-      if (!row.ok) continue
       const running = sums.get(row.currency) ?? '0'
       const next = addExact(running, row.amount)
       if (next !== null) sums.set(row.currency, next)
@@ -223,9 +225,10 @@ export function BulkBuyClient({
     <div className="space-y-6">
       <ActionAlert error={refusal} fallbackMessage={t('actionFailed')} />
       {candidatesError ? (
-        <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-          {candidatesError}
-        </p>
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+          <p>{candidatesError}</p>
+          <Button variant="outline" disabled={busy} onClick={() => void loadCandidates(true)}>{tCommon('actions.retry')}</Button>
+        </div>
       ) : null}
 
       <RecordTabs
@@ -239,7 +242,7 @@ export function BulkBuyClient({
         ]}
       >
         {activeTab === 'shipments' ? <>
-      {candidates === null ? (
+      {candidatesError ? null : candidates === null ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('shipping.bulk.loading')}</p>
       ) : candidates.length === 0 ? (
         <EmptyState
@@ -281,44 +284,26 @@ export function BulkBuyClient({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">
-                    <input
-                      type="checkbox"
-                      aria-label={t('shipping.bulk.selectAll')}
-                      checked={selected.size === candidates.length && candidates.length > 0}
-                      onChange={toggleAll}
-                      className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                    />
-                  </TableHead>
-                  <TableHead>{t('shipping.bulk.colShipment')}</TableHead>
-                  <TableHead>{t('shipping.bulk.colCustomer')}</TableHead>
-                  <TableHead>{t('shipping.bulk.colPromised')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {candidates.map((candidate) => (
-                  <TableRow key={candidate.handlingUnitId}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        aria-label={`${candidate.documentNumber} · ${candidate.handlingUnitCode ?? ''}`}
-                        checked={selected.has(candidate.handlingUnitId)}
-                        onChange={() => toggle(candidate.handlingUnitId)}
-                        className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                      />
-                    </TableCell>
-                    <TableCell className="font-mono">{candidate.documentNumber} · {candidate.handlingUnitCode}</TableCell>
-                    <TableCell>{candidate.customerName ?? '—'}</TableCell>
-                    <TableCell>{candidate.promisedDate ?? '—'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <PagedTable
+            source="shipping_bulk_candidates"
+            rows={candidates}
+            rowKey={(candidate) => candidate.handlingUnitId}
+            rowLabel={(candidate) => `${candidate.documentNumber} ${candidate.customerName ?? ''}`}
+            searchable
+            empty={t('shipping.bulk.emptyTitle')}
+            columns={[
+              { key: 'shipment', header: t('shipping.bulk.colShipment'), search: (candidate) => `${candidate.documentNumber} ${candidate.handlingUnitCode ?? ''}`, cell: (candidate) => <span className="font-mono">{candidate.documentNumber} · {candidate.handlingUnitCode ?? ''}</span> },
+              { key: 'customer', header: t('shipping.bulk.colCustomer'), search: (candidate) => candidate.customerName ?? '', cell: (candidate) => candidate.customerName ?? '—' },
+              { key: 'promised', header: t('shipping.bulk.colPromised'), search: (candidate) => candidate.promisedDate ?? '', cell: (candidate) => candidate.promisedDate ?? '—' },
+            ]}
+            selection={{
+              getId: (candidate) => candidate.handlingUnitId,
+              selectedIds: selected,
+              onToggle: toggle,
+              onToggleAll: toggleAll,
+              disabled: busy,
+            }}
+          />
 
         </>
       )}
@@ -335,32 +320,20 @@ export function BulkBuyClient({
                 </p>
               ) : null}
               {readyRows.length > 0 ? (
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t('shipping.bulk.colShipment')}</TableHead>
-                        <TableHead>{t('shipping.colRate')}</TableHead>
-                        <TableHead>{t('shipping.colDelivery')}</TableHead>
-                        <TableHead className="text-right">{t('shipping.colPrice')}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {readyRows.map((row) =>
-                        row.ok ? (
-                          <TableRow key={row.handlingUnitId}>
-                            <TableCell className="font-mono">{row.documentNumber}</TableCell>
-                            <TableCell>{row.carrier} · {row.service}</TableCell>
-                            <TableCell>{row.deliveryDate ?? '—'}</TableCell>
-                            <TableCell className="text-right font-medium tabular-nums">
-                              {moneyFor(row.currency).money(row.amount, { currency: row.currency })}
-                            </TableCell>
-                          </TableRow>
-                        ) : null,
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                <PagedTable
+                  source="shipping_bulk_rates"
+                  rows={readyRows}
+                  rowKey={(row) => row.handlingUnitId}
+                  rowLabel={(row) => `${row.documentNumber} ${row.carrier} ${row.service}`}
+                  searchable
+                  empty={t('shipping.bulk.emptyTitle')}
+                  columns={[
+                    { key: 'shipment', header: t('shipping.bulk.colShipment'), search: (row) => row.documentNumber, cell: (row) => <span className="font-mono">{row.documentNumber}</span> },
+                    { key: 'rate', header: t('shipping.colRate'), search: (row) => `${row.carrier} ${row.service}`, cell: (row) => `${row.carrier} · ${row.service}` },
+                    { key: 'delivery', header: t('shipping.colDelivery'), search: (row) => row.deliveryDate ?? '', cell: (row) => row.deliveryDate ?? '—' },
+                    { key: 'price', header: t('shipping.colPrice'), align: 'right', cell: (row) => <span className="font-medium tabular-nums">{moneyFor(row.currency).money(row.amount, { currency: row.currency })}</span> },
+                  ]}
+                />
               ) : null}
               {failedRows.length > 0 ? (
                 <ul className="space-y-2">

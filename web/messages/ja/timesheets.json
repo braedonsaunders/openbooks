@@ -251,6 +251,8 @@
     "rulesSaved": "ルールを保存しました。",
     "kiosksTitle": "キオスク端末",
     "noKiosks": "登録済みキオスクはありません。",
+    "pinRequired": "PINが必要",
+    "lastSeen": "最終確認",
     "retired": "廃止済み",
     "tokenIssued": "{name}の端末リンク — 今コピーしてください。再表示はできません:",
     "acknowledgeToken": "この端末リンクをコピーしました",

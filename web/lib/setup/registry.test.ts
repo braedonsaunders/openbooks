@@ -28,6 +28,26 @@ test('agents is a first-party setup group served by custom pages, not generic en
   assert.deepEqual(claimed.map((entity) => entity.key), [])
 })
 
+test('CRM setup lists are registry-backed, archived instead of deleted, and retain CRM authority', () => {
+  const entities = ['crm-account-statuses', 'crm-opportunity-statuses', 'crm-lead-sources'].map((key) => {
+    const entity = SETUP_ENTITY_BY_KEY.get(key)
+    assert.ok(entity)
+    return entity
+  })
+  for (const entity of entities) {
+    assert.equal(entity.groupKey, 'sales')
+    assert.equal(entity.featureKey, 'crm')
+    assert.equal(entity.writePermission, 'crm.setup.manage')
+    assert.equal(entity.allowDelete, false)
+    assert.equal(entity.naturalKey, 'key')
+    assert.equal(entity.rehomed, true)
+  }
+  const isWon = entities[1]!.fields.find((field) => field.key === 'isWon')!
+  assert.equal(setupFieldVisible(isWon, { isClosed: true }), true)
+  assert.equal(setupFieldVisible(isWon, { isClosed: false }), false)
+  assert.ok(!setupEntitiesByGroup().get('sales')?.some((entity) => entity.key.startsWith('crm-')))
+})
+
 test('workforce policy and native action limits have separate reachable Setup homes', () => {
   const policy = SETUP_ENTITY_BY_KEY.get('ai-rails-settings')!
   assert.equal(policy.rehomed, undefined)
@@ -345,14 +365,16 @@ test('allocations is a feature-gated custom-page rail entry, never generic CRUD'
   assert.ok(rail.includes('allocations'), 'allocations must appear on the setup rail')
 })
 
-test('every static setup option labelKey resolves under admin.setup', () => {
-  // The generic setup list/drawer translates option labelKeys against the
-  // admin.setup namespace, so a key that misses its prefix renders raw
-  // (time-type Classification showed "admin.setup.timeClassification.regular").
-  const catalog = JSON.parse(
+test('every setup option labelKey resolves in its owning catalog', () => {
+  // Registry hosts may resolve labels from their own catalog (CRM setup uses
+  // the existing `crm` catalog); a missing namespace prefix still renders raw.
+  const adminCatalog = JSON.parse(
     readFileSync(new URL('../../messages/en/admin.json', import.meta.url), 'utf8'),
   ) as Record<string, unknown>
-  const setup = (catalog.setup ?? {}) as Record<string, unknown>
+  const crmCatalog = JSON.parse(
+    readFileSync(new URL('../../messages/en/crm.json', import.meta.url), 'utf8'),
+  ) as Record<string, unknown>
+  const setup = (adminCatalog.setup ?? {}) as Record<string, unknown>
   const missing: string[] = []
   const seen = new Set<string>()
   for (const entity of SETUP_ENTITIES) {
@@ -361,8 +383,10 @@ test('every static setup option labelKey resolves under admin.setup', () => {
       for (const option of carrier.options ?? []) {
         if (!option.labelKey || seen.has(option.labelKey)) continue
         seen.add(option.labelKey)
-        let node: unknown = setup
-        for (const part of option.labelKey.split('.')) {
+        const crmOwned = option.labelKey.startsWith('crm.')
+        let node: unknown = crmOwned ? crmCatalog : setup
+        const path = crmOwned ? option.labelKey.slice('crm.'.length) : option.labelKey
+        for (const part of path.split('.')) {
           node = (node as Record<string, unknown> | null)?.[part]
         }
         if (typeof node !== 'string' || node.length === 0) missing.push(`${entity.key}: ${option.labelKey}`)
@@ -373,14 +397,18 @@ test('every static setup option labelKey resolves under admin.setup', () => {
 })
 
 test('every setup column, field and filter resolves its rendered English label', () => {
-  const catalog = JSON.parse(readFileSync(new URL('../../messages/en/admin.json', import.meta.url), 'utf8')) as Record<string, unknown>
-  const setup = catalog.setup as Record<string, unknown>
+  const adminCatalog = JSON.parse(readFileSync(new URL('../../messages/en/admin.json', import.meta.url), 'utf8')) as Record<string, unknown>
+  const crmCatalog = JSON.parse(readFileSync(new URL('../../messages/en/crm.json', import.meta.url), 'utf8')) as Record<string, unknown>
+  const setup = adminCatalog.setup as Record<string, unknown>
   const missing: string[] = []
   for (const entity of SETUP_ENTITIES) {
     const carriers = [...entity.columns, ...entity.fields, ...(entity.filters ?? [])]
     for (const carrier of carriers) {
       const path = 'labelKey' in carrier && typeof carrier.labelKey === 'string' ? carrier.labelKey : `fields.${carrier.key}`
-      const label = path.split('.').reduce<unknown>((node, key) => (node as Record<string, unknown> | null)?.[key], setup)
+      const crmOwned = path.startsWith('crm.')
+      const source = crmOwned ? crmCatalog : setup
+      const resolvedPath = crmOwned ? path.slice('crm.'.length) : path
+      const label = resolvedPath.split('.').reduce<unknown>((node, key) => (node as Record<string, unknown> | null)?.[key], source)
       if (typeof label !== 'string' || label.length === 0) missing.push(`${entity.key}: ${carrier.key}`)
     }
   }

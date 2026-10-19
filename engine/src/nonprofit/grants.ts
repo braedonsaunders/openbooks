@@ -1201,7 +1201,7 @@ export async function awardGrant(input: {
         event: "award",
         idempotencyKey: `grant-award:${grant.id}:v${grant.version}`,
         lines: [
-          { accountId: selectedReceivable(grant, input.accounts), amount: grant.award_amount, partyId: grant.sponsor_party_id, isOpenItem: true, dueDate: grant.period_to },
+          { accountId: selectedReceivable(grant, input.accounts), amount: grant.award_amount, partyId: grant.sponsor_party_id, isOpenItem: false },
           { accountId: selectedRevenue(grant, input.accounts), amount: negMoney(grant.award_amount), partyId: grant.sponsor_party_id },
         ],
       });
@@ -1344,7 +1344,7 @@ export async function recordGrantDrawdown(input: {
       idempotencyKey: `grant-drawdown:${drawdownId}`,
       lines: [
         { accountId: input.accounts.bankAccountId, amount: amount },
-        { accountId: liabilityOrReceivable, amount: negMoney(amount), partyId: grant.sponsor_party_id, isOpenItem: !conditional },
+        { accountId: liabilityOrReceivable, amount: negMoney(amount), partyId: grant.sponsor_party_id, isOpenItem: false },
       ],
     });
     const updated = await runner.execute<{ id: string }>(sql`
@@ -1572,7 +1572,7 @@ export async function amendGrant(input: {
         event: "award amendment",
         idempotencyKey: `grant-amendment:${created.id}`,
         lines: [
-          { accountId: selectedReceivable(previous, input.accounts), amount: delta, partyId: previous.sponsor_party_id, isOpenItem: true, dueDate: previous.period_to },
+          { accountId: selectedReceivable(previous, input.accounts), amount: delta, partyId: previous.sponsor_party_id, isOpenItem: false },
           { accountId: selectedRevenue(previous, input.accounts), amount: negMoney(delta), partyId: previous.sponsor_party_id },
         ],
       });
@@ -1737,6 +1737,15 @@ export async function voidGrantDrawdown(input: {
     const row = result.rows[0];
     if (!row) throw refusal({ message: "The drawdown is not in this organization.", code: "grant_drawdown_not_found", remedy: "Choose a drawdown from this organization's grant activity.", status: 409 });
     if (row.status === "void") throw refusal({ message: `Drawdown ${row.id} is already void.`, code: "grant_drawdown_state_conflict", remedy: "Review the existing void activity instead of voiding the drawdown again.", status: 409 });
+    const grant = await loadCurrentGrant(runner, input.orgId, row.grant_id, true);
+    if (grant.status === "closed_out" || grant.status === "closed") {
+      throw refusal({
+        message: `Grant ${grant.code} cannot have a drawdown voided while ${grant.status.replaceAll("_", " ")}.`,
+        code: "grant_state_conflict",
+        remedy: "Use a controlled adjusting entry to correct a drawdown after grant close-out.",
+        status: 409,
+      });
+    }
     const reason = requireText(input.reason, "reason");
     if (reason.length < 5 || reason.length > 500) throw refusal({ message: "The void reason must contain 5 to 500 characters.", code: "grant_void_reason_invalid", remedy: "Record the business reason for the void in 5 to 500 characters.", field: "reason" });
     const entries = [...new Set([row.revenue_entry_id, row.receivable_entry_id].filter((id): id is string => !!id))];
@@ -1940,16 +1949,24 @@ export async function listGrantActivity(orgId: string, grantId: string): Promise
     const entries = await runner.execute<{
       id: string; entry_number: string; posting_date: string; status: string; memo: string | null; created_at: string;
     }>(sql`
+      with versions as (
+        select id, award_entry_id from grants where org_id = ${orgId} and code = ${grant.code}
+      ), tracked_entries as (
+        select award_entry_id as id from versions
+        union
+        select d.receivable_entry_id from grant_drawdowns d join versions v on v.id = d.grant_id
+         where d.org_id = ${orgId}
+        union
+        select d.revenue_entry_id from grant_drawdowns d join versions v on v.id = d.grant_id
+         where d.org_id = ${orgId}
+      )
       select distinct je.id, je.entry_number, je.posting_date::text as posting_date, je.status,
              je.memo, je.created_at::text as created_at
         from journal_entries je
-       where je.org_id = ${orgId} and je.id = any(${uuidArray(ids)}::uuid[])
-       union
-      select distinct je.id, je.entry_number, je.posting_date::text as posting_date, je.status,
-             je.memo, je.created_at::text as created_at
-        from journal_entries je
-        join grant_drawdowns d on d.org_id = je.org_id and je.id in (d.receivable_entry_id, d.revenue_entry_id)
-       where je.org_id = ${orgId} and d.grant_id = any(${uuidArray(ids)}::uuid[])
+       where je.org_id = ${orgId} and (
+         je.id in (select id from tracked_entries where id is not null)
+         or je.reverses_entry_id in (select id from tracked_entries where id is not null)
+       )
        order by created_at, id
     `);
     const changes = await runner.execute<{

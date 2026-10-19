@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Building2, KeyRound, Mail, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 import { Card, CardContent } from "@openbooks/ui";
+import { useTranslations } from 'next-intl'
 
 export type PlatformTileIconKey = "building-2" | "users" | "key-round" | "mail";
 
@@ -19,6 +20,7 @@ const TILE_ICONS: Record<PlatformTileIconKey, LucideIcon> = {
  * carries no data — so the registry entry takes no props.
  */
 export function PlatformNotice() {
+  const t = useTranslations('platform.notice')
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/60 dark:bg-amber-950/25">
       <div className="flex items-start gap-3">
@@ -27,12 +29,10 @@ export function PlatformNotice() {
         </span>
         <div>
           <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">
-            Platform workspace
+            {t('title')}
           </p>
           <p className="mt-0.5 text-sm text-amber-800 dark:text-amber-300">
-            This workspace bypasses organization boundaries for authorized
-            operators. Every access-control mutation is validated and
-            written to the immutable audit trail.
+            {t('description')}
           </p>
         </div>
       </div>

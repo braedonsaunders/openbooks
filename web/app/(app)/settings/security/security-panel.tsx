@@ -17,6 +17,10 @@ type Session = {
   current: boolean;
 };
 
+export function securityErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 export async function jsonRequest(
   url: string,
   init: RequestInit | undefined,
@@ -66,6 +70,7 @@ export function SecurityPanel() {
   const [status, setStatus] = useState<MfaStatus | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [setup, setSetup] = useState<{ secret: string; provisioningUri: string } | null>(null);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -82,14 +87,19 @@ export function SecurityPanel() {
     ]).then(([mfa, sessionResult]) => {
       setStatus(mfa);
       setSessions(sessionResult.sessions);
+      setLoadError(false);
+      setMessage(null);
+    }, (error: unknown) => {
+      setLoadError(true);
+      throw error;
     });
   }, [requestFailed, lockoutMessage]);
 
   useEffect(() => {
     void reload().then(
       () => setLoaded(true),
-      () => {
-        setMessage(requestFailed);
+      (error: unknown) => {
+        setMessage(securityErrorMessage(error, requestFailed));
         setLoaded(true);
       },
     );
@@ -100,8 +110,8 @@ export function SecurityPanel() {
     setMessage(null);
     try {
       await action();
-    } catch {
-      setMessage(requestFailed);
+    } catch (error) {
+      setMessage(securityErrorMessage(error, requestFailed));
     } finally {
       setBusy(false);
     }
@@ -116,13 +126,30 @@ export function SecurityPanel() {
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {!loaded
                 ? tCommon("feedback.loading")
-                : status?.enabled
+                : loadError
+                  ? requestFailed
+                  : status?.enabled
                   ? t("enabled", { count: status.recoveryCodesRemaining })
                   : t("disabledDescription")}
             </p>
           </div>
 
-          {loaded && !status?.enabled && !setup ? (
+          {loadError ? (
+            <div className="space-y-3" role="alert">
+              <p className="text-sm text-red-600 dark:text-red-400">{message ?? requestFailed}</p>
+              <Button disabled={busy} onClick={() => {
+                void reload().then(
+                  () => setLoaded(true),
+                  (error: unknown) => {
+                    setMessage(securityErrorMessage(error, requestFailed));
+                    setLoaded(true);
+                  },
+                );
+              }}>{tCommon("actions.retry")}</Button>
+            </div>
+          ) : null}
+
+          {loaded && !loadError && !status?.enabled && !setup ? (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="setup-password">{t("confirmPassword")}</Label>
@@ -221,7 +248,7 @@ export function SecurityPanel() {
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("sessionsDescription")}</p>
           </div>
           <div className="divide-y divide-slate-200 dark:divide-slate-800">
-            {!loaded ? (
+            {loadError ? null : !loaded ? (
               <p className="py-3 text-sm text-slate-500 dark:text-slate-400">{tCommon("feedback.loading")}</p>
             ) : (
               sessions.map((session) => (

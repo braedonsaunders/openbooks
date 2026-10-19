@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import {
@@ -10,6 +9,8 @@ import {
   Button,
   Input,
   Label,
+  PageHeader,
+  SearchSelect,
   Select,
   Table,
   TableBody,
@@ -19,6 +20,8 @@ import {
   TableRow,
   Textarea,
 } from '@openbooks/ui'
+import { ModuleHomeTabs } from '@/components/module-home/ui'
+import { useDirtyClose } from '@/lib/use-dirty-close'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 /**
@@ -69,6 +72,18 @@ const UNAVAILABLE_TRIGGER_KINDS = ['field_change', 'event', 'document'] as const
 // named by the action's endpointKey (Settings → Developers → Webhooks).
 const ACTION_KINDS = ['create_task', 'send_email', 'send_notification', 'start_process', 'update_field', 'webhook'] as const
 const CONDITION_OPS = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'contains', 'is_null', 'changed_to'] as const
+type AutomationActionKind = typeof ACTION_KINDS[number]
+
+function newAction(kind: AutomationActionKind, firstProcessTemplateId = ''): Record<string, unknown> {
+  switch (kind) {
+    case 'create_task': return { kind, ownerKind: 'manager', title: '', dueOffsetDays: 0 }
+    case 'send_email': return { kind, templateKey: 'automation_notice', to: 'initiator' }
+    case 'send_notification': return { kind, to: 'initiator', body: '' }
+    case 'start_process': return { kind, templateId: firstProcessTemplateId }
+    case 'update_field': return { kind, entity: '', field: '', value: '' }
+    case 'webhook': return { kind, endpointKey: '' }
+  }
+}
 
 type ConditionLeaf = { field: string; op: string; value: string }
 
@@ -103,6 +118,7 @@ function fromLeaves(mode: 'all' | 'any', leaves: ConditionLeaf[]): Record<string
 export function AutomationBuilder({
   automation,
   runs,
+  scopeOptions,
   canSimulate,
   canManage,
   saveFailed,
@@ -111,6 +127,15 @@ export function AutomationBuilder({
 }: {
   automation: BuilderAutomation
   runs: BuilderRun[]
+  scopeOptions: {
+    subsidiaries: { value: string; label: string }[]
+    departments: { value: string; label: string }[]
+    locations: { value: string; label: string }[]
+    positions: { value: string; label: string }[]
+    users: { value: string; label: string; hint: string }[]
+    roles: { value: string; label: string }[]
+    processTemplates: { value: string; label: string; kind: string }[]
+  }
   canSimulate: boolean
   canManage: boolean
   saveFailed: string
@@ -120,6 +145,8 @@ export function AutomationBuilder({
   const t = useTranslations('admin.automations')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [name, setName] = useState(automation.name)
   const [version, setVersion] = useState(automation.version)
   const [trigger, setTrigger] = useState<Record<string, unknown>>({ ...automation.trigger })
@@ -145,9 +172,10 @@ export function AutomationBuilder({
   const [condMode, setCondMode] = useState<'all' | 'any'>(cond.mode)
   const [leaves, setLeaves] = useState<ConditionLeaf[]>(cond.leaves)
   const [actions, setActions] = useState<Record<string, unknown>[]>([...automation.actions])
-  const [actionDrafts, setActionDrafts] = useState(() => automation.actions.map((action) => JSON.stringify(action, null, 2)))
+  const [valueDrafts, setValueDrafts] = useState<Record<number, string>>({})
+  const [valueErrors, setValueErrors] = useState<Record<number, boolean>>({})
   const [busy, setBusy] = useState(false)
-  const [tab, setTab] = useState<'build' | 'runs'>('build')
+  const tab = searchParams.get('tab') === 'runs' ? 'runs' : 'build'
   const [simSubject, setSimSubject] = useState('')
   const [simSteps, setSimSteps] = useState<{ index: number; kind: string; status: string; output?: string; error?: string }[] | null>(null)
   // A refused save names what happened and offers the way back. Local edits
@@ -168,7 +196,8 @@ export function AutomationBuilder({
     setCondMode(reseeded.mode)
     setLeaves(reseeded.leaves)
     setActions([...automation.actions])
-    setActionDrafts(automation.actions.map((action) => JSON.stringify(action, null, 2)))
+    setValueDrafts({})
+    setValueErrors({})
     setVersion(automation.version)
     setConflict(null)
   }, [automation])
@@ -179,6 +208,26 @@ export function AutomationBuilder({
   // every mutating button renders only for managers. Simulate stays: its
   // API is read-guarded, so running it changes no stored state.
   const ro = !canManage
+
+  const serializedConditions = fromLeaves(condMode, leaves)
+  const dirty = name !== automation.name
+    || JSON.stringify(trigger) !== JSON.stringify(automation.trigger)
+    || JSON.stringify(rules) !== JSON.stringify(automation.rules ?? {})
+    || JSON.stringify(serializedConditions) !== JSON.stringify(automation.conditions ?? {})
+    || JSON.stringify(actions) !== JSON.stringify(automation.actions)
+    || Object.keys(valueDrafts).length > 0
+  const closeGuard = useDirtyClose({
+    dirty,
+    busy,
+    onClose: () => router.push(backHref),
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
+
+  function handleBack(event: MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault()
+    void closeGuard.close()
+  }
 
   async function patch(body: Record<string, unknown>, success: string) {
     setBusy(true)
@@ -228,9 +277,51 @@ export function AutomationBuilder({
   }
 
   function updateAction(index: number, patchAction: Record<string, unknown>) {
-    const next = actions.map((action, i) => (i === index ? { ...action, ...patchAction } : action))
-    setActions(next)
-    setActionDrafts((drafts) => drafts.map((draft, i) => (i === index ? JSON.stringify(next[i], null, 2) : draft)))
+    setActions((prev) => prev.map((action, i) => (i === index ? { ...action, ...patchAction } : action)))
+  }
+
+  function changeActionKind(index: number, kind: string) {
+    if (!(ACTION_KINDS as readonly string[]).includes(kind)) return
+    setActions((prev) => prev.map((action, i) => (i === index ? newAction(kind as AutomationActionKind, scopeOptions.processTemplates[0]?.value ?? '') : action)))
+    setValueDrafts((prev) => { const next = { ...prev }; delete next[index]; return next })
+    setValueErrors((prev) => { const next = { ...prev }; delete next[index]; return next })
+  }
+
+  function recipientOptions(selected = ''): { value: string; label: string; hint?: string; disabled?: boolean }[] {
+    const options: { value: string; label: string; hint?: string; disabled?: boolean }[] = [
+      { value: 'initiator', label: t('builder.recipientInitiator') },
+      { value: 'manager', label: t('builder.recipientManager') },
+      ...scopeOptions.roles.map((role) => ({ value: `role:${role.value}`, label: t('builder.recipientRole', { role: role.label }) })),
+      ...scopeOptions.users.map((user) => ({ value: user.value, label: user.label, hint: user.hint })),
+    ]
+    if (selected && !options.some((option) => option.value === selected)) {
+      options.push({ value: selected, label: t('builder.recipientUnavailable'), hint: selected, disabled: true })
+    }
+    return options
+  }
+
+  function actionIsValid(action: Record<string, unknown>): boolean {
+    const textValue = (key: string) => typeof action[key] === 'string' && (action[key] as string).length > 0
+    switch (action.kind) {
+      case 'send_email': return textValue('to') && textValue('templateKey')
+      case 'send_notification': return textValue('to') && textValue('body')
+      case 'create_task': {
+        const ownerKind = action.ownerKind
+        return textValue('title')
+          && ['role', 'person', 'manager', 'initiator'].includes(String(ownerKind))
+          && (!['role', 'person'].includes(String(ownerKind)) || textValue('owner'))
+          && Number.isSafeInteger(action.dueOffsetDays)
+          && Number(action.dueOffsetDays) >= 0
+      }
+      case 'start_process': return textValue('templateId')
+      case 'update_field': return textValue('entity') && textValue('field')
+      case 'webhook': return textValue('endpointKey')
+      default: return false
+    }
+  }
+
+  function setActionField(index: number, key: string, value: string) {
+    updateAction(index, { [key]: value })
   }
 
   function moveAction(index: number, delta: -1 | 1) {
@@ -241,13 +332,54 @@ export function AutomationBuilder({
     next[index] = next[j]!
     next[j] = tmp
     setActions(next)
-    setActionDrafts((drafts) => {
-      const nextDrafts = [...drafts]
-      const draft = nextDrafts[index]!
-      nextDrafts[index] = nextDrafts[j]!
-      nextDrafts[j] = draft
-      return nextDrafts
-    })
+    const reorder = <T,>(items: Record<number, T>) => {
+      const result = { ...items }
+      const left = result[index]
+      const right = result[j]
+      if (right === undefined) delete result[index]
+      else result[index] = right
+      if (left === undefined) delete result[j]
+      else result[j] = left
+      return result
+    }
+    setValueDrafts(reorder)
+    setValueErrors(reorder)
+  }
+
+  function removeAction(index: number) {
+    setActions((prev) => prev.filter((_, i) => i !== index))
+    const shift = <T,>(items: Record<number, T>) => Object.fromEntries(
+      Object.entries(items).flatMap(([key, value]) => {
+        const current = Number(key)
+        if (current === index) return []
+        return [[current > index ? current - 1 : current, value]]
+      }),
+    ) as Record<number, T>
+    setValueDrafts(shift)
+    setValueErrors(shift)
+  }
+
+  function changeValueType(index: number, valueType: string) {
+    const value = valueType === 'number' ? 0
+      : valueType === 'boolean' ? false
+        : valueType === 'json' ? null
+          : ''
+    updateAction(index, { value })
+    setValueDrafts((prev) => { const next = { ...prev }; delete next[index]; return next })
+    setValueErrors((prev) => { const next = { ...prev }; delete next[index]; return next })
+  }
+
+  function commitValueDraft(index: number, valueType: string, draft: string) {
+    try {
+      const value = valueType === 'number' ? Number(draft)
+        : valueType === 'json' ? JSON.parse(draft) : draft
+      if (valueType === 'number' && (!draft.trim() || !Number.isFinite(value))) throw new Error('invalid number')
+      updateAction(index, { value })
+      setValueDrafts((prev) => { const next = { ...prev }; delete next[index]; return next })
+      setValueErrors((prev) => { const next = { ...prev }; delete next[index]; return next })
+    } catch {
+      setValueErrors((prev) => ({ ...prev, [index]: true }))
+    }
   }
 
   async function simulate() {
@@ -273,25 +405,45 @@ export function AutomationBuilder({
     }
   }
 
+  const saveRecipe = () => patch({
+    name,
+    trigger,
+    rules,
+    conditions: serializedConditions,
+    actions,
+  }, t('builder.saved'))
+
+  const unsupportedAction = actions.some((action) => !(ACTION_KINDS as readonly string[]).includes(String(action.kind ?? '')))
+  const invalidActions = actions.length === 0 || actions.some((action) => !actionIsValid(action)) || Object.values(valueErrors).some(Boolean)
+  const actionKindLabel = (value: string) => (ACTION_KINDS as readonly string[]).includes(value)
+    ? t(`builder.actionKinds.${value}`)
+    : t('builder.otherStep')
+  const runStatusLabel = (value: string) => ['succeeded', 'failed', 'simulated', 'skipped', 'running', 'queued'].includes(value)
+    ? t(`builder.runStatuses.${value}`)
+    : t('builder.otherStatus')
+  const tabs = [
+    { href: `${pathname}?tab=build`, label: t('builder.buildTab'), active: tab === 'build' },
+    { href: `${pathname}?tab=runs`, label: t('builder.runsTab'), active: tab === 'runs' },
+  ]
+
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Link href={backHref} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
-          ← {backLabel}
-        </Link>
-        <h1 className="text-lg font-semibold">{automation.name}</h1>
-        <Badge variant={automation.status === 'enabled' ? 'success' : automation.status === 'error' ? 'destructive' : 'secondary'}>
-          {automation.status}
-        </Badge>
-        <span className="text-xs text-slate-500 tabular-nums">v{version}</span>
-      </div>
+      <PageHeader
+        title={name}
+        description={t('builder.description')}
+        titleContent={<span className="flex flex-wrap items-center gap-2">{name}<Badge variant={automation.status === 'enabled' ? 'success' : automation.status === 'error' ? 'destructive' : 'secondary'}>{t(`status.${automation.status}`)}</Badge><span className="text-xs font-normal text-slate-500 tabular-nums">v{version}</span></span>}
+        back={{ href: backHref, label: backLabel, onClick: handleBack }}
+        actions={canManage ? <Button disabled={busy || !dirty || invalidActions || unsupportedAction} onClick={() => void saveRecipe()}>{tCommon('actions.save')}</Button> : null}
+      />
       {conflict ? (
         <div
           className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
           role="alert"
         >
           <span className="min-w-52 flex-1">{conflict}</span>
-          <Button size="sm" variant="outline" onClick={() => router.refresh()}>
+          <Button size="sm" variant="outline" onClick={async () => {
+            if (await closeGuard.beforeClose()) router.refresh()
+          }}>
             {tCommon('actions.refresh')}
           </Button>
         </div>
@@ -302,10 +454,7 @@ export function AutomationBuilder({
       {canManage ? null : (
         <p className="text-sm text-slate-600 dark:text-slate-300">{t('builder.readOnlyNotice')}</p>
       )}
-      <div className="inline-flex items-center gap-2">
-        <Button variant={tab === 'build' ? 'default' : 'outline'} onClick={() => setTab('build')}>{t('builder.buildTab')}</Button>
-        <Button variant={tab === 'runs' ? 'default' : 'outline'} onClick={() => setTab('runs')}>{t('builder.runsTab')}</Button>
-      </div>
+      <ModuleHomeTabs tabs={tabs} placement="local" ariaLabel={t('builder.tabsAria')} />
 
       {tab === 'build' ? (
         <>
@@ -314,7 +463,6 @@ export function AutomationBuilder({
             <div className="mt-2 grid gap-2">
               <Label htmlFor="ab-name">{t('list.nameLabel')}</Label>
               <Input id="ab-name" value={name} onChange={(e) => setName(e.target.value)} disabled={ro} />
-              {canManage ? <div><Button disabled={busy} onClick={() => patch({ name }, t('builder.saved'))}>{t('builder.saveName')}</Button></div> : null}
             </div>
           </section>
 
@@ -388,7 +536,6 @@ export function AutomationBuilder({
                   </Select>
                 </>
               ) : null}
-              {canManage ? <div><Button disabled={busy} onClick={() => patch({ trigger }, t('builder.saved'))}>{t('builder.saveTrigger')}</Button></div> : null}
             </div>
           </section>
 
@@ -396,18 +543,41 @@ export function AutomationBuilder({
             <h2 className="text-sm font-semibold">{t('builder.whoWhenTitle')}</h2>
             <p className="mt-1 text-xs text-slate-500">{t('builder.whoWhenHelp')}</p>
             <div className="mt-2 grid gap-2">
-              {( ['subsidiaryId', 'departmentId', 'locationId', 'workerType', 'positionId'] as const ).map((key) => (
-                <div key={key} className="grid gap-1">
-                  <Label htmlFor={`ab-rule-${key}`}>{t(`builder.rule_${key}`)}</Label>
-                  <Input
-                    id={`ab-rule-${key}`}
-                    value={typeof rules[key] === 'string' ? (rules[key] as string) : ''}
-                    onChange={(e) => setRuleField(key, e.target.value)}
-                    placeholder={t('builder.ruleBlank')}
-                    disabled={ro}
-                  />
-                </div>
-              ))}
+              {(['subsidiaryId', 'departmentId', 'locationId', 'workerType', 'positionId'] as const).map((key) => {
+                const optionSets = {
+                  subsidiaryId: scopeOptions.subsidiaries,
+                  departmentId: scopeOptions.departments,
+                  locationId: scopeOptions.locations,
+                  positionId: scopeOptions.positions,
+                }
+                const value = typeof rules[key] === 'string' ? String(rules[key]) : ''
+                return (
+                  <div key={key} className="grid gap-1">
+                    <Label htmlFor={`ab-rule-${key}`}>{t(`builder.rule_${key}`)}</Label>
+                    {key === 'workerType' ? (
+                      <Input
+                        id={`ab-rule-${key}`}
+                        value={value}
+                        onChange={(e) => setRuleField(key, e.target.value)}
+                        placeholder={t('builder.ruleBlank')}
+                        disabled={ro}
+                      />
+                    ) : (
+                      <SearchSelect
+                        id={`ab-rule-${key}`}
+                        ariaLabelledBy={`ab-rule-${key}`}
+                        value={value}
+                        options={optionSets[key]}
+                        onChange={(next) => setRuleField(key, next)}
+                        placeholder={t('builder.ruleBlank')}
+                        emptyLabel={t('builder.ruleBlank')}
+                        clearable
+                        disabled={ro}
+                      />
+                    )}
+                  </div>
+                )
+              })}
               <div className="grid gap-1">
                 <Label htmlFor="ab-cond-mode">{t('builder.conditionsMode')}</Label>
                 <Select id="ab-cond-mode" value={condMode} onChange={(e) => setCondMode(e.target.value as 'all' | 'any')} disabled={ro}>
@@ -424,7 +594,7 @@ export function AutomationBuilder({
                   <div className="grid gap-1">
                     <Label htmlFor={`ab-leaf-op-${i}`}>{t('builder.opLabel')}</Label>
                     <Select id={`ab-leaf-op-${i}`} value={leaf.op} onChange={(e) => updateLeaf(i, { op: e.target.value })} disabled={ro}>
-                      {CONDITION_OPS.map((op) => <option key={op} value={op}>{op}</option>)}
+                      {CONDITION_OPS.map((op) => <option key={op} value={op}>{t(`builder.conditionOps.${op}`)}</option>)}
                     </Select>
                   </div>
                   <div className="grid gap-1">
@@ -437,7 +607,6 @@ export function AutomationBuilder({
               {canManage ? (
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setLeaves((prev) => [...prev, { field: '', op: 'eq', value: '' }])}>{t('builder.addCondition')}</Button>
-                <Button disabled={busy} onClick={() => patch({ rules, conditions: fromLeaves(condMode, leaves) }, t('builder.saved'))}>{t('builder.saveWhoWhen')}</Button>
               </div>
               ) : null}
             </div>
@@ -446,51 +615,114 @@ export function AutomationBuilder({
           <section className="rounded-lg border bg-white p-4 dark:bg-slate-900">
             <h2 className="text-sm font-semibold">{t('builder.actionsTitle')}</h2>
             <div className="mt-2 grid gap-3">
-              {actions.map((action, i) => (
+              {actions.map((action, i) => {
+                const actionKind = String(action.kind ?? '')
+                const ownerKind = String(action.ownerKind ?? 'manager')
+                const selectedOwner = String(action.owner ?? '')
+                const selectedRecipient = String(action.to ?? '')
+                const selectedTemplate = String(action.templateKey ?? '')
+                const selectedProcessTemplate = String(action.templateId ?? '')
+                const kindSupported = (ACTION_KINDS as readonly string[]).includes(actionKind)
+                const ownerOptions: { value: string; label: string; hint?: string; disabled?: boolean }[] = ownerKind === 'role'
+                  ? scopeOptions.roles.map((role) => ({ value: role.value, label: role.label }))
+                  : scopeOptions.users
+                const processOptions: { value: string; label: string; hint?: string; disabled?: boolean }[] = scopeOptions.processTemplates.map((item) => ({ value: item.value, label: item.label, hint: t(`builder.processTemplateKinds.${item.kind}`) }))
+                if (selectedOwner && !ownerOptions.some((option) => option.value === selectedOwner)) {
+                  ownerOptions.push({ value: selectedOwner, label: t('builder.assigneeUnavailable'), hint: selectedOwner, disabled: true })
+                }
+                if (selectedProcessTemplate && !processOptions.some((option) => option.value === selectedProcessTemplate)) {
+                  processOptions.push({ value: selectedProcessTemplate, label: t('builder.processTemplateUnavailable'), hint: selectedProcessTemplate, disabled: true })
+                }
+                const emailTemplateOptions: { value: string; label: string; disabled?: boolean }[] = [{ value: 'automation_notice', label: t('builder.emailTemplateNotice') }]
+                if (selectedTemplate && !emailTemplateOptions.some((option) => option.value === selectedTemplate)) {
+                  emailTemplateOptions.push({ value: selectedTemplate, label: t('builder.emailTemplateUnavailable'), disabled: true })
+                }
+                return (
                 <div key={i} className="grid gap-2 rounded-md border p-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold tabular-nums">#{i + 1}</span>
-                    <Select aria-label={t('builder.actionKindLabel')} value={String(action.kind ?? '')} onChange={(e) => updateAction(i, { kind: e.target.value })} disabled={ro}>
-                      {ACTION_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+                    <Select aria-label={t('builder.actionKindLabel')} value={actionKind} onChange={(e) => changeActionKind(i, e.target.value)} disabled={ro}>
+                      {!kindSupported ? <option value={actionKind}>{t('builder.actionKindUnavailable', { kind: actionKind })}</option> : null}
+                      {ACTION_KINDS.map((k) => <option key={k} value={k}>{t(`builder.actionKinds.${k}`)}</option>)}
                     </Select>
                     {canManage ? (
                     <>
-                    <Button variant="outline" onClick={() => moveAction(i, -1)}>↑</Button>
-                    <Button variant="outline" onClick={() => moveAction(i, 1)}>↓</Button>
-                    <Button variant="outline" onClick={() => {
-                      setActions((prev) => prev.filter((_, j) => j !== i))
-                      setActionDrafts((prev) => prev.filter((_, j) => j !== i))
-                    }}>{t('builder.remove')}</Button>
+                    <Button type="button" variant="outline" aria-label={t('builder.moveActionUp', { number: i + 1 })} onClick={() => moveAction(i, -1)}>↑</Button>
+                    <Button type="button" variant="outline" aria-label={t('builder.moveActionDown', { number: i + 1 })} onClick={() => moveAction(i, 1)}>↓</Button>
+                    <Button variant="outline" onClick={() => removeAction(i)}>{t('builder.remove')}</Button>
                     </>
                     ) : null}
                   </div>
-                  <Textarea
-                    aria-label={t('builder.actionJsonLabel')}
-                    value={actionDrafts[i] ?? ''}
-                    rows={4}
-                    disabled={ro}
-                    onChange={(e) => {
-                      const raw = e.target.value
-                      setActionDrafts((prev) => prev.map((draft, index) => (index === i ? raw : draft)))
-                      try {
-                        const parsed = JSON.parse(raw) as Record<string, unknown>
-                        setActions((prev) => prev.map((current, index) => (index === i ? parsed : current)))
-                      } catch {
-                        // Preserve incomplete JSON while typing; actions save
-                        // only after the draft parses again.
-                      }
-                    }}
-                  />
+                  {!kindSupported ? <p className="text-sm text-amber-700 dark:text-amber-300">{t('builder.actionKindUnavailableNote')}</p> : null}
+                  {actionKind === 'send_email' ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="grid gap-1"><Label htmlFor={`ab-action-to-${i}`}>{t('builder.actionRecipientLabel')}</Label><SearchSelect id={`ab-action-to-${i}`} ariaLabelledBy={`ab-action-to-${i}`} value={selectedRecipient} options={recipientOptions(selectedRecipient)} onChange={(value) => setActionField(i, 'to', value)} placeholder={t('builder.chooseRecipient')} disabled={ro} /></div>
+                      <div className="grid gap-1"><Label htmlFor={`ab-action-template-${i}`}>{t('builder.emailTemplateLabel')}</Label><SearchSelect id={`ab-action-template-${i}`} ariaLabelledBy={`ab-action-template-${i}`} value={selectedTemplate} options={emailTemplateOptions} onChange={(value) => setActionField(i, 'templateKey', value)} placeholder={t('builder.chooseEmailTemplate')} disabled={ro} /></div>
+                    </div>
+                  ) : null}
+                  {actionKind === 'send_notification' ? (
+                    <div className="grid gap-2">
+                      <div className="grid gap-1"><Label htmlFor={`ab-action-to-${i}`}>{t('builder.actionRecipientLabel')}</Label><SearchSelect id={`ab-action-to-${i}`} ariaLabelledBy={`ab-action-to-${i}`} value={selectedRecipient} options={recipientOptions(selectedRecipient)} onChange={(value) => setActionField(i, 'to', value)} placeholder={t('builder.chooseRecipient')} disabled={ro} /></div>
+                      <div className="grid gap-1"><Label htmlFor={`ab-action-body-${i}`}>{t('builder.notificationBodyLabel')}</Label><Textarea id={`ab-action-body-${i}`} value={String(action.body ?? '')} rows={3} disabled={ro} onChange={(e) => setActionField(i, 'body', e.target.value)} /></div>
+                    </div>
+                  ) : null}
+                  {actionKind === 'create_task' ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="grid gap-1"><Label htmlFor={`ab-action-owner-kind-${i}`}>{t('builder.taskAssigneeKindLabel')}</Label><Select id={`ab-action-owner-kind-${i}`} value={ownerKind} disabled={ro} onChange={(e) => updateAction(i, { ownerKind: e.target.value, owner: '' })}><option value="manager">{t('builder.recipientManager')}</option><option value="initiator">{t('builder.recipientInitiator')}</option><option value="person">{t('builder.assigneePerson')}</option><option value="role">{t('builder.assigneeRole')}</option></Select></div>
+                      {ownerKind === 'person' || ownerKind === 'role' ? <div className="grid gap-1"><Label htmlFor={`ab-action-owner-${i}`}>{t('builder.taskAssigneeLabel')}</Label><SearchSelect id={`ab-action-owner-${i}`} ariaLabelledBy={`ab-action-owner-${i}`} value={selectedOwner} options={ownerOptions} onChange={(value) => setActionField(i, 'owner', value)} placeholder={t('builder.chooseAssignee')} disabled={ro} /></div> : null}
+                      <div className="grid gap-1"><Label htmlFor={`ab-action-title-${i}`}>{t('builder.taskTitleLabel')}</Label><Input id={`ab-action-title-${i}`} value={String(action.title ?? '')} disabled={ro} onChange={(e) => setActionField(i, 'title', e.target.value)} /></div>
+                      <div className="grid gap-1"><Label htmlFor={`ab-action-due-${i}`}>{t('builder.taskDueOffsetLabel')}</Label><Input id={`ab-action-due-${i}`} type="number" min="0" step="1" value={String(action.dueOffsetDays ?? 0)} disabled={ro} onChange={(e) => updateAction(i, { dueOffsetDays: e.target.value === '' ? '' : Number(e.target.value) })} /></div>
+                    </div>
+                  ) : null}
+                  {actionKind === 'start_process' ? (
+                    <div className="grid gap-1"><Label htmlFor={`ab-action-process-${i}`}>{t('builder.processTemplateLabel')}</Label><SearchSelect id={`ab-action-process-${i}`} ariaLabelledBy={`ab-action-process-${i}`} value={selectedProcessTemplate} options={processOptions} onChange={(value) => setActionField(i, 'templateId', value)} placeholder={t('builder.chooseProcessTemplate')} disabled={ro || scopeOptions.processTemplates.length === 0} /><p className="text-xs text-slate-500">{scopeOptions.processTemplates.length ? t('builder.processTemplateAccessHelp') : t('builder.processTemplateUnavailableHelp')}</p></div>
+                  ) : null}
+                  {actionKind === 'update_field' ? (
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="grid gap-1"><Label htmlFor={`ab-action-entity-${i}`}>{t('builder.entityLabel')}</Label><Input id={`ab-action-entity-${i}`} value={String(action.entity ?? '')} disabled={ro} onChange={(e) => setActionField(i, 'entity', e.target.value)} /></div>
+                      <div className="grid gap-1"><Label htmlFor={`ab-action-field-${i}`}>{t('builder.fieldLabel')}</Label><Input id={`ab-action-field-${i}`} value={String(action.field ?? '')} disabled={ro} onChange={(e) => setActionField(i, 'field', e.target.value)} /></div>
+                      <div className="grid gap-1">
+                        <Label htmlFor={`ab-action-value-type-${i}`}>{t('builder.valueLabel')}</Label>
+                        {(() => {
+                          const valueType = typeof action.value === 'number' ? 'number'
+                            : typeof action.value === 'boolean' ? 'boolean'
+                              : typeof action.value === 'string' ? 'text' : 'json'
+                          const valueText = valueDrafts[i] ?? (valueType === 'json'
+                            ? JSON.stringify(action.value ?? null, null, 2)
+                            : String(action.value ?? ''))
+                          return (
+                            <>
+                              <Select id={`ab-action-value-type-${i}`} value={valueType} disabled={ro} onChange={(e) => changeValueType(i, e.target.value)}>
+                                <option value="text">{t('builder.valueTypes.text')}</option>
+                                <option value="number">{t('builder.valueTypes.number')}</option>
+                                <option value="boolean">{t('builder.valueTypes.boolean')}</option>
+                                <option value="json">{t('builder.valueTypes.json')}</option>
+                              </Select>
+                              {valueType === 'boolean' ? (
+                                <Select id={`ab-action-value-${i}`} value={String(action.value)} disabled={ro} onChange={(e) => updateAction(i, { value: e.target.value === 'true' })}>
+                                  <option value="true">{t('builder.valueTypes.true')}</option>
+                                  <option value="false">{t('builder.valueTypes.false')}</option>
+                                </Select>
+                              ) : valueType === 'json' ? (
+                                <Textarea id={`ab-action-value-${i}`} value={valueText} rows={3} disabled={ro} aria-invalid={valueErrors[i] || undefined} onChange={(e) => { setValueDrafts((prev) => ({ ...prev, [i]: e.target.value })); setValueErrors((prev) => { const next = { ...prev }; delete next[i]; return next }) }} onBlur={(e) => commitValueDraft(i, valueType, e.target.value)} />
+                              ) : (
+                                <Input id={`ab-action-value-${i}`} type={valueType === 'number' ? 'number' : 'text'} step={valueType === 'number' ? 'any' : undefined} value={valueText} disabled={ro} aria-invalid={valueErrors[i] || undefined} onChange={(e) => { setValueDrafts((prev) => ({ ...prev, [i]: e.target.value })); setValueErrors((prev) => { const next = { ...prev }; delete next[i]; return next }) }} onBlur={(e) => commitValueDraft(i, valueType, e.target.value)} />
+                              )}
+                              {valueErrors[i] ? <p className="text-xs text-red-600 dark:text-red-400">{t('builder.valueInvalid')}</p> : null}
+                            </>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  ) : null}
+                  {actionKind === 'webhook' ? (
+                    <div className="grid gap-1"><Label htmlFor={`ab-action-endpoint-${i}`}>{t('builder.endpointKeyLabel')}</Label><Input id={`ab-action-endpoint-${i}`} value={String(action.endpointKey ?? '')} disabled={ro} onChange={(e) => setActionField(i, 'endpointKey', e.target.value)} /></div>
+                  ) : null}
                 </div>
-              ))}
+              )})}
               {canManage ? (
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => {
-                  const action = { kind: 'send_notification', to: 'manager', body: '' }
-                  setActions((prev) => [...prev, action])
-                  setActionDrafts((prev) => [...prev, JSON.stringify(action, null, 2)])
-                }}>{t('builder.addAction')}</Button>
-                <Button disabled={busy} onClick={() => patch({ actions }, t('builder.saved'))}>{t('builder.saveActions')}</Button>
+                <Button type="button" variant="outline" onClick={() => setActions((prev) => [...prev, newAction('send_notification')])}>{t('builder.addAction')}</Button>
               </div>
               ) : null}
             </div>
@@ -523,8 +755,8 @@ export function AutomationBuilder({
                       {simSteps.map((s) => (
                         <TableRow key={s.index}>
                           <TableCell className="tabular-nums">{s.index}</TableCell>
-                          <TableCell>{s.kind}</TableCell>
-                          <TableCell><Badge variant="secondary">{s.status}</Badge></TableCell>
+                          <TableCell>{actionKindLabel(s.kind)}</TableCell>
+                          <TableCell><Badge variant="secondary">{runStatusLabel(s.status)}</Badge></TableCell>
                           <TableCell>{s.error ?? s.output ?? ''}</TableCell>
                         </TableRow>
                       ))}
@@ -557,6 +789,12 @@ export function AutomationRunsPanel({
   emptyLabel: string
 }) {
   const t = useTranslations('admin.automations')
+  const runStatusLabel = (value: string) => ['succeeded', 'failed', 'simulated', 'skipped', 'running', 'queued'].includes(value)
+    ? t(`builder.runStatuses.${value}`)
+    : t('builder.otherStatus')
+  const actionKindLabel = (value: string) => (ACTION_KINDS as readonly string[]).includes(value)
+    ? t(`builder.actionKinds.${value}`)
+    : t('builder.otherStep')
   const [openRunId, setOpenRunId] = useState<string | null>(null)
   const [steps, setSteps] = useState<{ index: number; kind: string; status: string; output?: string; error?: string }[]>([])
   const [runError, setRunError] = useState<string | null>(null)
@@ -600,11 +838,11 @@ export function AutomationRunsPanel({
             <TableRow key={r.id}>
               <TableCell>
                 <Badge variant={r.status === 'succeeded' ? 'success' : r.status === 'failed' ? 'destructive' : 'secondary'}>
-                  {r.status}
+                  {runStatusLabel(r.status)}
                 </Badge>
               </TableCell>
               <TableCell className="tabular-nums">{r.version}</TableCell>
-              <TableCell>{r.subjectKind ?? '—'}</TableCell>
+              <TableCell>{r.subjectKind ? t(`builder.subjectKinds.${r.subjectKind}`) : '—'}</TableCell>
               <TableCell className="tabular-nums">{r.createdAt}</TableCell>
               <TableCell>
                 <Button variant="outline" onClick={() => openRun(r.id)}>{t('builder.viewSteps')}</Button>
@@ -630,10 +868,10 @@ export function AutomationRunsPanel({
               {steps.map((s) => (
                 <TableRow key={s.index}>
                   <TableCell className="tabular-nums">{s.index}</TableCell>
-                  <TableCell>{s.kind}</TableCell>
+                  <TableCell>{actionKindLabel(s.kind)}</TableCell>
                   <TableCell>
                     <Badge variant={s.status === 'succeeded' || s.status === 'simulated' ? 'success' : s.status === 'failed' ? 'destructive' : 'secondary'}>
-                      {s.status}
+                      {runStatusLabel(s.status)}
                     </Badge>
                   </TableCell>
                   <TableCell>{s.error ?? s.output ?? ''}</TableCell>

@@ -5,6 +5,7 @@ import { budgetScenarioOptions } from "../budget-report";
 import { loadBudgetScenario } from "../budgets";
 import { isFeatureEnabled } from "../features";
 import { BudgetMutationError, saveBudgetCells, type BudgetCellInput } from "../budget-mutations";
+import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from "../budget-scope";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
@@ -65,6 +66,7 @@ export type BudgetCellWrite = {
   projectId?: string | null;
   locationId?: string | null;
   classId?: string | null;
+  extraDims?: Record<string, string>;
   amount: string;
   note?: string | null;
 };
@@ -78,6 +80,16 @@ export async function updateBudgetCells(context: ApplicationContext, input: {
   assertApplicationPermission(context, "budgets.manage");
   // The route 404s through guardFeaturePermission when the module is off.
   if (!(await isFeatureEnabled(context.authz.user.orgId, "budgets"))) throw notFound("budget");
+  if (!isUuid(input.scenarioId)) throw invalidInput("budget id must be a UUID");
+  const outOfScope = await scenarioOutOfScopeSubsidiaryNames(
+    input.scenarioId,
+    context.authz.user.orgId,
+    context.authz.allowedSubsidiaryIds,
+  );
+  if (outOfScope.length > 0) {
+    const refusal = outOfScopeScenarioError(outOfScope);
+    throw new ApplicationError("forbidden", refusal.message, 403);
+  }
   // Mirror the route's subsidiary checks: explicit entities must sit inside
   // the caller's scope, and an omitted entity resolves to the tenant root
   // inside saveBudgetCells — so a restricted caller whose scope excludes the
@@ -104,6 +116,7 @@ export async function updateBudgetCells(context: ApplicationContext, input: {
     projectId: cell.projectId ?? null,
     locationId: cell.locationId ?? null,
     classId: cell.classId ?? null,
+    extraDims: cell.extraDims ?? undefined,
     amount: cell.amount,
     note: cell.note ?? null,
   }));

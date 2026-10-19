@@ -25,7 +25,7 @@ export function installCompensationReadFixture() {
   const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
   const state = 'const f=globalThis.__compensationReadFixture;'
   const modules: Record<string, string> = {
-    'next-intl/server': state + "export async function getLocale(){return 'en'} export async function getTranslations(ns){return f.translate(ns)}",
+    'next-intl/server': state + `export async function getLocale(){return 'en'} export async function getTranslations(ns){return f.translate(ns)} export async function getFormatter(){return {dateTime(value,options){return new Intl.DateTimeFormat('en',{timeZone:'UTC',...options}).format(value)}}}`,
     '../authz': `export { can } from ${JSON.stringify(new URL('../lib/authz-core.ts', import.meta.url).href)}; export async function getAuthz(){return null}`,
     '../../components/module-home/group-tabs': 'export async function hrmGroupTabs(){return []}',
     '@openbooks/engine/platform/business-date/module': "export async function businessToday(){return '2026-09-22'}",

@@ -276,7 +276,7 @@ export const TAX_ENTITIES: SetupEntity[] = [
       { key: 'scheme', kind: 'select', options: OSS_SCHEMES, required: true },
       { key: 'identificationState', kind: 'country', required: true },
       { key: 'registrationNumber', kind: 'text', required: true },
-      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'effectiveFrom', kind: 'date', required: true },
       { key: 'effectiveTo', kind: 'date' },
       { key: 'isActive', kind: 'boolean' },
     ],

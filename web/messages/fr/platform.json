@@ -25,5 +25,210 @@
       "createdLinkOnly": "{name} créée. Copiez maintenant le lien à usage unique de l’administrateur pour définir son mot de passe.",
       "requestFailed": "L’organisation n’a pas pu être créée."
     }
+  },
+  "nav": {
+    "access": "Accès inter-organisations",
+    "accessDescription": "Gérer l’accès contrôlé entre les identités de connexion et les organisations.",
+    "overview": "Vue d’ensemble",
+    "organizations": "Organisations",
+    "users": "Utilisateurs",
+    "feedback": "Signalement de problèmes",
+    "emailLog": "Journal des e-mails",
+    "group": "Plateforme",
+    "overviewDescription": "Opérations, identités, contrôles d’accès et preuves de livraison à l’échelle du déploiement.",
+    "organizationsDescription": "Organisations de production, environnements de test et aperçus.",
+    "usersDescription": "Identités de connexion, rôles d’organisation et privilèges de plateforme en production.",
+    "feedbackDescription": "Configurer la destination des signalements intégrés.",
+    "emailLogDescription": "Preuves de livraison de toutes les organisations.",
+    "workspace": "Espace de travail de l’organisation"
+  },
+  "hub": {
+    "title": "Plateforme",
+    "description": "Opérations, identités, contrôles d’accès et preuves de livraison à l’échelle du déploiement.",
+    "organizationsDetail": "{production} en production · {nonProduction} hors production",
+    "superAdminsDetail": "{count, plural, one {# superadministrateur} other {# superadministrateurs}}",
+    "activeGrantsDetail": "Autorisations explicites actives",
+    "failedDeliveriesDetail": "Échecs de livraison à traiter"
+  },
+  "notice": {
+    "title": "Espace de travail de la plateforme",
+    "description": "Cet espace contourne les limites entre organisations pour les opérateurs autorisés. Chaque modification des contrôles d’accès est validée et inscrite dans le journal d’audit immuable."
+  },
+  "access": {
+    "title": "Accès inter-organisations",
+    "description": "Associations contrôlées entre les identités de connexion et les organisations. Les superadministrateurs n’ont pas besoin d’autorisations.",
+    "backToPlatform": "Retour à la plateforme",
+    "grantAccess": "Accorder l’accès",
+    "emptyFiltered": "Aucune autorisation ne correspond à ces filtres.",
+    "empty": "Aucune autorisation. Accordez à une identité de connexion l’accès à une autre organisation.",
+    "searchPlaceholder": "Rechercher un membre, une organisation ou un utilisateur actif…",
+    "status": "Statut",
+    "statuses": {
+      "active": "Actif",
+      "revoked": "Révoqué"
+    },
+    "columns": {
+      "member": "Membre",
+      "organization": "Organisation",
+      "actingUser": "Agit en tant que",
+      "lastChanged": "Dernière modification"
+    },
+    "historyPreserved": "Historique conservé",
+    "revoke": "Révoquer",
+    "mutation": {
+      "revoked": "Accès inter-organisations révoqué",
+      "requestFailed": "Impossible de modifier l’accès.",
+      "working": "Traitement…"
+    },
+    "grant": {
+      "title": "Accorder un accès inter-organisations",
+      "description": "Choisissez l’identité du membre, l’organisation cible et l’utilisateur actif dont les autorisations s’y appliqueront.",
+      "memberHelp": "Identité de connexion de l’organisation d’origine. Elle reste responsable lorsque le membre accède à une autre organisation.",
+      "member": "Identité du membre",
+      "selectMember": "Sélectionner un membre…",
+      "organizationHelp": "Organisation de production à laquelle le membre pourra accéder. L’accès à son organisation d’origine est déjà implicite.",
+      "organization": "Organisation cible",
+      "selectOrganization": "Sélectionner une organisation…",
+      "actingUserHelp": "Utilisateur actif dont les rôles et les autorisations s’appliquent lorsque le membre travaille dans l’organisation cible.",
+      "actingUser": "Agit en tant que",
+      "selectActingUser": "Sélectionner un utilisateur actif…",
+      "granting": "Attribution en cours…",
+      "submit": "Accorder l’accès",
+      "success": "Accès inter-organisations accordé",
+      "requestFailed": "Impossible d’accorder l’accès."
+    }
+  },
+  "users": {
+    "title": "Utilisateurs",
+    "description": "Identités de connexion, rôles d’organisation et privilèges de plateforme en production.",
+    "backToPlatform": "Retour à la plateforme",
+    "emptyFiltered": "Aucun utilisateur ne correspond à ces filtres.",
+    "empty": "Aucun utilisateur.",
+    "searchPlaceholder": "Rechercher un nom, un e-mail ou une organisation…",
+    "status": "Statut",
+    "statuses": {
+      "active": "Actif",
+      "inactive": "Inactif",
+      "superAdmin": "Superadministrateur"
+    },
+    "columns": {
+      "user": "Utilisateur",
+      "homeOrganization": "Organisation d’origine",
+      "roles": "Rôles",
+      "grants": "Autorisations",
+      "lastLogin": "Dernière connexion"
+    },
+    "explicitGrants": "{count, plural, one {# explicite} other {# explicites}}",
+    "homeOnly": "Organisation d’origine uniquement",
+    "never": "Jamais",
+    "manage": "Gérer",
+    "drawerDescription": "{email} · Organisation : {organization}",
+    "drawerTabsLabel": "Détails utilisateur",
+    "tabs": {
+      "overview": "Vue d’ensemble",
+      "grants": "Autorisations inter-organisations"
+    },
+    "currentOperator": "Opérateur actuel",
+    "revokeSuperAdmin": "Révoquer le statut de superadministrateur",
+    "makeSuperAdmin": "Nommer superadministrateur",
+    "mutation": {
+      "superAdminRevoked": "Privilèges de superadministrateur révoqués",
+      "superAdminGranted": "Privilèges de superadministrateur accordés",
+      "requestFailed": "Impossible de terminer la modification de la plateforme.",
+      "working": "Traitement…"
+    },
+    "facts": {
+      "email": "E-mail",
+      "homeOrganization": "Organisation d’origine",
+      "roles": "Rôles",
+      "lastLogin": "Dernière connexion",
+      "created": "Créé le",
+      "accountId": "Identifiant du compte"
+    },
+    "noGrants": "Aucune autorisation inter-organisations explicite. Cette identité accède à son organisation d’origine, sauf si elle est superadministratrice."
+  },
+  "tenants": {
+    "title": "Organisations",
+    "description": "Toutes les entreprises de production, tous les environnements de test et aperçus. Ouvrez une organisation pour accéder à son espace de travail.",
+    "backToPlatform": "Retour à la plateforme",
+    "emptyFiltered": "Aucune organisation ne correspond à ces filtres.",
+    "empty": "Aucune organisation.",
+    "searchPlaceholder": "Rechercher des organisations…",
+    "environment": "Environnement",
+    "environments": {
+      "production": "En production",
+      "sandbox": "Test",
+      "preview": "Aperçu"
+    },
+    "columns": {
+      "organization": "Organisation",
+      "locale": "Région",
+      "users": "Utilisateurs",
+      "sandboxes": "Environnements de test"
+    },
+    "parentNote": "de {name}",
+    "open": "Ouvrir",
+    "productionOnly": "Seules les organisations de production peuvent être ouvertes ici."
+  },
+  "emailLog": {
+    "title": "Journal des e-mails",
+    "description": "Preuves de livraison de toutes les organisations.",
+    "backToPlatform": "Retour à la plateforme",
+    "emptyFiltered": "Aucune livraison ne correspond à ces filtres.",
+    "empty": "Aucune livraison enregistrée.",
+    "searchPlaceholder": "Rechercher un objet, un destinataire ou une organisation…",
+    "status": "Statut",
+    "statuses": {
+      "queued": "En file d’attente",
+      "sent": "Envoyé",
+      "failed": "Échec",
+      "suppressed": "Supprimé",
+      "uncertain": "Incertain"
+    },
+    "columns": {
+      "subject": "Objet",
+      "organization": "Organisation",
+      "recipient": "Destinataire",
+      "delivery": "Livraison",
+      "logged": "Enregistré"
+    },
+    "unknownProvider": "Fournisseur inconnu"
+  },
+  "feedback": {
+    "title": "Signalement de problèmes",
+    "description": "Destination des signalements de produits intégrés pour ce déploiement.",
+    "backToPlatform": "Retour à la plateforme",
+    "saved": "Paramètres de signalement enregistrés",
+    "settingsDescription": "Une destination dessert tout le déploiement. Les utilisateurs peuvent signaler un problème depuis n’importe quelle page ; les informations personnelles et d’entreprise sont retirées avant la création du ticket.",
+    "tokenHelp": "Nécessite Issues: Read and write (granulaire) ou repo (classique). Laissez vide pour conserver le jeton enregistré. Lorsque le signalement est activé, l’enregistrement vérifie le jeton auprès du dépôt.",
+    "storedToken": "Jeton d’accès enregistré",
+    "storedTokenDescription": "La suppression du jeton désactive aussi le signalement, car aucun ticket ne peut être créé sans identifiants. Les tickets existants ne sont pas modifiés.",
+    "tokenRemoved": "Jeton d’accès supprimé",
+    "removeToken": "Supprimer le jeton"
+  },
+  "mutations": {
+    "requestFailed": "Impossible de terminer la modification de la plateforme.",
+    "working": "Traitement…"
+  },
+  "actions": {
+    "invalidUser": "L’identifiant utilisateur est invalide.",
+    "cannotRevokeOwn": "Vous ne pouvez pas révoquer vos propres privilèges de superadministrateur.",
+    "userNotFound": "Utilisateur introuvable.",
+    "finalSuperAdmin": "Le dernier superadministrateur actif ne peut pas être révoqué.",
+    "superAdminFailed": "Impossible de terminer la modification de la plateforme.",
+    "invalidMember": "L’identifiant du membre est invalide.",
+    "invalidOrganization": "L’identifiant de l’organisation est invalide.",
+    "invalidActingUser": "L’identifiant de l’utilisateur actif est invalide.",
+    "grantIdentityNotFound": "Membre, organisation ou utilisateur actif introuvable.",
+    "memberMustBeProduction": "L’identité du membre doit appartenir à une organisation de production.",
+    "targetMustBeProduction": "Un accès explicite ne peut viser qu’une organisation de production.",
+    "homeAccessAlreadyImplicit": "Le membre dispose déjà d’un accès implicite à son organisation d’origine.",
+    "actingUserMustBelongToTarget": "L’utilisateur actif doit appartenir à l’organisation cible.",
+    "actingUserMustBeActive": "L’utilisateur actif doit être actif.",
+    "grantCouldNotSave": "Impossible d’enregistrer l’autorisation d’accès.",
+    "grantFailed": "Impossible d’accorder l’accès.",
+    "invalidGrant": "L’identifiant de l’autorisation est invalide.",
+    "grantNotFound": "Autorisation introuvable.",
+    "revokeFailed": "Impossible de révoquer l’accès inter-organisations."
   }
 }

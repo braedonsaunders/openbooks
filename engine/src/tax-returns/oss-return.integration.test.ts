@@ -5,7 +5,9 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { computeOssReturn, ossReturnToCsv } from "./oss-return.ts";
+import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { recordSupplyEvidence } from "../tax/cross-border-records.ts";
+import { isoDateOf, utcDateFromParts } from "../platform/civil-date.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 // Union OSS from posted B2C digital invoices: DE and FR sales aggregate by
@@ -27,6 +29,12 @@ async function seedEuroOrg(org: Org): Promise<void> {
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', '{"crossBorderTax": true}'::jsonb)
      where id = ${org.orgId}`);
   for (const [number, start, end] of [
+    [1, "2026-01-01", "2026-01-31"],
+    [2, "2026-02-01", "2026-02-28"],
+    [3, "2026-03-01", "2026-03-31"],
+    [4, "2026-04-01", "2026-04-30"],
+    [5, "2026-05-01", "2026-05-31"],
+    [6, "2026-06-01", "2026-06-30"],
     [8, "2026-08-01", "2026-08-31"],
     [9, "2026-09-01", "2026-09-30"],
     [10, "2026-10-01", "2026-10-31"],
@@ -220,6 +228,73 @@ test("a credit in a later quarter becomes a correction line for the original qua
     assert.equal(q4.lines[0]!.baseAmount, "-1000.0000");
     assert.equal(q4.lines[0]!.taxAmount, "-190.0000");
     assert.match(ossReturnToCsv(q4), /CORRECTION;DE;19\.00;-1000\.00;-190\.00;2026-Q3/);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a supply voided in a later quarter remains in its original return and corrects there", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
+    await seedEuroOrg(org);
+    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today;
+    const currentYear = Number(today.slice(0, 4));
+    const currentMonth = Number(today.slice(5, 7));
+    const currentQuarter = Math.ceil(currentMonth / 3);
+    const currentQuarterStartMonth = (currentQuarter - 1) * 3 + 1;
+    const previousQuarter = currentQuarter === 1 ? 4 : currentQuarter - 1;
+    const previousQuarterYear = currentQuarter === 1 ? currentYear - 1 : currentYear;
+    const previousQuarterStartMonth = (previousQuarter - 1) * 3 + 1;
+    const quarterStart = (year: number, month: number) => `${year}-${String(month).padStart(2, "0")}-01`;
+    const monthEnd = (year: number, month: number) => {
+      return isoDateOf(utcDateFromParts(year, month, 0));
+    };
+    const quarterEnd = (year: number, month: number) => monthEnd(year, month + 2);
+    const invoiceDate = `${quarterStart(previousQuarterYear, previousQuarterStartMonth).slice(0, 8)}15`;
+    const previousFrom = quarterStart(previousQuarterYear, previousQuarterStartMonth);
+    const previousTo = quarterEnd(previousQuarterYear, previousQuarterStartMonth);
+    const currentFrom = quarterStart(currentYear, currentQuarterStartMonth);
+    const currentTo = quarterEnd(currentYear, currentQuarterStartMonth);
+    for (const date of [invoiceDate, today]) {
+      const covering = (await db.execute<{ id: string }>(sql`
+        select id from accounting_periods where org_id = ${org.orgId}
+          and starts_on <= ${date}::date and ends_on >= ${date}::date limit 1`)).rows[0];
+      if (!covering) {
+        const [year, month] = date.slice(0, 7).split("-").map(Number);
+        const calendar = (await db.execute<{ id: string }>(sql`
+          select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+        await db.execute(sql`
+          insert into accounting_periods
+            (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+          values (${randomUUID()}, ${org.orgId}, ${year}, ${month}, ${`${year}-${String(month).padStart(2, "0")}`},
+                  ${quarterStart(year!, month!)}, ${monthEnd(year!, month!)}, false, ${calendar})`);
+      }
+    }
+    const deCode = await seedRateCode(org, actorId, "DE-VAT-VOID", "DE", "19.0000");
+    const invoiceId = await seedDigitalInvoice(org, actorId, "INV-OSS-VOID", "DE", deCode, "19.0000", invoiceDate);
+    await approveDocument(org, invoiceId);
+    await postDocument(invoiceId, { control: CONTROL(org) });
+    const voided = await requestDocumentVoid({
+      orgId: org.orgId,
+      actorId,
+      documentId: invoiceId,
+      reason: "Customer transaction cancelled",
+      reversalDate: today,
+      allowedSubsidiaryIds: null,
+    });
+    assert.equal(voided.status, "voided");
+
+    const original = await computeOssReturn(db, org.orgId, { scheme: "union", from: previousFrom, to: previousTo });
+    assert.equal(original.lines.length, 1);
+    assert.equal(original.lines[0]!.baseAmount, "1000.0000");
+    assert.equal(original.lines[0]!.taxAmount, "190.0000");
+    const correction = await computeOssReturn(db, org.orgId, { scheme: "union", from: currentFrom, to: currentTo });
+    assert.equal(correction.lines.length, 1);
+    assert.equal(correction.lines[0]!.kind, "correction");
+    assert.equal(correction.lines[0]!.correctionQuarter, `${previousQuarterYear}-Q${previousQuarter}`);
+    assert.equal(correction.lines[0]!.baseAmount, "-1000.0000");
+    assert.equal(correction.lines[0]!.taxAmount, "-190.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -358,6 +358,9 @@
     "description": "スケジュールボードの一覧、設定、アーカイブ。",
     "return": "スケジュールに戻る"
   },
+  "recipients": {
+    "title": "ボードリソースの受信者"
+  },
   "distribution": {
     "title": "スケジュールをメール送信",
     "close": "閉じる",

@@ -54,5 +54,33 @@
   "status": "ステータス",
   "objects": "オブジェクト",
   "loadFailed": "請求インポートを読み込めませんでした。",
-  "requestFailed": "請求プラットフォームから応答がありませんでした。"
+  "requestFailed": "請求プラットフォームから応答がありませんでした。",
+  "backToSync": "同期に戻る",
+  "unknownValue": "不明",
+  "providers": {
+    "chargebee": "Chargebee",
+    "recurly": "Recurly",
+    "maxio": "Maxio",
+    "zuora": "Zuora"
+  },
+  "statuses": {
+    "draft": "下書き",
+    "preflight": "事前チェック",
+    "ready": "準備完了",
+    "running": "実行中",
+    "reconciling": "照合中",
+    "complete": "完了",
+    "failed": "失敗"
+  },
+  "attentionKinds": {
+    "plan": "プラン",
+    "currency": "通貨",
+    "tax_code": "税コード",
+    "customer": "顧客"
+  },
+  "differenceKinds": {
+    "mrr": "月次経常収益 (MRR)",
+    "open_ar": "未回収売掛金",
+    "deferred_revenue": "繰延収益"
+  }
 }

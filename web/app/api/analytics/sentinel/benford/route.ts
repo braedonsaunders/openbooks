@@ -46,18 +46,20 @@ export const GET = defineRoute({
 
     const kindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
     const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds);
-    // Leading digit(s) via magnitude scaling: d = floor(|amt| / 10^floor(log10|amt|))
-    // (1D → 1..9), or the leading two digits for 2D (10..99).
+    // Match sentinelData's exact decimal text-prefix extraction. Logarithmic
+    // magnitude scaling can round boundary values into a neighboring digit.
     const leadExpr = dim === "2d"
-      ? sql`floor(abs(d.total) / power(10, floor(log(abs(d.total))) - 1))::int`
-      : sql`floor(abs(d.total) / power(10, floor(log(abs(d.total)))))::int`;
+      ? sql`case when abs(d.total) >= 10 then left(trunc(abs(d.total))::bigint::text, 2)
+          else left(trunc(abs(d.total) * 10)::bigint::text, 2) end::int`
+      : sql`left(trunc(abs(d.total))::bigint::text, 1)::int`;
 
     const base = sql`
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
+      left join currencies cu on cu.code = d.currency
       where d.org_id = ${user.orgId} and d.voided_at is null and d.kind in (${kindsIn})
         ${subsidiaryFilter}
-        and abs(d.total) >= 1
+        and abs(coalesce(d.total, 0)) * power(10, coalesce(cu.minor_units, 2)) >= 100
         ${currency ? sql`and d.currency = ${currency}` : sql``}
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
@@ -69,7 +71,7 @@ export const GET = defineRoute({
           coalesce(d.document_date, d.posting_date)::text as date, abs(d.total) as amount,
           d.currency as currency,
           coalesce(p.display_name, '') as party_name,
-          (select je.id from journal_entries je where je.source_document_id = d.id limit 1) as entry_id
+          (select je.id from journal_entries je where je.source_document_id = d.id and je.org_id = d.org_id limit 1) as entry_id
         ${base}
         order by abs(d.total) desc
         limit 500

@@ -18,10 +18,11 @@ import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { benefitsCockpit } from '@openbooks/engine/hrm/benefits/benefits-read'
 import { can, type Authz } from '../authz'
 import type { DirectoryItem } from '../../components/module-home/ui'
-import { hrmGroupTabs } from '../../components/module-home/group-tabs'
+import type { ModuleHomeTab } from '../../components/module-home/ui'
 import { loadQueueLabels } from './change-requests'
 import { listScopedDepartmentOptions } from '../scoped-options'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
+import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import {
   isProgramEditable,
   parsePortfolioView,
@@ -250,6 +251,18 @@ function windowKindLabel(t: BenefitsCatalog, kind: string): string {
 /** Window lifecycle filters remain independent of the module destinations. */
 const SEGMENTS = ['all', 'open', 'draft', 'closed'] as const
 
+export function benefitsWorkspaceTabs(
+  t: (key: string) => string,
+  activeView: 'overview' | 'programs' | 'employees' | 'delivery',
+): ModuleHomeTab[] {
+  return [
+    { href: '/hrm/benefits', label: t('portfolio.overviewTitle'), active: activeView === 'overview' },
+    { href: '/hrm/benefits?view=programs', label: t('portfolio.programsTitle'), active: activeView === 'programs' },
+    { href: '/hrm/benefits?view=employees', label: t('benefits.workspace.tabs.employees'), active: activeView === 'employees' },
+    { href: '/hrm/benefits?view=delivery', label: t('benefits.workspace.tabs.delivery'), active: activeView === 'delivery' },
+  ]
+}
+
 export async function loadBenefits(authz: Authz, sp: Record<string, string | undefined>): Promise<BenefitsData> {
   const t = (await getTranslations('hrm')) as unknown as BenefitsCatalog
   const basePath = '/hrm/benefits'
@@ -260,7 +273,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   const segment = (SEGMENTS as readonly string[]).includes(rawSegment) ? rawSegment : null
   const showingEnrolments = sp.view === 'employees'
   const portfolioView = parsePortfolioView(sp.view)
-  const tabs = await hrmGroupTabs(authz, basePath)
+  const tabs = benefitsWorkspaceTabs(t, portfolioView)
   const keepView: Record<string, string> = showingEnrolments
     ? { view: 'employees' }
     : portfolioView !== 'overview'

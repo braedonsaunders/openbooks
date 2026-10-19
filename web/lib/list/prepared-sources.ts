@@ -620,6 +620,12 @@ const SOURCES = {
     rowKeyField: 'employmentId',
     mode: 'loaded',
   },
+  me_action_queue: {
+    route: '/me',
+    rowsField: 'actionQueueRows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
   me_overview_steps: {
     // top-5 window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
@@ -903,6 +909,12 @@ const SOURCES = {
   subcontracts_payment_controls: { route: '/subcontracts', mode: 'loaded' },
   close_posting_periods: { route: '/close/posting-periods', mode: 'loaded' },
   projects_duplicate_candidates: { route: '/projects/duplicates', mode: 'loaded' },
+  projects_duplicate_groups: {
+    route: '/projects/duplicates',
+    rowsField: 'groups',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
   accounts_merges: { route: '/accounts/merges', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
   segment_dependency_violations: { route: '/admin/setup/segment-dependencies', rowsField: 'rows', rowKeyField: 'key', mode: 'loaded' },
   admin_pdf_templates: { route: '/admin/pdf-templates', mode: 'loaded' },
@@ -971,6 +983,10 @@ const SOURCES = {
   },
   fulfillment_pick_execution: {route:'/picks',rowsField:'document.lines',rowKeyField:'lineId',mode:'loaded'},
   handling_unit_contents: {route:'/shipments',rowsField:'unit.lines',rowKeyField:'lineId',mode:'loaded'},
+  shipping_bulk_candidates: { route: '/shipments/labels', rowsField: 'candidates', rowKeyField: 'handlingUnitId', mode: 'loaded' },
+  shipping_bulk_rates: { route: '/shipments/labels?view=rates', rowsField: 'rates', rowKeyField: 'handlingUnitId', mode: 'loaded' },
+  billing_import_runs: { route: '/sync/billing-history', rowsField: 'runs', rowKeyField: 'id', mode: 'loaded' },
+  report_delivery_runs: { route: '/reports/custom/run/[id]/delivery', rowsField: 'recentRuns', rowKeyField: 'id', mode: 'loaded' },
   warehouse_receipts: {route:'/warehouse',rowsField:'receipts',rowKeyField:'lineId',mode:'loaded'},
   warehouse_putaway: {
     route: '/warehouse',
@@ -992,6 +1008,7 @@ const SOURCES = {
   asset_components: { route: '/assets', rowsField: 'members', rowKeyField: 'id', mode: 'loaded' },
   // Register drawer sessions: the session reader scopes and counts the window.
   pos_sessions: { route: '/pos/sessions', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'page', perPageField: 'perPage' } },
+  time_kiosks: { route: '/time/setup', rowsField: 'kiosks', rowKeyField: 'id', mode: 'loaded' },
 } satisfies Record<string, PreparedListSource>
 
 export type PreparedListSourceKey = keyof typeof SOURCES

@@ -523,7 +523,7 @@ function GrantTermsTab({
               </Button>
             </div>
           ) : null}
-          {!['closed_out', 'closed', 'void'].includes(terms.status) ? (
+          {!['closed', 'void'].includes(terms.status) ? (
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-40">
                 <Field label={t('grants.postingDate')}><DateField value={postingDate} onChange={(value) => setPostingDate(value)} /></Field>

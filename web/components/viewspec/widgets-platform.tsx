@@ -47,7 +47,7 @@ export const PLATFORM_WIDGETS = {
       name={str(props, 'name') ?? ''}
       subtitle={str(props, 'subtitle') ?? ''}
       isActive={props.isActive === true}
-      isSuperAdmin={props.isSuperAdmin === true}
+        isSuperAdmin={props.isSuperAdmin === true}
       isSelf={props.isSelf === true}
       backHref={str(props, 'backHref') ?? '/platform/users'}
       backLabel={str(props, 'backLabel') ?? ''}
@@ -190,7 +190,7 @@ export const PLATFORM_WIDGETS = {
   ),
   'org-environment-cell': (props) => (
     <OrgEnvironmentCell
-      envKind={str(props, 'envKind') ?? ''}
+      envKind={(str(props, 'envKind') ?? 'production') as ComponentProps<typeof OrgEnvironmentCell>['envKind']}
       variant={(str(props, 'variant') ?? 'secondary') as ComponentProps<typeof OrgEnvironmentCell>['variant']}
       parentNote={str(props, 'parentNote') ?? ''}
     />
@@ -221,6 +221,8 @@ export const PLATFORM_WIDGETS = {
       organizations:
         (props.organizations as ComponentProps<typeof GrantAccessForm>['organizations']) ?? [],
       actingUsers: (props.actingUsers as ComponentProps<typeof GrantAccessForm>['actingUsers']) ?? [],
+      open: true,
+      closeHref: '/platform/users',
     }
     return (
       <GrantAccessForm {...options} defaultMemberUserId={str(props, 'defaultMemberUserId') ?? ''} />

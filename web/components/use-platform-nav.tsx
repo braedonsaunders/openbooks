@@ -1,8 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { selectPlatformNav } from "@braedonsaunders/appkit-superadmin";
-import { OPENBOOKS_PLATFORM_NAV } from "../lib/platform-console";
+import { createOpenBooksPlatformNav } from "../lib/platform-console";
 import type { SidebarNavGroup } from "./sidebar-nav";
 
 /**
@@ -11,9 +12,11 @@ import type { SidebarNavGroup } from "./sidebar-nav";
  * `/platform`; the account menu is the entry point.
  */
 export function useNavGroups(groups: SidebarNavGroup[]): SidebarNavGroup[] {
+  const t = useTranslations("platform");
+  const platformNav = createOpenBooksPlatformNav(t);
   return selectPlatformNav(
     usePathname() ?? "",
     groups,
-    OPENBOOKS_PLATFORM_NAV.groups as SidebarNavGroup[],
+    platformNav.groups as SidebarNavGroup[],
   );
 }

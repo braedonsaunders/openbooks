@@ -25,5 +25,210 @@
       "createdLinkOnly": "已创建 {name}。请立即复制管理员设置密码的一次性链接。",
       "requestFailed": "无法创建组织。"
     }
+  },
+  "nav": {
+    "access": "跨组织访问",
+    "accessDescription": "管理登录身份与组织之间的受控访问。",
+    "overview": "概览",
+    "organizations": "组织",
+    "users": "用户",
+    "feedback": "问题反馈",
+    "emailLog": "邮件日志",
+    "group": "平台",
+    "overviewDescription": "整个部署的运营、身份、访问控制和投递证据。",
+    "organizationsDescription": "生产组织、沙盒和预览环境。",
+    "usersDescription": "生产登录身份、组织角色和平台权限。",
+    "feedbackDescription": "配置应用内问题反馈的提交位置。",
+    "emailLogDescription": "所有组织的投递证据。",
+    "workspace": "组织工作区"
+  },
+  "hub": {
+    "title": "平台",
+    "description": "整个部署的运营、身份、访问控制和投递证据。",
+    "organizationsDetail": "生产 {production} · 非生产 {nonProduction}",
+    "superAdminsDetail": "超级管理员 {count} 人",
+    "activeGrantsDetail": "有效的显式授权",
+    "failedDeliveriesDetail": "需要处理的投递失败"
+  },
+  "notice": {
+    "title": "平台工作区",
+    "description": "获授权的运营人员可在此工作区跨越组织边界操作。每项访问控制变更都会经过验证并写入不可变审计记录。"
+  },
+  "access": {
+    "title": "跨组织访问",
+    "description": "登录身份与组织之间的受控映射。超级管理员无需授权。",
+    "backToPlatform": "返回平台",
+    "grantAccess": "授予访问权限",
+    "emptyFiltered": "没有符合这些筛选条件的授权。",
+    "empty": "暂无授权。可授予登录身份访问其他组织的权限。",
+    "searchPlaceholder": "搜索成员、组织或代理用户…",
+    "status": "状态",
+    "statuses": {
+      "active": "有效",
+      "revoked": "已撤销"
+    },
+    "columns": {
+      "member": "成员",
+      "organization": "组织",
+      "actingUser": "代理身份",
+      "lastChanged": "最后变更"
+    },
+    "historyPreserved": "保留历史记录",
+    "revoke": "撤销",
+    "mutation": {
+      "revoked": "已撤销跨组织访问权限",
+      "requestFailed": "无法更改访问权限。",
+      "working": "处理中…"
+    },
+    "grant": {
+      "title": "授予跨组织访问权限",
+      "description": "选择成员身份、目标组织，以及在目标组织中应用其权限的有效用户。",
+      "memberHelp": "成员所属组织的登录身份。该成员在进入其他组织时仍是责任主体。",
+      "member": "成员身份",
+      "selectMember": "选择成员…",
+      "organizationHelp": "成员获准访问的生产组织。对所属组织的访问权限已默认存在。",
+      "organization": "目标组织",
+      "selectOrganization": "选择组织…",
+      "actingUserHelp": "成员在目标组织操作时，适用其角色和权限的有效用户记录。",
+      "actingUser": "代理身份",
+      "selectActingUser": "选择代理用户…",
+      "granting": "正在授予…",
+      "submit": "授予访问权限",
+      "success": "已授予跨组织访问权限",
+      "requestFailed": "无法授予访问权限。"
+    }
+  },
+  "users": {
+    "title": "用户",
+    "description": "生产登录身份、组织角色和平台权限。",
+    "backToPlatform": "返回平台",
+    "emptyFiltered": "没有符合这些筛选条件的用户。",
+    "empty": "暂无用户。",
+    "searchPlaceholder": "搜索姓名、电子邮件或组织…",
+    "status": "状态",
+    "statuses": {
+      "active": "有效",
+      "inactive": "停用",
+      "superAdmin": "超级管理员"
+    },
+    "columns": {
+      "user": "用户",
+      "homeOrganization": "所属组织",
+      "roles": "角色",
+      "grants": "授权",
+      "lastLogin": "上次登录"
+    },
+    "explicitGrants": "显式授权 {count} 项",
+    "homeOnly": "仅所属组织",
+    "never": "从未",
+    "manage": "管理",
+    "drawerDescription": "{organization} · {email}",
+    "drawerTabsLabel": "用户详情",
+    "tabs": {
+      "overview": "概览",
+      "grants": "跨组织授权"
+    },
+    "currentOperator": "当前运营人员",
+    "revokeSuperAdmin": "撤销超级管理员权限",
+    "makeSuperAdmin": "设为超级管理员",
+    "mutation": {
+      "superAdminRevoked": "已撤销超级管理员权限",
+      "superAdminGranted": "已授予超级管理员权限",
+      "requestFailed": "无法完成平台变更。",
+      "working": "处理中…"
+    },
+    "facts": {
+      "email": "电子邮件",
+      "homeOrganization": "所属组织",
+      "roles": "角色",
+      "lastLogin": "上次登录",
+      "created": "创建时间",
+      "accountId": "账户 ID"
+    },
+    "noGrants": "没有显式跨组织授权。除超级管理员外，此身份仅能访问所属组织。"
+  },
+  "tenants": {
+    "title": "组织",
+    "description": "所有生产企业、沙盒和预览环境。打开组织即可进入其工作区。",
+    "backToPlatform": "返回平台",
+    "emptyFiltered": "没有符合这些筛选条件的组织。",
+    "empty": "暂无组织。",
+    "searchPlaceholder": "搜索组织…",
+    "environment": "环境",
+    "environments": {
+      "production": "生产",
+      "sandbox": "沙盒",
+      "preview": "预览"
+    },
+    "columns": {
+      "organization": "组织",
+      "locale": "地区",
+      "users": "用户",
+      "sandboxes": "沙盒"
+    },
+    "parentNote": "属于 {name}",
+    "open": "打开",
+    "productionOnly": "此处只能打开生产组织。"
+  },
+  "emailLog": {
+    "title": "邮件日志",
+    "description": "所有组织的投递证据。",
+    "backToPlatform": "返回平台",
+    "emptyFiltered": "没有符合这些筛选条件的投递。",
+    "empty": "暂无投递记录。",
+    "searchPlaceholder": "搜索主题、收件人或组织…",
+    "status": "状态",
+    "statuses": {
+      "queued": "排队中",
+      "sent": "已发送",
+      "failed": "失败",
+      "suppressed": "已抑制",
+      "uncertain": "不确定"
+    },
+    "columns": {
+      "subject": "主题",
+      "organization": "组织",
+      "recipient": "收件人",
+      "delivery": "投递",
+      "logged": "记录时间"
+    },
+    "unknownProvider": "未知提供商"
+  },
+  "feedback": {
+    "title": "问题反馈",
+    "description": "此部署中应用内产品问题的提交位置。",
+    "backToPlatform": "返回平台",
+    "saved": "问题反馈设置已保存",
+    "settingsDescription": "整个部署共用一个提交位置。用户可以从任何页面提交问题；创建工单前会移除个人和公司信息。",
+    "tokenHelp": "需要 Issues: Read and write（细粒度）或 repo（经典）权限。留空可保留已存储的令牌。启用反馈后，保存时会通过代码仓库验证令牌。",
+    "storedToken": "已存储的访问令牌",
+    "storedTokenDescription": "移除令牌也会关闭问题反馈，因为没有凭据就无法创建工单。不会影响已有工单。",
+    "tokenRemoved": "访问令牌已移除",
+    "removeToken": "移除令牌"
+  },
+  "mutations": {
+    "requestFailed": "无法完成平台变更。",
+    "working": "处理中…"
+  },
+  "actions": {
+    "invalidUser": "用户标识无效。",
+    "cannotRevokeOwn": "不能撤销自己的超级管理员权限。",
+    "userNotFound": "未找到用户。",
+    "finalSuperAdmin": "不能撤销最后一位有效超级管理员的权限。",
+    "superAdminFailed": "无法完成平台变更。",
+    "invalidMember": "成员标识无效。",
+    "invalidOrganization": "组织标识无效。",
+    "invalidActingUser": "代理用户标识无效。",
+    "grantIdentityNotFound": "未找到成员、组织或代理用户。",
+    "memberMustBeProduction": "成员身份必须属于生产组织。",
+    "targetMustBeProduction": "显式访问权限只能授予生产组织。",
+    "homeAccessAlreadyImplicit": "成员已默认拥有所属组织的访问权限。",
+    "actingUserMustBelongToTarget": "代理用户必须属于目标组织。",
+    "actingUserMustBeActive": "代理用户必须处于有效状态。",
+    "grantCouldNotSave": "无法保存访问授权。",
+    "grantFailed": "无法授予访问权限。",
+    "invalidGrant": "访问授权标识无效。",
+    "grantNotFound": "未找到访问授权。",
+    "revokeFailed": "无法撤销跨组织访问权限。"
   }
 }

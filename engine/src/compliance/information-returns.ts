@@ -657,7 +657,8 @@ export async function loadPaymentTraces(args: {
                )) as backup_withheld,
            (select coalesce(-sum(wl.txn_amount), 0) from journal_lines wl
              where wl.org_id = d.org_id and wl.entry_id = je.id and wl.amount < 0
-               and wl.currency = d.currency and exists (
+               and wl.memo = 'Contractor withholding' and wl.contributor_kind is null
+               and exists (
                  select 1 from withholding_deductions wd
                  join withholding_enrollments we on we.org_id = wd.org_id and we.id = wd.enrollment_id
                   where wd.org_id = d.org_id and wd.payment_document_id = d.id
@@ -665,6 +666,7 @@ export async function loadPaymentTraces(args: {
                     and wd.subsidiary_id = d.subsidiary_id and wd.status = 'posted'
                     and wd.scheme_code = 'US_BACKUP_WITHHOLDING' and wd.deducted_amount > 0
                     and we.liability_account_id = wl.account_id
+                    and wd.currency = wl.currency
                )) as backup_liability_transaction,
            (select coalesce(sum(wd.deducted_amount), 0) from withholding_deductions wd
                   where wd.org_id = d.org_id and wd.payment_document_id = d.id
@@ -1338,6 +1340,7 @@ export async function ensureFiling(args: {
       from information_return_filings
      where org_id = ${args.orgId} and tax_year = ${args.taxYear} and form_type = ${args.formType}
        and subsidiary_id is not distinct from ${subsidiaryId}::uuid
+       and status <> 'void'
   `));
   const winner = existing.rows[0];
   if (!winner) {

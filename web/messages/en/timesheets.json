@@ -251,6 +251,8 @@
     "rulesSaved": "Rules saved.",
     "kiosksTitle": "Kiosk devices",
     "noKiosks": "No kiosks registered yet.",
+    "pinRequired": "PIN required",
+    "lastSeen": "Last seen",
     "retired": "Retired",
     "tokenIssued": "Device link for {name} — copy it now, it cannot be shown again:",
     "acknowledgeToken": "I copied this device link",

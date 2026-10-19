@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildListDrawerHref, hasActiveListFilters, isUuid, mergeHref } from './list-params'
+import { buildListDrawerHref, hasActiveListFilters, isUuid, mergeHref, setupSectionParams } from './list-params'
+
+test('rehomed setup sections preserve each drawer key and shared list state', () => {
+  assert.deepEqual(
+    setupSectionParams({ frow: 'new', prow: 'pair-1', mrow: ['mapping-1', 'ignored'], q: 'restricted', f_function: 'program' }, ['frow', 'prow', 'mrow']),
+    { frow: 'new', prow: 'pair-1', mrow: 'mapping-1', q: 'restricted', f_function: 'program' },
+  )
+})
 
 test('exclusive journal links clear competing drawers and preserve list state', () => {
   const href = buildListDrawerHref('/journal', { q: 'accrual', page: '3', entry: 'old-journal', txn: 'old-payment', reportRecord: 'old-invoice' },

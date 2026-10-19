@@ -14,6 +14,12 @@ interface RouteState {
   queries: string[];
   /** When true the lines query returns payroll-origin party-tagged lines. */
   payrollLines: boolean;
+  /** The pay-run document is resolved through posted_entry_id, not source_document_id. */
+  headerPayRun: boolean;
+  /** The line join cannot see the legacy pay-run document link. */
+  missingLinePayrollMarkers: boolean;
+  /** Two net-pay legs share an account but have different entity currencies. */
+  splitPayrollDimensions: boolean;
   journalDocument: boolean;
 }
 
@@ -23,6 +29,9 @@ const routeState: RouteState = {
   permissions: null,
   queries: [],
   payrollLines: false,
+  headerPayRun: false,
+  missingLinePayrollMarkers: false,
+  splitPayrollDimensions: false,
   journalDocument: false,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
@@ -137,6 +146,8 @@ stubModules({
           account_id: 'account-netpay',
           account_number: '2000',
           account_name: 'Net pay payable',
+          subsidiary_id: 'sub-visible',
+          functional_currency: 'USD',
           party: 'Alice Anderson',
           party_id: 'employee-alice',
           custom: { employee_note: 'Alice Anderson payroll detail' },
@@ -153,6 +164,8 @@ stubModules({
           account_id: 'account-netpay',
           account_number: '2000',
           account_name: 'Net pay payable',
+          subsidiary_id: 'sub-visible',
+          functional_currency: 'USD',
           party: 'Bob Brown',
           party_id: 'employee-bob',
           custom: { employee_note: 'Bob Brown payroll detail' },
@@ -169,6 +182,8 @@ stubModules({
           account_id: 'account-bank',
           account_number: '1000',
           account_name: 'Cash',
+          subsidiary_id: 'sub-visible',
+          functional_currency: 'USD',
           party: null,
           party_id: null,
           department: null,
@@ -183,7 +198,8 @@ stubModules({
           state.queries.push(text)
           if (text.includes('from journal_entries e')) {
             return { rows: [{ id: '00000000-0000-4000-8000-000000000001', subsidiary_id: 'sub-visible',
-              ...(state.payrollLines ? { origin: 'payroll', custom: { employee_note: 'Alice Anderson' } } : {}),
+              ...(state.payrollLines && !state.headerPayRun ? { origin: 'payroll', custom: { employee_note: 'Alice Anderson' } } : {}),
+              ...(state.headerPayRun ? { doc_id: '00000000-0000-4000-8000-000000000003', doc_kind: 'pay_run', source_document_id: null } : {}),
               ...(state.journalDocument ? { doc_id: '00000000-0000-4000-8000-000000000002', doc_kind: 'journal', source_document_id: null } : {}) }] }
           }
           if (text.includes('from documents d')) return { rows: [{
@@ -198,7 +214,16 @@ stubModules({
               text.includes('from role_assignments') || text.includes('from user_form_preferences')) return { rows: [] }
           if (text.includes('from orgs')) return { rows: [{ f: { multiSubsidiary: false, multiCurrency: false }, complexity: 'standard' }] }
           if (text.includes('from journal_lines l')) {
-            if (state.payrollLines) return { rows: payrollRows }
+            if (state.payrollLines) {
+              const rows = state.splitPayrollDimensions
+                ? payrollRows.map((row, index) => index === 1
+                  ? { ...row, subsidiary_id: 'sub-eu', functional_currency: 'EUR' }
+                  : row)
+                : payrollRows
+              return { rows: state.missingLinePayrollMarkers
+                ? rows.map((row) => ({ ...row, doc_kind: null, entry_origin: null }))
+                : rows }
+            }
             // Model PostgreSQL applying the query predicate: without the
             // predicate both intercompany lines would be returned.
             return text.includes('l.subsidiary_id in')
@@ -220,11 +245,19 @@ registerHooks({ resolve: (specifier, context, next) => next(specifier === "../pl
 const routeUrl = "./route.ts?reports-entry-subsidiary-scope-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
 
-function reset(allowedSubsidiaryIds: Set<string> | null, permissions: string[] | null = null, payrollLines = false): void {
+function reset(
+  allowedSubsidiaryIds: Set<string> | null,
+  permissions: string[] | null = null,
+  payrollLines = false,
+  options: { headerPayRun?: boolean; missingLinePayrollMarkers?: boolean; splitPayrollDimensions?: boolean } = {},
+): void {
   routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
   routeState.permissions = permissions;
   routeState.queries.length = 0;
   routeState.payrollLines = payrollLines;
+  routeState.headerPayRun = options.headerPayRun ?? false;
+  routeState.missingLinePayrollMarkers = options.missingLinePayrollMarkers ?? false;
+  routeState.splitPayrollDimensions = options.splitPayrollDimensions ?? false;
   routeState.journalDocument = false;
 }
 
@@ -349,6 +382,35 @@ test("reports.read-only roles see one restricted payroll line per account, never
   const bank = body.lines.find((line) => line.account_number === "1000") as Record<string, unknown>;
   assert.equal(bank.amount, "-4000.0000");
   assert.equal(bank.party, null);
+});
+
+test("header pay-run origin protects lines when the line document join is null", async () => {
+  reset(null, ["reports.read", "gl.read"], true, { headerPayRun: true, missingLinePayrollMarkers: true });
+
+  const response = await get();
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { lines: Array<Record<string, unknown>> };
+  const text = JSON.stringify(body.lines);
+  assert.ok(!text.includes("Alice Anderson") && !text.includes("Bob Brown"), "the header's pay-run kind protects employee detail");
+  const pay = body.lines.find((line) => line.account_number === "2000") as Record<string, unknown>;
+  assert.equal(pay.party, "Payroll (restricted)");
+  assert.equal(pay.amount, "4000.0000");
+});
+
+test("restricted payroll lines collapse separately by subsidiary and functional currency", async () => {
+  reset(null, ["reports.read", "gl.read"], true, { splitPayrollDimensions: true });
+
+  const response = await get();
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { lines: Array<Record<string, unknown>> };
+  const pay = body.lines.filter((line) => line.account_number === "2000");
+  assert.equal(pay.length, 2, "separate entity currencies keep separate aggregates");
+  assert.deepEqual(pay.map((line) => [line.subsidiary_id, line.functional_currency, line.amount]), [
+    ["sub-visible", "USD", "1500.0000"],
+    ["sub-eu", "EUR", "2500.0000"],
+  ]);
 });
 
 test("payroll.read roles keep full per-employee entry detail", async () => {

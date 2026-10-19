@@ -24,6 +24,7 @@ registerHooks({
     if (s.endsWith('/features') || s === './features') return wrap('web/lib/features.ts', `export async function isFeatureEnabled(){return true} export async function orgFeatureState(){return {features:{nonprofit:true,fundAccounting:true}}}`)
     if (s === '@openbooks/engine/nonprofit/funds' && c.parentURL?.endsWith('/funds/view.ts')) return wrap('engine/src/nonprofit/funds.ts', `export async function getFund(request){const s=globalThis.__fundReaderBoundary;s.reads.push(request);return s.fund}`)
     if (s === '@openbooks/engine/nonprofit/releases' && c.parentURL?.endsWith('/releases/view.ts')) return wrap('engine/src/nonprofit/releases.ts', `export async function getFundRelease(request){const s=globalThis.__fundReaderBoundary;s.reads.push(request);return s.release}`)
+    if (s === '@openbooks/engine/platform/business-date' && c.parentURL?.endsWith('/releases/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export async function businessToday(){return '2026-01-01'}`) }
     if (s === '@openbooks/engine/platform/db' && c.parentURL?.endsWith('/funds/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export const db={async execute(){const s=globalThis.__fundReaderBoundary;if(!s.fund || s.reads.length!==1)throw Error('collection read before canonical fund');s.collections++;return {rows:[]}}}`) }
     return resolveAppModule(s, c, next, root) ?? next(s, c)
   },
@@ -45,7 +46,7 @@ test('fund and release drawers use tenant-scoped canonical readers and refuse mi
   state.fund = { id: recordId, code: 'RESTRICTED', name: 'Restricted fund', kind: 'restricted', restrictionClass: 'donor', budgetaryControl: 'hard', isActive: true, parentId: null, subsidiaryId: null, subsidiaryIncludeChildren: false, custom: {} }
   state.reads = []
   const fund = (await loadFunds({ fund: recordId })).drawer
-  assert.ok(fund)
+  assert.ok(fund && fund.mode === 'record')
   assert.deepEqual(state.reads, [{ orgId, fundId: recordId }])
   assert.equal(state.collections, 2)
   assert.equal(fund.fund.budgetaryControl, 'hard')
@@ -55,7 +56,7 @@ test('fund and release drawers use tenant-scoped canonical readers and refuse mi
   state.release = { id: recordId, number: 'REL-1', releaseDate: '2026-01-01', amount: '12.34', purpose: 'Scholarship', satisfactionRef: 'Award', status: 'draft', fromFundId: recordId, toFundId: recordId, releaseAccountId: recordId, submittedBy: null, submittedAt: null, flowRunId: null, fromCode: null, fromName: 'Restricted fund', toCode: 'OPERATING', toName: 'Operating fund', postedEntryId: null, voidEntryId: null, custom: {} }
   state.reads = []
   const release = (await loadReleases({ release: recordId })).drawer
-  assert.ok(release)
+  assert.ok(release && release.mode === 'record')
   assert.deepEqual(state.reads, [{ orgId, releaseId: recordId }])
   assert.equal(release.release.amount, '12.34')
   assert.equal(release.release.fromCode, 'Restricted fund')

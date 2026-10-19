@@ -453,6 +453,7 @@ export async function loadStructure(input: ReadInput & { subsidiaryId: string; a
              currency, pre_money_basis_reason
         from equity_financing_rounds where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} order by closed_on, created_at, id`)).rows
       .map((row) => ({ id: row.id, name: row.name, shareClassId: row.share_class_id, closedOn: row.closed_on, pricePerShare: row.price_per_share, preMoneyValuation: row.pre_money_valuation, currency: row.currency, preMoneyBasisReason: row.pre_money_basis_reason }));
+    const voided = voidedSecurities(book, input.asOf);
     return {
       entity,
       classes: book.classes.map((row) => classRow(book, row, input.asOf)),
@@ -466,8 +467,8 @@ export async function loadStructure(input: ReadInput & { subsidiaryId: string; a
         };
       }),
       rounds: book.rounds.map((round) => {
-        const voided = voidedSecurities(book, "9999-12-31");
-        const issued = book.securities.filter((row) => row.roundId === round.id && row.kind === "share" && !voided.has(row.id));
+        const issued = book.securities.filter((row) => row.roundId === round.id && row.kind === "share"
+          && row.issueDate <= input.asOf && !row.sourceSecurityId && !voided.has(row.id));
         let raised = 0n;
         let shares = 0n;
         for (const security of issued) {

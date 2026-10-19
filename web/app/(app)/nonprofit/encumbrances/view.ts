@@ -53,6 +53,7 @@ export interface EncumbranceRecordDrawer {
 
 export interface EncumbranceCreateDrawer {
   mode: 'create'
+  remountKey: 'new'
   accountOptions: { id: string; number: string | null; name: string }[]
   subsidiaryOptions: { id: string; name: string }[]
   fundOptions: { id: string; code: string; name: string }[]
@@ -119,6 +120,7 @@ export async function loadEncumbrances(
       ...base,
       drawer: {
         mode: 'create',
+        remountKey: 'new',
         accountOptions: accounts.rows,
         subsidiaryOptions: inScope,
         fundOptions: funds.rows,

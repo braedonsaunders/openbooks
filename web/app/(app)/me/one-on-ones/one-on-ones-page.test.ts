@@ -59,6 +59,18 @@ const mockSources = new Map<string, string>([
         t.has = (key) => lookup(key) !== key
         return t
       }
+      export async function getFormatter() {
+        return {
+          dateTime(value, options) {
+            return new Intl.DateTimeFormat('en', {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+              timeZone: 'America/New_York',
+              ...options,
+            }).format(value)
+          },
+        }
+      }
     `,
   ],
   [
@@ -145,6 +157,11 @@ test('the drawer names the org-zone wall time, never the raw ISO instant', async
   assert.equal(data.detail.when, '2026-01-15 04:00')
   assert.match(data.detail.when, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, 'no T, zone suffix, or millis')
   assert.equal(data.detail.title, 'Rae Report', 'the heading identifies the person; the description carries the time')
+})
+
+test('list timestamps use the viewer locale and organization time zone', async () => {
+  const data = await loadMeOneOnOnesPage({})
+  assert.match(data.upcoming[0]!.when, /4:00 AM/)
 })
 
 test('authorMine derives from the delivered author, never a constant', async () => {

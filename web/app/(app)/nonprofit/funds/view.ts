@@ -62,6 +62,7 @@ export interface FundReleaseRef {
 }
 
 export interface FundDrawerData {
+  mode: 'record'
   remountKey: string
   fund: FundDetail
   pairs: FundPairLink[]
@@ -71,12 +72,23 @@ export interface FundDrawerData {
   closeHref: string
 }
 
+export interface FundCreateDrawerData {
+  mode: 'create'
+  remountKey: 'new'
+  canManage: boolean
+  closeHref: string
+}
+
+export type FundDrawerState = FundDrawerData | FundCreateDrawerData
+
 export interface FundsData {
   title: string
   description: string
   currentParams: Record<string, string | string[] | undefined>
   tabs: Awaited<ReturnType<typeof nonprofitGroupTabs>>
-  drawer: FundDrawerData | null
+  canManage: boolean
+  newLabel: string
+  drawer: FundDrawerState | null
 }
 
 type PairRow = {
@@ -97,17 +109,24 @@ export async function loadFunds(
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'fundAccounting')
   const t = await getTranslations('nonprofit')
+  const tCommon = await getTranslations('common')
   const tabs = await nonprofitGroupTabs(authz, '/nonprofit/funds')
+  const canManage = can(authz, 'funds.manage')
 
   const base: FundsData = {
     title: t('funds.title'),
     description: t('funds.description'),
     currentParams: sp,
     tabs,
+    canManage,
+    newLabel: tCommon('actions.newRecord'),
     drawer: null,
   }
 
   const fundId = pickString(sp.fund)
+  if (fundId === 'new' && canManage) {
+    return { ...base, drawer: { mode: 'create', remountKey: 'new', canManage, closeHref: '/nonprofit/funds' } }
+  }
   if (!fundId || !isUuid(fundId)) return base
   const found = await getFund({ orgId, fundId })
   if (!found) notFound()
@@ -138,6 +157,7 @@ export async function loadFunds(
   return {
     ...base,
     drawer: {
+      mode: 'record',
       remountKey: found.id,
       fund: {
         id: found.id,
@@ -164,7 +184,7 @@ export async function loadFunds(
         releaseDate: row.release_date,
         status: row.status,
       })),
-      canManage: can(authz, 'funds.manage'),
+      canManage,
       canCustomize: can(authz, 'admin.customization.manage'),
       closeHref: '/nonprofit/funds',
     },
@@ -182,7 +202,10 @@ export function fundsSpec(data: FundsData): PageSpec {
         title: f('title'),
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center justify-end gap-2',
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        actions: [
+          widget('module-home-tabs', { tabs: data.tabs }),
+          widget('link-button', { href: '/nonprofit/funds?fund=new', label: f('newLabel'), iconKey: 'plus' }, f('canManage')),
+        ],
       }),
     ],
     body: [

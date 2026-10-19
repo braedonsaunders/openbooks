@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveFunctionalAssignment, splitSharedCost, type FunctionalMapping } from "./functional.ts";
+import { normalizeFunctionalMappingInput, resolveFunctionalAssignment, splitSharedCost, type FunctionalMapping } from "./functional.ts";
 
 const disclosure = {
   allocationRuleKey: "shared_occupancy",
@@ -57,4 +57,15 @@ test("functional assignment is effective-dated and refuses unmapped expense line
   assert.throws(() => resolveFunctionalAssignment({
     accountName: "6200 Rent", departmentId: "dept-missing", projectId: null, postingDate: "2026-06-30",
   }, [mapping]), (error: unknown) => error instanceof Error && error.message.includes("6200 Rent"));
+});
+
+test("functional mapping commands normalize blank optional fields before validation and persistence", () => {
+  const normalized = normalizeFunctionalMappingInput({
+    orgId: "org-1", departmentId: " dept-1 ", projectId: "", functionKey: "program",
+    programKey: " ", effectiveFrom: "2026-01-01", effectiveTo: "", actorId: "user-1", reason: "Map department costs",
+  });
+  assert.deepEqual({ departmentId: normalized.departmentId, projectId: normalized.projectId,
+    programKey: normalized.programKey, effectiveTo: normalized.effectiveTo }, {
+    departmentId: "dept-1", projectId: null, programKey: null, effectiveTo: null,
+  });
 });

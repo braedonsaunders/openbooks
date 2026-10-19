@@ -54,5 +54,33 @@
   "status": "Status",
   "objects": "Objetos",
   "loadFailed": "Não foi possível carregar as importações de cobrança.",
-  "requestFailed": "A plataforma de cobrança não respondeu."
+  "requestFailed": "A plataforma de cobrança não respondeu.",
+  "backToSync": "Voltar para sincronização",
+  "unknownValue": "Desconhecido",
+  "providers": {
+    "chargebee": "Chargebee",
+    "recurly": "Recurly",
+    "maxio": "Maxio",
+    "zuora": "Zuora"
+  },
+  "statuses": {
+    "draft": "Rascunho",
+    "preflight": "Pré-verificação",
+    "ready": "Pronto",
+    "running": "Em andamento",
+    "reconciling": "Conciliando",
+    "complete": "Concluído",
+    "failed": "Falhou"
+  },
+  "attentionKinds": {
+    "plan": "Plano",
+    "currency": "Moeda",
+    "tax_code": "Código fiscal",
+    "customer": "Cliente"
+  },
+  "differenceKinds": {
+    "mrr": "Receita recorrente mensal (MRR)",
+    "open_ar": "Contas a receber em aberto",
+    "deferred_revenue": "Receita diferida"
+  }
 }

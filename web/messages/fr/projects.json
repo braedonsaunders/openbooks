@@ -625,6 +625,12 @@
       "job_number": "Même numéro d'affaire ({key})"
     },
     "chooseSurvivor": "Sélectionnez le projet survivant. Toutes les références des autres y sont transférées en une transaction.",
+    "matchKind": "Type de correspondance",
+    "matchKey": "Clé de correspondance",
+    "candidateCount": "Candidats",
+    "openGroup": "Examiner le groupe",
+    "mergeSource": "Projet à fusionner",
+    "manageRequired": "Vous pouvez examiner les projets en double, mais l’aperçu et la fusion nécessitent l’autorisation de gérer les projets.",
     "survivor": "Survivant",
     "code": "Code",
     "name": "Nom",

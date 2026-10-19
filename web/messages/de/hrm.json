@@ -931,6 +931,7 @@
     "emptyTitle": "Noch keine Anträge",
     "emptyDescription": "Stellen Sie Ihren ersten Antrag.",
     "balancesTitle": "Salden",
+    "availableLeaveLabel": "Verfügbarer Urlaub",
     "balancesEmpty": "Keine aktiven Urlaubsarten.",
     "balanceEmployment": "{employer} · Beschäftigung {employment}",
     "balancePerson": "Auf Personenebene",
@@ -1554,7 +1555,7 @@
         "rewards": "Prämien",
         "incentives": "Anreize",
         "payouts": "Auszahlungen",
-        "employees": "Leistungen",
+        "employees": "Beschäftigte",
         "delivery": "Abwicklung"
       }
     },

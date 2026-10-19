@@ -5,7 +5,7 @@ const React = await import('react')
 Object.assign(globalThis, { React })
 const { stubModules } = await import('../../../../testing/stub-modules')
 stubModules({
-  navigation: 'export function useRouter(){return {push(){}}}',
+  navigation: 'export function useRouter(){return {push(){}}}export function usePathname(){return "/settings/security"}export function useSearchParams(){return new URLSearchParams()}',
   intl: false,
   authz: false,
   features: false,
@@ -13,7 +13,7 @@ stubModules({
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const frenchMessages = (await import('../../../../messages/fr')).default
-const [{ SecurityPageContent }, { jsonRequest }] = await Promise.all([import('./sections'), import('./security-panel')])
+const [{ SecurityPageContent }, { jsonRequest, securityErrorMessage }] = await Promise.all([import('./sections'), import('./security-panel')])
 
 test('security settings page renders in French and uses localized request failure copy', async () => {
   const markup = renderToStaticMarkup(
@@ -33,4 +33,6 @@ test('security settings page renders in French and uses localized request failur
   assert.doesNotMatch(markup, /Configurer l’authentificateur/)
   globalThis.fetch = async () => { throw new TypeError('Failed to fetch') }
   await assert.rejects(jsonRequest('/api/auth/mfa', {}, frenchMessages.shell.securityPage.requestFailed), { message: frenchMessages.shell.securityPage.requestFailed })
+  assert.equal(securityErrorMessage(new Error('MFA setup is already pending in another session.'), 'generic'), 'MFA setup is already pending in another session.')
+  assert.equal(securityErrorMessage(new Error(''), 'generic'), 'generic')
 })

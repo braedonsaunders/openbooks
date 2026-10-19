@@ -24,7 +24,7 @@ export function PageHeader({
   titleContent?: React.ReactNode;
   description?: string;
   actions?: React.ReactNode;
-  back?: { href: string; label: string };
+  back?: { href: string; label: string; onClick?: React.MouseEventHandler<HTMLAnchorElement> };
   className?: string;
 }) {
   const navigation = useContext(PageHeaderNavigationContext);
@@ -37,6 +37,7 @@ export function PageHeader({
         <UiBackLink
           href={back.href}
           label={back.label}
+          onClick={back.onClick}
           className="text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
         />
       ) : null}

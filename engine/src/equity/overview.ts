@@ -13,8 +13,8 @@ import { buildCapTable, holdingState, vestingTermsOf, voidedSecurities, type Cap
 import { conversionOnVoidedTermsAsRecorded } from "./conversion-review.ts";
 import { assertEquityReadable, loadLegalEntity, requireEquityReader, type LegalEntity } from "./internal.ts";
 import { equityPostingsDue, type EquityPostingsDue } from "./period-postings.ts";
-import { floorShares, formatPercent, rational } from "./quantities.ts";
-import { earlyExerciseSource, election83bStatus, releasedUnits, restrictedPortion } from "./restricted-stock.ts";
+import { formatPercent, rational } from "./quantities.ts";
+import { earlyExerciseSource, election83bStatus } from "./restricted-stock.ts";
 import { formatLedger } from "./securities.ts";
 import { loadEquityBook } from "./store.ts";
 import { roundPreMoneyDrift } from "./structure.ts";
@@ -143,7 +143,7 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
     if (last) {
       let units = 0n;
       for (const security of issued) {
-        if (security.kind === "share" && security.roundId === last.id && !voided.has(security.id) && security.considerationAmount) units += toUnits(security.considerationAmount);
+        if (security.kind === "share" && security.roundId === last.id && !security.sourceSecurityId && !voided.has(security.id) && security.considerationAmount) units += toUnits(security.considerationAmount);
       }
       latestRound = {
         id: last.id, name: last.name, closedOn: last.closedOn, pricePerShare: last.pricePerShare, preMoneyValuation: last.preMoneyValuation,
@@ -195,7 +195,7 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
         attention.push({ kind: "election_83b", securityId: security.id, securityNumber: security.securityNumber, holderName: nameOf(security.holderPartyId), date: election.deadline, daysLeft: election.daysLeft ?? 0 });
       }
       if (earlyExerciseSource(book, security)) {
-        const unvested = restrictedPortion(security).restricted - floorShares(releasedUnits(book, security, asOf));
+        const unvested = state.unvested;
         if (unvested > 0n) attention.push({ kind: "restricted_deposit", securityId: security.id, securityNumber: security.securityNumber, holderName: nameOf(security.holderPartyId), shares: unvested.toString() });
       }
       if ((security.kind === "option" || security.kind === "warrant") && security.expirationDate && security.expirationDate >= asOf && security.expirationDate <= expiryHorizon) {

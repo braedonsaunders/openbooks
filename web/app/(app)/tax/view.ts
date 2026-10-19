@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { redirect } from 'next/navigation'
 import { db } from '@openbooks/engine/platform/db'
+import { filterTaxReturnFormsByFeatures } from '@openbooks/engine/tax-returns/return'
 import { readMigrationPlan } from '../../../lib/migration/plan'
 import {
   badge,
@@ -173,7 +174,7 @@ export async function loadTax(
       from tax_return_forms
      where org_id = ${orgId} and is_active
      order by country nulls last, name`))
-  const forms = formsResult.rows
+  const forms = await filterTaxReturnFormsByFeatures(orgId, formsResult.rows)
 
   const filters = sql`where org_id = ${orgId}
     ${status === 'prepared' || status === 'filed' ? sql`and status = ${status}` : sql``}

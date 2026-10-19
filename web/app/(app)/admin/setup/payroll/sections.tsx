@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { NavigationPicker } from '@/components/module-home/navigation-picker'
+import { PageHeader } from '@openbooks/ui'
 import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
@@ -35,8 +36,7 @@ import { EmployerFactsSection } from './EmployerFactsSection'
 import { WorkSchedulesSection } from './WorkSchedulesSection'
 
 /**
- * Tab-body slots for the payroll setup workspace, plus the header chrome the
- * spec cannot express.
+ * Tab-body slots for the payroll setup workspace, including its shared header.
  *
  * This page is the setup workspace's odd sibling: it owns a configuration-family picker
  * and one local navigation row rather than arriving through the generic entity list, and its
@@ -78,11 +78,8 @@ export function PayrollSetupTabs({
 }
 
 /**
- * The page header: h1 + description + launcher button. The native page owns
- * a `<header>` element here — no PageHeader block vocabulary for it — so the
- * whole row is one shared component over loader-resolved strings plus the
- * launcher payload. The widget registry renders it, so there is one copy of the
- * h1, the description, and the button chrome by construction.
+ * The page header combines loader-resolved text with the optional launcher
+ * action through the shared PageHeader component.
  */
 export function PayrollSetupHeader({
   title,
@@ -95,17 +92,11 @@ export function PayrollSetupHeader({
   launcher: PayrollLauncherData
   showLauncher?: boolean
 }) {
-  return (
-    <header className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">{description}</p>
-      </div>
-      {/* Re-launchable from the settings page — adding a second country
-          pack walks the same wizard. */}
-      {showLauncher ? <PayrollSetupLauncher variant="button" {...launcher} /> : null}
-    </header>
-  )
+  return <PageHeader
+    title={title}
+    description={description}
+    actions={showLauncher ? <PayrollSetupLauncher variant="button" {...launcher} /> : null}
+  />
 }
 
 /**

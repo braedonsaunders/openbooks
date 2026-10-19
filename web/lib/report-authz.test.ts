@@ -185,3 +185,12 @@ test('receivable and payable reports follow the side they show', async () => {
     'the seeded payables aging definition stays hidden from a receivables-only reader',
   )
 })
+
+test('attendance exception statements require every HRM parent and child feature', async () => {
+  const { reportStatementFeatureKeys } = await import('./report-authz.ts')
+  assert.deepEqual(reportStatementFeatureKeys('attendance-exceptions'), [
+    'hrm',
+    'hrmShiftPlanning',
+    'hrmAttendance',
+  ])
+})

@@ -358,6 +358,9 @@
     "description": "Lister, configurer et archiver les tableaux de planification.",
     "return": "Retour au planning"
   },
+  "recipients": {
+    "title": "Destinataires des ressources du tableau"
+  },
   "distribution": {
     "title": "Envoyer le planning par courriel",
     "close": "Fermer",

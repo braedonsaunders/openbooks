@@ -40,7 +40,7 @@ async function withCockpitReader(displayName: string, email: string, superAdmin:
 }
 test('nonprofit setup with the feature off redirects to the Features explanation', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   await withCockpitReader('Setup reader', 'setup-reader@scratch.test', false, async (org) => {
-    await assert.rejects(() => withOrgContext(org.orgId, () => loadNonprofitSetup()), (error: unknown) => String((error as { digest?: string }).digest ?? '').includes('/feature-required?feature=nonprofit'))
+    await assert.rejects(() => withOrgContext(org.orgId, () => loadNonprofitSetup({})), (error: unknown) => String((error as { digest?: string }).digest ?? '').includes('/feature-required?feature=nonprofit'))
   })
 })
 test('nonprofit cockpit surfaces a refused fund tie-out with its exact remedy', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

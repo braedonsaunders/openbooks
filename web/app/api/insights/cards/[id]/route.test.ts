@@ -26,6 +26,7 @@ interface RouteState {
   card: Card
   currentRevision: string
   updateSucceeds: boolean
+  deniedSource: string | null
 }
 
 const routeState: RouteState = {
@@ -43,6 +44,7 @@ const routeState: RouteState = {
   },
   currentRevision: STORED_REVISION,
   updateSucceeds: true,
+  deniedSource: null,
 }
 
 function sqlText(query: unknown): string {
@@ -114,6 +116,9 @@ const mockSources = new Map<string, string>([
       export function normalizeAllowedRoles(value) { return value }
       export function strOrNull(value) { return typeof value === 'string' && value.trim() ? value.trim() : null }
       export async function loadCard() { return state.card }
+      export async function guardInsightCardQuery(_authz, query) {
+        return query?.source === state.deniedSource ? new Response(JSON.stringify({ error: 'source access denied' }), { status: 403 }) : null
+      }
     `,
   ],
 ])
@@ -146,6 +151,7 @@ function reset() {
   routeState.calls.length = 0
   routeState.currentRevision = STORED_REVISION
   routeState.updateSucceeds = true
+  routeState.deniedSource = null
 }
 
 function patch(body: Record<string, unknown>): Promise<Response> {
@@ -202,6 +208,17 @@ test('PATCH writes under an exact revision and returns the next revision', async
   assert.ok(update)
   assert.match(update.text, /updated_at = greatest\(/)
   assert.match(update.text, /expectedUpdatedAt|timestamptz/)
+})
+
+test('PATCH refuses a replacement source the caller cannot access', async () => {
+  reset()
+  routeState.deniedSource = 'pay_stubs'
+  const response = await patch({
+    query: { source: 'pay_stubs' },
+    expectedUpdatedAt: STORED_REVISION,
+  })
+  assert.equal(response.status, 403)
+  assert.equal(routeState.calls.filter((call) => call.text.includes('update insight_cards')).length, 0)
 })
 
 test('GET exposes an exact revision token for the next save', async () => {

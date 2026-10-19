@@ -31,7 +31,7 @@ import {
   parseListParams,
   pickString,
 } from '../../../lib/list-params'
-import { loadCard } from '../../api/insights/_lib'
+import { insightSourceFilter, loadCard } from '../../api/insights/_lib'
 import { VIZ_META } from './viz-meta'
 
 /**
@@ -119,12 +119,18 @@ export async function loadInsights(
       ? statusParam
       : undefined
 
+  const features = await orgFeatureState(orgId)
+  const sourceKeys = allowedSources(
+    (permission) => can(authz, permission),
+    (key) => featureEnabled(features, key),
+  ).map((source) => source.key)
+  const sourceFilter = insightSourceFilter(sourceKeys)
   const visibility = insightVisibilitySql(authz)
-  const where = sql`org_id = ${orgId} and ${visibility}
+  const where = sql`org_id = ${orgId} and ${visibility} and ${sourceFilter}
     ${params.q ? sql` and name ilike ${'%' + params.q + '%'}` : sql``}
     ${status ? sql` and status = ${status}` : sql``}`
 
-  const [cards, counts, features] = await Promise.all([
+  const [cards, counts] = await Promise.all([
     db.execute(sql`
       select id, name, description, viz_type, status, query, updated_at
         from insight_cards
@@ -135,8 +141,7 @@ export async function loadInsights(
       select count(*) as total,
              count(*) filter (where status = 'draft') as drafts,
              count(*) filter (where status = 'published') as published
-        from insight_cards where org_id = ${orgId} and ${visibility}`),
-    orgFeatureState(orgId),
+        from insight_cards where org_id = ${orgId} and ${visibility} and ${sourceFilter}`),
   ])
   const c = counts.rows[0]!
   const total = Number(c.total)
@@ -227,10 +232,7 @@ export async function loadInsights(
           canCreate,
           canPublish,
           inventoryEnabled: featureEnabled(features, 'inventory'),
-          sourceKeys: allowedSources(
-            (permission) => can(authz, permission),
-            (key) => featureEnabled(features, key),
-          ).map((s) => s.key),
+          sourceKeys,
         }
       : isCreate
         ? {
@@ -238,10 +240,7 @@ export async function loadInsights(
             canCreate,
             canPublish: false,
             inventoryEnabled: featureEnabled(features, 'inventory'),
-            sourceKeys: allowedSources(
-              (permission) => can(authz, permission),
-              (key) => featureEnabled(features, key),
-            ).map((s) => s.key),
+            sourceKeys,
             createMode: true,
           }
         : null,

@@ -5,9 +5,10 @@ import { stubModules } from '../../../../testing/stub-modules'
 
 declare global {
   var __duplicatesToasts: { kind: string; message: string }[] | undefined
+  var __duplicateNavigation: string[] | undefined
 }
 
-await bootJsdomEnvironment({ url: 'http://localhost:4800/projects/duplicates', matchMediaMatches: false })
+await bootJsdomEnvironment({ url: 'http://localhost:4800/projects/duplicates?group=source_ref%3Alegacy-ref', matchMediaMatches: false })
 
 const { join: joinPath } = await import('node:path')
 const { pathToFileURL: toFileUrl } = await import('node:url')
@@ -15,9 +16,9 @@ const worktreeUiSource = `export * from "${toFileUrl(joinPath(process.cwd(), 'pa
 stubModules({
   navigation: {
     source:
-      "export function useRouter(){return{push(){},refresh(){},replace(){}}}" +
+      "export function useRouter(){return{push(h){(globalThis.__duplicateNavigation??=[]).push(h)},replace(h){(globalThis.__duplicateNavigation??=[]).push(h)},refresh(){}}}" +
       "export function usePathname(){return '/projects/duplicates'}" +
-      "export function useSearchParams(){return new URLSearchParams()}",
+      "export function useSearchParams(){return new URLSearchParams('group=source_ref%3Alegacy-ref')}",
   },
   intl: false,
   authz: false,
@@ -38,12 +39,14 @@ const { ProjectDuplicatesView } = await import('./ProjectDuplicatesView')
 
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms))
 
-function group(key: string, projects = [
-  { id: 'project-a', code: 'P-A', name: 'Alpha', customerId: 'customer-1', status: 'active', isActive: true },
-  { id: 'project-b', code: 'P-B', name: 'Bravo', customerId: 'customer-1', status: 'active', isActive: true },
-  { id: 'project-c', code: 'P-C', name: 'Charlie', customerId: 'customer-1', status: 'active', isActive: true },
-]) {
-  return { kind: 'source_ref' as const, key, projects }
+const group = {
+  kind: 'source_ref' as const,
+  key: 'legacy-ref',
+  projects: [
+    { id: 'project-a', code: 'P-A', name: 'Alpha', customerId: 'customer-1', status: 'active', isActive: true },
+    { id: 'project-b', code: 'P-B', name: 'Bravo', customerId: 'customer-1', status: 'active', isActive: true },
+    { id: 'project-c', code: 'P-C', name: 'Charlie', customerId: 'customer-1', status: 'active', isActive: true },
+  ],
 }
 
 function installFetch(handler: (url: URL, init?: RequestInit) => Response | null) {
@@ -58,6 +61,7 @@ function installFetch(handler: (url: URL, init?: RequestInit) => Response | null
 async function mount(t: TestContext, handler: (url: URL, init?: RequestInit) => Response | null) {
   document.body.innerHTML = ''
   globalThis.__duplicatesToasts = []
+  globalThis.__duplicateNavigation = []
   const restoreFetch = installFetch(handler)
   t.after(restoreFetch)
   const host = document.createElement('div')
@@ -70,19 +74,11 @@ async function mount(t: TestContext, handler: (url: URL, init?: RequestInit) => 
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <ProjectDuplicatesView canMerge />
+        <ProjectDuplicatesView group={group} canMerge />
       </NextIntlClientProvider>,
     )
     await tick()
   })
-  await tick()
-  return { host }
-}
-
-function rowFor(name: string): HTMLTableRowElement {
-  const row = [...document.querySelectorAll('tr')].find((candidate) => candidate.textContent?.includes(name))
-  assert.ok(row, `the duplicate row for ${name} is rendered`)
-  return row as HTMLTableRowElement
 }
 
 async function click(button: HTMLButtonElement) {
@@ -90,74 +86,60 @@ async function click(button: HTMLButtonElement) {
     button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await tick()
   })
-  await tick()
 }
 
-async function preview(name: string) {
-  const button = [...rowFor(name).querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === 'Preview')
-  assert.ok(button, `the duplicate row for ${name} offers Preview`)
-  await click(button as HTMLButtonElement)
+function previewButton() {
+  const button = [...document.body.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === 'Preview')
+  assert.ok(button, 'the drawer offers a merge preview')
+  return button as HTMLButtonElement
 }
 
-async function selectSurvivor(name: string) {
-  const radio = rowFor(name).querySelector('input[type="radio"]')
-  assert.ok(radio, `${name} can be selected as the surviving project`)
-  await act(async () => {
-    ;(radio as HTMLInputElement).click()
-    await tick()
-  })
-}
-
-test('a preview is hidden when the selected survivor changes', async (t) => {
-  const projects = group('legacy-ref', [
-    { id: 'project-a', code: 'P-A', name: 'Alpha', customerId: 'customer-1', status: 'active', isActive: true },
-    { id: 'project-b', code: 'P-B', name: 'Bravo', customerId: 'customer-1', status: 'active', isActive: true },
-    { id: 'project-c', code: 'P-C', name: 'Charlie', customerId: 'customer-1', status: 'active', isActive: true },
-  ])
+test('the URL drawer previews the selected direction and clears stale impact when its survivor changes', async (t) => {
   const requests: URL[] = []
   await mount(t, (url) => {
-    if (url.pathname === '/api/projects/duplicates') return Response.json({ groups: [projects] })
     if (url.pathname === '/api/projects/merge' && url.search) {
       requests.push(url)
-      return Response.json({ moved: [{ table: 'documents', rows: 3 }], customRefs: [], alreadyMerged: false })
+      return Response.json({ survivorId: 'project-a', duplicateId: 'project-b', moved: [{ table: 'documents', rows: 3 }], customRefs: [], alreadyMerged: false })
     }
     return null
   })
 
-  await preview('Bravo')
-  assert.match(rowFor('Bravo').textContent ?? '', /3 references will move\./)
+  await click(previewButton())
+  assert.match(document.body.textContent ?? '', /3 references will move\./)
   assert.equal(requests[0]?.searchParams.get('survivorId'), 'project-a')
   assert.equal(requests[0]?.searchParams.get('duplicateId'), 'project-b')
 
-  await selectSurvivor('Charlie')
-  assert.doesNotMatch(rowFor('Bravo').textContent ?? '', /3 references will move\./)
-  assert.equal([...rowFor('Bravo').querySelectorAll('button')].some((button) => button.textContent?.startsWith('Merge (')), false)
+  const survivor = document.body.querySelector<HTMLButtonElement>('#duplicate-project-survivor')
+  assert.ok(survivor, 'the survivor can be selected from the group')
+  await click(survivor)
+  const charlie = [...document.body.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+    .find((option) => option.textContent?.includes('Charlie'))
+  assert.ok(charlie, 'the other project is available as a survivor')
+  await click(charlie)
+  assert.doesNotMatch(document.body.textContent ?? '', /3 references will move\./)
+  assert.equal([...document.body.querySelectorAll('button')].some((button) => button.textContent?.startsWith('Merge (')), false)
 })
 
-test('a refused merge preview replaces stale impact with a group alert', async (t) => {
-  const projects = group('legacy-ref', [
-    { id: 'project-a', code: 'P-A', name: 'Alpha', customerId: 'customer-1', status: 'active', isActive: true },
-    { id: 'project-b', code: 'P-B', name: 'Bravo', customerId: 'customer-1', status: 'active', isActive: true },
-  ])
+test('a refused merge preview replaces the stale preview with the actionable server refusal', async (t) => {
   let previewCalls = 0
   await mount(t, (url) => {
-    if (url.pathname === '/api/projects/duplicates') return Response.json({ groups: [projects, group('other-ref')] })
     if (url.pathname === '/api/projects/merge' && url.search) {
       previewCalls += 1
-      if (previewCalls === 1) return Response.json({ moved: [{ table: 'documents', rows: 2 }], customRefs: [], alreadyMerged: false })
+      if (previewCalls === 1) {
+        return Response.json({ survivorId: 'project-a', duplicateId: 'project-b', moved: [{ table: 'documents', rows: 2 }], customRefs: [], alreadyMerged: false })
+      }
       return Response.json({ error: 'A posted document prevents this merge direction' }, { status: 422 })
     }
     return null
   })
 
-  await preview('Bravo')
-  assert.match(rowFor('Bravo').textContent ?? '', /2 references will move\./)
-  await preview('Bravo')
+  await click(previewButton())
+  assert.match(document.body.textContent ?? '', /2 references will move\./)
+  await click(previewButton())
 
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the typed preview refusal remains visible after its toast')
+  const alert = document.body.querySelector('[role="alert"]')
+  assert.ok(alert, 'the server refusal stays visible in the drawer')
   assert.equal(alert.textContent, 'A posted document prevents this merge direction')
-  assert.doesNotMatch(rowFor('Bravo').textContent ?? '', /2 references will move\./)
-  assert.equal([...rowFor('Bravo').querySelectorAll('button')].some((button) => button.textContent?.startsWith('Merge (')), false)
-  assert.equal(document.querySelectorAll('[role="alert"]').length, 1, 'the refusal is scoped to the affected duplicate group')
+  assert.doesNotMatch(document.body.textContent ?? '', /2 references will move\./)
+  assert.equal([...document.body.querySelectorAll('button')].some((button) => button.textContent?.startsWith('Merge (')), false)
 })

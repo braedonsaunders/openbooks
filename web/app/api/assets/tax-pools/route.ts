@@ -5,6 +5,7 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
+import { activePostingPrimaryBookId } from "@openbooks/engine/platform/database";
 import {
   listTaxRegimes,
   runTaxPool,
@@ -42,12 +43,6 @@ function isRunnableTaxYear(value: unknown): value is number {
   );
 }
 
-async function primaryBook(orgId: string): Promise<string | null> {
-  const r = await db.execute<{ id: string }>(
-    sql`select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`,
-  );
-  return r.rows[0]?.id ?? null;
-}
 /**
  * The shared unscoped-posting default: the hierarchy root. An org with no
  * subsidiaries at all keeps the established 422 instead of a 500.
@@ -164,7 +159,7 @@ export const POST = defineRoute({
         return notFound("record");
       bookId = book.rows[0].id;
     } else {
-      bookId = await primaryBook(gate.user.orgId);
+      bookId = await activePostingPrimaryBookId(gate.user.orgId);
     }
 
     // An explicit subsidiary is a write target, not merely a run parameter.

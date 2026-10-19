@@ -5,6 +5,7 @@ import { ApiResponseError } from "@/lib/api-error";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useViewerFormat } from "../../../../../lib/viewer-format";
 import { toast } from "sonner";
 import { promptDialog } from "@/lib/prompt";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, UrlDrawer } from "@openbooks/ui";
@@ -80,6 +81,7 @@ export function ReopenList(props: Props) {
 
 export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
   const t = useTranslations("close.setup");
+  const viewerFormat = useViewerFormat();
   const router = useRouter();
   const closeHref = drawerHref(props.currentParams, "periods", "reopen", null);
   const [busy, setBusy] = useState(false);
@@ -436,12 +438,12 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
         </Badge>
         {row.status === "approved" && typeof row.expires_at === "string" ? (
           <p className="mt-1 text-sm text-slate-500">
-            {t("periods.reopenActiveUntil", { date: String(row.expires_at).slice(0, 16).replace("T", " ") })}
+            {t("periods.reopenActiveUntil", { date: viewerFormat.dateTime(new Date(row.expires_at)) })}
           </p>
         ) : null}
         {row.status === "requested" && row.impact_snapshot?.amendment ? (
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            {t("periods.reopenRequestedUntil", { date: row.impact_snapshot.amendment.expiresAt.slice(0, 16).replace("T", " ") })}
+            {t("periods.reopenRequestedUntil", { date: viewerFormat.dateTime(new Date(row.impact_snapshot.amendment.expiresAt)) })}
           </p>
         ) : null}
         {row.status === "approved" && props.canReopen ? (

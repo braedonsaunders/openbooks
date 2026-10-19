@@ -1,8 +1,12 @@
-import { getAuthz, type Authz } from '@/lib/authz'
+import { can, getAuthz, type Authz } from '@/lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { insightVisibilitySql } from '@/lib/insight-access'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { allowedSources, getSource, sourcePermission } from '@openbooks/analytics'
+import { REPORT_ENTITY_MAP } from '@openbooks/reports'
+import { featureEnabled, isFeatureEnabled, orgFeatureState } from '@/lib/features'
+import { NextResponse } from 'next/server'
 import {
   INSIGHT_VIZ_TYPES,
   validateInsightQuery,
@@ -24,6 +28,37 @@ export function isVizType(v: unknown): v is VizType {
 /** Validate + normalize an incoming query plan; throws on a bad shape. */
 export function normalizeQuery(v: unknown) {
   return validateInsightQuery(v ?? { source: 'ledger_lines' })
+}
+
+/** Refuse a stored or incoming card query whose source is not readable by this caller. */
+export async function guardInsightCardQuery(authz: Authz, query: unknown): Promise<NextResponse | null> {
+  const source = (query as { source?: unknown } | null)?.source
+  if (typeof source !== 'string' || !getSource(source)) {
+    return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
+  }
+  const permission = sourcePermission(source)
+  if (permission && !can(authz, permission)) {
+    return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
+  }
+  const feature = REPORT_ENTITY_MAP[source]?.featureKey
+  if (feature && !(await isFeatureEnabled(authz.user.orgId, feature))) {
+    return NextResponse.json({ error: `${feature} feature is disabled` }, { status: 403 })
+  }
+  return null
+}
+
+/** One allowlist for the cards catalog and dashboard palette. */
+export async function visibleInsightSourceKeys(authz: Authz): Promise<string[]> {
+  const features = await orgFeatureState(authz.user.orgId)
+  return allowedSources(
+    (permission) => can(authz, permission),
+    (feature) => featureEnabled(features, feature),
+  ).map((source) => source.key)
+}
+
+export function insightSourceFilter(sourceKeys: string[]) {
+  if (sourceKeys.length === 0) return sql`false`
+  return sql`query->>'source' in (${sql.join(sourceKeys.map((key) => sql`${key}`), sql`, `)})`
 }
 
 /** Coerce an unknown viz-settings blob to a plain object (studio owns the keys;
@@ -66,7 +101,9 @@ export async function loadCard(id: string, orgId: string): Promise<CardRow | nul
       from insight_cards
      where id = ${id} and org_id = ${orgId} and ${insightVisibilitySql(authz)}
   `))
-  return res.rows[0] ?? null
+  const card = res.rows[0]
+  if (!card || (await guardInsightCardQuery(authz, card.query))) return null
+  return card
 }
 
 export type DashboardRow = {
@@ -118,6 +155,7 @@ export async function loadDashboardEmbed(
   const dashboard = await loadDashboard(dashboardId, orgId)
   if (!dashboard) return null
   const publishedOnly = opts.publishedOnly !== false
+  const sourceFilter = insightSourceFilter(await visibleInsightSourceKeys(authz))
 
   // Well-formed ids only. A layout is user data, and a widget pointing at
   // something that is not a uuid — a hand-edited board, an import, a seed —
@@ -132,6 +170,7 @@ export async function loadDashboardEmbed(
       from insight_cards
      where org_id = ${orgId} and id = any(${`{${cardIds.join(',')}}`}::uuid[])
        and ${insightVisibilitySql(authz)}
+       and ${sourceFilter}
        ${publishedOnly ? sql`and status = 'published'` : sql``}
   `))
 
@@ -212,9 +251,11 @@ export async function layoutCardsVisible(
 ): Promise<boolean> {
   if (layout.length === 0) return true
   const ids = [...new Set(layout.map((widget) => widget.cardId))]
+  const sourceFilter = insightSourceFilter(await visibleInsightSourceKeys(authz))
   const cards = await runner.execute<{ id: string }>(sql`
     select id from insight_cards where id = any(${`{${ids.join(',')}}`}::uuid[])
       and ${insightVisibilitySql(authz)}
+      and ${sourceFilter}
   `)
   return cards.rows.length === ids.length
 }
