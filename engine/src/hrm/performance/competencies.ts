@@ -521,7 +521,7 @@ export async function linkCompetency(args: {
         : args.targetKind === "position"
           ? (await db.execute<{ id: string; employerSubsidiaryId?: string | null }>(sql`
               select id, employer_subsidiary_id as "employerSubsidiaryId"
-                from positions where org_id = ${orgId} and id = ${targetId} for update
+                from positions where org_id = ${orgId} and id = ${targetId} for share
             `)).rows[0]
           : (await db.execute<{ id: string; employerSubsidiaryId?: string | null }>(sql`select id from hrm_review_template_sections where org_id = ${orgId} and id = ${targetId}`)).rows[0];
     if (!target) {
