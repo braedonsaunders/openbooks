@@ -3,13 +3,12 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import {
-  latestSignatureRequest,
   QUOTE_SUBJECT_TABLE,
   quoteCashPreview,
   requestQuoteSignature,
   voidSignatureRequestsForSubject,
 } from "@openbooks/engine/billing/quote-to-cash";
-import { db, withOrgContext } from "@openbooks/engine/platform/database";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/database";
 import { deliverQuoteSignature } from "@/lib/quote-to-cash/delivery";
 
 export const runtime = "nodejs";
@@ -34,10 +33,8 @@ export const GET = defineRoute({
   params,
   handler: async ({ authz, params }) => {
     try {
-      const request = await withOrgContext(authz.user.orgId, () =>
-        latestSignatureRequest(db, authz.user.orgId, QUOTE_SUBJECT_TABLE, params.id),
-      );
-      return NextResponse.json({ request });
+      const preview = await quoteCashPreview(authz.user.orgId, params.id, authz.allowedSubsidiaryIds);
+      return NextResponse.json({ request: preview.signature });
     } catch (e) {
       return apiErrorResponse(e);
     }
@@ -50,8 +47,8 @@ export const DELETE = defineRoute({
   params,
   handler: async ({ authz, params }) => {
     try {
-      const result = await withOrgContext(authz.user.orgId, () =>
-        voidSignatureRequestsForSubject(db, authz.user.orgId, QUOTE_SUBJECT_TABLE, params.id),
+      const result = await withOrgTransaction(authz.user.orgId, () =>
+        voidSignatureRequestsForSubject(db, authz.user.orgId, QUOTE_SUBJECT_TABLE, params.id, authz.allowedSubsidiaryIds),
       );
       return NextResponse.json(result);
     } catch (e) {
@@ -67,11 +64,12 @@ export const POST = defineRoute({
   body: sendBody,
   handler: async ({ request: req, authz, params, body }) => {
     try {
-      const preview = await quoteCashPreview(authz.user.orgId, params.id);
+      const preview = await quoteCashPreview(authz.user.orgId, params.id, authz.allowedSubsidiaryIds);
       const sent = await requestQuoteSignature({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         quoteId: params.id,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
         signerName: body.signerName,
         signerEmail: body.signerEmail,
         expiresInDays: body.expiresInDays,

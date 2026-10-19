@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { contractRecurringAmounts } from "./subscription-billing.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
@@ -15,11 +15,15 @@ import {
 import {
   activateQuote,
   declineQuoteSignature,
+  deleteQuoteTerm,
   discountPercent,
+  QuoteToCashError,
+  quoteCashPreview,
   QUOTE_SUBJECT_TABLE,
   requestQuoteSignature,
   resolveRampSchedule,
   runSignatureReminderScan,
+  saveQuoteTerm,
   signQuoteSignature,
   viewQuoteSignature,
   voidSignatureRequestsForSubject,
@@ -191,12 +195,59 @@ async function withDeal(
   }
 }
 
+test("quote term, signature, and activation operations enforce the quote subsidiary scope", DB, async () => {
+  await withDeal(async (org, actor, seed) => {
+    await db.execute(sql`
+      update documents set subsidiary_id = ${org.subsidiaryId}
+       where org_id = ${org.orgId} and id = ${seed.quoteId}
+    `);
+    const restricted = new Set<string>();
+    const refused = (error: unknown) => error instanceof QuoteToCashError && error.status === 404;
+    const term = {
+      termId: seed.termId,
+      quoteLineId: seed.lineId,
+      planId: seed.planId,
+      termMonths: 12,
+      startRule: "quote_date" as const,
+      billingTiming: "advance" as const,
+      steps: [{ startsAfterMonths: 0, unitPrice: "100.00", quantity: "1.00" }],
+    };
+
+    await assert.rejects(quoteCashPreview(org.orgId, seed.quoteId, restricted), refused);
+    await assert.rejects(quoteCashPreview(org.orgId, seed.quoteId, undefined as never), refused);
+    await assert.rejects(saveQuoteTerm(org.orgId, actor, seed.quoteId, term, restricted), refused);
+    await assert.rejects(deleteQuoteTerm(org.orgId, actor, seed.quoteId, seed.termId, restricted), refused);
+    await assert.rejects(requestQuoteSignature({
+      orgId: org.orgId,
+      actorId: actor,
+      quoteId: seed.quoteId,
+      allowedSubsidiaryIds: restricted,
+      signerName: "Ada Customer",
+      signerEmail: "ada@example.com",
+    }), refused);
+    await assert.rejects(activateQuote(org.orgId, actor, seed.quoteId, { allowedSubsidiaryIds: restricted }), refused);
+    await assert.rejects(
+      withOrgTransaction(org.orgId, () =>
+        voidSignatureRequestsForSubject(db, org.orgId, QUOTE_SUBJECT_TABLE, seed.quoteId, restricted)),
+      refused,
+    );
+
+    const unchanged = (await db.execute<{ terms: number; signatures: number; subscriptions: number }>(sql`
+      select (select count(*)::int from quote_subscription_terms where org_id = ${org.orgId} and quote_id = ${seed.quoteId}) as terms,
+             (select count(*)::int from signature_requests where org_id = ${org.orgId} and subject_id = ${seed.quoteId}) as signatures,
+             (select count(*)::int from subscriptions where org_id = ${org.orgId} and source_quote_id = ${seed.quoteId}) as subscriptions
+    `)).rows[0]!;
+    assert.deepEqual(unchanged, { terms: 1, signatures: 0, subscriptions: 0 });
+  });
+});
+
 test("list-price quote sends, signs, and activates exactly once", DB, async () => {
   await withDeal(async (org, actor, seed) => {
     const sent = await requestQuoteSignature({
       orgId: org.orgId,
       actorId: actor,
       quoteId: seed.quoteId,
+      allowedSubsidiaryIds: null,
       signerName: "Ada Customer",
       signerEmail: "ada@example.com",
     });
@@ -229,7 +280,7 @@ test("list-price quote sends, signs, and activates exactly once", DB, async () =
     // A replayed link refuses instead of signing twice.
     await assert.rejects(signQuoteSignature({ token: sent.token, name: "Ada Customer" }), /once and never replayed/);
 
-    const first = await activateQuote(org.orgId, actor, seed.quoteId, {});
+    const first = await activateQuote(org.orgId, actor, seed.quoteId, { allowedSubsidiaryIds: null });
     assert.equal(first.created, true);
     assert.equal(first.subscriptionIds.length, 1);
     assert.equal(first.contractId, null);
@@ -255,7 +306,7 @@ test("list-price quote sends, signs, and activates exactly once", DB, async () =
     ).rows.map((r) => r.idempotency_key);
     assert.deepEqual(amendments, [`quote-activation:${seed.quoteId}:${seed.termId}:p1`]);
 
-    const second = await activateQuote(org.orgId, actor, seed.quoteId, {});
+    const second = await activateQuote(org.orgId, actor, seed.quoteId, { allowedSubsidiaryIds: null });
     assert.equal(second.created, false);
     assert.deepEqual(second.subscriptionIds, first.subscriptionIds);
     const subCount = (
@@ -292,11 +343,12 @@ test("same-plan quote terms activate only their own billed component", DB, async
       orgId: org.orgId,
       actorId: actor,
       quoteId: seed.quoteId,
+      allowedSubsidiaryIds: null,
       signerName: "Ada Customer",
       signerEmail: "ada@example.com",
     });
     await signQuoteSignature({ token: sent.token, name: "Ada Customer" });
-    const activation = await activateQuote(org.orgId, actor, seed.quoteId, {});
+    const activation = await activateQuote(org.orgId, actor, seed.quoteId, { allowedSubsidiaryIds: null });
     assert.equal(activation.subscriptionIds.length, 2);
 
     const components = (await db.execute<{
@@ -331,6 +383,7 @@ test("over-threshold discount refuses sending until the quote is approved", DB, 
           orgId: org.orgId,
           actorId: actor,
           quoteId: seed.quoteId,
+          allowedSubsidiaryIds: null,
           signerName: "Ada Customer",
           signerEmail: "ada@example.com",
         }),
@@ -343,6 +396,7 @@ test("over-threshold discount refuses sending until the quote is approved", DB, 
         orgId: org.orgId,
         actorId: actor,
         quoteId: seed.quoteId,
+        allowedSubsidiaryIds: null,
         signerName: "Ada Customer",
         signerEmail: "ada@example.com",
       });
@@ -359,6 +413,7 @@ test("over-threshold discount refuses sending until the quote is approved", DB, 
         orgId: org.orgId,
         actorId: actor,
         quoteId: seed.quoteId,
+        allowedSubsidiaryIds: null,
         signerName: "Ada Customer",
         signerEmail: "ada@example.com",
       }),
@@ -375,6 +430,7 @@ test("a below-floor ramp refuses sending even when the total discount is negativ
           orgId: org.orgId,
           actorId: actor,
           quoteId: seed.quoteId,
+          allowedSubsidiaryIds: null,
           signerName: "Ada Customer",
           signerEmail: "ada@example.com",
         }),
@@ -397,10 +453,11 @@ test("editing a sent quote voids the request and stale signatures refuse", DB, a
       orgId: org.orgId,
       actorId: actor,
       quoteId: seed.quoteId,
+      allowedSubsidiaryIds: null,
       signerName: "Ada Customer",
       signerEmail: "ada@example.com",
     });
-    const voided = await voidSignatureRequestsForSubject(db, org.orgId, QUOTE_SUBJECT_TABLE, seed.quoteId);
+    const voided = await voidSignatureRequestsForSubject(db, org.orgId, QUOTE_SUBJECT_TABLE, seed.quoteId, null);
     assert.equal(voided.voided, 1);
     const row = (
       await db.execute<{ status: string }>(sql`
@@ -409,14 +466,14 @@ test("editing a sent quote voids the request and stale signatures refuse", DB, a
     assert.equal(row.status, "voided");
     await assert.rejects(signQuoteSignature({ token: sent.token, name: "Ada Customer" }), /voided/);
     // Voiding twice is a no-op, never a failure.
-    const again = await voidSignatureRequestsForSubject(db, org.orgId, QUOTE_SUBJECT_TABLE, seed.quoteId);
+    const again = await voidSignatureRequestsForSubject(db, org.orgId, QUOTE_SUBJECT_TABLE, seed.quoteId, null);
     assert.equal(again.voided, 0);
   });
 });
 
 test("unsigned quotes refuse activation by name", DB, async () => {
   await withDeal(async (org, actor, seed) => {
-    await assert.rejects(activateQuote(org.orgId, actor, seed.quoteId, {}), /no signed signature/);
+    await assert.rejects(activateQuote(org.orgId, actor, seed.quoteId, { allowedSubsidiaryIds: null }), /no signed signature/);
   });
 });
 
@@ -426,6 +483,7 @@ test("the reminder scan expires lapsed links and sends one reminder each", DB, a
       orgId: org.orgId,
       actorId: actor,
       quoteId: seed.quoteId,
+      allowedSubsidiaryIds: null,
       signerName: "Ada Customer",
       signerEmail: "ada@example.com",
     });
@@ -450,6 +508,7 @@ test("the reminder scan expires lapsed links and sends one reminder each", DB, a
       orgId: org.orgId,
       actorId: actor,
       quoteId: lapsedQuoteId,
+      allowedSubsidiaryIds: null,
       signerName: "Bo Customer",
       signerEmail: "bo@example.com",
     });
@@ -534,6 +593,7 @@ test("signing and declining refuse while quote-to-cash is off", DB, async () => 
       orgId: org.orgId,
       actorId: actor,
       quoteId: seed.quoteId,
+      allowedSubsidiaryIds: null,
       signerName: "Ada Customer",
       signerEmail: "ada@example.com",
     });

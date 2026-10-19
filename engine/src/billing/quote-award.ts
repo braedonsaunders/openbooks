@@ -237,7 +237,12 @@ async function priorAward(
  * Why this quote cannot be awarded now, or null. A signed quote must still
  * match what the customer signed; a quote changed since refuses.
  */
-async function awardBlock(runner: SqlExecutor, orgId: string, quote: QuoteRow): Promise<string | null> {
+async function awardBlock(
+  runner: SqlExecutor,
+  orgId: string,
+  quote: QuoteRow,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<string | null> {
   if (quote.status === "draft") return `Quote ${quote.document_number} is a draft — issue it before awarding it`;
   if (quote.status === "pending_approval") return `Quote ${quote.document_number} is awaiting approval — approve it in Flows before awarding it`;
   if (quote.status === "voided") return `Quote ${quote.document_number} is voided and cannot be awarded — issue a new quote for the work`;
@@ -245,7 +250,7 @@ async function awardBlock(runner: SqlExecutor, orgId: string, quote: QuoteRow): 
   if (!quote.party_id) return `Quote ${quote.document_number} names no customer — a project is awarded to the quote's customer`;
   const signature = await latestSignatureRequest(runner, orgId, QUOTE_SUBJECT_TABLE, quote.id);
   if (signature && signature.status === "signed") {
-    const current = await quotePresentationHash(runner, orgId, quote.id);
+    const current = await quotePresentationHash(runner, orgId, quote.id, allowedSubsidiaryIds);
     if (current !== signature.documentHash) {
       return "The quote changed after the customer signed it — void the signature request, re-send it, and award the quote once it is signed again";
     }
@@ -352,7 +357,7 @@ export async function previewQuoteAward(
       ? "Projects and Orders must both be on — turn them on in Company Settings → Features"
       : prior
         ? null
-        : await awardBlock(runner, ctx.orgId, quote);
+        : await awardBlock(runner, ctx.orgId, quote, ctx.allowedSubsidiaryIds);
     const lines = await loadQuoteLines(runner, ctx.orgId, quote);
     const types = await projectTypeOptions(runner, ctx.orgId);
     const typeId = await defaultProjectTypeId(runner, ctx.orgId, quote.billing_method);
@@ -442,7 +447,7 @@ export async function awardQuoteInTransaction(
   if (prior) {
     return { projectId: prior.projectId, projectName: prior.projectName, created: false, baselineId: prior.baselineId, taskCount: 0 };
   }
-  const blocked = await awardBlock(runner, ctx.orgId, quote);
+  const blocked = await awardBlock(runner, ctx.orgId, quote, ctx.allowedSubsidiaryIds);
   if (blocked) throw new QuoteAwardError(blocked);
   if (input.productionQuantities && !(await lockAndCheckOrgFeature(runner, ctx.orgId, "projectProgress"))) {
     throw new QuoteAwardError(

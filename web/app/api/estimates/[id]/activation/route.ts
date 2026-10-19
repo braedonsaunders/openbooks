@@ -28,7 +28,7 @@ export const GET = defineRoute({
   params,
   handler: async ({ authz, params }) => {
     try {
-      return NextResponse.json(await quoteCashPreview(authz.user.orgId, params.id));
+      return NextResponse.json(await quoteCashPreview(authz.user.orgId, params.id, authz.allowedSubsidiaryIds));
     } catch (e) {
       return apiErrorResponse(e);
     }
@@ -45,6 +45,7 @@ export const POST = defineRoute({
       return NextResponse.json(
         await activateQuote(authz.user.orgId, authz.user.id, params.id, {
           startOn: body.startOn,
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
         }),
       );
     } catch (e) {

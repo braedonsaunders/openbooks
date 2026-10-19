@@ -102,7 +102,7 @@ export async function installFeatureWorkflows(c: DemoContext): Promise<void> {
     const quote = (await db.execute<{ id: string; lineId: string }>(sql`select d.id,l.id as "lineId" from documents d join document_lines l on l.org_id=d.org_id and l.document_id=d.id and l.line_number=1 where d.org_id=${c.orgId} and d.external_source='industry_demo' and d.external_ref=${`operations-quote-${n}`}`)).rows[0];
     if (!quote) throw new SampleCompanyError("The subscription quote is missing; prepare native operating documents before configuring terms.");
     if ((await db.execute(sql`select id from quote_subscription_terms where org_id=${c.orgId} and quote_id=${quote.id}`)).rows.length) continue;
-    await saveQuoteTerm(c.orgId, c.actorId, quote.id, { quoteLineId: quote.lineId, planId: id("subscription_plans", "operations-plan"), termMonths: 12, startRule: "first_of_next_month", billingTiming: "advance", steps: [{ startsAfterMonths: 0, unitPrice: "2400.00", quantity: "1.00" }] });
+    await saveQuoteTerm(c.orgId, c.actorId, quote.id, { quoteLineId: quote.lineId, planId: id("subscription_plans", "operations-plan"), termMonths: 12, startRule: "first_of_next_month", billingTiming: "advance", steps: [{ startsAfterMonths: 0, unitPrice: "2400.00", quantity: "1.00" }] }, null);
   }
   if (f.fieldTickets) for (let n = 1; n <= 3; n++) {
     const fieldTicketId = id("documents", `operating-detail-${n}`);

@@ -645,7 +645,7 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
       || body.extraDims !== undefined
     if (cfg.kind === 'quote' && contentChanged) {
       await services.signing.voidSignatureRequestsForSubject(
-        tx as unknown as SqlExecutor, user.orgId, services.signing.QUOTE_SUBJECT_TABLE, id,
+        tx as unknown as SqlExecutor, user.orgId, services.signing.QUOTE_SUBJECT_TABLE, id, gate.allowedSubsidiaryIds,
       )
     }
     return 'saved' as const
