@@ -4,6 +4,7 @@ import { neg } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { addLayerAtCost } from "../inventory/cost-layers.ts";
+import { createReceiptInspection } from "../inventory/inspections.ts";
 import { InventoryError, type Runner } from "../inventory/contracts.ts";
 import type { JournalLineInput } from "../inventory/journal.ts";
 import { inventoryPeriodClosure, lockInventoryPosition, periodForDate, subsidiaryCurrency } from "../inventory/position.ts";
@@ -524,6 +525,7 @@ async function redateCompletionEntry(
          returning id`);
       if (serial.rows.length !== 1) throw new InventoryError("Serial " + (row.serial_number ?? "evidence") + " changed before the completion date correction.");
     }
+    await createReceiptInspection(tx, orgId, actorId, newMovementId);
     movementIds.push(newMovementId);
   }
 
