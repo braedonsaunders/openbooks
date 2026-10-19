@@ -146,6 +146,7 @@ async function loadAssetPayload(assetId: string, orgId: string, locale: string):
     select distinct je.id, je.origin, je.posting_date::text, ${periodDisplayLabelSql(locale, "p")} as period_name
       from journal_entries je
       join journal_lines jl on jl.org_id = je.org_id and jl.entry_id = je.id
+      join accounting_books ab on ab.org_id = je.org_id and ab.id = je.book_id and ab.is_primary
       left join accounting_periods p on p.org_id = je.org_id and p.id = je.period_id
      where je.org_id = ${orgId}
        and jl.contributor_kind = 'contract_cost_asset'
@@ -167,7 +168,12 @@ async function loadAssetPayload(assetId: string, orgId: string, locale: string):
       amortEndOn: row.amort_end_on,
       method: row.method,
       status: row.status,
-      carrying: minorUnitsToCanonical(await assetCarryingMinor(db, orgId, assetId), exponent),
+      carrying: minorUnitsToCanonical(
+        row.contract_id === null && row.capitalize_entry_id === null
+          ? BigInt(row.amount_minor)
+          : await assetCarryingMinor(db, orgId, assetId),
+        exponent,
+      ),
       capitalizeEntryId: row.capitalize_entry_id,
     },
     schedule: schedule.map((line) => ({
@@ -227,13 +233,14 @@ export async function loadContractCosts(
   const baseCurrency = org.base_currency;
   const exponent = await currencyExponent(db, baseCurrency);
 
-  // The balance in minor units, summed in SQL: every tagged asset leg posts
-  // in the organization base currency (the engine refuses the rest), so one
-  // exponent converts the whole carrying amount with no float anywhere.
+  // The balance includes posted and reversed history so reversals offset
+  // their original entries, and reads only the primary book. Scale with
+  // numeric power to preserve exact minor units without float exponentiation.
   const balance = (await db.execute<{ carrying: string }>(sql`
-    select coalesce(sum((jl.amount * (10 ^ cur.minor_units))::bigint), 0)::text as carrying
+    select coalesce(round(sum(jl.amount * power(10::numeric, cur.minor_units))), 0)::text as carrying
       from journal_lines jl
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
+      join accounting_books ab on ab.org_id = je.org_id and ab.id = je.book_id and ab.is_primary
       join currencies cur on cur.code = jl.currency
      where jl.org_id = ${orgId}
        and jl.contributor_kind = 'contract_cost_asset'

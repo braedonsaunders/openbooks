@@ -15,6 +15,7 @@ import { daysInCivilMonth } from "../platform/civil-date.ts";
 import {
   assetCarryingMinor,
   capitalizeContractCost,
+  contractCostAttentionItems,
   projectAmortizationSchedule,
   recognizeContractCostImpairment,
   runContractCostAmortization,
@@ -132,6 +133,98 @@ async function entryBalance(entryId: string): Promise<{ lines: number; balanced:
        and je.status in ('posted', 'reversed')`)).rows[0]!;
   return { lines: Number(rows.lines), balanced: rows.balanced };
 }
+
+test(
+  "contract cost carrying uses the primary book and unlinked assets retain their source amount",
+  { skip: !DB },
+  async () => {
+    const world = await setupCostWorld();
+    try {
+      const unlinked = await capitalizeContractCost({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        repPartyId: world.repPartyId,
+        customerPartyId: world.org.customerId,
+        costType: "commission",
+        amountMinor: 120000n,
+        currency: "CAD",
+        capitalizedOn: "2026-07-15",
+        originalExpenseAccountId: world.commissionExpenseAccountId,
+        source: { kind: "manual" },
+      });
+      assert.equal(unlinked.capitalizeEntryId, null);
+      const attention = await contractCostAttentionItems(db, world.org.orgId);
+      assert.equal(
+        attention.find((item) => item.assetId === unlinked.assetId)?.carryingMinor,
+        "120000",
+      );
+
+      const contractId = await seedContract(world, {
+        number: "C-PRIMARY-BOOK",
+        startsOn: "2026-07-01",
+        endsOn: "2026-09-30",
+      });
+      const capitalized = await capitalizeContractCost({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        revenueContractId: contractId,
+        repPartyId: world.repPartyId,
+        customerPartyId: world.org.customerId,
+        costType: "commission",
+        amountMinor: 100000n,
+        currency: "CAD",
+        capitalizedOn: "2026-07-15",
+        originalExpenseAccountId: world.commissionExpenseAccountId,
+        source: { kind: "manual" },
+      });
+      assert.ok(capitalized.capitalizeEntryId);
+      const primaryCarrying = await assetCarryingMinor(db, world.org.orgId, capitalized.assetId);
+      assert.equal(primaryCarrying, 100000n);
+
+      const secondaryBookId = (await db.execute<{ id: string }>(sql`
+        insert into accounting_books
+          (org_id, code, name, is_primary, is_active, posts_gl, created_by, updated_by)
+        values (${world.org.orgId}, 'CC-SECONDARY', 'Contract cost secondary', false, true, true,
+          ${world.actors.adminId}, ${world.actors.adminId})
+        returning id`)).rows[0]?.id;
+      assert.ok(secondaryBookId);
+      const secondaryEntryId = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
+           memo, origin, custom, created_by, updated_by)
+        select ${secondaryEntryId}, org_id, ${secondaryBookId}, subsidiary_id,
+               ${`CC-SECONDARY-${secondaryEntryId}`}, posting_date, period_id,
+               memo, origin,
+               (custom - 'idempotencyKey') || jsonb_build_object(
+                 'idempotencyKey', ${`contract-cost:secondary-book:${secondaryEntryId}`}::text
+               )::jsonb,
+               created_by, updated_by
+          from journal_entries
+         where org_id = ${world.org.orgId} and id = ${capitalized.capitalizeEntryId}`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+           currency, txn_amount, contributor_kind, contributor_ref)
+        select org_id, ${secondaryEntryId}, line_number, account_id, subsidiary_id,
+               amount, currency, txn_amount, contributor_kind, contributor_ref
+          from journal_lines
+         where org_id = ${world.org.orgId} and entry_id = ${capitalized.capitalizeEntryId}`);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now(), posted_by = ${world.managerId}
+         where org_id = ${world.org.orgId} and id = ${secondaryEntryId}`);
+
+      assert.equal(
+        await assetCarryingMinor(db, world.org.orgId, capitalized.assetId),
+        primaryCarrying,
+        "a replica in a secondary book does not change primary carrying value",
+      );
+    } finally {
+      await dropScratchOrgReporting(world.org.orgId);
+    }
+  },
+);
 
 test(
   "straight-line capitalization amortizes to the exact minor-unit total",

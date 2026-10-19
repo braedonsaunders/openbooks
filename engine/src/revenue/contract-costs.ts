@@ -29,7 +29,7 @@
  */
 import { sql } from "drizzle-orm";
 import { postEntry } from "../journal/post-entry.ts";
-import { fromUnits, roundDiv, toCents, toUnits } from "../money/money.ts";
+import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import {
   acquireOrgFeatureGateLock,
@@ -363,8 +363,8 @@ async function orgBaseCurrency(runner: SqlExecutor, orgId: string): Promise<stri
 }
 
 /**
- * The asset's carrying amount, read from the general ledger itself: the
- * signed sum of its tagged asset legs over live entries. Posted entries
+ * The asset's carrying amount, read from the primary general ledger: the
+ * signed sum of its tagged asset legs in ISO minor units. Posted entries
  * count alongside their reversals, so a reversed posting never inflates
  * the balance.
  */
@@ -373,16 +373,24 @@ export async function assetCarryingMinor(
   orgId: string,
   assetId: string,
 ): Promise<bigint> {
+  const asset = (await runner.execute<{ currency: string }>(sql`
+    select currency from contract_cost_assets
+     where org_id = ${orgId} and id = ${assetId}`)).rows[0];
+  if (!asset) return 0n;
+  const exponent = await currencyExponent(runner, asset.currency);
   const row = (await runner.execute<{ carrying: string }>(sql`
-    select coalesce(sum(jl.amount), 0)::text as carrying
+    select coalesce(round(sum(jl.amount) * power(10::numeric, ${exponent})), 0)::text as carrying
       from journal_lines jl
       join journal_entries je
         on je.org_id = jl.org_id and je.id = jl.entry_id
+      join accounting_books ab
+        on ab.org_id = je.org_id and ab.id = je.book_id and ab.is_primary
      where jl.org_id = ${orgId}
        and jl.contributor_kind = 'contract_cost_asset'
        and jl.contributor_ref = ${assetId}
+       and jl.currency = ${asset.currency}
        and je.status in ('posted', 'reversed')`)).rows[0];
-  return toCents(row?.carrying ?? "0");
+  return BigInt(row?.carrying ?? "0");
 }
 
 async function writeAudit(
@@ -1539,11 +1547,14 @@ export async function contractCostAttentionItems(
   const rows = (await runner.execute<{
     id: string;
     revenue_contract_id: string | null;
+    amount_minor: string;
+    capitalize_entry_id: string | null;
     contract_number: string | null;
     contract_status: string | null;
     capitalized_on: string;
   }>(sql`
-    select asset.id, asset.revenue_contract_id,
+    select asset.id, asset.revenue_contract_id, asset.amount_minor::text,
+           asset.capitalize_entry_id,
            contract.contract_number, contract.status as contract_status,
            asset.capitalized_on::text
       from contract_cost_assets asset
@@ -1553,11 +1564,14 @@ export async function contractCostAttentionItems(
   const out: AttentionItem[] = [];
   for (const row of rows) {
     if (!row.revenue_contract_id) {
+      const carrying = !row.capitalize_entry_id
+        ? BigInt(row.amount_minor)
+        : await assetCarryingMinor(runner, orgId, row.id);
       out.push({
         assetId: row.id,
         kind: "unlinked",
         contractNumber: null,
-        carryingMinor: (await assetCarryingMinor(runner, orgId, row.id)).toString(),
+        carryingMinor: carrying.toString(),
         capitalizedOn: row.capitalized_on,
       });
     } else if (row.contract_status === "cancelled") {
