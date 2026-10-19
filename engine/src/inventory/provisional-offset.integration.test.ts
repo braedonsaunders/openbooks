@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgContext } from "../platform/db.ts";
 import { issueInventory } from "./movement-issue.ts";
 import { receiveInventory } from "./movement-receive.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, grantScratchPermissions, seedFlowActors } from "../testing/fixtures.ts";
 import { attributeDeficitAccount, listUnattributedDeficits } from "./provisional-attribution.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -68,6 +68,7 @@ test("a receipt refuses to settle a shortfall whose charged account was never re
     // reason; the receipt then corrects the provisional cost on it. A
     // recorded account is never replaced.
     const { adminId } = await seedFlowActors(org.orgId);
+    await withOrgContext(org.orgId, () => grantScratchPermissions(org.orgId, adminId, ["gl.post"]));
     const otherSubsidiaryId = await createSecondSubsidiary(org);
     const [shortfall] = await listUnattributedDeficits(org.orgId, org.items.fifo);
     assert.ok(shortfall);
