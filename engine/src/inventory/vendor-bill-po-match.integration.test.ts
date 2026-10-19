@@ -36,7 +36,7 @@ test("a hand-coded bill for received stock auto-matches on post and refuses dupl
       const userId = await createScratchUser(org.orgId, "AP Clerk", "admin");
       await db.execute(sql\`
         update item_inventory_profiles set unit_conversions = '{"lb": 1}'::jsonb
-         where org_id = \${org.orgId} and item_id in (\${org.items.fifo}, \${org.items.movingAvg})
+         where org_id = \${org.orgId} and item_id in (\${org.items.fifo}, \${org.items.movingAvg}, \${org.items.standard})
       \`);
       // Two lines cannot claim the same received quantity twice in one
       // Match action, even though the order line still has ordered quantity.
@@ -47,7 +47,7 @@ test("a hand-coded bill for received stock auto-matches on post and refuses dupl
           (id, org_id, document_id, line_number, item_id, account_id, description, quantity, unit,
            unit_price, amount, tax_amount, quantity_fulfilled, quantity_billed, stock_location_id, custom)
         values
-          (\${partialSource}, \${org.orgId}, \${partialOrder.id}, 1, \${org.items.fifo}, \${org.accounts.invAsset},
+          (\${partialSource}, \${org.orgId}, \${partialOrder.id}, 1, \${org.items.standard}, \${org.accounts.invAsset},
            'Partially received grain', '20', 'lb', '6', '120', '0', '0', '0', \${org.stockLocationId}, '{}'::jsonb)
       \`);
       await db.execute(sql\`
@@ -75,9 +75,9 @@ test("a hand-coded bill for received stock auto-matches on post and refuses dupl
           (id, org_id, document_id, line_number, item_id, account_id, description, quantity, unit,
            unit_price, amount, tax_amount, stock_location_id, custom)
         values
-          (\${partialBillLineA}, \${org.orgId}, \${partialBillId}, 1, \${org.items.fifo}, \${org.accounts.clearing},
+          (\${partialBillLineA}, \${org.orgId}, \${partialBillId}, 1, \${org.items.standard}, \${org.accounts.clearing},
            'Partially received grain A', '10', 'lb', '6', '60', '0', \${org.stockLocationId}, '{}'::jsonb),
-          (\${partialBillLineB}, \${org.orgId}, \${partialBillId}, 2, \${org.items.fifo}, \${org.accounts.clearing},
+          (\${partialBillLineB}, \${org.orgId}, \${partialBillId}, 2, \${org.items.standard}, \${org.accounts.clearing},
            'Partially received grain B', '10', 'lb', '6', '60', '0', \${org.stockLocationId}, '{}'::jsonb)
       \`);
       const { matchVendorBillLines } = await import("./engine/src/payables/vendor-bill-matching.ts");
