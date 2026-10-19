@@ -52,8 +52,8 @@ const hooks = registerHooks({
   },
 })
 
-const createUrl = './route.ts?family-routes-test'
-const generateUrl = './[id]/generate/route.ts?family-routes-test'
+const createUrl = './route.ts'
+const generateUrl = './[id]/generate/route.ts'
 const { GET: listFamilies } = (await import(createUrl)) as typeof import('./route.ts')
 const { POST: createFamily } = (await import(createUrl)) as typeof import('./route.ts')
 const { POST: generateVariants } = (await import(generateUrl)) as typeof import('./[id]/generate/route.ts')
