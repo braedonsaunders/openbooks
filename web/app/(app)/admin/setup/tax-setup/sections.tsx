@@ -2,18 +2,14 @@ import 'server-only'
 
 import Link from 'next/link'
 import { ArrowRight, BadgeCheck, MapPin } from 'lucide-react'
-import { Button, Card, CardContent } from '@openbooks/ui'
+import { Button, Card, CardContent, PageHeader } from '@openbooks/ui'
 import type { SupportedCountry } from '@openbooks/engine/tax/pack-provisioning'
 import { AuthorityConnectionsClient, type AuthorityConnectionView } from './AuthorityConnectionsClient'
 import { TaxSetupGuide } from '../../../../../components/viewspec/native-widgets.client'
 
 /**
- * Shared chrome for the tax-setup workspace, plus the guide slot.
- *
- * The page owns a plain `<header>` (h1 + subtitle) rather than the
- * `PageHeader` component, so the whole header is one shared component over
- * loader-resolved strings. The widget registry renders it, so one implementation
- * paths share one implementation.
+ * Shared PageHeader chrome for the tax-setup workspace, plus the guide slot.
+ * The widget registry renders the header and guide from loader-resolved data.
  *
  * The guide body is a client component (search filtering, checkbox/select
  * state, expand/collapse, and the provision fetch flow are useState a spec
@@ -52,12 +48,7 @@ export interface TaxSetupGuideProps {
 }
 
 export function TaxSetupHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <header>
-      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
-      <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>
-    </header>
-  )
+  return <PageHeader title={title} description={subtitle} />
 }
 
 export function TaxSetupGuideSlot({ guide }: { guide: TaxSetupGuideProps }) {

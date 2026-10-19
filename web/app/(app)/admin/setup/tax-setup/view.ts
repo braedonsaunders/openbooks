@@ -86,10 +86,8 @@ export async function loadTaxSetup(
 
 /**
  * The page owns its narrow centered column; the setup workspace shell sits
- * outside it. The header (h1 + subtitle) is loader-resolved strings the bare
- * `page-header` block cannot express with identical classes (the native h1
- * carries `text-xl font-semibold …`, not the PageHeader component), so both
- * live in the shared `tax-setup-header` chrome with the guide slot.
+ * outside it. The header and guide use shared components fed with
+ * loader-resolved strings and data.
  */
 export function taxSetupSpec(data: TaxSetupData): PageSpec {
   return page({
