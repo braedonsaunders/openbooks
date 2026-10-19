@@ -251,7 +251,7 @@ test("overhead postings keep subsidiary and accounting-period groups intact", { 
       values(${f.orgId},2026,8,'2026-08','2026-08-01','2026-08-31',false,${calendarId})`);
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom,is_internal)
       values(${childProjectId},${f.orgId},${childSubsidiaryId},'OVH-CHILD','Overhead child project',${f.customerId},'active',true,'{}'::jsonb,false),
-            (${internalProjectId},${f.orgId},${f.rootSubsidiaryId},'OVH-INTERNAL','Internal overhead project',${f.customerId},'active',true,'{}'::jsonb,true)`);
+            (${internalProjectId},${f.orgId},${f.rootSubsidiaryId},'OVH-INTERNAL','Internal overhead project',null,'active',true,'{}'::jsonb,true)`);
     const specs = [
       { id: childEntries[0]!, projectId: f.rootProjectId, workedOn: "2026-07-20" },
       { id: childEntries[1]!, projectId: f.rootProjectId, workedOn: "2026-08-03" },
