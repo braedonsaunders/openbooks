@@ -197,8 +197,8 @@ test("taxed amendments rebuild tax evidence and enforce the exact cancelled quan
       set quantity = '100', quantity_fulfilled = '40', quantity_cancelled = '30', unit_price = '10',
           amount = ${tax.netAmount}, tax_code_id = ${taxCodeId}, tax_input_amount = ${tax.inputAmount}, tax_amount = ${tax.taxTotal}
       where id = ${lineId} and org_id = ${org.orgId}`);
-    await db.execute(sql`update documents set status = 'approved' where id = ${orderId} and org_id = ${org.orgId}`);
     await persistLineTaxComponents(org.orgId, lineId, tax.components, actors.submitterId);
+    await db.execute(sql`update documents set status = 'approved' where id = ${orderId} and org_id = ${org.orgId}`);
 
     await assert.rejects(
       amendPurchaseOrder({
