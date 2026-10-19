@@ -7,6 +7,7 @@ import { createScratchOrg, dropScratchOrg, grantScratchPermissions, seedFlowActo
 import { sum, toUnits, fromUnits, neg } from "../money/money.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { AssetRefusal } from "./asset-refusal.ts";
+import { postCapitalizationEntry } from "./capitalization-journal.ts";
 import {
   acceptAssetProposals,
   generateAssetProposalsForEntries,
@@ -180,6 +181,7 @@ test(
       const status = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
         select status from asset_proposals where org_id = ${org.orgId} and id = ${proposalId}`))).rows[0]!.status;
       assert.equal(status, "pending", "the proposal returns to the queue");
+      await refusedWith("acceptance_reversed", () => acceptAssetProposals(org.orgId, request, { actorId: actors.adminId }));
       const again = await reverseAssetProposalAcceptance(org.orgId, { acceptanceId: accepted.acceptanceId, date: org.date, reason: "repeat", actorId: actors.adminId });
       assert.equal(again.replayed, true, "reversing twice changes nothing");
     } finally {
@@ -187,6 +189,88 @@ test(
     }
   },
 );
+
+test("capitalization uses the subsidiary period and honors the assets close fence", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const calendarId = randomUUID();
+    const periodId = randomUUID();
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`insert into fiscal_calendars (id,org_id,name,is_active,is_default)
+        values (${calendarId},${org.orgId},'Entity asset calendar',true,false)`);
+      await db.execute(sql`insert into accounting_periods
+        (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on)
+        select ${periodId},org_id,${calendarId},fiscal_year,period_number,'Entity July',starts_on,ends_on
+          from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`);
+      await db.execute(sql`insert into subsidiary_accounting_preferences
+        (org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason)
+        values (${org.orgId},${org.subsidiaryId},'2026-07-01',${calendarId},'Use the entity asset calendar')`);
+      await db.execute(sql`insert into period_locks
+        (org_id,period_id,book_id,subsidiary_id,module,state,reason)
+        values (${org.orgId},${periodId},${org.bookId},${org.subsidiaryId},'assets','closed','Asset period close')`);
+    });
+
+    await assert.rejects(
+      withOrgContext(org.orgId, () => postCapitalizationEntry(db, {
+        orgId: org.orgId,
+        actorId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        entryNumber: `CAP-CLOSED-${randomUUID()}`,
+        memo: "Test the entity close fence",
+        idempotencyKey: `cap-closed:${randomUUID()}`,
+        lines: [
+          { accountId: org.accounts.invAsset, amount: "10", memo: "Capitalize" },
+          { accountId: org.accounts.clearing, amount: "-10", memo: "Reclassify" },
+        ],
+      })),
+      (error: unknown) => error instanceof AssetRefusal && error.code === "period_closed",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("capitalization result excludes appended department-balancing legs", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const departments = [randomUUID(), randomUUID()];
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`insert into departments (id,org_id,name)
+        values (${departments[0]},${org.orgId},'Operations'),(${departments[1]},${org.orgId},'Sales')`);
+      await db.execute(sql`insert into segment_definitions
+        (org_id,key,name,plural_name,source_kind,storage_column,is_balancing)
+        values (${org.orgId},'department','Department','Departments','builtin','department_id',true)
+        on conflict (org_id,key) do update set is_balancing=true`);
+      await db.execute(sql`insert into segment_balancing_policies
+        (org_id,segment_key,effective_from,clearing_account_id,reason)
+        values (${org.orgId},'department','2026-01-01',${org.accounts.clearing},'Balance asset reclasses by department')`);
+    });
+
+    const posted = await withOrgContext(org.orgId, () => postCapitalizationEntry(db, {
+      orgId: org.orgId,
+      actorId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      entryNumber: `CAP-SEGMENT-${randomUUID()}`,
+      memo: "Balance capitalization by department",
+      idempotencyKey: `cap-segment:${randomUUID()}`,
+      lines: [
+        { accountId: org.accounts.invAsset, amount: "10", memo: "Capitalize", departmentId: departments[0] },
+        { accountId: org.accounts.clearing, amount: "-10", memo: "Reclassify", departmentId: departments[1] },
+      ],
+    }));
+    assert.ok(posted);
+    assert.equal(posted.lines.length, 2, "the result contains the two requested lines only");
+    const lineCount = (await withOrgContext(org.orgId, () => db.execute<{ count: number }>(sql`
+      select count(*)::int as count from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId}`))).rows[0]!.count;
+    assert.equal(lineCount, 4, "the kernel also posts one balancing leg for each department");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "merge, reject with reason, restore, and void of a pending proposal when its source is reversed",

@@ -256,7 +256,6 @@ export async function applyAssetReversal(
           orgId,
           actorId,
           bookId: entry.book_id,
-          periodId: entry.period_id,
           date: input.effectiveOn,
           number: `AST-REV-${changeId}-${entry.id}`,
           memo: `Reversal: ${input.reason}`,

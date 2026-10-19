@@ -107,6 +107,9 @@ test('a transfer balances each entity, replays once, and reverses through the na
   const after = await counts(f.org.orgId);
   await reverseIntercompanyFundTransfer(f.org.orgId, f.actorId, posted.id, { reversalDate: f.org.date, reason: 'Return operating funds' }, null);
   assert.deepEqual(await counts(f.org.orgId), after);
+  await assert.rejects(postIntercompanyFundTransfer(f.org.orgId, f.actorId, null, f.transfer),
+    error => error instanceof IntercompanyError && error.status === 409);
+  assert.deepEqual(await counts(f.org.orgId), after, 'a reversed transfer key cannot return a live transfer or post again');
 }));
 
 test('a transfer key refuses changed currency, memo or reason without another posting', { skip: !DB }, async () => scenario(async f => {

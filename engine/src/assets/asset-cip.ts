@@ -336,12 +336,19 @@ export async function capitalizeCip(
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"asset-cip-capitalization:" + orgId + ":" + input.idempotencyKey}, 0))`);
     const cip = await lockCip(tx, orgId, input.cipAssetId, options.allowedSubsidiaryIds);
     await assertAssetAccess(tx, { orgId, actorId: options.actorId, permission: "assets.capitalize", feature: "constructionInProgress", subsidiaryIds: [cip.subsidiary_id] });
-    const prior = (await tx.execute<{ id: string; request_hash: string; entry_id: string; capitalized_amount: string; expensed_amount: string }>(sql`
-      select id, request_hash, entry_id, capitalized_amount::text as capitalized_amount, expensed_amount::text as expensed_amount
+    const prior = (await tx.execute<{ id: string; request_hash: string; entry_id: string; capitalized_amount: string; expensed_amount: string; status: string }>(sql`
+      select id, request_hash, entry_id, capitalized_amount::text as capitalized_amount,
+             expensed_amount::text as expensed_amount, status
         from asset_cip_capitalizations where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];
     if (prior) {
       if (prior.request_hash !== hash) {
         refuse("idempotency_conflict", "this request key was already used for a different capitalization", { status: 409, remedy: "Reopen the record to start a fresh capitalization." });
+      }
+      if (prior.status === "reversed") {
+        refuse("capitalization_reversed", "this capitalization has already been reversed", {
+          status: 409,
+          remedy: "Use a new request key to capitalize the reopened construction balance.",
+        });
       }
       const assets = (await tx.execute<{ asset_id: string | null; asset_number: string; amount: string }>(sql`
         select asset_id, asset_number, amount::text as amount from asset_cip_capitalization_lines

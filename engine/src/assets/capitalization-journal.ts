@@ -6,6 +6,7 @@ import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRe
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { assertAssetPeriodOpen, AssetLifecycleError } from "./asset-lifecycle.ts";
 import { refuse } from "./asset-refusal.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 
 /**
  * Reclassification journals for capitalization: moving a purchase from the
@@ -46,13 +47,8 @@ async function openPeriodFor(
   args: { orgId: string; bookId: string; subsidiaryId: string; date: string },
 ): Promise<string> {
   if (!isIsoCalendarDate(args.date)) refuse("date_invalid", "the posting date must be a calendar date (YYYY-MM-DD)");
-  const periods = (await tx.execute<{ id: string }>(sql`
-    select p.id from accounting_periods p
-      join fiscal_calendars c on c.org_id = p.org_id and c.id = p.fiscal_calendar_id
-     where p.org_id = ${args.orgId} and c.is_active and c.is_default and not p.is_adjustment
-       and p.starts_on <= ${args.date} and p.ends_on >= ${args.date}
-     for share of p, c`)).rows;
-  if (periods.length !== 1) {
+  const period = await resolveCoveringPeriod(tx, args.orgId, args.date, args.subsidiaryId);
+  if (!period) {
     refuse("period_missing", `no single accounting period covers ${args.date}`, {
       remedy: "Create the accounting period in Setup → Fiscal calendars, or choose a date inside an existing period.",
     });
@@ -60,7 +56,7 @@ async function openPeriodFor(
   try {
     await assertAssetPeriodOpen(tx, {
       orgId: args.orgId,
-      periodId: periods[0]!.id,
+      periodId: period.id,
       bookId: args.bookId,
       subsidiaryIds: [args.subsidiaryId],
     });
@@ -73,7 +69,7 @@ async function openPeriodFor(
     }
     throw error;
   }
-  return periods[0]!.id;
+  return period.id;
 }
 
 async function assertPostableAccounts(
@@ -153,6 +149,7 @@ export async function postCapitalizationEntry(
     actorId: args.actorId,
     currency,
     idempotencyKey: args.idempotencyKey,
+    closeModules: ["assets"],
     lines: lines.map((line, index) => ({
       accountId: line.accountId,
       amount: add(line.amount, "0"),
@@ -165,7 +162,7 @@ export async function postCapitalizationEntry(
   });
   return {
     entryId: posted.entryId,
-    lines: posted.lines.map((line) => ({
+    lines: posted.lines.slice(0, lines.length).map((line) => ({
       id: line.id,
       lineNumber: line.lineNumber,
       accountId: lines[line.lineNumber - 1]!.accountId,

@@ -1091,7 +1091,6 @@ export async function applyAssetChange(
           orgId,
           actorId,
           bookId: preview.bookId,
-          calendarId: preview.calendarId,
           date: input.effectiveOn,
           asset: state.asset,
           currency: state.seller.base_currency,
