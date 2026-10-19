@@ -1,14 +1,15 @@
 import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { z } from 'zod'
 import { submitFundRelease, voidFundRelease } from '@openbooks/engine/nonprofit/releases'
 
 export const runtime = 'nodejs'
 
 const postingBody = z.discriminatedUnion('action', [
-  z.strictObject({ action: z.literal('submit'), releaseId: z.string().uuid() }),
-  z.strictObject({ action: z.literal('void'), releaseId: z.string().uuid(), voidDate: z.string(), reason: z.string() }),
+  z.strictObject({ action: z.literal('submit'), releaseId: uuidString() }),
+  z.strictObject({ action: z.literal('void'), releaseId: uuidString(), voidDate: z.string(), reason: z.string() }),
 ])
 
 export const POST = defineRoute({
