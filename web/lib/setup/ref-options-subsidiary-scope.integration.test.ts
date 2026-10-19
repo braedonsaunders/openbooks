@@ -54,8 +54,10 @@ test('subsidiary-scoped reference pickers hide accounts and records owned by oth
     const amortization = SETUP_ENTITY_BY_KEY.get('expense-amortization-templates')
     assert.ok(amortization)
     const refs = await withBypass(() => loadRefOptions(amortization, org.orgId, scope))
-    assert.ok(refs.accounts.some((option) => option.value === accountA))
-    assert.ok(!refs.accounts.some((option) => option.value === accountB), 'setup ref loading carries the same subsidiary scope')
+    const accountOptions = refs.accounts
+    assert.ok(accountOptions, 'amortization templates expose account references')
+    assert.ok(accountOptions.some((option) => option.value === accountA))
+    assert.ok(!accountOptions.some((option) => option.value === accountB), 'setup ref loading carries the same subsidiary scope')
 
     const customers = await withBypass(() => loadEntityOptions('customers', org.orgId, scope))
     assert.ok(customers.some((option) => option.value === customerA))

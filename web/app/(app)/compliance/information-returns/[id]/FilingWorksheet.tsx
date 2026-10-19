@@ -57,19 +57,21 @@ export function filed(recipient: RecipientRow, box: string): string {
  * person has adjusted it, because "why does this differ from the books" is the
  * first question anyone reviewing a 1099 asks.
  */
+export type FilingWorksheetProps = {
+  filing: FilingDetail
+  boxes: FormBox[]
+  canManage: boolean
+  canFile: boolean
+  onDirtyChange?: (dirty: boolean) => void
+}
+
 export function FilingWorksheet({
   filing,
   boxes,
   canManage,
   canFile,
   onDirtyChange,
-}: {
-  filing: FilingDetail
-  boxes: FormBox[]
-  canManage: boolean
-  canFile: boolean
-  onDirtyChange?: (dirty: boolean) => void
-}) {
+}: FilingWorksheetProps) {
   const t = useTranslations('compliance')
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)

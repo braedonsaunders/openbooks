@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { WidgetRenderer } from "../../../components/viewspec/widget-props";
 
 // Switching from one open opportunity to another must not pour B's props
 // into A's stateful form: the title field (and every other useState seeded
@@ -125,25 +126,25 @@ test("every record drawer keys its element by the open record id", () => {
   // Creating the element runs the widget adapter but mounts nothing: the key
   // is what tells React to remount (rather than update) on a record switch,
   // and the mount test above proves a changed key resets the form.
-  type Renderer = (props: Record<string, unknown>) => { key: unknown };
-  const cases: [string, Renderer, Record<string, unknown>][] = [
-    ["activity-drawer", RECORDS_WIDGETS["activity-drawer"] as Renderer, { remountKey: "act-1" }],
-    ["opportunity-drawer", RECORDS_WIDGETS["opportunity-drawer"] as Renderer, { remountKey: "opp-1" }],
+  const cases: [string, WidgetRenderer, Record<string, unknown>][] = [
+    ["activity-drawer", RECORDS_WIDGETS["activity-drawer"], { remountKey: "act-1" }],
+    ["opportunity-drawer", RECORDS_WIDGETS["opportunity-drawer"], { remountKey: "opp-1" }],
     [
       "vendor-compliance-drawer",
-      (OPERATIONS_WIDGETS as Record<string, Renderer>)["vendor-compliance-drawer"]!,
+      OPERATIONS_WIDGETS["vendor-compliance-drawer"],
       { remountKey: "vendor-1" },
     ],
     [
       "lien-waiver-drawer",
-      (OPERATIONS_WIDGETS as Record<string, Renderer>)["lien-waiver-drawer"]!,
+      OPERATIONS_WIDGETS["lien-waiver-drawer"],
       { remountKey: "waiver-1" },
     ],
   ];
   for (const [name, renderer, drawer] of cases) {
     const element = renderer({ drawer });
+    if (!React.isValidElement(element)) assert.fail(`${name} must render a drawer element`);
     assert.equal(
-      element?.key,
+      element.key,
       (drawer as { remountKey: string }).remountKey,
       `${name} must key its drawer by the open record id`,
     );

@@ -1,11 +1,13 @@
 import 'server-only'
 
+import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { formDefinition } from '@openbooks/engine/compliance/information-returns'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { loadFiling, requireInformationReturnsFeature } from '../../../../../lib/compliance'
 import { isUuid } from '../../../../../lib/list-params'
+import type { FilingWorksheetProps } from './FilingWorksheet'
 
 /**
  * One information-return filing's recipient worksheet data, shared by its
@@ -21,7 +23,7 @@ import { isUuid } from '../../../../../lib/list-params'
  * which is string building — so the loader builds it. A spec has no `+`.
  */
 
-type WorksheetProps = Parameters<typeof FilingWorksheet>[0]
+type WorksheetProps = FilingWorksheetProps
 
 export interface FilingDetailData {
   title: string
@@ -56,4 +58,17 @@ export async function loadFilingDetail(id: string): Promise<FilingDetailData> {
     canManage: can(authz, 'compliance.manage'),
     canFile: can(authz, 'compliance.file'),
   }
+}
+
+export function filingDetailSpec(data: FilingDetailData): PageSpec {
+  return page({
+    route: '/compliance/information-returns/[id]',
+    layout: 'detail',
+    body: [
+      widgetBlock('information-return-filing-drawer', {
+        detail: data,
+        closeHref: data.backHref,
+      }),
+    ],
+  })
 }

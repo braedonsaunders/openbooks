@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { requirePermission, can } from '../../../../../lib/authz'
@@ -134,4 +135,16 @@ export async function loadProvisionDetail(
       taxEffect: m(d.taxEffect),
     })),
   }
+}
+
+export function provisionDetailSpec(data: ProvisionDetailData): PageSpec {
+  return page({
+    route: '/tax/provisions/[id]',
+    layout: 'detail',
+    body: [
+      widgetBlock('provision-run-drawer', {
+        drawer: { detail: data, closeHref: '/tax/provisions' },
+      }),
+    ],
+  })
 }

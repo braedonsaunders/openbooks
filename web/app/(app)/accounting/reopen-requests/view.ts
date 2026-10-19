@@ -91,7 +91,7 @@ const f = ref<ReopenRequestsData>()
 
 export function reopenRequestsSpec(data: ReopenRequestsData): PageSpec {
   return page({
-    route: BASE,
+    route: '/accounting/reopen-requests',
     layout: 'list',
     header: [
       pageHeader({ title: f('workspace.title'), description: f('workspace.description') }),

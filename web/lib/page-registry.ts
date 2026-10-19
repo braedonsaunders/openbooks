@@ -88,6 +88,42 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/accounting/changes': {
+    route: '/accounting/changes',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/accounting/changes/view')
+      return {
+        load: (input) => m.loadAccountingChanges(input.searchParams ?? {}),
+        spec: (data) => m.accountingChangesSpec(data as never),
+      }
+    },
+  },
+  '/accounting/provisions': {
+    route: '/accounting/provisions',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/accounting/provisions/view')
+      return {
+        load: (input) => m.loadProvisions(input.searchParams ?? {}),
+        spec: (data) => m.provisionsSpec(data as never),
+      }
+    },
+  },
+  '/accounting/reopen-requests': {
+    route: '/accounting/reopen-requests',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/accounting/reopen-requests/view')
+      return {
+        load: (input) => m.loadReopenRequests(input.searchParams ?? {}),
+        spec: (data) => m.reopenRequestsSpec(data as never),
+      }
+    },
+  },
   '/accounts': {
     route: '/accounts',
     segments: [],
@@ -1324,6 +1360,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/close/posting-periods': {
+    route: '/close/posting-periods',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/close/posting-periods/view')
+      return {
+        load: (input) => m.loadPostingPeriods(input.searchParams ?? {}),
+        spec: (data) => m.postingPeriodsSpec(data as never),
+      }
+    },
+  },
   '/collections': {
     route: '/collections',
     segments: [],
@@ -1351,11 +1399,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/compliance/information-returns': {
     route: '/compliance/information-returns',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/compliance/information-returns/view')
       return {
-        load: () => m.loadInformationReturns(),
+        load: (input) => m.loadInformationReturns(input.searchParams ?? {}),
         spec: (data) => m.informationReturnsSpec(data as never),
       }
     },
@@ -3367,11 +3415,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/tax/provisions': {
     route: '/tax/provisions',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/tax/provisions/view')
       return {
-        load: () => m.loadTaxProvisions(),
+        load: (input) => m.loadTaxProvisions(input.searchParams ?? {}),
         spec: (data) => m.taxProvisionsSpec(data as never),
       }
     },

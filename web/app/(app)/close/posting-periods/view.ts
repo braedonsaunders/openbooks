@@ -131,7 +131,7 @@ export function postingPeriodsSpec(data: PostingPeriodsData): PageSpec {
   }
 
   return page({
-    route: BASE,
+    route: '/close/posting-periods',
     layout: 'list',
     header: [pageHeader({
       title: f('title'),
