@@ -611,7 +611,7 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
             const previousRestriction: SubsidiaryRestriction | null = before
               ? before.subsidiary_restriction as SubsidiaryRestriction | null
               : { mode: "list", subsidiaryIds: [] };
-            const edit = await resolveRestrictionEditScopes(db, prod, previousRestriction, nextRestriction);
+            const edit = await resolveRestrictionEditScopes(db, prod, previousRestriction, nextRestriction ?? { mode: "all" });
             const outsideCoverage = edit.additions === undefined
               ? true
               : edit.additions === null
