@@ -70,6 +70,19 @@ test('independent list tabs retain their own server counts', () => {
   )
 })
 
+test('bank account lists retain separate server windows and payout tables stay loaded', () => {
+  const statements = preparedListSource('bank_account_statements')
+  const reconciliations = preparedListSource('bank_account_reconciliations')
+  assert.equal(statements.mode, 'server')
+  assert.equal(statements.basePathField, 'basePath')
+  assert.equal(statements.paging?.pageParamKey, 'stmtPage')
+  assert.equal(reconciliations.mode, 'server')
+  assert.equal(reconciliations.basePathField, 'basePath')
+  assert.equal(reconciliations.paging?.pageParamKey, 'reconPage')
+  assert.equal(preparedListSource('banking_payout_queue').mode, 'loaded')
+  assert.equal(preparedListSource('banking_payout_batches').mode, 'loaded')
+})
+
 test('registered descriptors preserve typed cells and stable row identity', () => {
   const list = registeredListTable('data_import_history', {
     rows: field('rows'),

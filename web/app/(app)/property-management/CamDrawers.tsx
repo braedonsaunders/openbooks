@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Drawer, Button, Input, Select, Textarea } from "@openbooks/ui";
+import { UrlDrawer, Button, Input, Select, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
 import { Field } from "./workspace-ui";
@@ -14,6 +14,7 @@ export function CamDrawer({
   stacked,
   initialPropertyId,
   pool,
+  closeHref,
   onClose,
   data,
   expenseAccounts,
@@ -24,6 +25,7 @@ export function CamDrawer({
   stacked?: boolean;
   initialPropertyId?: string;
   pool?: CamPool;
+  closeHref: string;
   onClose: () => void;
   data: PropertyWorkspace;
   expenseAccounts: Option[];
@@ -60,10 +62,11 @@ export function CamDrawer({
   }
   const submit = () => onSave({ ...form, fiscalYear: Number(form.fiscalYear) });
   return (
-    <Drawer
+    <UrlDrawer
       open={open}
+      openKey={pool?.id ?? "new-cam-pool"}
+      closeHref={closeHref}
       stacked={stacked}
-      onClose={onClose}
       title={pool ? "Edit CAM pool" : "New CAM pool"}
       description="CAM actuals are read from posted GL lines on the property's location and selected expense accounts."
       footer={
@@ -214,7 +217,7 @@ export function CamDrawer({
           </div>
         </Field>
       </div>
-    </Drawer>
+    </UrlDrawer>
   );
 }
 
@@ -222,6 +225,7 @@ export function CamCorrectionDrawer({
   open,
   stacked,
   pool,
+  closeHref,
   busy,
   onClose,
   onSave,
@@ -229,6 +233,7 @@ export function CamCorrectionDrawer({
   open: boolean;
   stacked?: boolean;
   pool?: CamPool;
+  closeHref: string;
   busy: boolean;
   onClose: () => void;
   onSave: (reason: string) => void | Promise<void>;
@@ -242,10 +247,11 @@ export function CamCorrectionDrawer({
     if (open) setReason("");
   }
   return (
-    <Drawer
+    <UrlDrawer
       open={open}
+      openKey={pool?.id}
+      closeHref={closeHref}
       stacked={stacked}
-      onClose={onClose}
       title="Reopen CAM for correction"
       description={`${pool?.name ?? "CAM pool"} will return to open status and its calculated allocations will be removed.`}
       footer={
@@ -274,6 +280,6 @@ export function CamCorrectionDrawer({
           />
         </Field>
       </div>
-    </Drawer>
+    </UrlDrawer>
   );
 }

@@ -7,7 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { confirmDialog } from "@/lib/confirm";
 import {
-  Drawer,
+  UrlDrawer,
   Button,
   Input,
   Label,
@@ -58,7 +58,7 @@ export function PropertyDetailDrawer({
   money,
   act,
   busy,
-  onClose,
+  closeHref,
   onAddUnit,
   onOpenUnit,
   onAddLease,
@@ -82,7 +82,7 @@ export function PropertyDetailDrawer({
   money: Money;
   act: PropertyAction;
   busy: boolean;
-  onClose: () => void;
+  closeHref: string;
   onAddUnit: () => void;
   onOpenUnit: (id: string) => void;
   onAddLease: (unitId?: string | null) => void;
@@ -484,9 +484,10 @@ export function PropertyDetailDrawer({
   };
 
   return (
-    <Drawer
+    <UrlDrawer
       open
-      onClose={onClose}
+      openKey={property.id}
+      closeHref={closeHref}
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
@@ -875,7 +876,7 @@ export function PropertyDetailDrawer({
           />
         </div>
       ) : null}
-    </Drawer>
+    </UrlDrawer>
   );
 }
 

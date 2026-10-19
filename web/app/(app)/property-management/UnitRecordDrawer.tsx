@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { Button, Card, CardContent, Drawer, Input, Popover, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
+import { Button, Card, CardContent, UrlDrawer, Input, Popover, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
 import { Empty, Field, Read, RecordTabs, Status } from "./workspace-ui";
 import type { LeaseRow, PropertyRow, SaveAction, UnitRow } from "./types";
 import { InteractiveTableRow } from '@/components/interactive-table-row'
@@ -14,7 +14,7 @@ export function UnitRecordDrawer({
   leases,
   permissions,
   busy,
-  onClose,
+  closeHref,
   onOpenLease,
   onAddLease,
   onSave,
@@ -25,7 +25,7 @@ export function UnitRecordDrawer({
   leases: LeaseRow[];
   permissions: { manage: boolean };
   busy: boolean;
-  onClose: () => void;
+  closeHref: string;
   onOpenLease: (id: string) => void;
   onAddLease: () => void;
   onSave: SaveAction;
@@ -79,11 +79,12 @@ export function UnitRecordDrawer({
     }
   };
   return (
-    <Drawer
+    <UrlDrawer
       open
       stacked
+      openKey={unit.id}
+      closeHref={closeHref}
       size="xl"
-      onClose={onClose}
       title={
         <span className="flex items-center gap-2.5">
           <span className="font-mono text-sm text-slate-500">{unit.code}</span>
@@ -237,7 +238,7 @@ export function UnitRecordDrawer({
           )}
         </div>
       ) : null}
-    </Drawer>
+    </UrlDrawer>
   );
 }
 

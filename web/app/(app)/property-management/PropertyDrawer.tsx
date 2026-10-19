@@ -2,14 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Drawer, Button, Input, Select } from "@openbooks/ui";
+import { UrlDrawer, Button, Input, Select } from "@openbooks/ui";
 import type { Option } from "./workspace-ui";
 import { Field, PROPERTY_TYPE_OPTIONS } from "./workspace-ui";
 import { CustomFieldInput } from "../../../components/custom-field-input";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
 import type { SaveAction, WorkspaceOptions } from "./types";
 
-export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAssetsEnabled = false, multiCurrency = false, fieldDefs = [] }: { open: boolean; onClose: () => void; options: WorkspaceOptions; busy: boolean; onSave: SaveAction; fixedAssetsEnabled?: boolean; multiCurrency?: boolean; fieldDefs?: CustomFieldDefClient[] }) {
+export function PropertyDrawer({ open, closeHref, onClose, options, busy, onSave, fixedAssetsEnabled = false, multiCurrency = false, fieldDefs = [] }: { open: boolean; closeHref: string; onClose: () => void; options: WorkspaceOptions; busy: boolean; onSave: SaveAction; fixedAssetsEnabled?: boolean; multiCurrency?: boolean; fieldDefs?: CustomFieldDefClient[] }) {
   const initial = useMemo(
     () => ({
       code: "",
@@ -66,9 +66,10 @@ export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAsse
     });
   };
   return (
-    <Drawer
+    <UrlDrawer
       open={open}
-      onClose={onClose}
+      openKey="new-property"
+      closeHref={closeHref}
       title={tWorkspace("newProperty")}
       description={t("description")}
       footer={
@@ -271,6 +272,6 @@ export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAsse
           </div>
         ) : null}
       </div>
-    </Drawer>
+    </UrlDrawer>
   );
 }

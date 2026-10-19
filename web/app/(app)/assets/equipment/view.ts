@@ -11,7 +11,7 @@ import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
 import { loadEquipment } from '../../../api/equipment/_lib'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
 import type { EquipmentDrawer } from './EquipmentDrawer'
-import { assetWorkspaceTabs } from '../tabs'
+import { loadAssetWorkspaceTabs } from '../tabs-loader'
 
 /**
  * The equipment register, split into a loader and a spec.
@@ -213,13 +213,15 @@ export async function loadEquipmentPage(
       { label: t('metrics.recovery'), value: money(summary.rows[0]?.recovery) },
       { label: t('metrics.billable'), value: money(summary.rows[0]?.billable) },
     ],
-    tabs: assetWorkspaceTabs({
-      active: 'equipment',
-      registerLabel: ta('tabs.register'),
-      taxDepreciationLabel: ta('tabs.taxDepreciation'),
-      equipmentLabel: t('title'),
-      showFixedAssets: fixedAssetsEnabled,
-      showEquipment: true,
+    tabs: await loadAssetWorkspaceTabs(authz.user.orgId, 'equipment', {
+      register: ta('tabs.register'),
+      taxDepreciation: ta('tabs.taxDepreciation'),
+      equipment: t('title'),
+      proposals: ta('proposals.title'),
+      construction: ta('construction.title'),
+      leases: ta('leases.pageTitle'),
+      maintenance: ta('maintenance.title'),
+      insurance: ta('insurance.title'),
     }),
     fixedAssetsLabel: t('fixedAssets'),
     taxDepreciationLabel: t('taxDepreciation'),

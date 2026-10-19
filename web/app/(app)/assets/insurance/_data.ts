@@ -1,4 +1,5 @@
 import 'server-only'
+import { getTranslations } from 'next-intl/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
@@ -6,6 +7,7 @@ import { insuredValueComparison, type InsuredValueRow } from '@openbooks/engine/
 import { can, requirePermission } from '@/lib/authz'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { isUuid, pickString } from '@/lib/list-params'
+import { loadAssetWorkspaceTabs } from '../tabs-loader'
 
 export interface PolicyRow {
   id: string
@@ -33,11 +35,16 @@ export interface PolicyDetail extends PolicyRow {
 }
 
 export interface InsuranceData {
+  title: string
+  description: string
+  tabs: { key: string; href: string; label: string; active: boolean }[]
+  currentParams: Record<string, string | string[] | undefined>
   tab: 'policies' | 'values'
   today: string
   rows: PolicyRow[]
   comparison: InsuredValueRow[]
   selected: PolicyDetail | null
+  createMode: boolean
   canMaintain: boolean
   subsidiaries: { id: string; name: string }[]
   insurers: { id: string; name: string }[]
@@ -51,6 +58,7 @@ export async function loadInsurance(sp: Record<string, string | string[] | undef
   const authz = await requirePermission('assets.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'assetInsurance')
+  const t = await getTranslations('assets')
   const allowed = authz.allowedSubsidiaryIds
   const tab = pickString(sp.tab) === 'values' ? 'values' : 'policies'
   const today = await businessToday(orgId)
@@ -128,11 +136,20 @@ export async function loadInsurance(sp: Record<string, string | string[] | undef
     }
   }
   return {
+    title: t('insurance.title'),
+    description: t('insurance.description'),
+    tabs: await loadAssetWorkspaceTabs(orgId, 'insurance', {
+      register: t('tabs.register'), taxDepreciation: t('tabs.taxDepreciation'), equipment: t('equipment.title'),
+      proposals: t('proposals.title'), construction: t('construction.title'), leases: t('leases.pageTitle'),
+      maintenance: t('maintenance.title'), insurance: t('insurance.title'),
+    }),
+    currentParams: sp,
     tab,
     today,
     rows: mapped,
     comparison,
     selected,
+    createMode: pickString(sp.policy) === 'new' && can(authz, 'assets.maintain'),
     canMaintain: can(authz, 'assets.maintain'),
     subsidiaries: subsidiaries.rows,
     insurers: insurers.rows,

@@ -745,7 +745,8 @@ export function LeaseDrawer({
   canManage,
   accounts,
   subsidiaries,
-}: { payload: LeasePayload; canManage: boolean } & Choices) {
+  closeHref = "/assets/leases",
+}: { payload: LeasePayload; canManage: boolean; closeHref?: string } & Choices) {
   const t = useTranslations("assets");
   const tCommon = useTranslations("common");
   const router = useRouter(),
@@ -781,7 +782,7 @@ export function LeaseDrawer({
   return (
     <UrlDrawer
       open
-      closeHref="/assets/leases"
+      closeHref={closeHref}
       title={l.lease_number}
       description={l.description ?? undefined}
       size="2xl"

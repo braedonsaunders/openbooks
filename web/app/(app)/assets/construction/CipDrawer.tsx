@@ -11,6 +11,8 @@ import { JournalEntryLink } from '@/components/journal-entry-link'
 import { PagedTable } from '@/components/paged-table'
 import { useMoney } from '@/components/money-provider'
 import { useAppAction } from '@/lib/use-app-action'
+import { useDirtyClose } from '@/lib/use-dirty-close'
+import { mergeHref } from '@/lib/list-params'
 import { newRequestKey, postJson, sumCents, toCents } from '../depth-client'
 import type { CipDetail, ConstructionData } from './_data'
 import { DateField } from '@/components/date-field'
@@ -21,12 +23,93 @@ type Line =
   | { kind: 'component'; parentAssetId: string; name: string; categoryId: string; amount: string; placeInService: boolean }
   | { kind: 'expense'; expenseAccountId: string; amount: string; memo: string }
 
+export function CipDrawer({ record, data, closeHref, createMode = false }: {
+  record: CipDetail | null
+  data: ConstructionData
+  closeHref: string
+  createMode?: boolean
+}) {
+  if (createMode) return <CipCreateDrawer data={data} closeHref={closeHref} />
+  return record ? <CipRecordDrawer record={record} data={data} closeHref={closeHref} /> : null
+}
+
+function CipCreateDrawer({ data, closeHref }: { data: ConstructionData; closeHref: string }) {
+  const t = useTranslations('assets')
+  const tc = useTranslations('common')
+  const router = useRouter()
+  const action = useAppAction()
+  const [form, setForm] = useState(() => ({
+    name: '',
+    subsidiaryId: data.subsidiaries[0]?.id ?? '',
+    categoryId: data.categories[0]?.id ?? '',
+    cipAccountId: '',
+    startedOn: data.today,
+  }))
+  const [initialForm] = useState(form)
+  const dirty = JSON.stringify(form) !== JSON.stringify(initialForm)
+  const closeGuard = useDirtyClose({
+    dirty,
+    busy: action.busy,
+    onClose: () => {},
+    message: tc('feedback.unsavedChanges'),
+    confirmLabel: tc('confirm.discardChanges'),
+  })
+  const set = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }))
+
+  async function create() {
+    await action.execute(
+      () => postJson<{ id: string }>('/api/assets/construction', form, t('construction.createFailed')),
+      {
+        fallbackMessage: t('construction.createFailed'),
+        successMessage: t('construction.created'),
+        onOk: (created) => {
+          router.push(mergeHref('/assets/construction', data.currentParams, { tab: 'records', cip: created.id }))
+          router.refresh()
+        },
+      },
+    )
+  }
+
+  return (
+    <UrlDrawer
+      open
+      closeHref={closeHref}
+      beforeClose={closeGuard.beforeClose}
+      size="lg"
+      title={t('construction.new')}
+      headerActions={<Button disabled={action.busy || !form.name.trim() || !form.subsidiaryId || !form.categoryId || !form.cipAccountId} onClick={() => void create()}>{t('construction.create')}</Button>}
+    >
+      <div className="space-y-4 p-1">
+        <ActionAlert error={action.refusal} fallbackMessage={t('construction.createFailed')} />
+        <div className="space-y-1.5"><Label htmlFor="cip-name">{t('construction.fields.name')}</Label><Input id="cip-name" value={form.name} onChange={(event) => set('name', event.target.value)} /></div>
+        <div className="space-y-1.5"><Label htmlFor="cip-subsidiary">{t('construction.fields.legalEntity')}</Label>
+          <Select id="cip-subsidiary" value={form.subsidiaryId} onChange={(event) => set('subsidiaryId', event.target.value)}>
+            {data.subsidiaries.map((subsidiary) => <option key={subsidiary.id} value={subsidiary.id}>{subsidiary.name}</option>)}
+          </Select>
+        </div>
+        <div className="space-y-1.5"><Label htmlFor="cip-account">{t('construction.fields.cipAccount')}</Label>
+          <Select id="cip-account" value={form.cipAccountId} onChange={(event) => set('cipAccountId', event.target.value)}>
+            <option value="">{t('construction.fields.choose')}</option>
+            {data.cipAccounts.map((account) => <option key={account.id} value={account.id}>{account.label}</option>)}
+          </Select>
+        </div>
+        <div className="space-y-1.5"><Label htmlFor="cip-category">{t('construction.fields.expectedCategory')}</Label>
+          <Select id="cip-category" value={form.categoryId} onChange={(event) => set('categoryId', event.target.value)}>
+            {data.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </Select>
+        </div>
+        <div className="space-y-1.5"><Label htmlFor="cip-started">{t('construction.fields.startedOn')}</Label><DateField id="cip-started" value={form.startedOn} onChange={(value) => set('startedOn', value)} /></div>
+      </div>
+    </UrlDrawer>
+  )
+}
+
 /**
  * One construction-in-progress record: its linked GL costs, the posted lines
  * still waiting to be linked, the capitalization form and the history of
  * capitalizations with their reversal.
  */
-export function CipDrawer({ record, data, closeHref }: { record: CipDetail; data: ConstructionData; closeHref: string }) {
+function CipRecordDrawer({ record, data, closeHref }: { record: CipDetail; data: ConstructionData; closeHref: string }) {
   const t = useTranslations('assets')
   const { money } = useMoney()
   const router = useRouter()

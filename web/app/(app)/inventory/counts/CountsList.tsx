@@ -3,15 +3,17 @@
 import { DirectedExecutionForm,useDirectedExecution } from '@/components/directed-execution'
 import { InventoryTrackingFields } from '@/components/inventory-tracking-fields'
 import { promptDialog } from '@/lib/prompt'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { refusalMessageFromBody } from '@/lib/api-error'
 import { Plus } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
+import { RegisteredListTable, type RegisteredListColumn } from '../../../../components/registered-list-table'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
+import { AsyncUrlDrawer } from '../../../../components/async-url-drawer'
+import { SearchInput } from '../../../../components/search-input'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { optionalScanResolver } from '../../../../lib/scan'
@@ -19,6 +21,7 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/inventory/stock-count-queries'
 import { hasUnsavedObservation, SECOND_COUNT_REASON_MIN_LENGTH, secondObservationNeedsReason } from './observation-reason'
 import { DateField } from '@/components/date-field'
+import { mergeHref } from '@/lib/list-params'
 
 /** Source id under which the count editor reports unsaved observations to the drawer guard. */
 const COUNT_DETAIL_DIRTY_SOURCE = 'count-detail'
@@ -27,13 +30,21 @@ const field = 'space-y-1.5'
 const OPEN_NEW_COUNT = 'openbooks:inventory-new-count'
 
 /** Header action that opens the already-loaded count editor synchronously. */
-export function NewCountButton({ label }: { label: string }) {
+export function NewCountButton({ label, currentParams = {} }: {
+  label: string
+  currentParams?: Record<string, string | string[] | undefined>
+}) {
   const router = useRouter()
   return (
     <Button
       onClick={() => {
         window.dispatchEvent(new Event(OPEN_NEW_COUNT))
-        router.replace('/inventory?inventoryView=counts&count=new', { scroll: false })
+        router.replace(mergeHref('/inventory', { inventoryView: 'counts', ...currentParams }, {
+          inventoryView: 'counts',
+          count: 'new',
+          countId: null,
+          page: 1,
+        }) as never, { scroll: false })
       }}
     >
       <Plus size={15} /> {label}
@@ -74,10 +85,23 @@ function StatusBadge({ status, label }: { status: string; label: string }) {
   return <Badge variant={variant as 'success' | 'warning' | 'secondary' | 'default'}>{label}</Badge>
 }
 
+function CountLink({ id, params, children }: {
+  id: string
+  params: Record<string, string | string[] | undefined>
+  children: ReactNode
+}) {
+  return (
+    <Link className="font-medium text-teal-700 hover:underline dark:text-teal-300" href={mergeHref('/inventory', params, { countId: id, count: null }) as never}>
+      {children}
+    </Link>
+  )
+}
+
 export function CountsList({
   counts,
   totalCount,
-  nextCursor,
+  page = 1,
+  perPage = 25,
   locations,
   subsidiaries,
   items,
@@ -91,10 +115,12 @@ export function CountsList({
   itemsExcludedCount,
   createRequested = false,
   selectedCountId,
+  currentParams = {},
 }: {
   counts: StockCountSummary[]
   totalCount: number
-  nextCursor: string | null
+  page?: number
+  perPage?: number
   locations: { id: string; name: string | null }[]
   subsidiaries: { id: string; name: string | null }[]
   items: { id: string; code: string | null; name: string | null }[]
@@ -111,14 +137,26 @@ export function CountsList({
   itemsExcludedCount: number
   createRequested?: boolean
   selectedCountId?: string
+  currentParams?: Record<string, string | string[] | undefined>
 }) {
   const t = useTranslations('inventory')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const [createOpen, setCreateOpen] = useState(createRequested)
   const [selectedId, setSelectedId] = useState<string | null>(selectedCountId ?? null)
-  const [detail, setDetail] = useState<StockCountDetail | null>(null)
-  const [detailError, setDetailError] = useState<string | null>(null)
+  const [detailResult, setDetailResult] = useState<{
+    recordId: string
+    requestKey: string
+    detail?: StockCountDetail
+    error?: string
+  } | null>(null)
+  const [detailAttempt, setDetailAttempt] = useState(0)
+  const detailRequestKey = selectedId ? `${selectedId}:${detailAttempt}` : null
+  const selectedDetailResult = detailResult?.recordId === selectedId ? detailResult : null
+  const currentDetailResult = selectedDetailResult?.requestKey === detailRequestKey ? selectedDetailResult : null
+  const detail = selectedDetailResult?.detail ?? null
+  const detailError = detail ? null : currentDetailResult?.error ?? null
+  const detailPending = !!selectedId && !detail && !detailError
   // Typed observations that are not yet recorded hold the count drawer open
   // behind a discard confirmation, so Escape or a row switch cannot drop them.
   const detailGuard = useDirtyClose({
@@ -127,36 +165,6 @@ export function CountsList({
     message: tCommon('feedback.unsavedChanges'),
     confirmLabel: tCommon('confirm.discardChanges'),
   })
-  // Server-paged rows: the first page renders with the page; older counts
-  // load on demand so count #501+ stays reachable instead of truncated.
-  const [rows, setRows] = useState(counts)
-  const [cursor, setCursor] = useState<string | null>(nextCursor)
-  const [loadedTotal, setLoadedTotal] = useState(totalCount)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [listError, setListError] = useState<string | null>(null)
-
-  async function loadMore(): Promise<void> {
-    if (!cursor || loadingMore) return
-    setLoadingMore(true)
-    setListError(null)
-    try {
-      const res = await fetch(`/api/inventory/counts?limit=500&cursor=${encodeURIComponent(cursor)}`)
-      // The refusal reads through the shared helper so message, remedy and
-      // code render instead of the bare `error` field.
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setListError(refusalMessageFromBody(data, { fallback: t('counts.failed') }) ?? t('counts.failed'))
-        return
-      }
-      const data = (await res.json()) as { counts: StockCountSummary[]; totalCount: number; nextCursor: string | null }
-      setRows((prev) => [...prev, ...data.counts])
-      setCursor(data.nextCursor)
-      setLoadedTotal(data.totalCount)
-    } finally {
-      setLoadingMore(false)
-    }
-  }
-
   const locationOptions = locations.map((l) => ({ value: l.id, label: l.name ?? l.id }))
   const subsidiaryOptions = subsidiaries.map((s) => ({ value: s.id, label: s.name ?? s.id }))
   const itemOptions = items.map((i) => ({
@@ -164,8 +172,8 @@ export function CountsList({
     label: `${i.code ? `${i.code} · ` : ''}${i.name ?? ''}`.trim(),
   }))
   const stockLocationOptions = stockLocations.map((l) => ({ value: l.id, label: l.code ?? l.id }))
-
-  const activeDetailFetch = useRef(0)
+  const countParams = { inventoryView: 'counts', ...currentParams }
+  const closeHref = mergeHref('/inventory', countParams, { countId: null, count: null })
 
   useEffect(() => {
     const open = () => setCreateOpen(true)
@@ -173,104 +181,72 @@ export function CountsList({
     return () => window.removeEventListener(OPEN_NEW_COUNT, open)
   }, [])
 
-  /** Refetch for event handlers (never called from an effect). */
-  async function refetchDetail(id: string): Promise<void> {
-    const ticket = ++activeDetailFetch.current
-    const res = await fetch(`/api/inventory/counts?id=${encodeURIComponent(id)}`)
-    if (activeDetailFetch.current !== ticket) return
-    // The refusal reads through the shared helper so message, remedy and
-    // code render instead of the bare `error` field.
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      setDetailError(refusalMessageFromBody(data, { fallback: t('counts.failed') }) ?? t('counts.failed'))
-      return
-    }
-    const data = await res.json()
-    setDetail(data as StockCountDetail)
-  }
-
   useEffect(() => {
-    if (!selectedId) return
-    // Same shape as the templates preview effect: the async IIFE is inline
-    // so state updates happen only after the await, never in the body.
-    const ticket = ++activeDetailFetch.current
+    if (!selectedId || !detailRequestKey) return
+    const controller = new AbortController()
     const id = selectedId
+    const requestKey = detailRequestKey
     ;(async () => {
-      const res = await fetch(`/api/inventory/counts?id=${encodeURIComponent(id)}`)
-      if (activeDetailFetch.current !== ticket) return
-      // The refusal reads through the shared helper so message, remedy and
-      // code render instead of the bare `error` field.
+      const res = await fetch(`/api/inventory/counts?id=${encodeURIComponent(id)}`, { signal: controller.signal, cache: 'no-store' })
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setDetailError(refusalMessageFromBody(data, { fallback: t('counts.failed') }) ?? t('counts.failed'))
-        return
+        throw new Error(await readApiErrorMessage(res, t('counts.failed')))
       }
       const data = await res.json()
-      setDetail(data as StockCountDetail)
-    })()
-    return () => {
-      activeDetailFetch.current += 1
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId])
+      if (controller.signal.aborted) return
+      setDetailResult({ recordId: id, requestKey, detail: data as StockCountDetail })
+    })().catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      setDetailResult({
+        recordId: id,
+        requestKey,
+        error: error instanceof Error ? error.message : t('counts.failed'),
+      })
+    })
+    return () => controller.abort()
+  }, [selectedId, detailRequestKey, t])
 
-  const columns: PagedColumn<StockCountSummary>[] = [
-    { key: 'date', header: t('counts.columns.date'), cell: (r) => r.countedOn, search: (r) => r.countedOn },
+  const columns: RegisteredListColumn<StockCountSummary>[] = [
+    { key: 'date', header: t('counts.columns.date'), cell: (r) => <CountLink id={r.id} params={countParams}>{r.countedOn}</CountLink>, search: (r) => r.countedOn },
     {
       key: 'location',
       header: t('counts.columns.location'),
-      cell: (r) => r.locationName ?? '—',
+      cell: (r) => <CountLink id={r.id} params={countParams}>{r.locationName ?? '—'}</CountLink>,
       search: (r) => `${r.locationName ?? ''} ${r.memo ?? ''}`,
     },
     {
       key: 'status',
       header: t('counts.columns.status'),
-      cell: (r) => <StatusBadge status={r.status} label={t(`counts.statusNames.${r.status}`)} />,
+      cell: (r) => <CountLink id={r.id} params={countParams}><StatusBadge status={r.status} label={t(`counts.statusNames.${r.status}`)} /></CountLink>,
       search: (r) => r.status,
     },
     {
       key: 'progress',
       header: t('counts.columns.progress'),
       align: 'right',
-      cell: (r) => `${r.lineCount - r.uncountedCount}/${r.lineCount}`,
+      cell: (r) => <CountLink id={r.id} params={countParams}>{`${r.lineCount - r.uncountedCount}/${r.lineCount}`}</CountLink>,
     },
     {
       key: 'variance',
       header: t('counts.columns.variance'),
       align: 'right',
-      cell: (r) => <span className="tabular-nums">{r.discrepantLineCount}</span>,
+      cell: (r) => <CountLink id={r.id} params={countParams}><span className="tabular-nums">{r.discrepantLineCount}</span></CountLink>,
     },
   ]
 
   return (
     <>
-      <PagedTable
+      <RegisteredListTable
         source="inventory_counts"
-        rows={rows}
+        rows={counts}
         columns={columns}
-        searchable
         empty={canPost ? t('counts.empty') : t('counts.emptyViewer')}
         rowKey={(r) => r.id}
-        onRowClick={(r) => {
-          setDetail(null)
-          setDetailError(null)
-          setSelectedId(r.id)
-          router.replace(`/inventory?inventoryView=counts&countId=${encodeURIComponent(r.id)}`, { scroll: false })
-        }}
-        emptyAsRow
+        state={{ total: totalCount, page, perPage }}
+        basePath="/inventory"
+        currentParams={countParams}
+        searchable={false}
+        toolbarAfter={<SearchInput placeholder={tCommon('actions.search')} />}
       />
-      {listError ? (
-        <p role="alert" className="text-sm text-red-800 dark:text-red-300">
-          {t('counts.failed')}: {listError}
-        </p>
-      ) : null}
-      {cursor ? (
-        <div className="flex justify-center py-2">
-          <Button variant="secondary" size="sm" disabled={loadingMore} onClick={() => void loadMore()}>
-            {loadingMore ? t('counts.list.loadingMore') : t('counts.list.showMore', { loaded: rows.length, total: loadedTotal })}
-          </Button>
-        </div>
-      ) : null}
       {createOpen ? (
         <CreateCountDrawer
           locationOptions={locationOptions}
@@ -284,15 +260,19 @@ export function CountsList({
           lots={lots}
           onClose={() => {
             setCreateOpen(false)
-            router.replace('/inventory?inventoryView=counts')
+            router.replace(closeHref)
             router.refresh()
           }}
         />
       ) : null}
       {selectedId ? (
-        <UrlDrawer
+        <AsyncUrlDrawer
           open
-          closeHref="/inventory?inventoryView=counts"
+          openKey={selectedId}
+          pending={detailPending}
+          error={detailError}
+          onRetry={() => setDetailAttempt((attempt) => attempt + 1)}
+          closeHref={closeHref}
           size="xl"
           title={t('counts.detail.title')}
           beforeClose={detailGuard.beforeClose}
@@ -308,22 +288,17 @@ export function CountsList({
               registerDirty={detailGuard.registerDirty}
               onDone={() => {
                 setSelectedId(null)
-                router.replace('/inventory?inventoryView=counts')
+                router.replace(closeHref)
                 router.refresh()
               }}
               onChanged={() => {
                 if (!selectedId) return
-                setDetailError(null)
-                void refetchDetail(selectedId)
+                setDetailAttempt((attempt) => attempt + 1)
                 router.refresh()
               }}
             />
-          ) : (
-            <p className="p-1 text-sm text-slate-500">
-              {detailError ? `${t('counts.failed')}: ${detailError}` : t('counts.detail.loading')}
-            </p>
-          )}
-        </UrlDrawer>
+          ) : null}
+        </AsyncUrlDrawer>
       ) : null}
     </>
   )

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { Button, Card, CardContent, Drawer, Input, Popover, cn } from "@openbooks/ui";
+import { Button, Card, CardContent, UrlDrawer, Input, Popover, cn } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { confirmDialog } from "@/lib/confirm";
 import { Field, RecordTabs, Status } from "./workspace-ui";
@@ -19,7 +19,7 @@ export function LeaseRecordDrawer({
   permissions,
   busy,
   stacked,
-  onClose,
+  closeHref,
   act,
   money,
   onSave,
@@ -30,7 +30,7 @@ export function LeaseRecordDrawer({
   permissions: PropertyPermissions;
   busy: boolean;
   stacked?: boolean;
-  onClose: () => void;
+  closeHref: string;
   act: PropertyAction;
   money: Money;
   onSave: SaveAction;
@@ -74,10 +74,11 @@ export function LeaseRecordDrawer({
     if (result) setMode("view");
   };
   return (
-    <Drawer
+    <UrlDrawer
       open
       stacked={stacked}
-      onClose={onClose}
+      openKey={lease.id}
+      closeHref={closeHref}
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
@@ -224,7 +225,7 @@ export function LeaseRecordDrawer({
           setForm={setForm}
         />
       )}
-    </Drawer>
+    </UrlDrawer>
   );
 }
 

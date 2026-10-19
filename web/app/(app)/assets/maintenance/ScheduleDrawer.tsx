@@ -10,6 +10,8 @@ import { DrawerTabStrip } from '@/components/drawer-tab-strip'
 import { PagedTable } from '@/components/paged-table'
 import { useMoney } from '@/components/money-provider'
 import { useAppAction } from '@/lib/use-app-action'
+import { useDirtyClose } from '@/lib/use-dirty-close'
+import { mergeHref } from '@/lib/list-params'
 import { postJson } from '../depth-client'
 import type { MaintenanceData, ScheduleDetail } from './_data'
 import { ScheduleFields, scheduleBody, type ScheduleFormValues } from './ScheduleFields'
@@ -22,7 +24,70 @@ type Tab = 'record' | 'history' | 'schedule' | 'meter'
  * line that paid for it; a betterment is proposed for capitalization), the
  * asset's maintenance history, the schedule's terms and meter readings.
  */
-export function ScheduleDrawer({ schedule, data, closeHref }: { schedule: ScheduleDetail; data: MaintenanceData; closeHref: string }) {
+export function ScheduleDrawer({ schedule, data, closeHref, createMode = false }: { schedule: ScheduleDetail | null; data: MaintenanceData; closeHref: string; createMode?: boolean }) {
+  if (createMode) return <ScheduleCreateDrawer data={data} closeHref={closeHref} />
+  return schedule ? <ScheduleRecordDrawer schedule={schedule} data={data} closeHref={closeHref} /> : null
+}
+
+function ScheduleCreateDrawer({ data, closeHref }: { data: MaintenanceData; closeHref: string }) {
+  const t = useTranslations('assets')
+  const tc = useTranslations('common')
+  const router = useRouter()
+  const action = useAppAction()
+  const [form, setForm] = useState(() => ({
+    assetId: data.assets[0]?.id ?? '',
+    values: {
+      name: '', intervalMonths: '12', intervalUsage: '', usageUnit: '', startsOn: data.today,
+      leadDays: '14', vendorPartyId: '', estimatedCost: '',
+    } satisfies ScheduleFormValues,
+  }))
+  const [initialForm] = useState(form)
+  const dirty = JSON.stringify(form) !== JSON.stringify(initialForm)
+  const closeGuard = useDirtyClose({
+    dirty,
+    busy: action.busy,
+    onClose: () => {},
+    message: tc('feedback.unsavedChanges'),
+    confirmLabel: tc('confirm.discardChanges'),
+  })
+
+  async function create() {
+    await action.execute(
+      () => postJson<{ id: string }>('/api/assets/maintenance/schedules', { assetId: form.assetId, ...scheduleBody(form.values) }, t('maintenance.saveFailed')),
+      {
+        fallbackMessage: t('maintenance.saveFailed'),
+        successMessage: t('maintenance.created'),
+        onOk: (created) => {
+          router.push(mergeHref('/assets/maintenance', data.currentParams, { schedule: created.id }))
+          router.refresh()
+        },
+      },
+    )
+  }
+
+  return (
+    <UrlDrawer
+      open
+      closeHref={closeHref}
+      beforeClose={closeGuard.beforeClose}
+      size="xl"
+      title={t('maintenance.new')}
+      headerActions={<Button disabled={action.busy || !form.assetId || !form.values.name.trim()} onClick={() => void create()}>{t('maintenance.create')}</Button>}
+    >
+      <div className="space-y-4 p-1">
+        <ActionAlert error={action.refusal} fallbackMessage={t('maintenance.saveFailed')} />
+        <div className="space-y-1.5"><Label htmlFor="new-schedule-asset">{t('maintenance.fields.asset')}</Label>
+          <Select id="new-schedule-asset" value={form.assetId} onChange={(event) => setForm((current) => ({ ...current, assetId: event.target.value }))}>
+            {data.assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.label}</option>)}
+          </Select>
+        </div>
+        <ScheduleFields idPrefix="new-schedule" values={form.values} vendors={data.vendors} onChange={(patch) => setForm((current) => ({ ...current, values: { ...current.values, ...patch } }))} />
+      </div>
+    </UrlDrawer>
+  )
+}
+
+function ScheduleRecordDrawer({ schedule, data, closeHref }: { schedule: ScheduleDetail; data: MaintenanceData; closeHref: string }) {
   const t = useTranslations('assets')
   const { money } = useMoney()
   const router = useRouter()

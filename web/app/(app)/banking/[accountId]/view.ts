@@ -20,13 +20,14 @@ import {
   pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
+import type { ModuleHomeTab } from '../../../../components/module-home/tab-types'
 import { requirePermission, can, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { listAccountStatements, reconciliationBookId, reconciliationStalenessSummaries } from '@openbooks/engine/banking/banking'
 import { bankAccount } from '../../../../lib/banking-accounts'
@@ -159,6 +160,7 @@ export interface BankingAccountData {
   configureHref: string
   configureLabel: string
   accountId: string
+  activeTab: 'statements' | 'reconciliations'
   accountCurrency: string | null
   openReconciliationId: string | null
   glBalance: string
@@ -243,6 +245,7 @@ export async function loadBankingAccount(
   if (!isUuid(accountId)) notFound()
   const orgId = authz.user.orgId
   const basePath = `/banking/${accountId}`
+  const activeTab = pickString(sp.tab) === 'reconciliations' ? 'reconciliations' : 'statements'
   const timeZone = await businessTimeZone(orgId)
   const timestampFormatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone })
   const formatTimestamp = (value: string) => timestampFormatter.format(new Date(value))
@@ -482,6 +485,7 @@ export async function loadBankingAccount(
     configureHref: `/accounts?account=${accountId}`,
     configureLabel: t('account.configure'),
     accountId: account.id,
+    activeTab,
     accountCurrency: account.currency_restriction,
     openReconciliationId: account.open_reconciliation_id,
     glBalance: account.balance ?? '',
@@ -635,119 +639,106 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
       }),
     ],
     body: [
-      grid('space-y-8', [
-        grid('space-y-2', [
-          grid('flex flex-wrap items-center gap-2', [
-            heading(2, f('statementsTitle'), 'mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100'),
-            widgetBlock('search-input', {
-              placeholder: data.statementsSearchPlaceholder,
-              paramKey: 'stmtQ',
-              pageParamKey: 'stmtPage',
-            }),
-            widgetBlock('filter-chips', {
-              basePath: data.basePath,
-              currentParams: data.currentParams,
-              paramKey: 'source',
-              label: data.sourceLabel,
-              options: data.sourceOptions,
-              pageParamKey: 'stmtPage',
-            }),
-          ]),
+      widgetBlock('module-home-tabs', {
+        tabs: [
           {
-            ...widgetBlock('empty-state', {
+            href: mergeHref(data.basePath, data.currentParams, { tab: 'statements' }),
+            label: data.statementsTitle,
+            active: data.activeTab === 'statements',
+          },
+          {
+            href: mergeHref(data.basePath, data.currentParams, { tab: 'reconciliations' }),
+            label: data.reconciliationsTitle,
+            active: data.activeTab === 'reconciliations',
+          },
+        ] satisfies ModuleHomeTab[],
+        placement: 'local',
+      }),
+      ...(data.activeTab === 'statements'
+        ? data.stmtIsEmpty
+          ? [widgetBlock('empty-state', {
               title: data.statementsEmptyTitle,
               description: data.statementsEmptyDescription,
               action: data.canReconcile ? 'import-statement' : null,
               actionProps: data.canReconcile ? { accountId: data.accountId } : null,
-            }),
-            when: f('stmtIsEmpty'),
-          },
-          {
-            ...table({
-              variant: 'app',
-              rows: f('statementRows'),
-              rowKey: item('id'),
-              sorting: {
-                basePath: data.basePath,
-                sort: f('stmtSort'),
-                dir: f('stmtDir'),
-                sortParamKey: 'stmtSort',
-                dirParamKey: 'stmtDir',
-                pageParamKey: 'stmtPage',
-              },
-              columns: [
-                column(
-                  rootF('columnStatementDate'),
-                  link(item('dateLabel'), item('dateHref'), 'text-teal-700 hover:underline dark:text-teal-300'),
-                  { sort: 'date', className: 'font-medium' },
-                ),
-                column(rootF('columnSource'), badge(item('sourceLabel'), { variant: 'outline' }), { sort: 'source' }),
-                column(rootF('columnLines'), number(item('lineCount')), { sort: 'lines', align: 'right' }),
-                column(
-                  rootF('columnUnmatched'),
-                  widgetCell('unmatched-count-cell', {
-                    display: item('unmatchedCount'),
-                    isZero: item('unmatchedIsZero'),
+            })]
+          : [
+              grid('space-y-2', [
+                heading(2, f('statementsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+                registeredListTable('bank_account_statements', {
+                  variant: 'app',
+                  rows: f('statementRows'),
+                  rowKey: item('id'),
+                  sorting: {
+                    basePath: data.basePath,
+                    sort: f('stmtSort'),
+                    dir: f('stmtDir'),
+                    sortParamKey: 'stmtSort',
+                    dirParamKey: 'stmtDir',
+                    pageParamKey: 'stmtPage',
+                  },
+                  columns: [
+                    column(
+                      rootF('columnStatementDate'),
+                      link(item('dateLabel'), item('dateHref'), 'text-teal-700 hover:underline dark:text-teal-300'),
+                      { sort: 'date', className: 'font-medium' },
+                    ),
+                    column(rootF('columnSource'), badge(item('sourceLabel'), { variant: 'outline' }), { sort: 'source' }),
+                    column(rootF('columnLines'), number(item('lineCount')), { sort: 'lines', align: 'right' }),
+                    column(
+                      rootF('columnUnmatched'),
+                      widgetCell('unmatched-count-cell', {
+                        display: item('unmatchedCount'),
+                        isZero: item('unmatchedIsZero'),
+                      }),
+                      { align: 'right', className: 'tabular-nums' },
+                    ),
+                    column(rootF('columnOpening'), money(item('openingBalance')), { align: 'right' }),
+                    column(rootF('columnClosing'), money(item('closingBalance')), { align: 'right' }),
+                    column(rootF('columnImported'), text(item('importedAt')), {
+                      sort: 'imported',
+                      className: MUTED,
+                    }),
+                    column(
+                      '',
+                      widgetCell('statement-delete-cell', {
+                        statementId: item('id'),
+                        lineCount: item('deleteLineCount'),
+                        blockedReason: item('deleteBlockedReason'),
+                        confirmMessage: item('deleteConfirmMessage'),
+                        showDelete: item('showDelete'),
+                        matchedCount: item('unmatchAllMatchedCount'),
+                        unmatchAllConfirmMessage: item('unmatchAllConfirmMessage'),
+                      }),
+                    ),
+                  ],
+                }, [
+                  widgetBlock('search-input', {
+                    placeholder: data.statementsSearchPlaceholder,
+                    paramKey: 'stmtQ',
+                    pageParamKey: 'stmtPage',
                   }),
-                  // A widget cell is not a `money`/`number` cell, so the
-                  // figure alignment has to be named explicitly.
-                  { align: 'right', className: 'tabular-nums' },
-                ),
-                column(rootF('columnOpening'), money(item('openingBalance')), { align: 'right' }),
-                column(rootF('columnClosing'), money(item('closingBalance')), { align: 'right' }),
-                column(rootF('columnImported'), text(item('importedAt')), {
-                  sort: 'imported',
-                  className: MUTED,
+                  widgetBlock('filter-chips', {
+                    basePath: data.basePath,
+                    currentParams: data.currentParams,
+                    paramKey: 'source',
+                    label: data.sourceLabel,
+                    options: data.sourceOptions,
+                    pageParamKey: 'stmtPage',
+                  }),
+                ]),
+                pagination({
+                  basePath: data.basePath,
+                  total: f('stmtTotal'),
+                  page: f('stmtPage'),
+                  perPage: f('stmtPerPage'),
+                  pageParamKey: 'stmtPage',
+                  bare: true,
                 }),
-                column(
-                  '',
-                  widgetCell('statement-delete-cell', {
-                    statementId: item('id'),
-                    lineCount: item('deleteLineCount'),
-                    blockedReason: item('deleteBlockedReason'),
-                    confirmMessage: item('deleteConfirmMessage'),
-                    showDelete: item('showDelete'),
-                    matchedCount: item('unmatchAllMatchedCount'),
-                    unmatchAllConfirmMessage: item('unmatchAllConfirmMessage'),
-                  }),
-                ),
-              ],
-            }),
-            when: f('stmtShowTable'),
-          },
-          {
-            ...pagination({
-              basePath: data.basePath,
-              total: f('stmtTotal'),
-              page: f('stmtPage'),
-              perPage: f('stmtPerPage'),
-              pageParamKey: 'stmtPage',
-              // The native pagers sit flush inside their section; the `mt-3`
-              // spacer belongs to list pages that wrap them.
-              bare: true,
-            }),
-            when: f('stmtShowTable'),
-          },
-        ], { as: 'section' }),
-        grid('space-y-2', [
-          grid('flex flex-wrap items-center gap-2', [
-            heading(2, f('reconciliationsTitle'), 'mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100'),
-            widgetBlock('search-input', {
-              placeholder: data.reconciliationsSearchPlaceholder,
-              paramKey: 'reconQ',
-              pageParamKey: 'reconPage',
-            }),
-            widgetBlock('filter-chips', {
-              basePath: data.basePath,
-              currentParams: data.currentParams,
-              paramKey: 'reconStatus',
-              label: data.reconStatusLabel,
-              options: data.reconStatusOptions,
-              pageParamKey: 'reconPage',
-            }),
-          ]),
-          {
-            ...widgetBlock('empty-state', {
+              ], { as: 'section' }),
+            ]
+        : data.reconIsEmpty
+          ? [widgetBlock('empty-state', {
               title: data.reconciliationsEmptyTitle,
               description: data.reconciliationsEmptyDescription,
               action: data.canReconcile ? 'start-reconciliation' : null,
@@ -758,64 +749,65 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
                     glBalance: data.glBalance,
                   }
                 : null,
-            }),
-            when: f('reconIsEmpty'),
-          },
-          {
-            ...table({
-              variant: 'app',
-              rows: f('reconRows'),
-              rowKey: item('id'),
-              sorting: {
-                basePath: data.basePath,
-                sort: f('reconSort'),
-                dir: f('reconDir'),
-                sortParamKey: 'reconSort',
-                dirParamKey: 'reconDir',
-                pageParamKey: 'reconPage',
-              },
-              columns: [
-                column(rootF('columnThroughDate'), text(item('throughDate')), {
-                  sort: 'through',
-                  className: 'font-medium',
+            })]
+          : [
+              grid('space-y-2', [
+                heading(2, f('reconciliationsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+                registeredListTable('bank_account_reconciliations', {
+                  variant: 'app',
+                  rows: f('reconRows'),
+                  rowKey: item('id'),
+                  sorting: {
+                    basePath: data.basePath,
+                    sort: f('reconSort'),
+                    dir: f('reconDir'),
+                    sortParamKey: 'reconSort',
+                    dirParamKey: 'reconDir',
+                    pageParamKey: 'reconPage',
+                  },
+                  columns: [
+                    column(rootF('columnThroughDate'), text(item('throughDate')), {
+                      sort: 'through',
+                      className: 'font-medium',
+                    }),
+                    column(rootF('columnStatementBalance'), money(item('statementBalance')), {
+                      sort: 'balance',
+                      align: 'right',
+                    }),
+                    column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') }), {
+                      sort: 'status',
+                    }),
+                    column(rootF('columnStale'), widgetCell('stale-badge-cell', { label: item('staleLabel') })),
+                    column(rootF('columnEvidence'), badge(item('evidenceLabel'), { variant: item('evidenceVariant') })),
+                    column(rootF('columnStarted'), text(item('createdAt')), { sort: 'created', className: MUTED }),
+                    column(rootF('columnSignedOff'), text(item('signedOffAt')), { className: MUTED }),
+                    column('', widgetCell('recon-action-cell', { href: item('actionHref'), label: item('actionLabel') })),
+                  ],
+                }, [
+                  widgetBlock('search-input', {
+                    placeholder: data.reconciliationsSearchPlaceholder,
+                    paramKey: 'reconQ',
+                    pageParamKey: 'reconPage',
+                  }),
+                  widgetBlock('filter-chips', {
+                    basePath: data.basePath,
+                    currentParams: data.currentParams,
+                    paramKey: 'reconStatus',
+                    label: data.reconStatusLabel,
+                    options: data.reconStatusOptions,
+                    pageParamKey: 'reconPage',
+                  }),
+                ]),
+                pagination({
+                  basePath: data.basePath,
+                  total: f('reconTotal'),
+                  page: f('reconPage'),
+                  perPage: f('reconPerPage'),
+                  pageParamKey: 'reconPage',
+                  bare: true,
                 }),
-                column(rootF('columnStatementBalance'), money(item('statementBalance')), {
-                  sort: 'balance',
-                  align: 'right',
-                }),
-                column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') }), {
-                  sort: 'status',
-                }),
-                column(
-                  rootF('columnStale'),
-                  widgetCell('stale-badge-cell', { label: item('staleLabel') }),
-                ),
-                column(rootF('columnEvidence'), badge(item('evidenceLabel'), { variant: item('evidenceVariant') })),
-                column(rootF('columnStarted'), text(item('createdAt')), { sort: 'created', className: MUTED }),
-                column(rootF('columnSignedOff'), text(item('signedOffAt')), { className: MUTED }),
-                column(
-                  '',
-                  widgetCell('recon-action-cell', { href: item('actionHref'), label: item('actionLabel') }),
-                ),
-              ],
-            }),
-            when: f('reconShowTable'),
-          },
-          {
-            ...pagination({
-              basePath: data.basePath,
-              total: f('reconTotal'),
-              page: f('reconPage'),
-              perPage: f('reconPerPage'),
-              pageParamKey: 'reconPage',
-              // The native pagers sit flush inside their section; the `mt-3`
-              // spacer belongs to list pages that wrap them.
-              bare: true,
-            }),
-            when: f('reconShowTable'),
-          },
-        ], { as: 'section' }),
-      ]),
+              ], { as: 'section' }),
+            ]),
       widgetBlock('statement-drawer', { drawer: data.drawer }, f('drawerOpen')),
     ],
   })

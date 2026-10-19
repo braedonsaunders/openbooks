@@ -119,7 +119,8 @@ const renderers = {
     if (!drawer) return null
     // The unsaved New-ticket drawer shares the list's drawer slot.
     if ('createMode' in drawer && drawer.createMode === true) return <FieldTicketCreateDrawer {...drawer} />
-    return <FieldTicketDrawer {...(drawer as ComponentProps<typeof FieldTicketDrawer>)} />
+    const ticketDrawer = drawer as ComponentProps<typeof FieldTicketDrawer>
+    return <FieldTicketDrawer key={ticketDrawer.ticket.id} {...ticketDrawer} />
   },
   'expense-drawer': (props: { drawer: unknown }) => {
     const drawer = props.drawer as (ComponentProps<typeof ExpenseDrawer> & { remountKey: string }) | null

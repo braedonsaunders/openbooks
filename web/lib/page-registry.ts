@@ -2037,9 +2037,12 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
     segments: [],
     searchParams: true,
     module: async () => {
-      const m = await import('../app/(app)/inventory/view')
+      const [loader, m] = await Promise.all([
+        import('../app/(app)/inventory/loader'),
+        import('../app/(app)/inventory/view'),
+      ])
       return {
-        load: (input) => m.loadInventory(input.searchParams ?? {}),
+        load: (input) => loader.loadInventory(input.searchParams ?? {}),
         spec: (data) => m.inventorySpec(data as never),
       }
     },

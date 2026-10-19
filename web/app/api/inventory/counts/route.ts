@@ -88,7 +88,8 @@ export const GET = defineRoute({
     }
     // The list is subsidiary-scoped server-side: a restricted caller sees
     // only the entities in their grant, and an empty grant sees nothing.
-    // Pages are cursor-bounded — count #501+ is reachable, never truncated.
+    // The page workspace uses bounded numeric pages; integrations may keep
+    // using the stable cursor contract.
     const limitParam = params.get('limit')
     let limit: number | undefined
     if (limitParam !== null) {
@@ -97,12 +98,22 @@ export const GET = defineRoute({
         return NextResponse.json({ error: 'limit must be an integer between 1 and 500' }, { status: 422 })
       }
     }
-    const page = await listStockCounts(user.orgId, {
+    const pageParam = params.get('page')
+    let pageNumber: number | undefined
+    if (pageParam !== null) {
+      pageNumber = Number(pageParam)
+      if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > 10_000) {
+        return NextResponse.json({ error: 'page must be an integer between 1 and 10000' }, { status: 422 })
+      }
+      limit ??= 25
+    }
+    const result = await listStockCounts(user.orgId, {
       subsidiaryIds: gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null,
       limit,
-      cursor: params.get('cursor'),
+      ...(pageNumber !== undefined ? { page: pageNumber } : { cursor: params.get('cursor') }),
+      search: params.get('q') ?? undefined,
     })
-    return NextResponse.json({ ok: true, ...page })
+    return NextResponse.json({ ok: true, ...result })
   } catch (e: unknown) {
     return refusal(e)
   }

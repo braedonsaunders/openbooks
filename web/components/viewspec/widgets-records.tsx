@@ -397,6 +397,6 @@ export const RECORDS_WIDGETS = {
   'type-builder-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof TypeBuilderDrawer> | null
     if (!drawer) return null
-    return <TypeBuilderDrawer {...drawer} />
+    return <TypeBuilderDrawer key={drawer.type.id || 'new'} {...drawer} />
   },
 } satisfies Record<string, WidgetRenderer>

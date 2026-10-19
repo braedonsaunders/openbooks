@@ -1,4 +1,5 @@
 import 'server-only'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
@@ -6,6 +7,7 @@ import { can, requirePermission } from '@/lib/authz'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { isFeatureEnabled } from '@/lib/features'
 import { isUuid, pickString } from '@/lib/list-params'
+import { loadAssetWorkspaceTabs } from '../tabs-loader'
 
 export const PROPOSAL_STATUSES = ['pending', 'accepted', 'rejected', 'voided'] as const
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number]
@@ -40,6 +42,10 @@ export interface ProposalRow {
 }
 
 export interface ProposalsData {
+  title: string
+  description: string
+  tabs: { key: string; href: string; label: string; active: boolean }[]
+  currentParams: Record<string, string | string[] | undefined>
   status: ProposalStatus | 'all'
   rows: ProposalRow[]
   selected: ProposalRow | null
@@ -60,6 +66,7 @@ export async function loadProposals(sp: Record<string, string | string[] | undef
   const authz = await requirePermission('assets.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'assetProposals')
+  const t = await getTranslations('assets')
   const requested = pickString(sp.status)
   const status = requested === 'all' || (PROPOSAL_STATUSES as readonly string[]).includes(requested ?? '')
     ? (requested as ProposalStatus | 'all')
@@ -151,6 +158,14 @@ export async function loadProposals(sp: Record<string, string | string[] | undef
     selected = all.rows.find((row) => row.id === selectedId) ?? null
   }
   return {
+    title: t('proposals.title'),
+    description: t('proposals.description'),
+    tabs: await loadAssetWorkspaceTabs(orgId, 'proposals', {
+      register: t('tabs.register'), taxDepreciation: t('tabs.taxDepreciation'), equipment: t('equipment.title'),
+      proposals: t('proposals.title'), construction: t('construction.title'), leases: t('leases.pageTitle'),
+      maintenance: t('maintenance.title'), insurance: t('insurance.title'),
+    }),
+    currentParams: sp,
     status,
     rows: mapped,
     selected,

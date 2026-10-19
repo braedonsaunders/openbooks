@@ -19,3 +19,17 @@ test('native record opening and closing preserve every list filter without serve
   assert.equal(isListDrawerHrefChange('/ap/bills', '/ar/invoices?doc=' + id), false)
   assert.equal(listDrawerRoute('__proto__'), null)
 })
+
+test('property management drawers preserve the selected workspace and unrelated query state', () => {
+  const list = '/property-management?tab=properties&view=default&form=property-default'
+  const property = `${list}&property=property-1`
+  const unit = `${property}&unit=unit-1`
+  const lease = `${unit}&lease=lease-1`
+  assert.equal(isListDrawerHrefChange(list, property), true)
+  assert.equal(isListDrawerHrefChange(property, unit), true)
+  assert.equal(isListDrawerHrefChange(unit, lease), true)
+  assert.equal(isListDrawerHrefChange(lease, unit), true)
+  assert.equal(isListDrawerHrefChange(property, `${list}&property=new`), true)
+  assert.equal(isListDrawerHrefChange(list, '/property-management?tab=cam&view=default&form=property-default'), false)
+  assert.equal(isListDrawerHrefChange(list, `${list}&sort=name`), false)
+})

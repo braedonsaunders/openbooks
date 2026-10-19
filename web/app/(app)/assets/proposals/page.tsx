@@ -1,8 +1,6 @@
-import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '@/components/page-layout'
+import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadProposals } from './_data'
-import { ProposalsWorkspace } from './ProposalsWorkspace'
+import { proposalsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,10 +15,6 @@ export default async function AssetProposalsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const [data, t] = await Promise.all([loadProposals(sp), getTranslations('assets')])
-  return (
-    <ListPageLayout header={<PageHeader title={t('proposals.title')} description={t('proposals.description')} />}>
-      <ProposalsWorkspace data={data} currentParams={sp} />
-    </ListPageLayout>
-  )
+  const data = await loadProposals(sp)
+  return <ModuleView spec={proposalsSpec(data)} data={data} searchParams={sp} trusted />
 }

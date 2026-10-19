@@ -1,4 +1,5 @@
 import 'server-only'
+import { getTranslations } from 'next-intl/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
@@ -8,6 +9,7 @@ import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { isFeatureEnabled } from '@/lib/features'
 import { isUuid, pickString } from '@/lib/list-params'
 import { ASSET_TYPES, PNL_COST_TYPES } from '@/lib/account-types'
+import { loadAssetWorkspaceTabs } from '../tabs-loader'
 
 /** Noncurrent asset types a construction-in-progress account may have (the engine refuses others). */
 const CIP_ACCOUNT_TYPES = ASSET_TYPES.filter((type) => type === 'asset_fixed' || type === 'asset_other')
@@ -42,12 +44,17 @@ export interface CipDetail extends CipRecordRow {
 }
 
 export interface ConstructionData {
+  title: string
+  description: string
+  tabs: { key: string; href: string; label: string; active: boolean }[]
+  currentParams: Record<string, string | string[] | undefined>
   tab: 'records' | 'reconciliation'
   today: string
   asOf: string
   rows: CipRecordRow[]
   reconciliation: (CipReconciliationRow & { subsidiaryName: string })[]
   selected: CipDetail | null
+  createMode: boolean
   canCapitalize: boolean
   componentsEnabled: boolean
   subsidiaries: { id: string; name: string }[]
@@ -98,6 +105,7 @@ export async function loadConstruction(sp: Record<string, string | string[] | un
   const authz = await requirePermission('assets.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'constructionInProgress')
+  const t = await getTranslations('assets')
   const allowed = authz.allowedSubsidiaryIds
   const scope = allowed ? [...allowed] : null
   const today = await businessToday(orgId)
@@ -163,14 +171,24 @@ export async function loadConstruction(sp: Record<string, string | string[] | un
       }
     }
   }
+  const canCapitalize = can(authz, 'assets.capitalize')
   return {
+    title: t('construction.title'),
+    description: t('construction.description'),
+    tabs: await loadAssetWorkspaceTabs(orgId, 'construction', {
+      register: t('tabs.register'), taxDepreciation: t('tabs.taxDepreciation'), equipment: t('equipment.title'),
+      proposals: t('proposals.title'), construction: t('construction.title'), leases: t('leases.pageTitle'),
+      maintenance: t('maintenance.title'), insurance: t('insurance.title'),
+    }),
+    currentParams: sp,
     tab,
     today,
     asOf,
     rows,
     reconciliation: recon.map((row) => ({ ...row, subsidiaryName: names.get(row.subsidiaryId) ?? '' })),
     selected,
-    canCapitalize: can(authz, 'assets.capitalize'),
+    createMode: pickString(sp.cip) === 'new' && canCapitalize,
+    canCapitalize,
     componentsEnabled,
     subsidiaries: subsidiaries.rows,
     categories: categories.rows,

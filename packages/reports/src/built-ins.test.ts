@@ -254,6 +254,12 @@ describe('built-in report definitions', () => {
       'a non-activating flag must not silently add a filter',
     )
   })
+
+  it('publishes payout reconciliation in the built-in report catalog', () => {
+    const def = BUILT_IN_REPORT_DEFINITION_MAP['payout-reconciliation']
+    assert.ok(def, 'payout reconciliation must be runnable from a built-in definition')
+    assert.equal(def.query.entity, 'payout_reconciliation')
+  })
 })
 
 describe('period_preset compile contract', () => {

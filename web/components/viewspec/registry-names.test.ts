@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import * as React from 'react'
 import { FRAME_NAMES, WIDGET_NAMES } from './registry-names'
 import { WIDGET_FAMILIES, WIDGET_FAMILY } from './widget-index'
-import { UnknownWidgetError, loadWidgetFamily, renderWidget } from './widget-loader'
 
+Object.assign(globalThis, { React })
+const { UnknownWidgetError, loadWidgetFamily, renderWidget } = await import('./widget-loader')
 const { WIDGET_REGISTRY } = await import('./widgets')
 const { FRAME_REGISTRY } = await import('./blocks')
 

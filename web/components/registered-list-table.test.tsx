@@ -28,6 +28,26 @@ test('server windows retain rows and source totals without client slicing', () =
   assert.equal(result.props.perPage, 25)
 })
 
+test('inventory counts use the shared server pager', () => {
+  const rows = [{ id: 'count-1', date: '2026-10-18' }]
+  const result = RegisteredListTable({
+    source: 'inventory_counts',
+    rows,
+    rowKey: (row) => row.id,
+    empty: 'Empty',
+    state: { total: 620, page: 4, perPage: 25 },
+    basePath: '/inventory',
+    currentParams: { inventoryView: 'counts', page: '4' },
+    columns: [{ key: 'date', header: 'Date', cell: (row) => row.date }],
+  })
+  assert.equal(result.type, ServerPagedTable)
+  assert.equal(result.props.rows, rows)
+  assert.equal(result.props.total, 620)
+  assert.equal(result.props.page, 4)
+  assert.equal(result.props.perPage, 25)
+  assert.equal(result.props.basePath, '/inventory')
+})
+
 test('loaded lists pass only rendered cells and declared search text across the client boundary', () => {
   const result = RegisteredListTable({
     source: 'hrm_compensation_cycles',

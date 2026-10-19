@@ -4,6 +4,7 @@ import test from "node:test";
 declare global {
   var __workItemToasts: { kind: string; message: string }[] | undefined;
   var __workItemRefreshed: boolean | undefined;
+  var __workItemConfirmCalls: unknown[] | undefined;
 }
 
 // Dismiss/resolve/assign/note/rate refusals (invalid_transition,
@@ -39,6 +40,12 @@ registerHooks({
       return {
         shortCircuit: true,
         url: "data:text/javascript,export const toast={success(m){(globalThis.__workItemToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__workItemToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
+      };
+    }
+    if (specifier === "./confirm" && context.parentURL?.endsWith("/web/lib/use-dirty-close.ts")) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function confirmDialog(options){(globalThis.__workItemConfirmCalls??=[]).push(options);return true}",
       };
     }
     return next(specifier, context);
@@ -92,7 +99,11 @@ const ITEM: WorkItem = {
   feedback: null,
 };
 
-async function renderDrawer(withNotes = false) {
+async function renderDrawer(
+  withNotes = false,
+  assignment?: NonNullable<Parameters<typeof WorkItemDrawer>[0]["assignment"]>,
+  assignees?: NonNullable<Parameters<typeof WorkItemDrawer>[0]["assignees"]>,
+) {
   document.body.innerHTML = "";
   globalThis.__workItemRefreshed = false;
   const host = document.createElement("div");
@@ -107,6 +118,8 @@ async function renderDrawer(withNotes = false) {
             closeHref="/close"
             canWrite={true}
             notes={withNotes ? [] : undefined}
+            assignment={assignment}
+            assignees={assignees}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -200,4 +213,72 @@ test("a forbidden note pins the translated reason", async (t) => {
     /don't have permission/,
     "the pinned refusal must carry the translated forbidden reason",
   );
+});
+
+test("clearing an assignment clears its inputs after the server confirms", async (t) => {
+  const requests: Array<{ url: string; method?: string; body?: unknown }> = [];
+  const restoreFetch = scriptFetch((url, init) => {
+    requests.push({ url, method: init?.method, body: JSON.parse(String(init?.body)) });
+    return Response.json({});
+  });
+  t.after(restoreFetch);
+  const { unmount } = await renderDrawer(false, {
+    assigneeUserId: "user-1",
+    assigneeUserName: "Alex Operator",
+    assigneeRole: "controller",
+    assigneeRoleName: "Controller",
+    dueAt: "2026-10-25T00:00:00.000Z",
+    overdue: false,
+  }, {
+    users: [{ id: "user-1", name: "Alex Operator", email: "alex@example.test" }],
+    roles: [{ id: "controller", name: "Controller" }],
+  });
+  t.after(unmount);
+
+  const selects = document.querySelectorAll("select");
+  const dueDate = document.querySelector<HTMLInputElement>("input[data-date-field]");
+  assert.equal(selects[0]?.value, "user-1");
+  assert.equal(selects[1]?.value, "controller");
+  assert.equal(dueDate?.value, "10/25/2026");
+
+  const clear = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === "Clear",
+  );
+  assert.ok(clear, "the assignment clear action renders");
+  await click(clear);
+
+  assert.deepEqual(requests, [{
+    url: `/api/continuous-close/items/${ITEM.id}`,
+    method: "PATCH",
+    body: { action: "assign", assigneeUserId: null, assigneeRole: null, dueAt: null },
+  }]);
+  assert.equal(selects[0]?.value, "");
+  assert.equal(selects[1]?.value, "");
+  assert.equal(dueDate?.value, "");
+  assert.equal(globalThis.__workItemRefreshed, true);
+});
+
+test("saved feedback does not trigger the unsaved-changes confirmation", async (t) => {
+  globalThis.__workItemConfirmCalls = [];
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/continuous-close/items/${ITEM.id}/feedback` && init?.method === "PUT") {
+      return Response.json({});
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await renderDrawer();
+  t.after(unmount);
+
+  const helpful = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === "Helpful",
+  );
+  assert.ok(helpful, "the helpful feedback action renders");
+  await click(helpful);
+
+  const close = document.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
+  assert.ok(close, "the drawer close action renders");
+  await click(close);
+
+  assert.deepEqual(globalThis.__workItemConfirmCalls, []);
 });

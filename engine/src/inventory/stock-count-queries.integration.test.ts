@@ -14,9 +14,8 @@ import { listStockCounts } from "./stock-count-queries.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 /**
- * Stock-count list regressions: subsidiary scoping (D4), discrepant-line
- * variance (D5), and cursor pagination past 500 rows (D6). Integration
- * partition only (filename), against scratch orgs.
+ * Stock-count list regressions cover subsidiary isolation, line-level
+ * discrepancies, and cursor plus URL pagination against scratch orgs.
  */
 
 async function secondSubsidiary(org: ScratchOrg): Promise<string> {
@@ -104,7 +103,7 @@ test("offsetting variances stay visibly discrepant; no cross-item sum is shown",
   }
 });
 
-test("cursor pages reach past 500 rows with total and next-page evidence", async () => {
+test("cursor and URL pages reach every row with totals and search evidence", async () => {
   const org = await createScratchOrg();
   try {
     // 505 posted counts with strictly staggered dates; the oldest must stay
@@ -147,6 +146,14 @@ test("cursor pages reach past 500 rows with total and next-page evidence", async
     assert.equal(seen.size, 505, "every count, including #501+, is reachable");
     assert.ok(seen.has(oldestId), "the oldest posted count is reachable through the list");
     assert.equal(pages, 3, "200 + 200 + 105 in three bounded pages");
+
+    const numericPage = await listStockCounts(org.orgId, { page: 2, limit: 10 });
+    assert.equal(numericPage.totalCount, 505);
+    assert.deepEqual(numericPage.counts.map((row) => row.id), ids.slice(10, 20));
+    assert.equal(numericPage.nextCursor, null, "numeric paging does not mix in cursor state");
+    const searched = await listStockCounts(org.orgId, { page: 1, limit: 10, search: org.date });
+    assert.equal(searched.totalCount, 1, "literal date search counts only its matching rows");
+    assert.equal(searched.counts[0]?.id, ids[0]);
   } finally {
     await dropScratchOrg(org.orgId);
   }
