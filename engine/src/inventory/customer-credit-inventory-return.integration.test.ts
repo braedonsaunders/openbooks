@@ -278,7 +278,7 @@ test(
              subtotal, tax_total, total, custom)
           values (${saleId}, ${org.orgId}, 'cash_sale', ${`CS-${saleId.slice(0, 8)}`},
             ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-            'CAD', 1, 'approved', '4', '0', '4', '{}'::jsonb)`);
+            'CAD', 1, 'draft', '4', '0', '4', '{}'::jsonb)`);
         await db.execute(sql`
           insert into document_lines
             (id, org_id, document_id, line_number, item_id, account_id,
@@ -287,6 +287,7 @@ test(
           values (${saleLineId}, ${org.orgId}, ${saleId}, 1, ${itemId},
             ${org.accounts.revenue}, '1', '4', '4', '0', false, '1', '0',
             ${org.stockLocationId}, '{}'::jsonb, false)`);
+        await db.execute(sql`update documents set status = 'approved' where id = ${saleId} and org_id = ${org.orgId}`);
         const shipment = await issueInventory(org.orgId, null, {
           itemId,
           stockLocationId: org.stockLocationId,
