@@ -295,6 +295,27 @@ export async function settleRebateForPostedDocument(orgId:string,documentId:stri
   await audit(db,orgId,actorId,'rebate_claims',claim.id,'settle','Posted native rebate settlement',claim,{entryId:doc.posted_entry_id});
 }
 
+/** Refuse a changed settlement tax treatment before the document posting kernel validates tax totals. */
+export async function assertRebateSettlementTaxBeforePosting(orgId:string,documentId:string):Promise<void> {
+  const row=(await db.execute<{tax_treatment:'outside_scope'|'taxable';settlement_tax_code_id:string|null;tax_code_id:string|null;tax_group_id:string|null;tax_overridden:boolean;line_count:number}>(sql`
+    select a.tax_treatment,a.settlement_tax_code_id,l.tax_code_id,l.tax_group_id,l.tax_overridden,
+      (select count(*)::int from document_lines all_lines where all_lines.org_id=d.org_id and all_lines.document_id=d.id) as line_count
+    from rebate_claims c
+    join rebate_agreements a on a.org_id=c.org_id and a.id=c.agreement_id
+    join documents d on d.org_id=c.org_id and d.id=c.settlement_document_id
+    join document_lines l on l.org_id=d.org_id and l.document_id=d.id
+    where c.org_id=${orgId} and c.settlement_document_id=${documentId} and c.status='document_pending'
+    order by l.line_number limit 1
+    for update of c,a,d,l`)).rows[0];
+  if (!row) return;
+  const taxMatches=row.tax_treatment==='outside_scope'
+    ? row.tax_code_id===null && row.tax_group_id===null && !row.tax_overridden
+    : row.settlement_tax_code_id!==null && row.tax_code_id===row.settlement_tax_code_id && row.tax_group_id===null && !row.tax_overridden;
+  if (row.line_count!==1 || !taxMatches) {
+    throw new RebateError('Restore the settlement document counterparty, currency, accrual account, exact claim amount and agreement tax treatment before posting');
+  }
+}
+
 /** A generated settlement draft can be voided and prepared again. A posted
  * settlement must be reversed through its claim to retain accrual lineage. */
 export async function rebateSettlementVoidContext(orgId:string,documentId:string) {
