@@ -69,7 +69,7 @@ export type ManufacturingHomeData = {
 const f = ref<ManufacturingHomeData>()
 const row = ref<ManufacturingHomeRow>()
 
-export function manufacturingHomeSpec(data: ManufacturingHomeData): PageSpec {
+export function manufacturingHomeSpec(_data: ManufacturingHomeData): PageSpec {
   return page({
     route: '/manufacturing',
     layout: 'list',
