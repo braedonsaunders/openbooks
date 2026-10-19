@@ -8,13 +8,14 @@ import { periodFingerprint } from "./readiness.ts";
 import { refreshCloseRun } from "./run-automation.ts";
 import { startCloseRun } from "./run-start.ts";
 import { recordClosingFxRateEvidence } from "./fx-revaluation-evidence.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, grantScratchPermissions, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
 
 const enabled = !!process.env.OPENBOOKS_DB_URL;
 
 async function setup() {
   const org = await createScratchOrg();
   const actor = (await seedFlowActors(org.orgId)).adminId;
+  await grantScratchPermissions(org.orgId, actor, ["close.run"]);
   const other = randomUUID();
   await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     values (${other}, ${org.orgId}, ${org.subsidiaryId}, 'Other entity', 'USD', 'US')`);
