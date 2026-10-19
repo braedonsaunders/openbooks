@@ -275,6 +275,16 @@ export interface MeRequestRow extends MyRequest {
   submittedLabel: string | null
 }
 
+export interface MeActionQueueRow {
+  id: string
+  title: string
+  kindLabel: string
+  href: string
+  dueLabel: string
+  statusLabel: string
+  statusVariant: StatusVariant
+}
+
 export interface MeEmploymentRow {
   employmentId: string
   employer: string
@@ -294,7 +304,14 @@ export interface MeOverviewData {
   hasContent: boolean
   hasTeam: boolean
   displayName: string | null
+  notAvailableLabel?: string
+  latestNetPayLabel?: string
   employments: MeEmploymentRow[]
+  employmentFacts?: MeFact[]
+  actionQueueRows?: MeActionQueueRow[]
+  openStepsCount?: number
+  pendingRequestsCount?: number
+  expiringQualificationsCount?: number
   employmentsTitle: string
   employmentsColumns: { employer: string; title: string; department: string; status: string; manager: string; serviceStart: string }
   employmentsEmpty: string
@@ -312,6 +329,7 @@ export interface MeOverviewData {
   requestsEmptyDescription: string
   requestsColumns: { kind: string; status: string; submitted: string }
   balancesTitle: string
+  availableLeaveLabel?: string
   balances: MyLeaveBalance[]
   balancesEmpty: string
   // HR-14 begin: the viewer's own certifications needing action.
@@ -414,6 +432,8 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
   const base = {
     title: t('me.overview.title'),
     description: t('me.overview.description'),
+    notAvailableLabel: t('me.overview.notAvailable'),
+    latestNetPayLabel: t('me.pay.columns.netPay'),
     tabs,
     stepsTitle: t('me.overview.stepsTitle'),
     stepsEmpty: t('me.overview.stepsEmpty'),
@@ -435,6 +455,7 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       submitted: t('me.requests.columns.submitted'),
     },
     balancesTitle: t('me.overview.balancesTitle'),
+    availableLeaveLabel: t('me.overview.availableLeaveLabel'),
     balancesEmpty: t('me.overview.balancesEmpty'),
     // HR-14 begin
     qualificationsTitle: t('me.overview.qualificationsTitle'),
@@ -476,6 +497,9 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       actorHasTeam({ orgId, actorId: authz.user.id }).catch(() => false),
       selfWorkspaceCapabilities(orgId).catch(() => ({ hasReviewCycles: false, hasBenefitPlans: false })),
     ])
+    const reviewWorkspace = caps.hasReviewCycles
+      ? await getMyReviewWorkspace({ orgId, actorId: authz.user.id })
+      : null
     const visible = SELF_SERVICE_EXTENSIONS.filter(
       (extension) =>
         extension.capability === undefined ||
@@ -509,24 +533,94 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       qualificationsState = "unavailable";
       qualificationRefusal = sectionRefusal(t, error);
     }
+    const employmentRows = profile.employments.map((summary) => ({
+      employmentId: summary.employmentId,
+      employer: summary.employerName,
+      title: summary.jobTitle ?? t('me.overview.notAvailable'),
+      department: summary.departmentName ?? t('me.overview.notAvailable'),
+      statusLabel: statusLabel(t, 'me.employmentStatus', summary.status),
+      statusVariant: statusVariant(summary.status),
+      manager: summary.managerNames.length > 0 ? summary.managerNames.join(', ') : t('me.overview.notAvailable'),
+      serviceStart: summary.serviceStart,
+    }))
+    const employmentFacts: MeFact[] = employmentRows.length === 0 ? [] : [
+      { label: base.employmentsColumns.employer, value: [...new Set(employmentRows.map((row) => row.employer))].join(' · ') },
+      { label: base.employmentsColumns.title, value: [...new Set(employmentRows.map((row) => row.title))].join(' · ') },
+      { label: base.employmentsColumns.department, value: [...new Set(employmentRows.map((row) => row.department))].join(' · ') },
+      { label: base.employmentsColumns.status, value: [...new Set(employmentRows.map((row) => row.statusLabel))].join(' · ') },
+    ]
+    const pendingRequests = requests.filter((row) => row.status === 'draft' || row.status === 'pending_approval')
+    const visibleSteps = stepRows(t, steps.slice(0, 5))
+    const visibleRequests = requestRows(t, pendingRequests.slice(0, 5))
+    const expiringQualifications = qualifications.filter((q) => q.status === 'expiring' || q.status === 'expired')
+    const qualificationRows = expiringQualifications
+      .sort((a, b) =>
+        a.status === b.status ? (a.expiresOn ?? '').localeCompare(b.expiresOn ?? '') : a.status === 'expired' ? -1 : 1,
+      )
+      .slice(0, 5)
+      .map((q) => ({
+        id: q.id,
+        typeName: q.type.name,
+        expiresOn: q.expiresOn,
+        statusLabel: t.has(`qualifications.statusNames.${q.status}`)
+          ? (t(`qualifications.statusNames.${q.status}`) as string)
+          : q.status,
+        statusVariant: qualificationVariant(q.status),
+      }))
+    const actionQueueRows: MeActionQueueRow[] = [
+      ...visibleSteps.map((step) => ({
+        id: `step:${step.id}`,
+        title: step.title,
+        kindLabel: t('me.checklists.title'),
+        href: `/me/checklists?step=${encodeURIComponent(step.id)}`,
+        dueLabel: step.dueOn,
+        statusLabel: step.statusLabel,
+        statusVariant: step.statusVariant,
+      })),
+      ...visibleRequests.map((request) => ({
+        id: `request:${request.id}`,
+        title: request.kindLabel,
+        kindLabel: request.kindLabel,
+        href: '/me/profile',
+        dueLabel: request.submittedLabel ?? t('me.overview.notAvailable'),
+        statusLabel: request.statusLabel,
+        statusVariant: request.statusVariant,
+      })),
+      ...(reviewWorkspace?.cycles.flatMap((group) => [
+        ...(group.mySelf?.status === 'pending' ? [{
+          id: `review:${group.mySelf.id}`,
+          title: group.name,
+          kindLabel: t('me.reviews.selfTitle'),
+          href: group.mySelf.drawerHref,
+          dueLabel: group.mySelf.selfDueOn ?? t('me.overview.notAvailable'),
+          statusLabel: statusLabel(t, 'me.reviewStatus', group.mySelf.status),
+          statusVariant: statusVariant(group.mySelf.status),
+        }] : []),
+        ...group.sharedWithMe.filter((review) => review.status === 'shared').map((review) => ({
+          id: `review:${review.id}`,
+          title: group.name,
+          kindLabel: t('me.reviews.sharedTitle'),
+          href: '/me/reviews',
+          dueLabel: review.sharedAt ?? t('me.overview.notAvailable'),
+          statusLabel: statusLabel(t, 'me.reviewStatus', review.status),
+          statusVariant: statusVariant(review.status),
+        })),
+      ]) ?? []),
+    ]
     return {
       ...base,
       refusal: null,
       hasContent: true,
       hasTeam,
       displayName: profile.displayName,
-      employments: profile.employments.map((summary) => ({
-        employmentId: summary.employmentId,
-        employer: summary.employerName,
-        title: summary.jobTitle ?? t('me.overview.notAvailable'),
-        department: summary.departmentName ?? t('me.overview.notAvailable'),
-        statusLabel: statusLabel(t, 'me.employmentStatus', summary.status),
-        statusVariant: statusVariant(summary.status),
-        manager: summary.managerNames.length > 0 ? summary.managerNames.join(', ') : t('me.overview.notAvailable'),
-        serviceStart: summary.serviceStart,
-      })),
-      steps: stepRows(t, steps.slice(0, 5)),
-      requests: requestRows(t, requests.filter((row) => row.status === 'draft' || row.status === 'pending_approval').slice(0, 5)),
+      employments: employmentRows,
+      employmentFacts,
+      actionQueueRows,
+      openStepsCount: steps.length,
+      pendingRequestsCount: pendingRequests.length,
+      expiringQualificationsCount: expiringQualifications.length,
+      steps: visibleSteps,
+      requests: visibleRequests,
       balances: inbox?.balances ?? [],
       qualificationsState,
       ...(qualificationRefusal
@@ -535,21 +629,7 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
             qualificationsEmptyDescription: qualificationRefusal.message,
           }
         : {}),
-      qualifications: qualifications
-        .filter((q) => q.status === 'expiring' || q.status === 'expired')
-        .sort((a, b) =>
-          a.status === b.status ? (a.expiresOn ?? '').localeCompare(b.expiresOn ?? '') : a.status === 'expired' ? -1 : 1,
-        )
-        .slice(0, 5)
-        .map((q) => ({
-          id: q.id,
-          typeName: q.type.name,
-          expiresOn: q.expiresOn,
-          statusLabel: t.has(`qualifications.statusNames.${q.status}`)
-            ? (t(`qualifications.statusNames.${q.status}`) as string)
-            : q.status,
-          statusVariant: qualificationVariant(q.status),
-        })),
+      qualifications: qualificationRows,
       extensions,
       hasExtensions: extensions.length > 0,
     }

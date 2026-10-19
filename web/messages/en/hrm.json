@@ -930,6 +930,7 @@
     "emptyTitle": "No requests yet",
     "emptyDescription": "File your first request to see it here.",
     "balancesTitle": "Balances",
+    "availableLeaveLabel": "Available leave",
     "balancesEmpty": "No active leave types.",
     "balanceEmployment": "{employer} · Employment {employment}",
     "balancePerson": "Person-level",
@@ -1553,7 +1554,7 @@
         "rewards": "Rewards",
         "incentives": "Incentives",
         "payouts": "Payouts",
-        "employees": "Benefits",
+        "employees": "Employees",
         "delivery": "Delivery"
       }
     },

@@ -7,12 +7,14 @@ import {
   column,
   grid,
   field as item,
-  heading,
-  link,
   page,
   pageHeader,
+  panel,
+  link,
   ref,
+  statTile,
   text,
+  textBlock,
   widget,
   widgetBlock,
   type PageSpec,
@@ -38,6 +40,16 @@ import { loadMeOverview, type MeOverviewData } from '../../../lib/hrm/self-servi
 const f = ref<MeOverviewData>()
 
 export function meSpec(data: MeOverviewData): PageSpec {
+  const timeBalances = data.balances.filter((balance) => balance.kind === 'time')
+  const leaveValue = timeBalances.length > 0
+    ? timeBalances.map((balance) => `${balance.leaveTypeCode}: ${balance.unlimited ? data.unlimitedLabel : balance.remaining ?? data.notAvailableLabel ?? '—'}`).join(' · ')
+    : data.notAvailableLabel ?? '—'
+  const leaveSub = timeBalances.length > 0
+    ? data.timeKindLabel
+    : data.balancesEmpty
+  const latestPay = data.payStubs?.[0]
+  const latestPayValue = latestPay?.netPay ?? data.notAvailableLabel ?? '—'
+  const compensationLabel = data.tabs.find((tab) => tab.href === '/me/compensation')?.label ?? data.payTitle ?? ''
   return page({
     route: '/me',
     layout: 'list',
@@ -69,153 +81,70 @@ export function meSpec(data: MeOverviewData): PageSpec {
         f('refusal'),
       ),
       {
-        ...grid('flex h-full min-h-0 flex-col gap-4', [
-          // Employment, steps, requests, balances, qualifications and
-          // payslips render as direct lists under house headings — no
-          // panel repeats the section name.
-          heading(2, f('employmentsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-          registeredListTable('me_overview_employments', {
-            variant: 'app',
-            rows: f('employments'),
-            rowKey: item('employmentId'),
-            columns: [
-              column(f('employmentsColumns.employer'), text(item('employer'))),
-              column(f('employmentsColumns.title'), text(item('title'))),
-              column(f('employmentsColumns.department'), text(item('department'))),
-              column(
-                f('employmentsColumns.status'),
-                badge(item('statusLabel'), { variant: item('statusVariant') }),
-              ),
-              column(f('employmentsColumns.manager'), text(item('manager'))),
-              column(
-                f('employmentsColumns.serviceStart'),
-                text(item('serviceStart'), { className: 'tabular-nums' }),
-              ),
-            ],
-            empty: { title: f('employmentsEmpty'), description: f('employmentsEmptyDescription') },
-          }),
-          heading(2, f('stepsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-          registeredListTable('me_overview_steps', {
-            variant: 'app',
-            rows: f('steps'),
-            rowKey: item('id'),
-            columns: [
-              column(f('stepsColumns.title'), text(item('title'))),
-              column(f('stepsColumns.process'), text(item('processKind'))),
-              column(
-                f('stepsColumns.due'),
-                text(item('dueOn'), { className: 'tabular-nums' }),
-              ),
-              column(
-                f('stepsColumns.status'),
-                badge(item('statusLabel'), { variant: item('statusVariant') }),
-              ),
-            ],
-            empty: { title: f('stepsEmpty'), description: f('stepsEmptyDescription') },
-          }),
-          heading(2, f('requestsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-          registeredListTable('me_overview_requests', {
-            variant: 'app',
-            rows: f('requests'),
-            rowKey: item('id'),
-            columns: [
-              column(f('requestsColumns.kind'), text(item('kindLabel'))),
-              column(
-                f('requestsColumns.status'),
-                badge(item('statusLabel'), { variant: item('statusVariant') }),
-              ),
-              column(
-                f('requestsColumns.submitted'),
-                text(item('submittedLabel'), { className: 'tabular-nums' }),
-              ),
-            ],
-            empty: { title: f('requestsEmpty'), description: f('requestsEmptyDescription') },
-          }),
-          heading(2, f('balancesTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-          widgetBlock('hrm-leave-balances', {
-            balances: data.balances,
-            timeKindLabel: data.timeKindLabel,
-            valueKindLabel: data.valueKindLabel,
-            unlimitedLabel: data.unlimitedLabel,
-            serviceStartUnknownLabel: data.serviceStartUnknownLabel,
-            empty: data.balancesEmpty,
-          }),
-// HR-14 begin: the viewer's own certifications needing action —
-          // same shared registered list as every other overview section.
-          ...(data.qualificationsState === "disabled"
-            ? []
-            : [
-                heading(2, f('qualificationsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-                registeredListTable('me_overview_qualifications', {
-                  variant: 'app',
-                  rows: f('qualifications'),
-                  rowKey: item('id'),
-                  columns: [
-                    column(f('qualificationsColumns.type'), text(item('typeName'))),
-                    column(
-                      f('qualificationsColumns.expires'),
-                      text(item('expiresOn'), { className: 'tabular-nums' }),
-                    ),
-                    column(
-                      f('qualificationsColumns.status'),
-                      badge(item('statusLabel'), { variant: item('statusVariant') }),
-                    ),
-                  ],
-                  empty: { title: f('qualificationsEmpty'), description: f('qualificationsEmptyDescription') },
-                }),
-              ]),
-
-          // HR-21 begin: own payslips with the Explain drawer. The trace
-          // table and diff chips render from the deterministic service —
-          // no LLM is needed for the drawer; assistant phrasing is optional.
-          // Shown while payroll is on; the empty state covers stub-less staff.
-          {
-            ...heading(2, f('payTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-            when: f('hasPay'),
-          },
-          {
-            ...registeredListTable('me_overview_pay', {
-              variant: 'app',
-              rows: f('payStubs'),
-              rowKey: item('id'),
-              columns: [
-                column(
-                  f('payColumns.payDate'),
-                  text(item('payDate'), { className: 'tabular-nums' }),
-                ),
-                column(f('payColumns.gross'), text(item('gross')), {
-                  align: 'right',
-                  className: 'tabular-nums',
-                }),
-                column(f('payColumns.netPay'), text(item('netPay')), {
-                  align: 'right',
-                  className: 'tabular-nums',
-                }),
-                column('', link(item('explainLabel'), item('explainHref'))),
-              ],
-              empty: { title: f('payEmpty') },
+        ...grid('flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4', [
+          grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5', [
+            statTile({ iconKey: 'clipboard-check', accent: 'teal', label: f('stepsTitle'), value: String(data.openStepsCount ?? data.steps?.length ?? 0), sub: f('viewChecklists') }),
+            statTile({ iconKey: 'file-clock', accent: 'amber', label: f('requestsTitle'), value: String(data.pendingRequestsCount ?? data.requests?.length ?? 0), sub: f('requestsEmptyDescription') }),
+            statTile({ iconKey: 'calendar-days', accent: 'sky', label: f('availableLeaveLabel'), value: leaveValue, sub: leaveSub }),
+            statTile({ iconKey: 'triangle-alert', accent: 'violet', label: f('qualificationsTitle'), value: String(data.expiringQualificationsCount ?? data.qualifications?.length ?? 0), sub: f('qualificationsEmptyDescription') }),
+            statTile({ iconKey: 'banknote', accent: 'emerald', label: data.latestNetPayLabel ?? data.payColumns?.netPay ?? data.payTitle ?? '', value: latestPayValue, sub: latestPay?.payDate ?? data.notAvailableLabel ?? '' }),
+          ]),
+          grid('grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3', [
+            panel({
+              title: f('stepsTitle'),
+              iconKey: 'list-checks',
+              hint: f('stepsEmptyDescription'),
+              bodyClassName: 'min-h-0 overflow-y-auto p-0',
+              className: 'min-h-[24rem] lg:col-span-2',
+              blocks: [registeredListTable('me_action_queue', {
+                variant: 'app',
+                rows: f('actionQueueRows'),
+                rowKey: item('id'),
+                columns: [
+                  column(f('stepsColumns.title'), link(item('title'), item('href'))),
+                  column(f('requestsColumns.kind'), text(item('kindLabel'))),
+                  column(f('stepsColumns.due'), text(item('dueLabel'), { className: 'tabular-nums' })),
+                  column(f('requestsColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+                ],
+                empty: { title: f('stepsEmpty'), description: f('stepsEmptyDescription') },
+              })],
             }),
-            when: f('hasPay'),
-          },
-          {
-            ...widgetBlock(
-              'hrm-explain-drawer',
-              {
-                explain: data.payExplain,
-              },
-              f('payExplain'),
-            ),
-            when: f('hasPay'),
-          },
-          // HR-21 end
-          widgetBlock(
-            'directory-section',
-            {
-              title: data.extensionsTitle,
-              items: data.extensions,
-            },
-            f('hasExtensions'),
-          ),
+            grid('flex min-h-0 flex-col gap-5 overflow-y-auto', [
+              panel({
+                title: f('employmentsTitle'),
+                iconKey: 'briefcase',
+                bodyClassName: 'p-0',
+                className: 'shrink-0',
+                blocks: [
+                  widgetBlock('hrm-facts', { facts: data.employmentFacts ?? [], empty: data.employmentsEmpty }),
+                  widgetBlock('hrm-leave-balances', {
+                    balances: data.balances,
+                    timeKindLabel: data.timeKindLabel,
+                    valueKindLabel: data.valueKindLabel,
+                    unlimitedLabel: data.unlimitedLabel,
+                    serviceStartUnknownLabel: data.serviceStartUnknownLabel,
+                    empty: data.balancesEmpty,
+                  }),
+                ],
+              }),
+              panel({
+                title: f('payTitle'),
+                iconKey: 'wallet',
+                bodyClassName: 'space-y-3 p-4',
+                className: 'shrink-0',
+                when: f('hasPay'),
+                blocks: [
+                  textBlock(latestPay ? `${data.payColumns?.payDate ?? ''}: ${latestPay.payDate} · ${data.payColumns?.netPay ?? ''}: ${latestPay.netPay}` : data.payEmpty ?? ''),
+                  ...(latestPay ? [
+                    widget('link-button', { href: latestPay.explainHref, label: latestPay.explainLabel, variant: 'outline' }),
+                    widget('link-button', { href: '/me/compensation', label: compensationLabel, variant: 'outline' }),
+                  ] : []),
+                ],
+              }),
+              widgetBlock('directory-section', { title: data.extensionsTitle, items: data.extensions }, f('hasExtensions')),
+            ]),
+          ]),
+          widgetBlock('hrm-explain-drawer', { explain: data.payExplain }, f('payExplain')),
         ]),
         when: f('hasContent'),
       },

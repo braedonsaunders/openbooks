@@ -930,6 +930,7 @@
     "emptyTitle": "Aucune demande",
     "emptyDescription": "Enregistrez votre première demande.",
     "balancesTitle": "Soldes",
+    "availableLeaveLabel": "Congés disponibles",
     "balancesEmpty": "Aucun type de congé actif.",
     "balanceEmployment": "{employer} · Emploi {employment}",
     "balancePerson": "Au niveau de la personne",
@@ -1553,7 +1554,7 @@
         "rewards": "Récompenses",
         "incentives": "Intéressement",
         "payouts": "Versements",
-        "employees": "Avantages",
+        "employees": "Employés",
         "delivery": "Exécution"
       }
     },

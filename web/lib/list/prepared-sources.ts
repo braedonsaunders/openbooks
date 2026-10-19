@@ -580,6 +580,12 @@ const SOURCES = {
     rowKeyField: 'employmentId',
     mode: 'loaded',
   },
+  me_action_queue: {
+    route: '/me',
+    rowsField: 'actionQueueRows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
   me_overview_steps: {
     // top-5 window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,

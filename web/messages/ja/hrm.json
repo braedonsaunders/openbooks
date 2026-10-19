@@ -930,6 +930,7 @@
     "emptyTitle": "申請はまだありません",
     "emptyDescription": "最初の申請を登録してください。",
     "balancesTitle": "残高",
+    "availableLeaveLabel": "利用可能な休暇",
     "balancesEmpty": "有効な休暇種別がありません。",
     "balanceEmployment": "{employer} · 雇用 {employment}",
     "balancePerson": "個人単位",
@@ -1553,7 +1554,7 @@
         "rewards": "報奨",
         "incentives": "インセンティブ",
         "payouts": "支払い",
-        "employees": "福利厚生",
+        "employees": "従業員",
         "delivery": "履行"
       }
     },

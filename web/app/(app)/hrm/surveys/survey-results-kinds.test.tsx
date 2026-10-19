@@ -83,7 +83,7 @@ const drawer = {
   },
 } as unknown as Drawer
 
-async function renderText(): Promise<{ text: string; unmount: () => Promise<void> }> {
+async function renderText(target: Drawer = drawer): Promise<{ text: string; heatClasses: string[]; unmount: () => Promise<void> }> {
   const { JSDOM } = await import('jsdom')
   // A real URL: UrlDrawer resolves its close href against the address bar.
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
@@ -120,12 +120,13 @@ async function renderText(): Promise<{ text: string; unmount: () => Promise<void
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages}>
-        <SurveysDrawer drawer={drawer} />
+        <SurveysDrawer drawer={target} />
       </NextIntlClientProvider>,
     )
   })
   return {
     text: doc.body.textContent ?? '',
+    heatClasses: [...doc.querySelectorAll('td')].map((cell) => cell.className),
     unmount: async () => {
       await act(async () => {
         root.unmount()
@@ -152,6 +153,34 @@ test('an unrecognized question kind falls back to its code, never blank', async 
   const m = await renderText()
   try {
     assert.match(m.text, /mystery_kind/, 'an unknown kind stays visible as its code')
+  } finally {
+    await m.unmount()
+  }
+})
+
+test('heatmap severity bands use readable semantic colors in light and dark themes', async () => {
+  const target = {
+    ...drawer,
+    results: {
+      ...drawer.results!,
+      heat: {
+        drivers: ['Safety'],
+        segments: ['North', 'Central', 'South'],
+        cells: {
+          Safety: {
+            North: { mean: 1.5, suppressed: false },
+            Central: { mean: 3, suppressed: false },
+            South: { mean: 4.5, suppressed: false },
+          },
+        },
+      },
+    },
+  } as unknown as Drawer
+  const m = await renderText(target)
+  try {
+    assert.ok(m.heatClasses.some((className) => className.includes('bg-red-50') && className.includes('dark:text-red-200')))
+    assert.ok(m.heatClasses.some((className) => className.includes('bg-amber-50') && className.includes('dark:text-amber-200')))
+    assert.ok(m.heatClasses.some((className) => className.includes('bg-emerald-50') && className.includes('dark:text-emerald-200')))
   } finally {
     await m.unmount()
   }

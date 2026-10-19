@@ -58,10 +58,11 @@ async function post(url: string, body: unknown, failed: string): Promise<boolean
   return true
 }
 
-/** Colour scale for a 1–5 mean: red (low) → amber → green (high). */
-function heatColor(mean: number): string {
-  const t = Math.min(1, Math.max(0, (mean - 1) / 4))
-  return `hsl(${Math.round(t * 120)} 70% 88%)`
+/** Theme-aware semantic bands for a 1–5 mean; text stays readable in either theme. */
+function heatCellClass(mean: number): string {
+  if (mean < 2.5) return 'bg-red-50 text-red-900 dark:bg-red-950/50 dark:text-red-200'
+  if (mean < 3.75) return 'bg-amber-50 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200'
+  return 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200'
 }
 
 function Heatmap({ results, suppressedLabel }: { results: NonNullable<Drawer['results']>; suppressedLabel: string }) {
@@ -92,7 +93,7 @@ function Heatmap({ results, suppressedLabel }: { results: NonNullable<Drawer['re
                   )
                 }
                 return (
-                  <TableCell key={segment} style={{ backgroundColor: heatColor(cell.mean) }}>
+                  <TableCell key={segment} className={heatCellClass(cell.mean)}>
                     {cell.mean.toFixed(2)}
                   </TableCell>
                 )
