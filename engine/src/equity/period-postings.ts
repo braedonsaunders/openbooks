@@ -107,10 +107,11 @@ const RUN_PERIOD_HORIZON = 36;
 
 /**
  * The period a stock compensation or note interest run is due for: the
- * earliest accounting period of the default calendar that has started by
+ * earliest accounting period of the default calendar that has ended by
  * `today`, ends after the latest posted run, is open for posting, and
  * through whose end the run would post a change. Null when nothing is due,
- * so a closed period or an empty run is never offered (equity.read).
+ * so a closed period, an empty run or a period still under way is never
+ * offered (equity.read).
  */
 export async function nextEquityRunPeriod(input: { orgId: string; actorId: string; subsidiaryId: string; kind: "compensation" | "interest"; today: string }): Promise<EquityRunPeriod | null> {
   await assertEquityReadable(input.orgId);
@@ -121,7 +122,7 @@ export async function nextEquityRunPeriod(input: { orgId: string; actorId: strin
       select max(through_date)::text as through from ${table} where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId}`)).rows[0]?.through ?? null;
     const periods = (await db.execute<{ id: string; name: string; ends_on: string }>(sql`
       select p.id, p.name, p.ends_on::text as ends_on from accounting_periods p
-       where p.org_id = ${input.orgId} and not p.is_adjustment and p.starts_on <= ${input.today}::date
+       where p.org_id = ${input.orgId} and not p.is_adjustment and p.ends_on <= ${input.today}::date
          ${last ? sql`and p.ends_on > ${last}::date` : sql``}
          and p.fiscal_calendar_id in (select id from fiscal_calendars where org_id = ${input.orgId} and is_default and is_active)
        order by p.ends_on, p.id
