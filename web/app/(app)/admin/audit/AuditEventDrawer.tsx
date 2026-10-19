@@ -6,6 +6,7 @@ import { Badge, Drawer, cn } from '@openbooks/ui'
 import { Braces, Clock3, Database, Fingerprint, History, UserRound } from 'lucide-react'
 import { isUuid } from '@openbooks/engine/platform/identifiers'
 import { auditEventDiffs, type AuditDiffRow } from '../../../../lib/audit-diff'
+import { auditActionLabel } from '../../../../lib/audit-action-label'
 import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
 import { AsyncUrlDrawer } from '../../../../components/async-url-drawer'
 
@@ -35,7 +36,6 @@ const ACTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'dest
   reject: 'destructive',
 }
 
-const KNOWN_ACTIONS = new Set(['insert', 'update', 'delete', 'post', 'void', 'approve', 'reject'])
 const CONTEXT_KEYS = new Set(['source', 'mode', 'reason'])
 const ACRONYMS = new Set(['api', 'fx', 'gl', 'id', 'url'])
 
@@ -223,7 +223,7 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
   const tabs: DrawerTab[] = ['changes', ...(hasBefore ? ['before' as const] : []), ...(hasAfter ? ['after' as const] : [])]
   const [activeTab, setActiveTab] = useState<DrawerTab>('changes')
   const when = event ? format.dateTime(new Date(event.at), { dateStyle: 'long', timeStyle: 'medium' }) : ''
-  const actionLabel = event ? (KNOWN_ACTIONS.has(event.action) ? t(`actions.${event.action}` as never) : humanize(event.action)) : ''
+  const actionLabel = event ? auditActionLabel(t as never, event.action, humanize) : ''
   const actor = event?.actorName ?? t('systemActor')
   const context = Object.fromEntries(Object.entries(changes).filter(([key]) => CONTEXT_KEYS.has(key)))
 

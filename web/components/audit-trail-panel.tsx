@@ -11,6 +11,7 @@ import {
   type AuditEvent,
 } from '../app/(app)/admin/audit/AuditEventDrawer'
 import { hasInspectableChanges } from '../lib/audit-diff'
+import { auditActionLabel } from '../lib/audit-action-label'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 import type { AuditRecordTable } from '@/lib/audit-record-types'
 
@@ -49,6 +50,7 @@ function changeCount(changes: Record<string, unknown>): number {
 
 export function AuditTrailPanel({ table, recordId, refreshKey }: { table: AuditRecordTable; recordId: string; refreshKey?: string | number | object }) {
   const t = useTranslations('common.auditTrail')
+  const auditT = useTranslations('admin.audit')
   const ta = useTranslations('admin.audit')
   const [q, setQ] = useState('')
   const [action, setAction] = useState('')
@@ -95,7 +97,7 @@ export function AuditTrailPanel({ table, recordId, refreshKey }: { table: AuditR
   const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.perPage ?? 15)))
   const actionLabel = (value: string) => KNOWN_ACTIONS.has(value)
     ? t(`actions.${value}` as never)
-    : value.replaceAll('_', ' ')
+    : auditActionLabel(auditT as never, value, (code) => code.replaceAll('_', ' '))
 
   return (
     <section className="space-y-3 p-1">

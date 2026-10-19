@@ -10,6 +10,7 @@ import { accessDeniedHref } from '../../../../lib/gate-targets'
 import type { AuditListRow } from './AuditRows'
 import type { AuditEvent } from './AuditEventDrawer'
 import { readAuditEvent, readAuditPage } from '../../../../lib/audit-reader'
+import { auditActionLabel } from '../../../../lib/audit-action-label'
 
 /** The company audit log requires both audit permission and unrestricted
  * subsidiary access because deleted records have no current scope row. */
@@ -17,10 +18,6 @@ import { readAuditEvent, readAuditPage } from '../../../../lib/audit-reader'
 // Raw record-type tokens (table names or document kinds like "customer_invoice")
 // → friendly labels: "Customer Invoice", "Journal Entry", "Budget Scenarios".
 const humanize = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-
-// Known audit actions with translated labels (admin.audit.actions.*); anything
-// else in the log renders verbatim as the stored action code.
-const KNOWN_ACTIONS = new Set(['insert', 'update', 'delete', 'post', 'void', 'approve', 'reject'])
 
 const BASE = '/admin/audit'
 
@@ -83,7 +80,8 @@ export async function loadAudit(
     eventId && isUuid(eventId) ? readAuditEvent(authz.user.orgId, eventId) : Promise.resolve(null),
   ])
   const total = result.total
-  const actionLabel = (a: string) => (KNOWN_ACTIONS.has(a) ? t(`actions.${a}`) : a)
+  // Labelled audit actions read through admin.audit.actions; anything else renders as its stored code.
+  const actionLabel = (a: string) => auditActionLabel(t as never, a, (code) => code)
   const drawer = selectedEvent ? {
     event: selectedEvent,
     closeHref: mergeHref(BASE, sp, { event: null }),

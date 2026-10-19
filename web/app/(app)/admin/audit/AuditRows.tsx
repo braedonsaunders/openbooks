@@ -1,6 +1,7 @@
 'use client'
 
 import { PagedTable } from '../../../../components/paged-table'
+import { auditActionLabel } from '../../../../lib/audit-action-label'
 import { useSearchParams } from 'next/navigation'
 import { useFormatter, useTranslations } from 'next-intl'
 import { Badge } from '@openbooks/ui'
@@ -27,15 +28,6 @@ const ACTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'dest
   reject: 'destructive',
 }
 
-const KNOWN_ACTIONS = new Set([
-  'insert',
-  'update',
-  'delete',
-  'post',
-  'void',
-  'approve',
-  'reject',
-])
 const ACRONYMS = new Set(['api', 'fx', 'gl', 'id', 'url'])
 
 const humanize = (value: string) =>
@@ -59,10 +51,7 @@ export function AuditRows({
   const t = useTranslations('admin.audit')
   const format = useFormatter()
   const searchParams = useSearchParams()
-  const actionLabel = (action: string) =>
-    KNOWN_ACTIONS.has(action)
-      ? t(`actions.${action}` as never)
-      : humanize(action)
+  const actionLabel = (action: string) => auditActionLabel(t as never, action, humanize)
   const when = (row: AuditListRow) =>
     format.dateTime(new Date(row.at), {
       dateStyle: 'medium',
