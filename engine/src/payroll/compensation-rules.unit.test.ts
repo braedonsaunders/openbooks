@@ -74,6 +74,7 @@ test("conditional rules leave explicit zero evidence and do not pay an inapplica
 
 test("the same line cannot target a statutory or cross-country component", () => {
   const rules = definition([rule("allowance", firstId, "base * 0.1")]);
+  refuses(() => compileCompensationRules(rules, [{ ...components[0]!, kind: "credit" }]), /unsupported component kind.*earning, deduction, or employer contribution/);
   refuses(() => compileCompensationRules(rules, [{ ...components[0]!, systemKey: "cpp" }]), /statutory component ALLOWANCE.*country-pack-owned.*user-defined/);
   refuses(() => compileCompensationRules(rules, [{ ...components[0]!, country: "US" }]), /ALLOWANCE in US.*package belongs to CA/);
   refuses(() => compileCompensationRules(rules, [{ ...components[0]!, isActive: false }]), /inactive component ALLOWANCE.*enable/);

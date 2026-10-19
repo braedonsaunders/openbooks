@@ -21,7 +21,7 @@ export interface CompensationRuleComponent {
   readonly orgId: string;
   readonly id: string;
   readonly code: string;
-  readonly kind: "earning" | "deduction" | "employer_contribution";
+  readonly kind: "earning" | "deduction" | "employer_contribution" | "credit";
   readonly country: string | null;
   readonly systemKey: string | null;
   readonly isActive: boolean;
@@ -143,7 +143,7 @@ export function compileCompensationRules(
     if (!component || component.orgId !== definition.orgId) throw new PayrollError(`The component for compensation rule ${JSON.stringify(rule.key)} is not visible in this organization — choose a component from its Payroll setup.`);
     if (component.systemKey !== null) throw new PayrollError(`Compensation rule ${JSON.stringify(rule.key)} targets statutory component ${component.code} — statutory amounts remain country-pack-owned; choose a user-defined component.`);
     if (component.isActive !== true) throw new PayrollError(`Compensation rule ${JSON.stringify(rule.key)} targets inactive component ${component.code} — enable it in Payroll setup before using it.`);
-    if (!["earning", "deduction", "employer_contribution"].includes(component.kind)) throw new PayrollError(`Compensation rule ${JSON.stringify(rule.key)} targets an unsupported component kind — choose an earning, deduction, or employer contribution.`);
+    if (component.kind === "credit") throw new PayrollError(`Compensation rule ${JSON.stringify(rule.key)} targets an unsupported component kind — choose an earning, deduction, or employer contribution.`);
     if (component.country !== null && component.country !== definition.country) {
       throw new PayrollError(`Compensation rule ${JSON.stringify(rule.key)} targets ${component.code} in ${component.country}, while the package belongs to ${definition.country} — choose a component available to this payroll country.`);
     }

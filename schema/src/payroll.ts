@@ -82,7 +82,7 @@ export const payComponents = pgTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     kind: text("kind", {
-      enum: ["earning", "deduction", "employer_contribution"],
+      enum: ["earning", "deduction", "employer_contribution", "credit"],
     }).notNull(),
     /** Country pack the component belongs to; null = shared across packs.
      * Statutory rows get it from their seeder; user components may scope
@@ -668,7 +668,7 @@ export const payStubLines = pgTable(
     stubId: uuid("stub_id").notNull(),
     componentId: uuid("component_id"),
     kind: text("kind", {
-      enum: ["earning", "deduction", "employer_contribution"],
+      enum: ["earning", "deduction", "employer_contribution", "credit"],
     }).notNull(),
     description: text("description").notNull(),
     hours: numeric("hours", { precision: 12, scale: 2 }),
