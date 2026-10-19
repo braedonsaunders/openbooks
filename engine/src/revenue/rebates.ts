@@ -233,7 +233,8 @@ export async function settleRebatePayment(orgId:string,actorId:string,id:string,
     const carrying=a.side==='customer'?claim.base_amount:neg(claim.base_amount);
     const bankAmount=a.side==='customer'?neg(cash):cash;
     const difference=neg(add(carrying,bankAmount));
-    const entry=await postEntry(db,{orgId,bookId,subsidiaryId:a.subsidiary_id,periodId:period.id,postingDate:input.postingDate,currency:a.currency,origin:'rebate_settlement',closeModules:[a.side==='customer'?'ar':'ap'],entryNumber:`REBATE-PAY-${id}`,idempotencyKey:`rebate-payment:${id}`,actorId,
+    const settlementRevision=(await db.execute<{revision:string}>(sql`select count(*)::text as revision from rebate_settlement_reversals where org_id=${orgId} and claim_id=${id}`)).rows[0]!.revision;
+    const entry=await postEntry(db,{orgId,bookId,subsidiaryId:a.subsidiary_id,periodId:period.id,postingDate:input.postingDate,currency:a.currency,origin:'rebate_settlement',closeModules:[a.side==='customer'?'ar':'ap'],entryNumber:`REBATE-PAY-${id}-R${settlementRevision}`,idempotencyKey:`rebate-payment:${id}:revision:${settlementRevision}`,actorId,
       memo:input.reason,lines:[{accountId:a.accrual_account_id,amount:carrying,currency:baseCurrency,txnAmount:carrying,fxRate:'1',partyId:claim.party_id},
         {accountId:input.bankAccountId,amount:bankAmount,txnAmount:a.side==='customer'?neg(claim.amount):claim.amount,fxRate:input.fxRate,partyId:claim.party_id},
         ...(cmp(difference,'0')!==0?[{accountId:a.fx_account_id,amount:difference,currency:baseCurrency,txnAmount:difference,fxRate:'1',partyId:claim.party_id}]:[])]});
@@ -259,18 +260,25 @@ export async function settleRebateForPostedDocument(orgId:string,documentId:stri
   const row=(await db.execute<RebateClaim>(sql`select * from rebate_claims where org_id=${orgId} and settlement_document_id=${documentId}`)).rows[0];
   if (!row) return;
   const a=await agreement(db,orgId,row.agreement_id); await mutex(db,orgId,a.subsidiary_id); await enabled(db,orgId);
+  if (a.tax_treatment==='taxable' && !a.settlement_tax_code_id) throw new RebateError('Set the settlement tax code on the taxable rebate agreement, then prepare a new settlement document');
   const claim=(await db.execute<RebateClaim>(sql`select * from rebate_claims where org_id=${orgId} and id=${row.id} for update`)).rows[0]!;
-  const doc=(await db.execute<{kind:string;status:string;party_id:string;subsidiary_id:string;currency:string;fx_rate:string;posting_date:string;posted_entry_id:string;amount:string;account_id:string;line_count:number;tax_total:string}>(sql`
+  const doc=(await db.execute<{kind:string;status:string;party_id:string;subsidiary_id:string;currency:string;fx_rate:string;posting_date:string;posted_entry_id:string;amount:string;account_id:string;line_count:number;tax_total:string;tax_code_id:string|null;tax_group_id:string|null;tax_overridden:boolean}>(sql`
     select d.kind,d.status,d.party_id,d.subsidiary_id,d.currency,d.fx_rate::text,coalesce(d.posting_date,d.document_date)::text as posting_date,d.posted_entry_id,d.tax_total::text,
       (select sum(l.amount)::text from document_lines l where l.org_id=d.org_id and l.document_id=d.id) as amount,
       (select l.account_id from document_lines l where l.org_id=d.org_id and l.document_id=d.id order by l.line_number limit 1) as account_id,
+      (select l.tax_code_id from document_lines l where l.org_id=d.org_id and l.document_id=d.id order by l.line_number limit 1) as tax_code_id,
+      (select l.tax_group_id from document_lines l where l.org_id=d.org_id and l.document_id=d.id order by l.line_number limit 1) as tax_group_id,
+      (select l.tax_overridden from document_lines l where l.org_id=d.org_id and l.document_id=d.id order by l.line_number limit 1) as tax_overridden,
       (select count(*)::int from document_lines l where l.org_id=d.org_id and l.document_id=d.id) as line_count
     from documents d where d.org_id=${orgId} and d.id=${documentId}
   `)).rows[0];
   if (claim.status==='settled') return;
   const absolute=cmp(claim.amount,'0')<0?neg(claim.amount):claim.amount;
-  if (!doc || doc.status!=='posted' || doc.kind!==rebateSettlementKind(a.side,claim.amount) || doc.party_id!==claim.party_id || doc.subsidiary_id!==a.subsidiary_id || doc.currency!==a.currency || doc.line_count!==1 || doc.account_id!==a.accrual_account_id || cmp(doc.amount,absolute)!==0 || !doc.posted_entry_id || claim.status!=='document_pending') {
-    throw new RebateError('Restore the settlement document counterparty, currency, accrual account and exact claim amount, with no tax, before posting');
+  const taxMatches=doc && (a.tax_treatment==='outside_scope'
+    ? cmp(doc.tax_total,'0')===0 && doc.tax_code_id===null && doc.tax_group_id===null
+    : doc.tax_code_id===a.settlement_tax_code_id && doc.tax_group_id===null && !doc.tax_overridden);
+  if (!doc || doc.status!=='posted' || doc.kind!==rebateSettlementKind(a.side,claim.amount) || doc.party_id!==claim.party_id || doc.subsidiary_id!==a.subsidiary_id || doc.currency!==a.currency || doc.line_count!==1 || doc.account_id!==a.accrual_account_id || cmp(doc.amount,absolute)!==0 || !taxMatches || !doc.posted_entry_id || claim.status!=='document_pending') {
+    throw new RebateError('Restore the settlement document counterparty, currency, accrual account, exact claim amount and agreement tax treatment before posting');
   }
   const booked=mulRate(claim.amount,doc.fx_rate);
   const difference=add(claim.base_amount,neg(booked));
@@ -279,7 +287,7 @@ export async function settleRebateForPostedDocument(orgId:string,documentId:stri
     const baseCurrency=(await db.execute<{base_currency:string}>(sql`select base_currency from subsidiaries where org_id=${orgId} and id=${a.subsidiary_id}`)).rows[0]?.base_currency;
     if (!bookId||!period||!baseCurrency) throw new RebateError('Settlement requires the entity currency and posting period');
     const accrualAdjustment=a.side==='customer'?difference:neg(difference);
-    await postEntry(db,{orgId,bookId,subsidiaryId:a.subsidiary_id,periodId:period.id,postingDate:doc.posting_date,currency:baseCurrency,actorId,sourceDocumentId:documentId,origin:'rebate_settlement',closeModules:[a.side==='customer'?'ar':'ap'],entryNumber:`REBATE-FX-${claim.id}`,idempotencyKey:`rebate-credit-fx:${claim.id}`,memo:'Rebate settlement currency adjustment',
+    await postEntry(db,{orgId,bookId,subsidiaryId:a.subsidiary_id,periodId:period.id,postingDate:doc.posting_date,currency:baseCurrency,actorId,sourceDocumentId:documentId,origin:'rebate_settlement',closeModules:[a.side==='customer'?'ar':'ap'],entryNumber:`REBATE-FX-${claim.id}-${documentId}`,idempotencyKey:`rebate-credit-fx:${documentId}`,memo:'Rebate settlement currency adjustment',
       lines:[{accountId:a.accrual_account_id,amount:accrualAdjustment,partyId:claim.party_id},{accountId:a.fx_account_id,amount:neg(accrualAdjustment),partyId:claim.party_id}]});
   }
   if (!(await db.execute(sql`update rebate_claims set status='settled',settlement_entry_id=${doc.posted_entry_id},settlement_on=${doc.posting_date},updated_at=now(),updated_by=${actorId}
