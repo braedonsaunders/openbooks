@@ -107,6 +107,38 @@ test("a clock-out before its clock-in refuses and leaves the pair open", { skip:
   }
 });
 
+test("clock-paired entries stay draft until the employee submits the timesheet week", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId, { unpaidBreakMinutes: 0 });
+    const worker = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, null);
+    await withOrg(org.orgId, async () => {
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-09-14T08:00:00.000Z",
+        source: "mobile", clientEventId: randomUUID(),
+      });
+      const paired = await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_out", occurredAt: "2026-09-14T09:00:00.000Z",
+        source: "mobile", clientEventId: randomUUID(),
+      });
+      assert.equal(paired.entryIds.length, 1);
+      const rows = (await db.execute<{ entryStatus: string; weekStatus: string }>(sql`
+        select te.status as "entryStatus", w.status as "weekStatus"
+          from time_entries te
+          join timesheet_weeks w on w.org_id = te.org_id
+            and w.employee_party_id = te.employee_party_id
+            and te.worked_on between w.week_start and w.week_start + 6
+         where te.org_id = ${org.orgId} and te.employee_party_id = ${worker}`)).rows;
+      assert.deepEqual(rows, [{ entryStatus: "draft", weekStatus: "draft" }]);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("clock events accept only live images in the field-time photo folder and flags use the same rule", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

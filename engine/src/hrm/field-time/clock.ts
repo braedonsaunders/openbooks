@@ -457,7 +457,7 @@ async function pairAndPostEntries(input: {
       values
         (${input.orgId}, ${input.employeePartyId}, ${cell.date}::date, ${pieceHours},
          ${refs.projectId}, ${refs.projectTaskId}, ${refs.costCodeRef},
-         'submitted', ${input.open.occurred_at}::timestamptz,
+         'draft', ${input.open.occurred_at}::timestamptz,
          ${wageRate}, ${wageCurrency}, ${pairId},
          ${input.actorUserId}, ${input.actorUserId})
       returning id`)).rows[0];
