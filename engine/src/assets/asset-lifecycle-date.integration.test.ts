@@ -34,6 +34,8 @@ test("asset lifecycle entries honor the subsidiary assets close on its effective
     await db.execute(sql`insert into subsidiary_accounting_preferences
       (org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason)
       values (${org.orgId},${org.subsidiaryId},'2026-07-01',${calendarId},'Use the entity asset calendar')`);
+    await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+    await runDepreciation(org.orgId, org.date, actorId, assetId);
     const source = await remeasureAsset(org.orgId, assetId, {
       actorId, date: org.date, newCarryingValue: "800",
     });
