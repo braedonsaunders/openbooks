@@ -476,6 +476,8 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
       values
         (${org.orgId}, ${brokenEntry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '0.0001', 'CAD', '0.0001', '1'),
         (${org.orgId}, ${brokenEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '-0.0001', 'CAD', '-0.0001', '1')`);
+    await db.execute(sql`update journal_lines set eliminate = true
+      where org_id = ${org.orgId} and entry_id = ${brokenEntry} and account_id = ${org.accounts.ar}`);
     await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${brokenEntry}`);
     await assert.rejects(
       runAutoElimination(org.orgId, org.periodId, actorId),
