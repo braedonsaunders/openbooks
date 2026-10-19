@@ -124,7 +124,13 @@ async function seedInformationReturnPayment(
   actorId: string,
   amount: string,
   suffix: string,
-  opts: { partyId?: string; taxYear?: number; tinLast4?: string | null } = {},
+  opts: {
+    partyId?: string
+    taxYear?: number
+    tinLast4?: string | null
+    backupWithholdingAmount?: string
+    cashAmount?: string
+  } = {},
 ): Promise<{ paymentId: string; journalEntryId: string; journalLineIds: string[] }> {
   const partyId = opts.partyId ?? org.vendorId;
   const sourceDate = opts.taxYear === undefined ? org.date : `${opts.taxYear}-07-15`;
@@ -142,7 +148,7 @@ async function seedInformationReturnPayment(
   `);
   const paymentId = randomUUID();
   const journalEntryId = randomUUID();
-  const journalLineIds = [randomUUID(), randomUUID()];
+  const journalLineIds = [randomUUID(), randomUUID(), ...(opts.backupWithholdingAmount ? [randomUUID()] : [])];
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       insert into documents
@@ -173,11 +179,46 @@ async function seedInformationReturnPayment(
       values
         (${journalLineIds[0]!}, ${org.orgId}, ${journalEntryId}, 1,
          ${org.accounts.ap}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1,
-         ${org.vendorId}, true, 'Information-return payment control'),
+         ${partyId}, true, 'Information-return payment control'),
         (${journalLineIds[1]!}, ${org.orgId}, ${journalEntryId}, 2,
-         ${org.accounts.bank}, ${org.subsidiaryId}, ${`-${amount}`}, 'CAD',
-         ${`-${amount}`}, 1, null, false, 'Information-return cash source')
+         ${org.accounts.bank}, ${org.subsidiaryId}, ${`-${opts.cashAmount ?? amount}`}, 'CAD',
+         ${`-${opts.cashAmount ?? amount}`}, 1, null, false, 'Information-return cash source')
     `);
+    if (opts.backupWithholdingAmount) {
+      const enrollmentId = randomUUID();
+      await tx.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+           currency, txn_amount, fx_rate, party_id, is_open_item, memo)
+        values
+          (${journalLineIds[2]!}, ${org.orgId}, ${journalEntryId}, 3,
+           ${org.accounts.ap}, ${org.subsidiaryId}, ${`-${opts.backupWithholdingAmount}`},
+           'USD', ${`-${opts.backupWithholdingAmount}`}, 1, null, false, 'Contractor withholding')
+      `);
+      await tx.execute(sql`
+        insert into withholding_enrollments
+          (id, org_id, subsidiary_id, scheme_code, contractor_reference,
+           liability_account_id, effective_from, created_by, updated_by)
+        values
+          (${enrollmentId}, ${org.orgId}, ${org.subsidiaryId}, 'US_BACKUP_WITHHOLDING',
+           ${`IR-WITHHOLDING-${suffix}`}, ${org.accounts.ap}, ${sourceDate}, ${actorId}, ${actorId})
+      `);
+      await tx.execute(sql`
+        insert into withholding_deductions
+          (org_id, subsidiary_id, enrollment_id, payee_name, scheme_code, party_id,
+           payment_document_id, bill_document_id, bill_open_line_id, journal_entry_id,
+           payment_date, period_start, period_end, currency, band_code, rate_percent,
+           paid_amount, net_amount, materials_amount, vat_amount, consideration_amount,
+           base_amount, deducted_amount, created_by)
+        values
+          (${org.orgId}, ${org.subsidiaryId}, ${enrollmentId}, 'Information-return recipient',
+           'US_BACKUP_WITHHOLDING', ${partyId}, ${paymentId}, ${paymentId},
+           ${journalLineIds[0]!}, ${journalEntryId}, ${sourceDate}, ${sourceDate}, ${sourceDate},
+           'USD', 'BACKUP', 10, ${opts.backupWithholdingAmount}, '0', '0', '0',
+           ${opts.backupWithholdingAmount}, ${opts.backupWithholdingAmount},
+           ${opts.backupWithholdingAmount}, ${actorId})
+      `);
+    }
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_at = now(), posted_by = ${actorId}
@@ -346,6 +387,35 @@ test("concurrent ensureFiling opens yield one filing with the same id", { skip: 
       select count(*)::int as n from information_return_filings
        where org_id = ${org.orgId} and tax_year = 2033 and form_type = '1099-NEC'`)).rows[0]!.n;
     assert.equal(count, 1);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("a void filing releases its identity for a usable replacement", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const original = await ensureFiling({
+      orgId: org.orgId,
+      taxYear: 2058,
+      formType: "1099-NEC",
+      currency: "USD",
+      actorId,
+    });
+    await voidFiling({ orgId: org.orgId, filingId: original.id, actorId, reason: "Corrected filing needed" });
+
+    const replacement = await ensureFiling({
+      orgId: org.orgId,
+      taxYear: 2058,
+      formType: "1099-NEC",
+      currency: "USD",
+      actorId,
+    });
+    assert.notEqual(replacement.id, original.id);
+    assert.equal(replacement.status, "draft");
+    const { computation } = await recomputeFiling({ orgId: org.orgId, filingId: replacement.id, actorId });
+    assert.equal(computation.recipients.length, 0);
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
@@ -831,6 +901,33 @@ test("payment-trace cash counts the funding bank leg only, never a discount leg"
     const vendorTraces = traces.get(partyId) ?? [];
     assert.equal(vendorTraces.length, 1, "the discounted payment is traced");
     assert.equal(vendorTraces[0]!.cash, "2950.0000", "cash is the bank leg, not bank plus discount");
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("foreign-currency payments match backup withholding in its statutory currency", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const partyId = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${partyId}, ${org.orgId}, 'vendor', 'Withheld CAD Recipient', null, true, '{}'::jsonb)
+    `);
+    await seedInformationReturnPayment(org, actorId, "3000", "BACKUP-CAD", {
+      partyId,
+      taxYear: 2059,
+      backupWithholdingAmount: "100",
+      cashAmount: "2900",
+    });
+
+    const traces = await loadPaymentTraces({ orgId: org.orgId, taxYear: 2059 });
+    const [trace] = traces.get(partyId) ?? [];
+    assert.ok(trace, "the posted foreign-currency payment is traced");
+    assert.equal(trace.cash, "2900.0000");
+    assert.equal(trace.backupWithheld, "100.0000");
+    assert.equal(trace.withholdingDeductionIds?.length, 1);
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
