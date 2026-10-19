@@ -34,7 +34,7 @@ export const POST = defineRoute({
       );
 
     const body = routeBody;
-    if ((body.subjectEntity == null) !== (body.subjectId == null)) {
+    if (body.subjectId != null && body.subjectEntity == null) {
       return NextResponse.json(
         {
           error:
