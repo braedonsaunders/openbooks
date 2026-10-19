@@ -284,6 +284,7 @@ export async function removeInsuranceCoverage(
 export interface InsuredValueRow {
   policyId: string;
   policyNumber: string;
+  currency: string;
   assetId: string;
   assetNumber: string;
   assetName: string;
@@ -300,10 +301,10 @@ export async function insuredValueComparison(
   args: { allowedSubsidiaryIds?: readonly string[] | null; policyId?: string | null; asOf: string },
 ): Promise<InsuredValueRow[]> {
   const rows = (await db.execute<{
-    policy_id: string; policy_number: string; asset_id: string; asset_number: string; asset_name: string;
+    policy_id: string; policy_number: string; currency: string; asset_id: string; asset_number: string; asset_name: string;
     insured_value: string; replacement_value: string | null; carrying_value: string | null;
   }>(sql`
-    select p.id as policy_id, p.policy_number, a.id as asset_id, a.asset_number, a.name as asset_name,
+    select p.id as policy_id, p.policy_number, p.currency, a.id as asset_id, a.asset_number, a.name as asset_name,
            c.insured_value::text as insured_value, c.replacement_value::text as replacement_value,
            v.carrying_value::text as carrying_value
       from asset_insurance_coverages c
@@ -322,6 +323,7 @@ export async function insuredValueComparison(
     return {
       policyId: row.policy_id,
       policyNumber: row.policy_number,
+      currency: row.currency,
       assetId: row.asset_id,
       assetNumber: row.asset_number,
       assetName: row.asset_name,

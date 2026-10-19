@@ -7,6 +7,7 @@ import { insuredValueComparison, type InsuredValueRow } from '@openbooks/engine/
 import { can, requirePermission } from '@/lib/authz'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { isUuid, pickString } from '@/lib/list-params'
+import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
 import { loadAssetWorkspaceTabs } from '../tabs-loader'
 
 export interface PolicyRow {
@@ -87,7 +88,9 @@ export async function loadInsurance(sp: Record<string, string | string[] | undef
     db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name from parties p
         join vendor_roles v on v.org_id = p.org_id and v.party_id = p.id
-       where p.org_id = ${orgId} and p.is_active order by p.display_name limit 1000`),
+       where p.org_id = ${orgId} and p.is_active and v.is_active
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed, { orgWideNull: true })}
+       order by p.display_name limit 1000`),
     db.execute<{ id: string; label: string; subsidiary_id: string }>(sql`
       select id, concat_ws(' · ', asset_number, name) as label, subsidiary_id from fixed_assets
        where org_id = ${orgId} and status in ('draft', 'in_service', 'fully_depreciated', 'construction')

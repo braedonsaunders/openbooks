@@ -39,8 +39,8 @@ export function InsuranceWorkspace({
     { key: 'entity', header: t('insurance.columns.legalEntity'), cell: (row) => row.subsidiaryName },
     { key: 'period', header: t('insurance.columns.coverage'), cell: (row) => `${row.coverageStartsOn} – ${row.coverageEndsOn}` },
     { key: 'covered', header: t('insurance.columns.covered'), align: 'right', cell: (row) => row.covered },
-    { key: 'insured', header: t('insurance.columns.insuredTotal'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.insuredTotal)}</span> },
-    { key: 'premium', header: t('insurance.columns.premium'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.premium)}</span> },
+    { key: 'insured', header: t('insurance.columns.insuredTotal'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.insuredTotal, { currency: row.currency })}</span> },
+    { key: 'premium', header: t('insurance.columns.premium'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.premium, { currency: row.currency })}</span> },
     { key: 'status', header: t('insurance.columns.status'), cell: (row) => (
       <Badge variant={row.status === 'cancelled' ? 'secondary' : row.coverageEndsOn < data.today ? 'destructive' : row.renewed ? 'success' : 'default'}>
         {row.status === 'cancelled' ? t('insurance.status.cancelled') : row.coverageEndsOn < data.today ? t('insurance.status.expired') : row.renewed ? t('insurance.status.renewed') : t('insurance.status.active')}
@@ -50,10 +50,10 @@ export function InsuranceWorkspace({
   const valueColumns: PagedColumn<InsuredValueRow>[] = [
     { key: 'asset', header: t('insurance.columns.asset'), cell: (row) => <span><span className="font-mono text-[13px]">{row.assetNumber}</span> {row.assetName}</span>, search: (row) => `${row.assetNumber} ${row.assetName}` },
     { key: 'policy', header: t('insurance.columns.policyNumber'), cell: (row) => row.policyNumber, search: (row) => row.policyNumber },
-    { key: 'insured', header: t('insurance.columns.insuredValue'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.insuredValue)}</span> },
-    { key: 'replacement', header: t('insurance.columns.replacementValue'), align: 'right', cell: (row) => (row.replacementValue ? <span className="tabular-nums">{money(row.replacementValue)}</span> : '—') },
-    { key: 'nbv', header: t('insurance.columns.netBookValue'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.netBookValue)}</span> },
-    { key: 'gap', header: t('insurance.columns.gap'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.gap)}</span> },
+    { key: 'insured', header: t('insurance.columns.insuredValue'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.insuredValue, { currency: row.currency })}</span> },
+    { key: 'replacement', header: t('insurance.columns.replacementValue'), align: 'right', cell: (row) => (row.replacementValue ? <span className="tabular-nums">{money(row.replacementValue, { currency: row.currency })}</span> : '—') },
+    { key: 'nbv', header: t('insurance.columns.netBookValue'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.netBookValue, { currency: row.currency })}</span> },
+    { key: 'gap', header: t('insurance.columns.gap'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.gap, { currency: row.currency })}</span> },
     { key: 'standing', header: t('insurance.columns.standing'), cell: (row) => <Badge variant={STANDING_VARIANT[row.standing]}>{t(`insurance.standing.${row.standing}`)}</Badge> },
   ]
   return (

@@ -79,7 +79,7 @@ function registerHref(sp: SearchParams, id: string): string {
   return `/subcontracts?${params}`
 }
 
-export async function loadSubcontracts(sp: SearchParams = {}): Promise<SubcontractsData> {
+export async function loadSubcontracts(sp: Record<string, string | string[] | undefined> = {}): Promise<SubcontractsData> {
   const authz = await requirePermission('ap.read')
   await requireSubcontractsFeature(authz.user.orgId)
   const [t, common, locale] = await Promise.all([
@@ -109,7 +109,10 @@ export async function loadSubcontracts(sp: SearchParams = {}): Promise<Subcontra
       : await db.execute<SubcontractOption>(sql`select p.id, p.display_name as name from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id where p.org_id = ${orgId} and p.is_active and vr.is_active
           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
         order by p.display_name`)
-    const accounts = await db.execute<SubcontractOption>(sql`select id, concat_ws(' · ', number, name) as name from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense','cogs') order by number nulls last`)
+    const accounts = await db.execute<SubcontractOption>(sql`select id, concat_ws(' · ', number, name) as name from accounts
+      where org_id = ${orgId} and is_active and not is_summary and type in ('expense','cogs')
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+      order by number nulls last`)
     const parties = await db.execute<SubcontractOption>(sql`select id, display_name as name from parties
       where org_id = ${orgId} and is_active
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}

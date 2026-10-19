@@ -9,6 +9,7 @@ import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { isFeatureEnabled } from '@/lib/features'
 import { isUuid, pickString } from '@/lib/list-params'
 import { ASSET_TYPES, PNL_COST_TYPES } from '@/lib/account-types'
+import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
 import { loadAssetWorkspaceTabs } from '../tabs-loader'
 
 /** Noncurrent asset types a construction-in-progress account may have (the engine refuses others). */
@@ -122,10 +123,14 @@ export async function loadConstruction(sp: Record<string, string | string[] | un
       select id, name from asset_categories where org_id = ${orgId} and is_active and asset_account_id is not null order by name`),
     db.execute<{ id: string; label: string }>(sql`
       select id, concat_ws(' · ', number, name) as label from accounts
-       where org_id = ${orgId} and is_active and not is_summary and type = any(${`{${CIP_ACCOUNT_TYPES.join(',')}}`}::text[]) order by number nulls last`),
+       where org_id = ${orgId} and is_active and not is_summary and type = any(${`{${CIP_ACCOUNT_TYPES.join(',')}}`}::text[])
+         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}
+       order by number nulls last`),
     db.execute<{ id: string; label: string }>(sql`
       select id, concat_ws(' · ', number, name) as label from accounts
-       where org_id = ${orgId} and is_active and not is_summary and type = any(${`{${PNL_COST_TYPES.join(',')}}`}::text[]) order by number nulls last`),
+       where org_id = ${orgId} and is_active and not is_summary and type = any(${`{${PNL_COST_TYPES.join(',')}}`}::text[])
+         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}
+       order by number nulls last`),
     db.execute<{ id: string; label: string; subsidiary_id: string }>(sql`
       select id, concat_ws(' · ', asset_number, name) as label, subsidiary_id from fixed_assets
        where org_id = ${orgId} and parent_asset_id is null and status in ('draft', 'in_service', 'fully_depreciated')

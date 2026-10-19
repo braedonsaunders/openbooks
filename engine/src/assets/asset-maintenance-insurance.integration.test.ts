@@ -161,6 +161,11 @@ test(
       }, { actorId: actors.adminId }));
       await setInsuranceCoverage(org.orgId, { policyId: policy.id, assetId, insuredValue: "40000.00", replacementValue: "52000.00", actorId: actors.adminId });
       const rows = await insuredValueComparison(org.orgId, { asOf: "2026-07-15" });
+      const policyCurrency = (await db.execute<{ currency: string }>(sql`
+        select currency from asset_insurance_policies where org_id = ${org.orgId} and id = ${policy.id}
+      `)).rows[0]?.currency;
+      assert.ok(policyCurrency)
+      assert.equal(rows[0]?.currency, policyCurrency, 'comparison rows carry the policy subsidiary currency');
       assert.deepEqual(rows.map((row) => [row.policyNumber, row.insuredValue, row.netBookValue, row.gap, row.standing]), [
         ["HB-100", "40000.0000", "48000.0000", "-8000.0000", "underinsured"],
       ]);

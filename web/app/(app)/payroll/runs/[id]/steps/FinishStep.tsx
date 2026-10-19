@@ -17,6 +17,7 @@ import { PagedTable, type PagedColumn } from '../../../../../../components/paged
 import { SeparationIssuePanel } from '../../../_ui/filing-workspace'
 import { BankFilePanel } from '../BankFilePanel'
 import { decimalAbs } from '../../../../../../lib/statement-format'
+import { journalEntryDrawerHref } from '../../../../../../lib/cross-module-drawer-links'
 
 /* ------------------------------------------------------------------ */
 /* Step 5 — Post & finish                                              */
@@ -165,7 +166,7 @@ export function FinishStep({
         <div className="flex items-center gap-2">
           {posted && run.posted_entry_id && (
             <Button asChild size="sm" variant="outline">
-              <Link href={`/journal?txn=${run.posted_entry_id}` as never}>
+              <Link href={journalEntryDrawerHref(run.posted_entry_id) as never}>
                 <BookOpenCheck size={14} aria-hidden />
                 {t('wizard.finish.viewJournal')}
               </Link>
@@ -176,7 +177,7 @@ export function FinishStep({
           )}
           {posted && run.paid_entry_id && (
             <Button asChild size="sm" variant="ghost">
-              <Link href={`/journal?txn=${run.paid_entry_id}` as never}>
+              <Link href={journalEntryDrawerHref(run.paid_entry_id) as never}>
                 {t('wizard.finish.viewPayment')}
               </Link>
             </Button>

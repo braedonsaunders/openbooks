@@ -11,6 +11,7 @@ import { ASSET_DEPTH_FEATURES, assertAssetAccess } from "./asset-access.ts";
 import { orgsWithAssetFeature } from "./asset-alerts.ts";
 import { createDraftAsset, lockCategoryForCapitalization, placeDraftInService } from "./asset-drafts.ts";
 import { refuse } from "./asset-refusal.ts";
+import { proposalMergeScopeIssue } from "./asset-proposal-merge.ts";
 import { matchCapitalizationRule, type CapitalizationRule } from "./capitalization-rules.ts";
 import {
   markCapitalizationEntryReversed,
@@ -486,6 +487,27 @@ export async function acceptAssetProposals(
       feature: "assetProposals",
       subsidiaryIds: [...new Set(proposals.map((proposal) => proposal.subsidiary_id))],
     });
+    if (input.operation === "merge") {
+      const scopeIssue = proposalMergeScopeIssue(proposals.map((proposal) => ({
+        currency: proposal.currency,
+        subsidiaryId: proposal.subsidiary_id,
+      })));
+      if (scopeIssue === "currency") {
+        refuse("proposal_merge_currency_mismatch", "proposals to merge must use one currency", {
+          remedy: "Select proposals in the same currency before merging them.",
+        });
+      }
+      if (scopeIssue === "subsidiary") {
+        refuse("proposal_merge_subsidiary_mismatch", "proposals to merge must belong to one legal entity", {
+          remedy: "Select proposals from a single legal entity before merging them.",
+        });
+      }
+      if (scopeIssue === "missing_scope") {
+        refuse("proposal_merge_scope_missing", "each proposal must have a currency and legal entity before merging", {
+          remedy: "Refresh the proposal list and resolve missing proposal currency or legal entity data.",
+        });
+      }
+    }
     const prior = (await tx.execute<{ id: string; request_hash: string; reclass_entry_id: string | null; status: string }>(sql`
       select id, request_hash, reclass_entry_id, status from asset_proposal_acceptances
        where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];

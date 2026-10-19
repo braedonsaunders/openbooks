@@ -8,6 +8,7 @@ import { can, requirePermission } from '@/lib/authz'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { isFeatureEnabled } from '@/lib/features'
 import { isUuid, pickString } from '@/lib/list-params'
+import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
 import { loadAssetWorkspaceTabs } from '../tabs-loader'
 
 export interface ScheduleDetail {
@@ -85,7 +86,9 @@ export async function loadMaintenance(sp: Record<string, string | string[] | und
     db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name from parties p
         join vendor_roles v on v.org_id = p.org_id and v.party_id = p.id
-       where p.org_id = ${orgId} and p.is_active order by p.display_name limit 1000`),
+       where p.org_id = ${orgId} and p.is_active and v.is_active
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed, { orgWideNull: true })}
+       order by p.display_name limit 1000`),
     db.execute<{ id: string; label: string; subsidiary_id: string | null }>(sql`
       select dl.id, concat_ws(' · ', d.document_number, coalesce(dl.description, ''), dl.amount::text) as label, d.subsidiary_id
         from document_lines dl

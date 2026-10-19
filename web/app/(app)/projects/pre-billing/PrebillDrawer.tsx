@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { listRecordDrawerHref } from "@/lib/cross-module-drawer-links";
 import { toast } from "sonner";
 import {
   Alert,
@@ -159,7 +160,7 @@ export function PrebillDrawer({
       ) : null}
       {prebill.invoiceDocumentId ? (
         <Button asChild variant="outline">
-          <Link href={`/ar/invoices?invoice=${prebill.invoiceDocumentId}`}>
+          <Link href={listRecordDrawerHref("customer_invoice", prebill.invoiceDocumentId) as never}>
             {t("detail.openInvoice", { invoiceNumber: prebill.invoiceNumber ?? "" })}
           </Link>
         </Button>

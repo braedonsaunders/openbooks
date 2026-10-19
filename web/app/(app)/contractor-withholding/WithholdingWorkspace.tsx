@@ -12,6 +12,7 @@ import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
 import { DocTypeBadge } from '@/components/doc-type-badge'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { paymentDrawerHref } from '@/lib/cross-module-drawer-links'
 import type { WithholdingDepositView, WithholdingPeriodSummary, WithholdingReturnView, WithholdingStatement } from '@openbooks/engine/contractor-withholding'
 import type { WithholdingEnrollmentOption } from '@/lib/contractor-withholding'
 import { DateField } from '@/components/date-field'
@@ -145,7 +146,7 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, s
           ariaLabel={t('return')}
         />}
         {returnBody === 'payments' ? <PagedTable source="contractor_withholding_return_payments" rows={ret.sourcePayments ?? []} rowKey={row => row.documentId} empty={t('emptySourcePayments')} columns={[
-          { key: 'payment', header: t('paymentDocument'), cell: row => <Link href={`/payments?doc=${row.documentId}`}>{row.documentNumber}</Link> },
+          { key: 'payment', header: t('paymentDocument'), cell: row => <Link href={paymentDrawerHref(row.documentId) as never}>{row.documentNumber}</Link> },
           { key: 'date', header: tc('labels.date'), cell: row => row.paymentDate },
           { key: 'deducted', header: t('deducted'), align: 'right', cell: row => money(row.withholdingAmount, { currency: row.currency }) },
           { key: 'statutory', header: t('reportedDeduction'), align: 'right', cell: row => money(row.statutoryWithholdingAmount, { currency: row.statutoryCurrency }) },

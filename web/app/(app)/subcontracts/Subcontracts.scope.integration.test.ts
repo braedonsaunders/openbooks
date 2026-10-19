@@ -39,7 +39,7 @@ function insertParty(orgId: string, id: string, name: string, subsidiaryId: stri
   `)
 }
 
-test('subcontract pickers expose only projects and parties in the caller subsidiary scope', async () => {
+test('subcontract pickers expose only accounts, projects, and parties in the caller subsidiary scope', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   const branchId = randomUUID()
   const visibleProject = `Visible project ${randomUUID()}`
@@ -48,6 +48,9 @@ test('subcontract pickers expose only projects and parties in the caller subsidi
   const hiddenVendor = `Hidden vendor ${randomUUID()}`
   const visibleParty = `Visible party ${randomUUID()}`
   const hiddenParty = `Hidden party ${randomUUID()}`
+  const visibleAccountId = randomUUID()
+  const hiddenAccountId = randomUUID()
+  const orgWideAccountId = randomUUID()
   try {
     await withBypassContext(async () => {
       await db.execute(sql`
@@ -68,6 +71,13 @@ test('subcontract pickers expose only projects and parties in the caller subsidi
           values (${org.orgId}, ${partyId}, 'CAD', true)
         `)
       }
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, subsidiary_id)
+        values
+          (${visibleAccountId}, ${org.orgId}, ${randomUUID()}, ${`Visible account ${randomUUID()}`}, 'expense', ${org.subsidiaryId}),
+          (${hiddenAccountId}, ${org.orgId}, ${randomUUID()}, ${`Hidden account ${randomUUID()}`}, 'expense', ${branchId}),
+          (${orgWideAccountId}, ${org.orgId}, ${randomUUID()}, ${`Org-wide account ${randomUUID()}`}, 'expense', null)
+      `)
       await insertParty(org.orgId, randomUUID(), visibleParty, org.subsidiaryId)
       await insertParty(org.orgId, randomUUID(), hiddenParty, branchId)
     })
@@ -85,6 +95,9 @@ test('subcontract pickers expose only projects and parties in the caller subsidi
       assert.ok(!data.vendors.some((item) => item.name === hiddenVendor), 'vendors in another subsidiary stay out of the picker')
       assert.ok(data.parties.some((item) => item.name === visibleParty))
       assert.ok(!data.parties.some((item) => item.name === hiddenParty), 'joint-party options in another subsidiary stay out of the picker')
+      assert.ok(data.expenseAccounts.some((item) => item.id === visibleAccountId))
+      assert.ok(!data.expenseAccounts.some((item) => item.id === hiddenAccountId), 'expense accounts in another subsidiary stay out of the picker')
+      assert.ok(data.expenseAccounts.some((item) => item.id === orgWideAccountId), 'organization-wide expense accounts remain available')
     })
   } finally {
     state.authz = null

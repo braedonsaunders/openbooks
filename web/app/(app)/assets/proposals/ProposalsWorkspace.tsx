@@ -15,6 +15,7 @@ import { newRequestKey, postJson, sumCents } from '../depth-client'
 import type { ProposalRow, ProposalsData } from './_data'
 import { ProposalDrawer } from './ProposalDrawer'
 import { DateField } from '@/components/date-field'
+import { canMergeProposalScopes } from '@openbooks/engine/assets/asset-proposal-merge'
 
 const STATUS_VARIANT: Record<string, 'warning' | 'success' | 'secondary' | 'outline'> = {
   pending: 'warning',
@@ -47,7 +48,14 @@ export function ProposalsWorkspace({
     () => data.rows.filter((row) => selected.includes(row.id) && row.status === 'pending'),
     [data.rows, selected],
   )
-  const mergeTotal = sumCents(pendingSelected.map((row) => row.amount))
+  const mergeCompatible = canMergeProposalScopes(pendingSelected)
+  const mergeCurrency = pendingSelected[0]?.currency
+  const mergeTotal = mergeCompatible ? sumCents(pendingSelected.map((row) => row.amount)) : null
+
+  function updateSelection(next: string[]) {
+    setSelected(next)
+    setMergeOpen(false)
+  }
 
   const open = (row: ProposalRow) => router.push(mergeHref('/assets/proposals', currentParams, { proposal: row.id }))
 
@@ -58,7 +66,7 @@ export function ProposalsWorkspace({
     { key: 'vendor', header: t('proposals.columns.vendor'), cell: (row) => row.vendorName ?? '—', search: (row) => row.vendorName ?? '' },
     { key: 'account', header: t('proposals.columns.account'), cell: (row) => row.accountLabel, search: (row) => row.accountLabel },
     { key: 'rule', header: t('proposals.columns.rule'), cell: (row) => row.ruleName ?? t('proposals.manual') },
-    { key: 'amount', header: t('proposals.columns.amount'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.amount)}</span> },
+    { key: 'amount', header: t('proposals.columns.amount'), align: 'right', cell: (row) => <span className="tabular-nums">{money(row.amount, { currency: row.currency })}</span> },
     { key: 'status', header: t('proposals.columns.status'), cell: (row) => <Badge variant={STATUS_VARIANT[row.status] ?? 'secondary'}>{t(`proposals.status.${row.status}`)}</Badge> },
   ]
 
@@ -74,7 +82,7 @@ export function ProposalsWorkspace({
   }
 
   async function merge() {
-    if (!mergeTotal) return
+    if (!mergeCompatible || !mergeTotal) return
     await action.execute(
       () => postJson('/api/assets/proposals/accept', {
         idempotencyKey: newRequestKey(),
@@ -115,8 +123,8 @@ export function ProposalsWorkspace({
         selection={data.canCapitalize ? {
           getId: (row) => row.id,
           selectedIds: selected,
-          onToggle: (id) => setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id])),
-          onToggleAll: (ids) => setSelected((current) => (ids.every((id) => current.includes(id)) ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])])),
+          onToggle: (id) => updateSelection(selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]),
+          onToggleAll: (ids) => updateSelection(ids.every((id) => selected.includes(id)) ? selected.filter((id) => !ids.includes(id)) : [...new Set([...selected, ...ids])]),
         } : undefined}
         toolbarAfter={
           <div className="flex flex-wrap items-center gap-2">
@@ -130,9 +138,9 @@ export function ProposalsWorkspace({
               options={(['pending', 'accepted', 'rejected', 'voided'] as const).map((value) => ({ value, label: t(`proposals.status.${value}`) }))}
             />
             {data.canCapitalize && pendingSelected.length >= 2 ? (
-              <Popover open={mergeOpen} onOpenChange={setMergeOpen} trigger={<Button size="sm" onClick={() => setMergeOpen((value) => !value)}>{t('proposals.merge.action', { count: pendingSelected.length })}</Button>}>
+              <Popover open={mergeOpen && mergeCompatible} onOpenChange={setMergeOpen} trigger={<Button size="sm" disabled={!mergeCompatible} onClick={() => setMergeOpen((value) => !value)}>{t('proposals.merge.action', { count: pendingSelected.length })}</Button>}>
                 <div className="w-80 space-y-3 p-3">
-                  <p className="text-sm text-slate-600 dark:text-slate-300">{t('proposals.merge.summary', { count: pendingSelected.length, total: money(mergeTotal ?? '0') })}</p>
+                  {mergeTotal && mergeCurrency ? <p className="text-sm text-slate-600 dark:text-slate-300">{t('proposals.merge.summary', { count: pendingSelected.length, total: money(mergeTotal, { currency: mergeCurrency }) })}</p> : null}
                   <div className="space-y-1.5"><Label htmlFor="merge-name">{t('proposals.fields.assetName')}</Label><Input id="merge-name" value={mergeName} onChange={(event) => setMergeName(event.target.value)} /></div>
                   <div className="space-y-1.5"><Label htmlFor="merge-category">{t('proposals.fields.category')}</Label>
                     <Select id="merge-category" value={mergeCategory} onChange={(event) => setMergeCategory(event.target.value)}>
@@ -140,7 +148,7 @@ export function ProposalsWorkspace({
                     </Select>
                   </div>
                   <div className="space-y-1.5"><Label htmlFor="merge-date">{t('proposals.fields.acceptedOn')}</Label><DateField id="merge-date" value={mergeDate} onChange={(value) => setMergeDate(value)} /></div>
-                  <Button className="w-full" disabled={action.busy || !mergeName.trim() || !mergeCategory || !mergeTotal} onClick={merge}>{t('proposals.merge.confirm')}</Button>
+                  <Button className="w-full" disabled={!mergeCompatible || action.busy || !mergeName.trim() || !mergeCategory || !mergeTotal} onClick={merge}>{t('proposals.merge.confirm')}</Button>
                 </div>
               </Popover>
             ) : null}
