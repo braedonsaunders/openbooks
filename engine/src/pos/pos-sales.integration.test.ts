@@ -14,8 +14,9 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { PosError } from "./errors.ts";
+import { completeRequestedDocumentVoid, requestDocumentVoid } from "../ledger/document-void.ts";
 import { completePosRefund, completePosSale, readPosReceipt, type PosAuthority, type PosPricingDeps } from "./sales.ts";
-import { openSession, readSessionSummary } from "./sessions.ts";
+import { listSessions, openSession, readSessionSummary } from "./sessions.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const SALE_INSTANT = "2026-07-15T15:00:00.000Z";
@@ -182,6 +183,36 @@ test("a full discount needs the register override permission", { skip: !DB }, as
     const docs = (await withOrg(f.org.orgId, () => db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents where org_id = ${f.org.orgId} and kind = 'cash_sale'`))).rows[0]!.n;
     assert.equal(docs, 0);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
+
+test("voided POS sales do not count toward session totals or expected cash", { skip: !DB }, async () => {
+  const f = await fixture();
+  try {
+    const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
+      lines: [{ itemId: f.org.items.fifo, quantity: "1" }],
+      payments: [{ kind: "cash", tendered: "10.00" }],
+      expectedTotal: "10.0000",
+    }), cashier, pricing));
+    assert.equal(sold.total, "10.0000");
+
+    const requested = await withOrg(f.org.orgId, () => requestDocumentVoid({
+      documentId: sold.documentId,
+      orgId: f.org.orgId,
+      actorId: f.actorId,
+      reason: "Sale entered in error",
+      reversalDate: f.org.date,
+      source: "api",
+    }));
+    assert.equal(requested.status, "voided");
+    await withOrg(f.org.orgId, () => completeRequestedDocumentVoid(sold.documentId, f.org.orgId, null));
+
+    const summary = await withOrg(f.org.orgId, () => readSessionSummary(db, f.org.orgId, f.sessionId, null));
+    assert.deepEqual([summary.saleCount, summary.salesTotalMinor, summary.saleCashMinor, summary.expectedCashMinor], [0, 0n, 0n, 0n]);
+    const sessions = await withOrg(f.org.orgId, () => listSessions(db, f.org.orgId, { registerId: f.registerId }, null));
+    assert.deepEqual([sessions.rows[0]?.saleCount, sessions.rows[0]?.salesTotalMinor], [0, "0"]);
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
