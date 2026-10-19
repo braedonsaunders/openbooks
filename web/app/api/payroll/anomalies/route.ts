@@ -85,7 +85,7 @@ export const POST = defineRoute({
     const body = typeof requestBody === "object" && requestBody !== null
       ? requestBody as { action?: unknown; timeOnly?: unknown }
       : undefined;
-    const timeOnly = (body?.action === undefined || body.action === "scan") && body.timeOnly === true;
+    const timeOnly = (body?.action === undefined || body.action === "scan") && body?.timeOnly === true;
     const payrollManager = can(gate, "payroll.manage");
     const timeApprover = can(gate, "time.approve");
     if (timeOnly ? !(payrollManager || timeApprover) : !payrollManager) {

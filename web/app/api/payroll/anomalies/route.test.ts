@@ -69,7 +69,8 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = await import("./route.ts?payroll-anomaly-post-route-test") as typeof import("./route.ts");
+const routeUrl = "./route.ts?payroll-anomaly-post-route-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 after(() => hooks.deregister());
 
 function setup(permissions: string[], features: Record<string, boolean>) {
