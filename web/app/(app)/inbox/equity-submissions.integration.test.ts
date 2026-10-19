@@ -46,7 +46,7 @@ registerScopedHooks({
   },
 });
 
-const { withOrgContext } = await import("@openbooks/engine/platform/db");
+const { withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { installEngineSeams } = await import("@openbooks/engine/composition/install");
 const { dropScratchOrgReporting, seedApprovalFlow } = await import("@openbooks/engine/testing/fixtures");
 const { setupEquityWorld } = await import("@openbooks/engine/testing/equity-world");
@@ -72,9 +72,13 @@ function authzFor(orgId: string, userId: string, role: string, permissions: stri
 }
 
 test("a pending equity action is the requester's submission and the equity approver's task", { skip: !DB }, async () => {
-  const w = await setupEquityWorld();
+  const w = await withBypassContext(() => setupEquityWorld());
   try {
-    await seedApprovalFlow(w.org.orgId, { subjectKind: EQUITY_ACTION_SUBJECT_KIND, assignees: [{ type: "user", userId: w.approverId }], mode: "any" });
+    await withBypassContext(() => seedApprovalFlow(w.org.orgId, {
+      subjectKind: EQUITY_ACTION_SUBJECT_KIND,
+      assignees: [{ type: "user", userId: w.approverId }],
+      mode: "any",
+    }));
     const plan = await createPlan({
       orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, code: "EIP", name: "Equity incentive plan",
       shareClassId: w.commonClassId, effectiveOn: "2026-01-01", reservedShares: "4000000", recycleForfeited: true, recycleExpired: true, recycleRepurchased: false,
