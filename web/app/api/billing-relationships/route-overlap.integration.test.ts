@@ -123,6 +123,82 @@ async function relationshipCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
+test("scoped relationship reads and writes hide out-of-scope billing targets", { skip: !DB }, async () => {
+  const { org, child, payerA, groupA, groupB } = await fixture();
+  const otherSubsidiaryId = randomUUID();
+  const parentId = randomUUID();
+  const visibleChildId = randomUUID();
+  const hiddenChildId = randomUUID();
+  const hiddenTargetChildId = randomUUID();
+  const hiddenPayerId = randomUUID();
+  const visibleRelationshipId = randomUUID();
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other company', 'CAD', 'CA')`);
+      await db.execute(sql`
+        update consolidation_groups set billing_subsidiary_id = ${org.subsidiaryId}
+         where org_id = ${org.orgId} and id = ${groupA}`);
+      await db.execute(sql`
+        update consolidation_groups set billing_subsidiary_id = ${otherSubsidiaryId}
+         where org_id = ${org.orgId} and id = ${groupB}`);
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${parentId}, ${org.orgId}, 'customer', 'Shared parent', null, true, '{}'::jsonb),
+               (${visibleChildId}, ${org.orgId}, 'customer', 'Visible subsidiary customer', ${org.subsidiaryId}, true, '{}'::jsonb),
+               (${hiddenChildId}, ${org.orgId}, 'customer', 'Other subsidiary customer', ${otherSubsidiaryId}, true, '{}'::jsonb),
+               (${hiddenTargetChildId}, ${org.orgId}, 'customer', 'Visible customer with hidden payer', ${org.subsidiaryId}, true, '{}'::jsonb),
+               (${hiddenPayerId}, ${org.orgId}, 'customer', 'Other subsidiary payer', ${otherSubsidiaryId}, true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into customer_roles (org_id, party_id)
+        values (${org.orgId}, ${parentId}), (${org.orgId}, ${visibleChildId}),
+               (${org.orgId}, ${hiddenChildId}), (${org.orgId}, ${hiddenTargetChildId}), (${org.orgId}, ${hiddenPayerId})`);
+      await db.execute(sql`
+        update consolidation_groups set payer_party_id = ${parentId}
+         where org_id = ${org.orgId} and id in (${groupA}, ${groupB})`);
+      await db.execute(sql`
+        insert into customer_billing_relationships
+          (id, org_id, child_party_id, bill_to_party_id, payer_party_id, effective_from, consolidation_group_id)
+        values
+          (${randomUUID()}, ${org.orgId}, ${visibleChildId}, ${parentId}, ${parentId}, '2026-01-01', ${groupA}),
+          (${randomUUID()}, ${org.orgId}, ${hiddenChildId}, ${parentId}, ${parentId}, '2026-01-01', ${groupB}),
+          (${randomUUID()}, ${org.orgId}, ${hiddenTargetChildId}, ${parentId}, ${hiddenPayerId}, '2099-01-01', null),
+          (${visibleRelationshipId}, ${org.orgId}, ${child}, ${payerA}, ${payerA}, '2026-01-01', null)`);
+    });
+
+    state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
+    const read = await withOrgContext(org.orgId, () => GET(new Request(
+      `http://billing.test/api/billing-relationships?childPartyId=${parentId}`,
+    )));
+    const payload = await read.json() as {
+      children: Array<{ childPartyId: string }>;
+      groups: Array<{ id: string }>;
+    };
+    assert.equal(read.status, 200, JSON.stringify(payload));
+    assert.deepEqual(payload.children.map((row) => row.childPartyId), [visibleChildId]);
+    assert.deepEqual(payload.groups.map((row) => row.id), [groupA]);
+    const childRead = await withOrgContext(org.orgId, () => GET(new Request(
+      `http://billing.test/api/billing-relationships?childPartyId=${hiddenTargetChildId}`,
+    )));
+    const childPayload = await childRead.json() as { relationships: unknown[] };
+    assert.equal(childRead.status, 200, JSON.stringify(childPayload));
+    assert.deepEqual(childPayload.relationships, [], 'a relationship with a hidden payer is omitted');
+
+    const patch = await send(PATCH, { id: visibleRelationshipId, payerPartyId: hiddenPayerId });
+    assert.equal(patch.status, 404);
+    const create = await send(POST, {
+      childPartyId: child, billToPartyId: payerA, payerPartyId: parentId,
+      effectiveFrom: '2026-02-01', effectiveTo: null, consolidationGroupId: groupB,
+    });
+    assert.equal(create.status, 404);
+    assert.equal(await relationshipCount(org.orgId), 4, 'hidden billing targets cannot be written');
+  } finally {
+    state.allowedSubsidiaryIds = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
 function windowOf(orgId: string, id: string) {
   return withBypassContext(() => db.execute<{ from: string; to: string | null }>(sql`
     select effective_from::text as "from", effective_to::text as "to"
