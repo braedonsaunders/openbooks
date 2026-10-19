@@ -273,11 +273,11 @@ test(
         const saleLineId = randomUUID();
         await db.execute(sql`
           insert into documents
-            (id, org_id, kind, document_number, party_id, subsidiary_id,
+            (id, org_id, kind, document_number, party_id, subsidiary_id, period_id,
              document_date, posting_date, currency, fx_rate, status,
              subtotal, tax_total, total, custom)
           values (${saleId}, ${org.orgId}, 'cash_sale', ${`CS-${saleId.slice(0, 8)}`},
-            ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+            ${org.customerId}, ${org.subsidiaryId}, ${org.periodId}, ${org.date}, ${org.date},
             'CAD', 1, 'posted', '4', '0', '4', '{}'::jsonb)`);
         await db.execute(sql`
           insert into document_lines
