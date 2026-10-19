@@ -32,6 +32,14 @@ import {
   uuidArray,
 } from "../organization/subsidiaries.ts";
 
+export class AssetTransferError extends Error {
+  readonly status = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "AssetTransferError";
+  }
+}
+
 type NciAllocation = {
   percent: string;
   ownershipPath?: string[];
@@ -97,7 +105,7 @@ export function measureAssetTransferElimination(
     fraction.numerator < 0n ||
     fraction.numerator > fraction.denominator
   )
-    throw new Error("invalid retained physical asset fraction");
+    throw new AssetTransferError("invalid retained physical asset fraction");
   const currentRate = args.currentBuyerRate ?? basis.buyerToGroupRate;
   const translate = (value: string) =>
     mulRate(divRate(value, basis.buyerToGroupRate), currentRate);
@@ -134,7 +142,7 @@ export function measureAssetTransferElimination(
     (args.realizedMargin === undefined ||
       args.depreciationAdjustment === undefined)
   )
-    throw new Error(
+    throw new AssetTransferError(
       "disposed portions require the realized margin and retained historical depreciation evidence",
     );
   const retainedInitialMargin = add(
@@ -217,10 +225,10 @@ export async function consolidateAssetTransfers(
       sql`select p.starts_on::text,p.ends_on::text,${canonicalPeriodLabelSql("p")} as label from accounting_periods p where p.org_id=${orgId} and p.id=${periodId}`,
     )
   ).rows[0];
-  if (!period) throw new Error("consolidation period not found");
+  if (!period) throw new AssetTransferError("consolidation period not found");
   const cutoff = asOf ?? period.ends_on;
   if (cutoff < period.starts_on || cutoff > period.ends_on)
-    throw new Error(
+    throw new AssetTransferError(
       "asset transfer cutoff must lie inside the accounting period",
     );
   const transfers = (
@@ -247,7 +255,7 @@ export async function consolidateAssetTransfers(
         sql`select a.acquisition_cost::text,a.status,s.base_currency from fixed_assets a join subsidiaries s on s.id=a.subsidiary_id and s.org_id=a.org_id where a.org_id=${orgId} and a.id=${transfer.receiving_asset_id} for share of a,s`,
       )
     ).rows[0];
-    if (!asset) throw new Error("receiving asset evidence is unavailable");
+    if (!asset) throw new AssetTransferError("receiving asset evidence is unavailable");
     // Asset edits and controlled corrections lock the asset before the frozen
     // transfer row. Use that same order: holding t FOR SHARE while waiting on
     // the asset would deadlock a correction upgrading its transfer-row lock.
@@ -257,7 +265,7 @@ export async function consolidateAssetTransfers(
       )
     ).rows[0];
     if (!current)
-      throw new Error(
+      throw new AssetTransferError(
         "the asset transfer accounting book changed during consolidation; restore the active book before retrying",
       );
     transfer = current;
@@ -277,7 +285,7 @@ export async function consolidateAssetTransfers(
       )
     ).rows[0];
     if (later)
-      throw new Error(
+      throw new AssetTransferError(
         "a later asset transfer consolidation exists; correct that close before recalculating an earlier period",
       );
     // Historical carrying values use effective-dated basis changes and posted
@@ -310,7 +318,7 @@ export async function consolidateAssetTransfers(
         (r) => r.starts_on <= date && r.ends_on >= date,
       );
       if (rows.length !== 1 || !rows[0]![kind])
-        throw new Error(
+        throw new AssetTransferError(
           `derive consolidated ${kind.replace("_rate", "")} rates for ${asset.base_currency} to ${transfer.group_currency} on ${date} before consolidating the transfer`,
         );
       return rows[0]![kind]!;
@@ -360,7 +368,7 @@ export async function consolidateAssetTransfers(
         (v) => !groupRows.some((g) => g.source_event_id === v.id),
       )
     )
-      throw new Error(
+      throw new AssetTransferError(
         "the transferred asset has a legal-book valuation without an approved group measurement; open the receiving asset and propose its Group valuation before consolidation",
       );
     const valuations = await assetGroupHistory(tx, orgId, transfer.id, cutoff);
@@ -557,7 +565,7 @@ export async function consolidateAssetTransfers(
       !entity.isElimination ||
       entity.baseCurrency !== transfer.group_currency
     )
-      throw new Error(
+      throw new AssetTransferError(
         "restore the transfer's active elimination entity and currency before consolidating",
       );
     await assertPeriodModulesOpen(tx, {
@@ -573,7 +581,7 @@ export async function consolidateAssetTransfers(
       )
     ).rows;
     if (accounts.length !== new Set(lines.map((l) => l.accountId)).size)
-      throw new Error(
+      throw new AssetTransferError(
         "asset transfer consolidation requires active posting accounts",
       );
     await validateSubsidiaryRestrictions(tx, {
@@ -605,7 +613,7 @@ export async function consolidateAssetTransfers(
       })),
     });
     if (postedEntry.entryId !== id)
-      throw new Error("asset transfer consolidation was not posted");
+      throw new AssetTransferError("asset transfer consolidation was not posted");
     await tx.execute(
       sql`insert into asset_transfer_consolidation_entries(org_id,transfer_id,period_id,journal_entry_id,target_balances,created_by) values(${orgId},${transfer.id},${periodId},${id},${JSON.stringify(target)}::jsonb,${actorId})`,
     );

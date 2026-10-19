@@ -8,6 +8,7 @@ import {
   type SqlExecutor,
 } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import {
   add,
@@ -55,8 +56,7 @@ import {
  * the caller, never a bare 500.
  */
 export class RevenueModificationError extends Error {
-  readonly status = 422;
-  constructor(message: string) {
+  constructor(message: string, readonly status: 404 | 409 | 422 = 422) {
     super(message);
     this.name = "RevenueModificationError";
   }
@@ -179,7 +179,7 @@ async function lockedContract(tx: SqlExecutor, orgId: string, id: string) {
     await tx.execute<Contract>(sql`select id,customer_id,project_id,contract_number,status,currency,subsidiary_id,revision,last_change_id,total_transaction_price::text,starts_on::text,ends_on::text,pricing
     from revenue_contracts where org_id=${orgId} and id=${id} for update`)
   ).rows[0];
-  if (!c) throw new Error("revenue contract not found");
+  if (!c) throw new RevenueModificationError("revenue contract not found", 404);
   return c;
 }
 function validate(input: RevenueModificationInput) {
@@ -732,27 +732,28 @@ async function appendAdjustment(
     schedule: Schedule;
     amount: string;
     date: string;
+    subsidiaryId: string;
     actorId: string;
   },
 ) {
   if (isZero(args.amount)) return;
-  const period = (
-    await tx.execute<{
-      id: string;
-    }>(sql`select p.id from accounting_periods p join fiscal_calendars c on c.id=p.fiscal_calendar_id and c.org_id=p.org_id
-    where p.org_id=${args.orgId} and not p.is_adjustment and c.is_default and c.is_active and p.starts_on<=${args.date}::date and p.ends_on>=${args.date}::date for share of p,c`)
-  ).rows;
-  if (period.length !== 1)
-    throw new Error(
-      `provision one default-calendar accounting period covering ${args.date}`,
+  const period = await resolveCoveringPeriod(
+    tx,
+    args.orgId,
+    args.date,
+    args.subsidiaryId,
+  );
+  if (!period)
+    throw new RevenueModificationError(
+      `provision an accounting period on the revenue contract's subsidiary calendar covering ${args.date}`,
     );
   const inserted =
     await tx.execute(sql`insert into recognition_schedule_lines(org_id,schedule_id,period_id,sequence,planned_amount,revision,modification_adjustment,recognition_on,created_by,updated_by)
-    values(${args.orgId},${args.schedule.id},${period[0]!.id},
+    values(${args.orgId},${args.schedule.id},${period.id},
       (select coalesce(max(sequence),-1)+1 from recognition_schedule_lines where org_id=${args.orgId} and schedule_id=${args.schedule.id}),
       ${args.amount},${args.schedule.revision},true,${args.date},${args.actorId},${args.actorId}) returning id`);
   if (inserted.rows.length !== 1)
-    throw new Error("revenue adjustment could not be recorded");
+    throw new RevenueModificationError("revenue adjustment could not be recorded");
 }
 async function postAdjustments(
   orgId: string,
@@ -766,7 +767,7 @@ async function postAdjustments(
     const posted = await runRevenueRecognition(orgId, date, actorId, id, [
       subsidiaryId,
     ]);
-    if (posted.problems.length) throw new Error(posted.problems.join("; "));
+    if (posted.problems.length) throw new RevenueModificationError(posted.problems.join("; "));
     entryIds.push(...posted.entries.map((e) => e.entryId));
     const pending = (
       await db.execute<{
@@ -775,7 +776,7 @@ async function postAdjustments(
       where s.org_id=${orgId} and s.obligation_id=${id} and l.modification_adjustment and (l.journal_entry_id is null or l.recognized_amount<>l.planned_amount) and l.superseded_by_change_id is null and l.planned_amount<>0 and l.recognition_on<=${date}::date`)
     ).rows;
     if (pending.length)
-      throw new Error(
+      throw new RevenueModificationError(
         "a required amendment adjustment did not post; review the accounting book and period configuration",
       );
   }
@@ -792,7 +793,7 @@ export async function applyRevenueModification(
         sql`select subject_id from financial_changes where org_id=${orgId} and id=${changeId} and domain='revenue'`,
       )
     ).rows[0];
-    if (!identity) throw new Error("revenue modification not found");
+    if (!identity) throw new RevenueModificationError("revenue modification not found", 404);
     const contract = await lockedContract(tx, orgId, identity.subject_id);
     const change = await loadFinancialChange(tx, orgId, changeId);
     const input = change.payload as unknown as RevenueModificationInput;
@@ -829,8 +830,9 @@ export async function applyRevenueModification(
           !l.superseded_by_change_id,
       ).length
     )
-      throw new Error(
-        "the future revenue plan changed while applying its approved amendment",
+      throw new RevenueModificationError(
+        "the future revenue plan changed while applying its approved amendment; review the current schedule and propose a new amendment",
+        409,
       );
     for (const schedule of state.schedules.filter(
       (s) =>
@@ -844,6 +846,7 @@ export async function applyRevenueModification(
         schedule,
         amount: balance.stub,
         date: input.effectiveOn,
+        subsidiaryId: input.subsidiaryId,
         actorId,
       });
     }
@@ -873,7 +876,7 @@ export async function applyRevenueModification(
           values(${targetContractId},${orgId},${contract.customer_id},${`${contract.contract_number}-M-${changeId}-${gi + 1}`},'active',${input.effectiveOn},${state.currency},${primaryMeasured.newTotal},${input.subsidiaryId},${contract.id},
             ${JSON.stringify({ changeId, enforceableRightsEvidence: input.enforceableRightsEvidence, assessment: input.assessment })}::jsonb,${actorId},${actorId}) returning id`);
         if (inserted.rows.length !== 1)
-          throw new Error(
+          throw new RevenueModificationError(
             "the separate revenue contract could not be recorded",
           );
         newContractIds.push(targetContractId);
@@ -893,7 +896,7 @@ export async function applyRevenueModification(
             deferred_account_id=${promise.deferredAccountId},recognized_account_id=${promise.recognizedAccountId},status='open',last_change_id=${changeId},updated_by=${actorId},updated_at=now()
             where org_id=${orgId} and id=${id} and contract_id=${contract.id} returning id`);
           if (updated.rows.length !== 1)
-            throw new Error(
+            throw new RevenueModificationError(
               "the revised performance obligation could not be saved",
             );
         } else {
@@ -901,7 +904,7 @@ export async function applyRevenueModification(
             await tx.execute(sql`insert into performance_obligations(id,org_id,contract_id,description,recognition_rule_id,standalone_selling_price,allocated_price,percent_complete,recognition_starts_on,recognition_ends_on,deferred_account_id,recognized_account_id,last_change_id,status,created_by,updated_by)
             values(${id},${orgId},${targetContractId},${promise.description},${promise.recognitionRuleId},${promise.standaloneSellingPrice},${measured.allocated},${promise.percentComplete},${input.effectiveOn},${promise.recognitionEndsOn ?? null},${promise.deferredAccountId},${promise.recognizedAccountId},${changeId},'open',${actorId},${actorId}) returning id`);
           if (inserted.rows.length !== 1)
-            throw new Error(
+            throw new RevenueModificationError(
               "the added performance obligation could not be saved",
             );
         }
@@ -950,7 +953,7 @@ export async function applyRevenueModification(
                 sql`insert into recognition_schedules(id,org_id,obligation_id,book_id,revision,total_amount,change_basis,status,created_by,updated_by) values(${scheduleId},${orgId},${id},${book.id},${revision},${bookMeasured.allocated},${JSON.stringify(basis)}::jsonb,'planned',${actorId},${actorId}) returning id`,
               );
           if (written.rows.length !== 1)
-            throw new Error(
+            throw new RevenueModificationError(
               "a book-specific amended revenue plan could not be saved",
             );
           await appendAdjustment(tx, {
@@ -965,6 +968,7 @@ export async function applyRevenueModification(
             },
             amount: bookMeasured.catchUp,
             date: input.effectiveOn,
+            subsidiaryId: input.subsidiaryId,
             actorId,
           });
           rebuild.push({ id, bookId: book.id });
@@ -975,7 +979,7 @@ export async function applyRevenueModification(
             await tx.execute(sql`insert into recognition_events(org_id,obligation_id,period_month,amount,description,source_reference,created_by,updated_by)
             values(${orgId},${id},${e.periodMonth},${e.amount},${e.description},${`modification:${changeId}:${gi}:${pi}:${ei}`},${actorId},${actorId}) returning id`);
           if (inserted.rows.length !== 1)
-            throw new Error("amended performance event could not be recorded");
+            throw new RevenueModificationError("amended performance event could not be recorded");
         }
       }
       for (const retired of primaryMeasured.retired) {
@@ -983,7 +987,7 @@ export async function applyRevenueModification(
           sql`update performance_obligations set allocated_price=${retired.allocated},status='satisfied',last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${retired.id} returning id`,
         );
         if (updated.rows.length !== 1)
-          throw new Error("the extinguished promise could not be closed");
+          throw new RevenueModificationError("the extinguished promise could not be closed");
         for (const book of state.books) {
           const old = state.schedules.find(
               (s) => s.obligation_id === retired.id && s.book_id === book.id,
@@ -1015,7 +1019,7 @@ export async function applyRevenueModification(
             sql`update recognition_schedules set revision=revision+1,total_amount=${balance.recognized},change_basis=${JSON.stringify(basis)}::jsonb,status='complete',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${old.id} returning id`,
           );
           if (saved.rows.length !== 1)
-            throw new Error("the extinguished book plan could not be closed");
+            throw new RevenueModificationError("the extinguished book plan could not be closed");
         }
       }
     }
@@ -1039,14 +1043,14 @@ export async function applyRevenueModification(
       );
     const newPrice = add(contract.total_transaction_price, contractDelta);
     if (cmp(newPrice, "0") < 0)
-      throw new Error(
+      throw new RevenueModificationError(
         "the amendment would leave the contract with a negative transaction price",
       );
     const updated =
       await tx.execute(sql`update revenue_contracts set subsidiary_id=${input.subsidiaryId},revision=revision+1,last_change_id=${changeId},total_transaction_price=${newPrice},
       status=${input.groups.some((g) => g.treatment !== "separate") ? "active" : contract.status},pricing=pricing||${JSON.stringify({ lastModificationId: changeId })}::jsonb,updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${contract.id} and revision=${contract.revision} returning id`);
     if (updated.rows.length !== 1)
-      throw new Error("the revenue contract revision could not be finalized");
+      throw new RevenueModificationError("the revenue contract revision could not be finalized");
     const result = {
       revision: contract.revision + 1,
       newTransactionPrice: newPrice,

@@ -2,6 +2,7 @@ import { assertFinancialChangeAccess } from "../organization/financial-change-ac
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import {
   db,
   withOrg,
@@ -755,6 +756,20 @@ export function assertLeaseTermWithinHorizon(
   return frequencyMonths;
 }
 
+/** The contractual schedule is authoritative for the lease classification term. */
+export function leaseClassificationInputsForTerm(
+  inputs: LeaseClassificationInputs | null | undefined,
+  leaseTermMonths: number,
+): LeaseClassificationInputs {
+  if (!Number.isSafeInteger(leaseTermMonths) || leaseTermMonths < 1)
+    throw new LeaseError("lease term must be a positive whole number of months");
+  assertClassificationInputs(inputs ?? {});
+  return {
+    ...inputs,
+    leaseTermMonths,
+  };
+}
+
 /**
  * Cutover-date gate for continue-from-opening onboarding. The first
  * scheduled period must begin on or after the balances' as-of date: a
@@ -885,11 +900,10 @@ export async function createLeaseAgreement(
     // month persisting as operating instead of finance. Malformed caller
     // input still fails closed first: derivation corrects a wrong but
     // well-formed term, it does not launder junk.
-    assertClassificationInputs(input.classificationInputs ?? {});
-    const classificationInputs = {
-      ...input.classificationInputs,
-      leaseTermMonths: input.termPeriods * frequencyMonths,
-    };
+    const classificationInputs = leaseClassificationInputsForTerm(
+      input.classificationInputs,
+      input.termPeriods * frequencyMonths,
+    );
     const classification = classifyLease(classificationInputs, framework);
 
     if (input.exemption === "short_term") {
@@ -1128,16 +1142,12 @@ async function postingContext(
     throw new LeaseError(
       "the lease has no originating posting book; reconcile its commencement or imported balances before scheduling changes",
     );
+  const period = await resolveCoveringPeriod(runner, orgId, date, subsidiaryId);
   const r = await runner.execute<{
     book_id: string | null;
-    period_id: string | null;
     currency: string | null;
   }>(sql`
     select (select id from accounting_books where org_id = ${orgId} and id=${bookId} and is_active and posts_gl for share) as book_id,
-           (select id from accounting_periods p where p.org_id = ${orgId} and not p.is_adjustment
-              and starts_on <= ${date} and ends_on >= ${date}
-              and exists (select 1 from fiscal_calendars c where c.id=p.fiscal_calendar_id and c.org_id=p.org_id and c.is_default and c.is_active)
-              for share) as period_id,
            (select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}) as currency
   `);
   const row = r.rows[0];
@@ -1145,12 +1155,12 @@ async function postingContext(
     throw new LeaseError(
       "the lease posting book is no longer active or GL-posting; ask an authorized administrator to restore the originating book's posting configuration in Accounting books before posting this lease",
     );
-  if (!row.period_id)
+  if (!period)
     throw new LeaseError(`no accounting period covers ${date}`);
   if (!row.currency) throw new LeaseError("subsidiary not found");
   return {
     bookId: row.book_id,
-    periodId: row.period_id,
+    periodId: period.id,
     currency: row.currency,
   };
 }

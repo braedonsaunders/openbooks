@@ -33,6 +33,7 @@ import {
   postLeaseEntry,
   measureLesseeLease,
   classifyLease,
+  leaseClassificationInputsForTerm,
   assertLeaseTermWithinHorizon,
   shortTermExemptionEligible,
   createLeaseAgreement,
@@ -429,15 +430,20 @@ function proposalState(
 ) {
   if (input.operation === "separate_lease") {
     const agreement = input.separateLease!.agreement;
+    const frequencyMonths = assertLeaseTermWithinHorizon(
+      agreement.termPeriods,
+      agreement.paymentFrequency,
+    );
+    const leaseTermMonths = agreement.termPeriods * frequencyMonths;
+    const classificationInputs = leaseClassificationInputsForTerm(
+      agreement.classificationInputs,
+      leaseTermMonths,
+    );
     if (agreement.openingBalances)
       throw new LeaseError(
         "an added right of use is a new lease, not a carried-in opening balance",
       );
     if (agreement.exemption) {
-      const months = assertLeaseTermWithinHorizon(
-        agreement.termPeriods,
-        agreement.paymentFrequency,
-      );
       if (
         agreement.exemption === "low_value" &&
         state.beforeState.framework !== "ifrs"
@@ -446,9 +452,8 @@ function proposalState(
       if (
         agreement.exemption === "short_term" &&
         !shortTermExemptionEligible({
-          leaseTermMonths: agreement.termPeriods * months,
-          purchaseOptionReasonablyCertain:
-            agreement.classificationInputs?.purchaseOptionReasonablyCertain,
+          leaseTermMonths,
+          purchaseOptionReasonablyCertain: classificationInputs.purchaseOptionReasonablyCertain,
         })
       )
         throw new LeaseError(
@@ -470,7 +475,7 @@ function proposalState(
       periodsPerYear: periodsPerYear[agreement.paymentFrequency],
       timing: agreement.paymentTiming ?? "arrears",
       model: classifyLease(
-        agreement.classificationInputs ?? {},
+        classificationInputs,
         state.beforeState.framework,
       ).model,
       initialDirectCosts: agreement.initialDirectCosts,

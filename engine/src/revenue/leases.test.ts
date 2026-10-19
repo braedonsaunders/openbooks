@@ -5,6 +5,7 @@ import {
   assertLeaseCommencementOn,
   assertLeaseTimingSupported,
   classifyLease,
+  leaseClassificationInputsForTerm,
   classifyLessorLease,
   LeaseError,
   lessorStraightLineSchedule,
@@ -139,6 +140,12 @@ test("US GAAP classification criteria (842-10-25-2)", () => {
     ).model,
     "finance",
   );
+});
+
+test("lease classification derives the term from the contractual payment schedule", () => {
+  const inputs = leaseClassificationInputsForTerm({ economicLifeMonths: 48 }, 36);
+  assert.equal(inputs.leaseTermMonths, 36);
+  assert.equal(classifyLease(inputs, "us_gaap").model, "finance");
 });
 
 test("classification refuses junk numerics with a named LeaseError", () => {

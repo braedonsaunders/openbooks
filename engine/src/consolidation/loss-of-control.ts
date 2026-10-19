@@ -23,6 +23,7 @@ import {
   validateSubsidiaryRestrictions,
 } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import {
@@ -96,7 +97,7 @@ export interface LossOfControlInput {
  */
 export class LossOfControlProposalError extends Error {
   constructor(
-    readonly status: 404 | 403 | 422,
+    readonly status: 404 | 403 | 409 | 422,
     message: string,
   ) {
     super(message);
@@ -462,15 +463,23 @@ async function scope(
         "manual elimination lines carry no family attribution, so a subsidiary-restricted proposal cannot select them; have an unrestricted group controller include the lines explicitly",
       );
   }
-  const period = (
-    await tx.execute<{ id: string; starts_on: string; ends_on: string }>(
-      sql`select p.id,p.starts_on::text,p.ends_on::text from accounting_periods p join fiscal_calendars c on c.org_id=p.org_id and c.id=p.fiscal_calendar_id where p.org_id=${orgId} and c.is_active and c.is_default and not p.is_adjustment and p.starts_on<=${input.effectiveOn} and p.ends_on>=${input.effectiveOn} for share of p,c`,
-    )
-  ).rows;
-  if (period.length !== 1)
-    throw new LossOfControlProposalError(422,
-      "configure one default-calendar accounting period for the control-loss date",
+  const periods = new Map<string, NonNullable<Awaited<ReturnType<typeof resolveCoveringPeriod>>>>();
+  for (const subsidiaryId of requiredSubsidiaryIds) {
+    const period = await resolveCoveringPeriod(
+      tx,
+      orgId,
+      input.effectiveOn,
+      subsidiaryId,
     );
+    if (!period)
+      throw new LossOfControlProposalError(
+        422,
+        `configure an accounting period on ${context.byId.get(subsidiaryId)!.name}'s fiscal calendar for ${input.effectiveOn}`,
+      );
+    periods.set(subsidiaryId, period);
+  }
+  const period = periods.get(elimination.id)!;
+  const parentPeriod = periods.get(parent.id)!;
   const book = (
     await tx.execute<{ id: string }>(
       sql`select id from accounting_books where org_id=${orgId} and is_primary and is_active and posts_gl for share`,
@@ -480,13 +489,14 @@ async function scope(
     throw new LossOfControlProposalError(422,
       "loss of control requires the active primary consolidation book",
     );
-  await assertPeriodModulesOpen(tx, {
-    orgId,
-    periodId: period[0]!.id,
-    bookId: book[0]!.id,
-    subsidiaryIds: requiredSubsidiaryIds,
-    modules: ["gl"],
-  });
+  for (const subsidiaryId of requiredSubsidiaryIds)
+    await assertPeriodModulesOpen(tx, {
+      orgId,
+      periodId: periods.get(subsidiaryId)!.id,
+      bookId: book[0]!.id,
+      subsidiaryIds: [subsidiaryId],
+      modules: ["gl"],
+    });
   const policies = (
     await tx.execute<Interest>(
       sql`select interest.*,interest.effective_from::text,interest.effective_to::text,interest.acquisition_date::text from subsidiary_ownership_interests interest where interest.org_id=${orgId} and interest.subsidiary_id=any(${uuidArray(family)}::uuid[]) and interest.is_active and interest.effective_from<=${input.effectiveOn} order by interest.subsidiary_id,interest.effective_from,interest.id for share`,
@@ -516,7 +526,7 @@ async function scope(
       );
   }
   const ownershipInterestIds = policies
-    .filter((p) => !p.effective_to || p.effective_to >= period[0]!.starts_on)
+    .filter((p) => !p.effective_to || p.effective_to >= period.starts_on)
     .map((p) => p.id);
   const late = (
     await tx.execute(
@@ -557,7 +567,7 @@ async function scope(
   ).rows;
   const rates = (
     await tx.execute(
-      sql`select period_id,from_currency,to_currency,current_rate::text,average_rate::text,historical_rate::text,source from consolidated_fx_rates where org_id=${orgId} and period_id=${period[0]!.id} order by from_currency,to_currency`,
+      sql`select period_id,from_currency,to_currency,current_rate::text,average_rate::text,historical_rate::text,source from consolidated_fx_rates where org_id=${orgId} and period_id=${period.id} order by from_currency,to_currency`,
     )
   ).rows;
   return {
@@ -566,7 +576,8 @@ async function scope(
     elimination,
     family,
     requiredSubsidiaryIds,
-    period: period[0]!,
+    period,
+    parentPeriod,
     bookId: book[0]!.id,
     policies,
     factors,
@@ -1085,6 +1096,7 @@ async function post(
   lines: LossOfControlBalance[],
   number: string,
   reversesEntryId?: string,
+  origin = "translation",
 ) {
   const material = lines.filter((l) => !isZero(l.amount));
   if (!material.length) return null;
@@ -1103,7 +1115,7 @@ async function post(
     )
   ).rows;
   if (accounts.length !== accountIds.length)
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "restore the active posting accounts required by this approved disposal journal",
     );
   assertFinalKernelBalance(scoped);
@@ -1118,7 +1130,7 @@ async function post(
     postingDate: date,
     periodId: s.period.id,
     memo: "Approved loss of control",
-    origin: "translation",
+    origin,
     reversesEntryId,
     actorId,
     currency,
@@ -1129,7 +1141,7 @@ async function post(
     })),
   });
   if (postedEntry.entryId !== id)
-    throw new Error("loss-of-control journal was not posted");
+    throw new LossOfControlProposalError(422, "the loss-of-control journal could not be posted; review the active book and period configuration");
   return id;
 }
 export async function applyLossOfControl(
@@ -1143,7 +1155,7 @@ export async function applyLossOfControl(
       change.domain !== "consolidation" ||
       change.operation !== "loss_of_control"
     )
-      throw new Error("select a loss-of-control proposal");
+      throw new LossOfControlProposalError(422, "select a loss-of-control proposal");
     await assertFinancialChangeAccess(tx, {
       orgId,
       actorId,
@@ -1170,33 +1182,36 @@ export async function applyLossOfControl(
       approverScope &&
       s.requiredSubsidiaryIds.some((id) => !approverScope.has(id))
     )
-      throw new Error(
+      throw new LossOfControlProposalError(409,
         "the approver no longer covers every affected entity; obtain a new scoped approval",
       );
     const closed = await tx.execute(
       sql`update subsidiary_ownership_interests set effective_to=${input.effectiveOn},last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${change.subject_id} returning id`,
     );
     if (closed.rows.length !== 1)
-      throw new Error("ownership window could not be closed");
+      throw new LossOfControlProposalError(409, "the ownership window changed while applying this disposal; review the current ownership record and propose it again");
     const measured = await measure(tx, orgId, actorId, input, s, changeId);
     if (
       canonicalJson(measured.preview) !== canonicalJson(calculated.preview) ||
       canonicalJson(measured.parentLines) !==
         canonicalJson(calculated.parentLines)
     )
-      throw new Error(
-        "the final disposal measurement differs from its approved workpaper",
+      throw new LossOfControlProposalError(
+        409,
+        "the final disposal measurement differs from its approved workpaper; review the current balances and obtain approval for a new proposal",
       );
     const parentEntry = await post(
       tx,
       orgId,
       actorId,
-      s,
+      { ...s, period: s.parentPeriod },
       s.parent.id,
       s.parent.baseCurrency,
       input.effectiveOn,
       measured.parentLines,
       `CONTROL-PARENT-${changeId}`,
+      undefined,
+      "correction",
     );
     const entry = await post(
       tx,
@@ -1218,7 +1233,7 @@ export async function applyLossOfControl(
         .toISOString()
         .slice(0, 10);
       await tx.execute(
-        sql`insert into subsidiary_ownership_interests(id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,investment_account_id,equity_income_account_id,distribution_account_id,distribution_income_account_id,last_change_id,created_by,updated_by) values(${retainedInterestId},${orgId},${s.parent.id},${s.interest.subsidiary_id},${next},${input.retainedPercent},'equity',${next},${input.retainedFairValue},0,1,'proportionate',${input.retainedAccountId},${input.equityIncomeAccountId},${input.distributionAccountId},${input.distributionIncomeAccountId},${changeId},${actorId},${actorId})`,
+        sql`insert into subsidiary_ownership_interests(id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,investment_account_id,equity_income_account_id,distribution_account_id,distribution_income_account_id,last_change_id,created_by,updated_by) values(${retainedInterestId},${orgId},${s.parent.id},${s.interest.subsidiary_id},${next},${input.retainedPercent},'equity',${next},${input.parentRetainedCarrying},0,${input.parentToGroupRate},'proportionate',${input.retainedAccountId},${input.equityIncomeAccountId},${input.distributionAccountId},${input.distributionIncomeAccountId},${changeId},${actorId},${actorId})`,
       );
     }
     await tx.execute(
@@ -1279,13 +1294,6 @@ async function reversalState(
     permission: "close.run",
     feature: "multiSubsidiary",
   });
-  await assertPeriodModulesOpen(tx, {
-    orgId,
-    periodId: loss.period_id,
-    bookId: loss.book_id,
-    subsidiaryIds: requiredSubsidiaryIds,
-    modules: ["gl"],
-  });
   if (
     loss.retained_interest_id &&
     (
@@ -1304,11 +1312,13 @@ async function reversalState(
       id: string;
       subsidiary_id: string;
       book_id: string;
+      period_id: string;
       status: string;
       reverses_entry_id: string | null;
       currency: string;
+      origin: string;
     }>(
-      sql`select e.id,e.subsidiary_id,e.book_id,e.status,e.reverses_entry_id,s.base_currency as currency from journal_entries e join subsidiaries s on s.org_id=e.org_id and s.id=e.subsidiary_id where e.org_id=${orgId} and e.id=any(${uuidArray(entries)}::uuid[]) order by e.id for update of e`,
+      sql`select e.id,e.subsidiary_id,e.book_id,e.period_id,e.status,e.reverses_entry_id,e.origin,s.base_currency as currency from journal_entries e join subsidiaries s on s.org_id=e.org_id and s.id=e.subsidiary_id where e.org_id=${orgId} and e.id=any(${uuidArray(entries)}::uuid[]) order by e.id for update of e`,
     )
   ).rows;
   if (
@@ -1318,6 +1328,19 @@ async function reversalState(
     throw new LossOfControlProposalError(422,
       "a disposal journal has subsequent correction history; retain that evidence and reconcile it before proposing a new disposal correction",
     );
+  const checkedPeriods = new Set<string>();
+  for (const journal of journals) {
+    const key = `${journal.period_id}:${journal.subsidiary_id}`;
+    if (checkedPeriods.has(key)) continue;
+    await assertPeriodModulesOpen(tx, {
+      orgId,
+      periodId: journal.period_id,
+      bookId: journal.book_id,
+      subsidiaryIds: [journal.subsidiary_id],
+      modules: ["gl"],
+    });
+    checkedPeriods.add(key);
+  }
   const lines = (
     await tx.execute<{
       entry_id: string;
@@ -1393,7 +1416,7 @@ export async function applyLossOfControlReversal(
     });
     if (change.status === "applied") return change.result!;
     if (change.domain !== "consolidation" || change.operation !== "reversal")
-      throw new Error("select a consolidation correction");
+      throw new LossOfControlProposalError(422, "select a consolidation correction");
     const state = await reversalState(
       tx,
       orgId,
@@ -1411,26 +1434,26 @@ export async function applyLossOfControlReversal(
       change.approved_by!,
     );
     if (allowed && state.requiredSubsidiaryIds.some((id) => !allowed.has(id)))
-      throw new Error(
+      throw new LossOfControlProposalError(409,
         "the independent approver no longer covers every affected entity",
       );
     const marked = await tx.execute(
       sql`update consolidation_control_losses set reversed_by_change_id=${changeId} where org_id=${orgId} and id=${state.loss.id} and reversed_by_change_id is null returning id`,
     );
     if (marked.rows.length !== 1)
-      throw new Error("the disposal correction could not be recorded");
+      throw new LossOfControlProposalError(409, "the disposal correction changed while applying; review the current correction history before retrying");
     if (state.loss.retained_interest_id) {
       const retired = await tx.execute(
         sql`update subsidiary_ownership_interests set is_active=false,last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${state.loss.retained_interest_id} and is_active returning id`,
       );
       if (retired.rows.length !== 1)
-        throw new Error("the retained interest could not be retired");
+        throw new LossOfControlProposalError(409, "the retained interest changed while applying the correction; review its current status before retrying");
     }
     const reopened = await tx.execute(
       sql`update subsidiary_ownership_interests set effective_to=${state.loss.measurement.originalEffectiveTo},last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${state.loss.interest_id} returning id`,
     );
     if (reopened.rows.length !== 1)
-      throw new Error("the original control window could not be restored");
+      throw new LossOfControlProposalError(409, "the original ownership window changed while applying the correction; review its current status before retrying");
     const entryIds: string[] = [];
     for (const entry of state.journals) {
       // Keep cancellation of an earlier consolidation generation intact. Its
@@ -1441,7 +1464,7 @@ export async function applyLossOfControlReversal(
         tx,
         orgId,
         actorId,
-        { bookId: entry.book_id, period: { id: state.loss.period_id } },
+        { bookId: entry.book_id, period: { id: entry.period_id } },
         entry.subsidiary_id,
         entry.currency,
         state.loss.effective_on,
@@ -1454,12 +1477,13 @@ export async function applyLossOfControlReversal(
           })),
         `CONTROL-REV-${changeId}-${entry.id}`,
         entry.id,
+        entry.origin,
       );
       if (id) entryIds.push(id);
       try {
         await markEntryReversed(tx, { orgId, entryId: entry.id, actorId });
       } catch {
-        throw new Error(
+        throw new LossOfControlProposalError(409,
           "a disposal journal could not be linked to its correction",
         );
       }
