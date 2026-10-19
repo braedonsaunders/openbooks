@@ -974,7 +974,7 @@ export async function scheduleForAsset(
     remainingMonths.forEach((month, index) => futureAmounts.set(month, amounts[index]!));
   }
   if (asset.method === "pattern" && asset.revenueContractId) {
-    return months.map((month, i) => ({
+    return months.map((month) => ({
       month,
       periodId: periodIdsByMonth.get(month) ?? null,
       amountMinor: postedByMonth.get(month) ?? futureAmounts.get(month) ?? 0n,
