@@ -1,37 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Play, Plus, RefreshCw } from "lucide-react";
 import { readApiErrorMessage } from "../../../../lib/api-error";
-import { ListTable, type ListTableColumn } from "../../../../components/list-table";
+import { PagedTable, type PagedColumn } from "../../../../components/paged-table";
 import { ListPageLayout } from "../../../../components/page-layout";
 import {
   Badge,
   Button,
   DisclosureSection,
-  Drawer,
+  EmptyState,
   Input,
   Label,
   PageHeader,
   Select,
+  UrlDrawer,
 } from "@openbooks/ui";
 import { DateField } from '../../../../components/date-field'
+import { formatObjectCounts, shouldOpenImportWizard, BILLING_IMPORT_COUNT_KEYS, type BillingImportCounts } from './presentation'
 
 // --- shapes (mirror the API responses) -----------------------------------------
 
-interface Counts {
-  customers: number;
-  plans: number;
-  subscriptions: number;
-  invoices: number;
-  creditNotes: number;
-  payments: number;
-  usage: number;
-  coupons: number;
-  revenueSchedules: number;
-}
+type Counts = BillingImportCounts;
 
 interface AttentionItem {
   kind: "plan" | "currency" | "tax_code" | "customer";
@@ -68,25 +62,25 @@ interface Preflight {
 
 type Step = "connect" | "preflight" | "result";
 
-const COUNT_KEYS: (keyof Counts)[] = [
-  "customers",
-  "plans",
-  "subscriptions",
-  "invoices",
-  "creditNotes",
-  "payments",
-  "usage",
-  "coupons",
-  "revenueSchedules",
-];
-
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive" | "warning" | "success"> = {
-  completed: "success",
+  complete: "success",
   running: "default",
   ready: "secondary",
   preflight: "secondary",
+  draft: "secondary",
+  reconciling: "warning",
   failed: "destructive",
 };
+
+const PROVIDERS = ["chargebee", "recurly", "maxio", "zuora"] as const;
+const ATTENTION_KINDS = ["plan", "currency", "tax_code", "customer"] as const;
+const DIFFERENCE_KINDS = ["mrr", "open_ar", "deferred_revenue"] as const;
+const STATUSES = ["draft", "preflight", "ready", "running", "reconciling", "complete", "failed"] as const;
+type EnumTranslationKey =
+  | `providers.${(typeof PROVIDERS)[number]}`
+  | `statuses.${(typeof STATUSES)[number]}`
+  | `attentionKinds.${(typeof ATTENTION_KINDS)[number]}`
+  | `differenceKinds.${(typeof DIFFERENCE_KINDS)[number]}`;
 
 async function postJson(url: string, body: unknown, fallback: string): Promise<unknown> {
   const res = await fetch(url, {
@@ -100,9 +94,17 @@ async function postJson(url: string, body: unknown, fallback: string): Promise<u
 
 export function BillingHistoryClient() {
   const t = useTranslations("billingImport");
+  const searchParams = useSearchParams();
+  const drawerOpen = shouldOpenImportWizard(searchParams);
+  const translatedEnum = (
+    group: "providers" | "statuses" | "attentionKinds" | "differenceKinds",
+    value: string,
+    supported: readonly string[],
+  ) => supported.includes(value)
+    ? t(`${group}.${value}` as EnumTranslationKey)
+    : t("unknownValue");
   const [runs, setRuns] = useState<ImportRun[]>([]);
   const [loading, setLoading] = useState(true);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [step, setStep] = useState<Step>("connect");
   const [provider, setProvider] = useState("chargebee");
   const [externalAccount, setExternalAccount] = useState("");
@@ -136,13 +138,18 @@ export function BillingHistoryClient() {
     void refresh();
   }, [refresh]);
 
-  function openWizard() {
+  const resetWizard = useCallback(() => {
     setStep("connect");
     setRunId(null);
     setPreflight(null);
     setResult(null);
-    setDrawerOpen(true);
-  }
+  }, []);
+
+  useEffect(() => {
+    if (drawerOpen) resetWizard();
+  }, [drawerOpen, resetWizard]);
+
+  const openWizardHref = "/sync/billing-history?import=new";
 
   async function startPreflight() {
     setBusy(true);
@@ -199,19 +206,31 @@ export function BillingHistoryClient() {
     }
   }
 
-  const columns: ListTableColumn<ImportRun>[] = [
-    { key: "provider", header: t("provider"), cell: (row) => row.provider },
-    { key: "account", header: t("account"), cell: (row) => row.externalAccount },
-    { key: "mode", header: t("mode"), cell: (row) => row.mode },
+  const columns: PagedColumn<ImportRun>[] = [
+    {
+      key: "provider",
+      header: t("provider"),
+      cell: (row) => translatedEnum("providers", row.provider, PROVIDERS),
+      search: (row) => `${translatedEnum("providers", row.provider, PROVIDERS)} ${row.externalAccount}`,
+    },
+    { key: "account", header: t("account"), cell: (row) => row.externalAccount, search: (row) => row.externalAccount },
+    {
+      key: "mode",
+      header: t("mode"),
+      cell: (row) => t(row.mode === "opening_balances" ? "modeOpeningBalances" : "modePostHistorical"),
+      search: (row) => t(row.mode === "opening_balances" ? "modeOpeningBalances" : "modePostHistorical"),
+    },
     {
       key: "status",
       header: t("status"),
-      cell: (row) => <Badge variant={STATUS_VARIANT[row.status] ?? "outline"}>{row.status}</Badge>,
+      cell: (row) => <Badge variant={STATUS_VARIANT[row.status] ?? "outline"}>{translatedEnum("statuses", row.status, STATUSES)}</Badge>,
+      search: (row) => translatedEnum("statuses", row.status, STATUSES),
     },
     {
       key: "counts",
       header: t("objects"),
-      cell: (row) => (row.counts ? COUNT_KEYS.map((k) => `${row.counts?.[k] ?? 0} ${k}`).join(" · ") : "—"),
+      cell: (row) => formatObjectCounts(row.counts, (key) => t(key)),
+      search: (row) => formatObjectCounts(row.counts, (key) => t(key)),
     },
     {
       key: "actions",
@@ -237,10 +256,13 @@ export function BillingHistoryClient() {
         <PageHeader
           title={t("title")}
           description={t("subtitle")}
+          back={{ href: "/sync", label: t("backToSync") }}
           actions={
-            <Button onClick={openWizard}>
-              <Plus className="mr-1 h-4 w-4" />
-              {t("newImport")}
+            <Button asChild>
+              <Link href={openWizardHref}>
+                <Plus className="mr-1 h-4 w-4" />
+                {t("newImport")}
+              </Link>
             </Button>
           }
         />
@@ -249,26 +271,30 @@ export function BillingHistoryClient() {
       {loading ? (
         <p className="text-sm text-muted-foreground">{t("loading")}</p>
       ) : runs.length === 0 ? (
-        <div className="rounded-lg border p-8 text-center">
-          <p className="font-medium">{t("emptyTitle")}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{t("emptyBody")}</p>
-          <Button className="mt-4" onClick={openWizard}>
-            <Plus className="mr-1 h-4 w-4" />
-            {t("newImport")}
-          </Button>
-        </div>
+        <EmptyState
+          title={t("emptyTitle")}
+          description={t("emptyBody")}
+          action={<Button asChild><Link href={openWizardHref}><Plus className="mr-1 h-4 w-4" />{t("newImport")}</Link></Button>}
+        />
       ) : (
-        <ListTable rows={runs} columns={columns} rowKey={(row) => row.id} empty={<p className="text-sm text-muted-foreground">{t("emptyBody")}</p>} />
+        <PagedTable
+          source="billing_import_runs"
+          rows={runs}
+          columns={columns}
+          rowKey={(row) => row.id}
+          searchable
+          empty={<EmptyState title={t("emptyTitle")} description={t("emptyBody")} />}
+        />
       )}
 
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={t("wizardTitle")}>
+      <UrlDrawer open={drawerOpen} openKey="new" closeHref="/sync/billing-history" title={t("wizardTitle")}>
         {step === "connect" && (
           <div className="space-y-4">
             <div>
               <Label>{t("provider")}</Label>
               <Select value={provider} onChange={(e) => setProvider(e.target.value)}>
                 {["chargebee", "recurly", "maxio", "zuora"].map((p) => (
-                  <option key={p} value={p}>{p}</option>
+                  <option key={p} value={p}>{translatedEnum("providers", p, PROVIDERS)}</option>
                 ))}
               </Select>
             </div>
@@ -296,7 +322,7 @@ export function BillingHistoryClient() {
             <div>
               <h3 className="font-medium">{t("countsTitle")}</h3>
               <ul className="mt-1 text-sm">
-                {COUNT_KEYS.map((k) => (
+                {BILLING_IMPORT_COUNT_KEYS.map((k) => (
                   <li key={k}>{t(`count_${k}`)}: {preflight.counts[k]}</li>
                 ))}
               </ul>
@@ -309,7 +335,7 @@ export function BillingHistoryClient() {
                 <ul className="mt-1 space-y-2">
                   {preflight.attention.map((item) => (
                     <li key={`${item.kind}:${item.externalRef}`} className="rounded border p-2 text-sm">
-                      <Badge variant="warning">{item.kind}</Badge>
+                      <Badge variant="warning">{translatedEnum("attentionKinds", item.kind, ATTENTION_KINDS)}</Badge>
                       <p className="mt-1">{item.label}</p>
                       {item.suggestion && <p className="text-muted-foreground">{item.suggestion.label}</p>}
                       <p className="text-muted-foreground">{item.remedy}</p>
@@ -351,7 +377,7 @@ export function BillingHistoryClient() {
               <ul className="space-y-2">
                 {result.reconciliation.differences.map((d, i) => (
                   <li key={i} className="rounded border p-2 text-sm">
-                    <Badge variant="outline">{d.kind}</Badge>
+                    <Badge variant="outline">{translatedEnum("differenceKinds", d.kind, DIFFERENCE_KINDS)}</Badge>
                     <p className="mt-1 font-medium">{d.ref}</p>
                     <p>{t("sourceValue")}: {d.sourceMajor} · {t("openbooksValue")}: {d.openbooksMajor}</p>
                     <p className="text-muted-foreground">{d.explanation}</p>
@@ -359,10 +385,10 @@ export function BillingHistoryClient() {
                 ))}
               </ul>
             )}
-            <Button variant="outline" onClick={() => setDrawerOpen(false)}>{t("close")}</Button>
+            <Button asChild variant="outline"><Link href="/sync/billing-history">{t("close")}</Link></Button>
           </div>
         )}
-      </Drawer>
+      </UrlDrawer>
     </ListPageLayout>
   );
 }

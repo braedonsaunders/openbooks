@@ -939,6 +939,7 @@ const SOURCES = {
   handling_unit_contents: {route:'/shipments',rowsField:'unit.lines',rowKeyField:'lineId',mode:'loaded'},
   shipping_bulk_candidates: { route: '/shipments/labels', rowsField: 'candidates', rowKeyField: 'handlingUnitId', mode: 'loaded' },
   shipping_bulk_rates: { route: '/shipments/labels?view=rates', rowsField: 'rates', rowKeyField: 'handlingUnitId', mode: 'loaded' },
+  billing_import_runs: { route: '/sync/billing-history', rowsField: 'runs', rowKeyField: 'id', mode: 'loaded' },
   warehouse_receipts: {route:'/warehouse',rowsField:'receipts',rowKeyField:'lineId',mode:'loaded'},
   warehouse_putaway: {
     route: '/warehouse',

@@ -239,6 +239,31 @@ function blockSignature(blocks: TypedBlock[]): string[] {
  * Everything else that ships English verbatim is an untranslated string.
  */
 const COGNATES = new Set<string>([
+  // Billing platform product names remain in their registered brand spelling.
+  'fr:billingImport.providers.chargebee|Chargebee',
+  'fr:billingImport.providers.recurly|Recurly',
+  'fr:billingImport.providers.maxio|Maxio',
+  'fr:billingImport.providers.zuora|Zuora',
+  'es:billingImport.providers.chargebee|Chargebee',
+  'es:billingImport.providers.recurly|Recurly',
+  'es:billingImport.providers.maxio|Maxio',
+  'es:billingImport.providers.zuora|Zuora',
+  'de:billingImport.providers.chargebee|Chargebee',
+  'de:billingImport.providers.recurly|Recurly',
+  'de:billingImport.providers.maxio|Maxio',
+  'de:billingImport.providers.zuora|Zuora',
+  'pt-BR:billingImport.providers.chargebee|Chargebee',
+  'pt-BR:billingImport.providers.recurly|Recurly',
+  'pt-BR:billingImport.providers.maxio|Maxio',
+  'pt-BR:billingImport.providers.zuora|Zuora',
+  'ja:billingImport.providers.chargebee|Chargebee',
+  'ja:billingImport.providers.recurly|Recurly',
+  'ja:billingImport.providers.maxio|Maxio',
+  'ja:billingImport.providers.zuora|Zuora',
+  'zh:billingImport.providers.chargebee|Chargebee',
+  'zh:billingImport.providers.recurly|Recurly',
+  'zh:billingImport.providers.maxio|Maxio',
+  'zh:billingImport.providers.zuora|Zuora',
   // Equity identicals added with their report labels and MFN terms: instrument names (Option, RSU, SAFE, Warrant) and the universal before → after template.
   'ja:equity.mfn.termsChange|{before} → {after}',
   'ja:reports.catalog.columnValues.equity_compensation_run_lines.security_kind.rsu|RSU',

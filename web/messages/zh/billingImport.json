@@ -42,5 +42,33 @@
   "status": "状态",
   "objects": "对象",
   "loadFailed": "无法加载账单导入记录。",
-  "requestFailed": "账单平台无响应。"
+  "requestFailed": "账单平台无响应。",
+  "backToSync": "返回同步",
+  "unknownValue": "未知",
+  "providers": {
+    "chargebee": "Chargebee",
+    "recurly": "Recurly",
+    "maxio": "Maxio",
+    "zuora": "Zuora"
+  },
+  "statuses": {
+    "draft": "草稿",
+    "preflight": "预检",
+    "ready": "就绪",
+    "running": "运行中",
+    "reconciling": "对账中",
+    "complete": "已完成",
+    "failed": "失败"
+  },
+  "attentionKinds": {
+    "plan": "套餐",
+    "currency": "币种",
+    "tax_code": "税码",
+    "customer": "客户"
+  },
+  "differenceKinds": {
+    "mrr": "月度经常性收入 (MRR)",
+    "open_ar": "未收应收账款",
+    "deferred_revenue": "递延收入"
+  }
 }

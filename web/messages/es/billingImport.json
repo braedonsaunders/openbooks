@@ -42,5 +42,33 @@
   "status": "Estado",
   "objects": "Objetos",
   "loadFailed": "No se pudieron cargar las importaciones de facturación.",
-  "requestFailed": "La plataforma de facturación no respondió."
+  "requestFailed": "La plataforma de facturación no respondió.",
+  "backToSync": "Volver a sincronización",
+  "unknownValue": "Desconocido",
+  "providers": {
+    "chargebee": "Chargebee",
+    "recurly": "Recurly",
+    "maxio": "Maxio",
+    "zuora": "Zuora"
+  },
+  "statuses": {
+    "draft": "Borrador",
+    "preflight": "Verificación previa",
+    "ready": "Listo",
+    "running": "En curso",
+    "reconciling": "Conciliando",
+    "complete": "Completado",
+    "failed": "Fallido"
+  },
+  "attentionKinds": {
+    "plan": "Plan de servicio",
+    "currency": "Moneda",
+    "tax_code": "Código fiscal",
+    "customer": "Cliente"
+  },
+  "differenceKinds": {
+    "mrr": "Ingresos recurrentes mensuales (MRR)",
+    "open_ar": "Cuentas por cobrar abiertas",
+    "deferred_revenue": "Ingresos diferidos"
+  }
 }

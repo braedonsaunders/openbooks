@@ -42,5 +42,33 @@
   "status": "Status",
   "objects": "Objekte",
   "loadFailed": "Abrechnungsimporte konnten nicht geladen werden.",
-  "requestFailed": "Die Abrechnungsplattform hat nicht geantwortet."
+  "requestFailed": "Die Abrechnungsplattform hat nicht geantwortet.",
+  "backToSync": "Zurück zur Synchronisierung",
+  "unknownValue": "Unbekannt",
+  "providers": {
+    "chargebee": "Chargebee",
+    "recurly": "Recurly",
+    "maxio": "Maxio",
+    "zuora": "Zuora"
+  },
+  "statuses": {
+    "draft": "Entwurf",
+    "preflight": "Vorabprüfung",
+    "ready": "Bereit",
+    "running": "Läuft",
+    "reconciling": "Abstimmung läuft",
+    "complete": "Abgeschlossen",
+    "failed": "Fehlgeschlagen"
+  },
+  "attentionKinds": {
+    "plan": "Tarif",
+    "currency": "Währung",
+    "tax_code": "Steuercode",
+    "customer": "Kunde"
+  },
+  "differenceKinds": {
+    "mrr": "Monatlich wiederkehrender Umsatz (MRR)",
+    "open_ar": "Offene Forderungen",
+    "deferred_revenue": "Abgegrenzte Erlöse"
+  }
 }

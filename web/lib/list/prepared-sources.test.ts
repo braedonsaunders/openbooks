@@ -89,3 +89,11 @@ test('Talent worklists retain record identities when the first saved row appears
   const source=preparedListSource(key);assert.equal(source.mode,'loaded',key);assert.equal(source.rowKeyField,'id',key);
  }
 });
+
+test('billing import history is a loaded list with stable run identities', () => {
+  const source = preparedListSource('billing_import_runs')
+  assert.equal(source.mode, 'loaded')
+  assert.equal(source.route, '/sync/billing-history')
+  assert.equal(source.rowsField, 'runs')
+  assert.equal(source.rowKeyField, 'id')
+})
