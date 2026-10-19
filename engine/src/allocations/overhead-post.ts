@@ -121,12 +121,21 @@ export function overheadRateAppliesToTimeEntry(rateAlias: string, entryAlias: st
 
 export interface OverheadApplyResult {
   entryId: string | null;
+  entryIds: string[];
   total: string;
   entries: number;
   projects: number;
   /** Rate-covered entries whose rounded amount was zero, stamped as
    * applied-with-zero (no journal) in this call. */
   dust: number;
+}
+
+export class OverheadPostingPeriodError extends Error {
+  readonly status = 409;
+  constructor(readonly workedOn: string, readonly subsidiaryId: string | null) {
+    super(`No accounting period covers overhead for work dated ${workedOn}. Create the accounting period for that date in Close, then approve the time or run the overhead backfill again.`);
+    this.name = "OverheadPostingPeriodError";
+  }
 }
 
 /**
@@ -191,7 +200,7 @@ async function ensureOverheadKernelRule(
  * method 'none'), and whose worked day has a published rate participate.
  */
 export async function applyOverheadForTime(orgId: string, actorId: string, timeEntryIds: string[]): Promise<OverheadApplyResult> {
-  const none: OverheadApplyResult = { entryId: null, total: "0", entries: 0, projects: 0, dust: 0 };
+  const none: OverheadApplyResult = { entryId: null, entryIds: [], total: "0", entries: 0, projects: 0, dust: 0 };
   if (timeEntryIds.length === 0) return none;
   // Advisory pre-read: provision the kernel rule outside the posting
   // transaction (its sync owns its transactions) when the policy looks
@@ -212,14 +221,19 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     // may stack several rows for one scope (category rows), so the amount is
     // the SUM of every applicable row's term and each entry appears exactly
     // once — the journal stamp below claims each carried entry once.
-    const rows = (await tx.execute<{ id: string; project_id: string; worked_on: string; amount: string }>(sql`
+    const rows = (await tx.execute<{
+      id: string; project_id: string; worked_on: string; subsidiary_id: string | null; period_id: string | null; amount: string;
+    }>(sql`
       with locked as (
-        select te.id, te.org_id, te.project_id, te.worked_on, te.hours, te.department_id
+        select te.id, te.org_id, te.project_id, te.worked_on, te.hours, te.department_id,
+               coalesce(p.subsidiary_id, te.cost_rate_subsidiary_id) as subsidiary_id
           from time_entries te
+          left join projects p on p.id = te.project_id and p.org_id = te.org_id
          where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
            and te.status = 'approved' and te.project_id is not null
            and te.costing_basis = 'actual'
            and te.overhead_journal_entry_id is null
+           and coalesce(p.is_internal, false) = false
            and ${dustExclusion("te")}
            and not exists (
              select 1 from projects p
@@ -239,12 +253,23 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
          order by te.id
          for update of te
       )
-      select entry.id, entry.project_id, entry.worked_on,
+      select entry.id, entry.project_id, entry.worked_on, entry.subsidiary_id, covering.id as period_id,
              -- hours × rate is quantized to the ledger scale at source: the raw
              -- numeric(19,4)×numeric(19,4) product carries up to 8 decimals,
              -- which money parsing would reject as over-precise.
              sum(round(entry.hours * r.rate_percent, 4)) as amount
         from locked entry
+        left join lateral (
+          select ap.id
+            from accounting_periods ap
+            join fiscal_calendars fc
+              on fc.id = ap.fiscal_calendar_id and fc.org_id = ap.org_id and fc.is_active
+             and fc.id = public.subsidiary_posting_calendar(entry.org_id, entry.subsidiary_id, entry.worked_on)
+           where ap.org_id = entry.org_id and not ap.is_adjustment
+             and ap.starts_on <= entry.worked_on and ap.ends_on >= entry.worked_on
+           order by ap.starts_on, ap.ends_on, ap.id
+           limit 1
+        ) covering on true
         join overhead_rates r
           on r.rate_kind = 'per_hour'
          and ${overheadRateAppliesToDriver("r", {
@@ -252,16 +277,20 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
           workedOn: sql`entry.worked_on`,
           departmentId: sql`entry.department_id`,
         })}
-       group by entry.id, entry.project_id, entry.worked_on
-       order by entry.id`));
+       group by entry.id, entry.project_id, entry.worked_on, entry.subsidiary_id, covering.id
+       order by entry.subsidiary_id nulls first, covering.id nulls first, entry.worked_on, entry.id`));
     if (rows.rows.length === 0) return none;
 
-    const byProject = new Map<string, string>();
-    const entriesByProject = new Map<string, Array<{ id: string; amount: string }>>();
-    const carried: string[] = [];
+    const groups = new Map<string, {
+      subsidiaryId: string | null;
+      periodId: string;
+      postingDate: string;
+      byProject: Map<string, string>;
+      entriesByProject: Map<string, Array<{ id: string; amount: string }>>;
+      carried: string[];
+      total: string;
+    }>();
     const dust: string[] = [];
-    let total = "0";
-    let maxDate = "";
     for (const r of rows.rows) {
       const amt = normalizeMoney(String(r.amount));
       // Hours × rate rounded to 0.0000: no journal leg, but the entry must
@@ -271,119 +300,134 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
         dust.push(r.id);
         continue;
       }
-      byProject.set(r.project_id, add(byProject.get(r.project_id) ?? "0", amt));
-      const legEntries = entriesByProject.get(r.project_id);
+      if (!r.period_id) throw new OverheadPostingPeriodError(r.worked_on, r.subsidiary_id);
+      const key = `${r.subsidiary_id ?? "__default__"}|${r.period_id}`;
+      const group = groups.get(key) ?? {
+        subsidiaryId: r.subsidiary_id,
+        periodId: r.period_id,
+        postingDate: "",
+        byProject: new Map<string, string>(),
+        entriesByProject: new Map<string, Array<{ id: string; amount: string }>>(),
+        carried: [],
+        total: "0",
+      };
+      group.byProject.set(r.project_id, add(group.byProject.get(r.project_id) ?? "0", amt));
+      const legEntries = group.entriesByProject.get(r.project_id);
       if (legEntries) legEntries.push({ id: r.id, amount: amt });
-      else entriesByProject.set(r.project_id, [{ id: r.id, amount: amt }]);
-      total = add(total, amt);
-      carried.push(r.id);
-      if (r.worked_on > maxDate) maxDate = r.worked_on;
+      else group.entriesByProject.set(r.project_id, [{ id: r.id, amount: amt }]);
+      group.total = add(group.total, amt);
+      group.carried.push(r.id);
+      if (r.worked_on > group.postingDate) group.postingDate = r.worked_on;
+      groups.set(key, group);
     }
-    if (carried.length === 0) {
+    if (groups.size === 0) {
       if (dust.length > 0) {
         await stampOverheadDust(tx, orgId, actorId, dust);
-        return { entryId: null, total: "0", entries: 0, projects: 0, dust: dust.length };
+        return { ...none, dust: dust.length };
       }
       return none;
     }
 
-    // The kernel owns the pair from here: line-building, contributor
-    // stamping and lineage come from the system rule in force on the posting
-    // date. The advisory pre-read usually resolved it; a mid-flight policy
-    // change falls back to a load (plus one provisioning sync), and a still-
-    // missing rule is a fail-closed inconsistency, never an unstamped post.
-    const postingDate = maxDate || await businessToday(orgId);
-    let kernelRule = advisoryRule;
-    if (!kernelRule || kernelRule.version.effectiveFrom > postingDate ||
-        (kernelRule.version.effectiveTo != null && kernelRule.version.effectiveTo < postingDate)) {
-      kernelRule = await ensureOverheadKernelRule(orgId, actorId, settings.accountId, postingDate);
-    }
-    if (!kernelRule) {
-      throw new Error("overhead kernel rule is not in force for the posting date");
-    }
-    const kernelAccount = kernelRule.version.accountScope.kind === "accounts"
-      ? kernelRule.version.accountScope.accountIds[0] ?? null
-      : null;
-    if (kernelAccount !== settings.accountId) {
-      throw new Error("overhead policy changed during posting; retry the approval");
-    }
-    const built = buildNetZeroPairLines({
-      rule: kernelRule,
-      source: { accountId: settings.accountId! },
-      total,
-      targets: [...byProject].map(([projectId, amt]) => ({
-        projectId,
-        amount: amt,
-        entries: entriesByProject.get(projectId) ?? [],
-      })),
-    });
+    const entryIds: string[] = [];
+    const projects = new Set<string>();
+    let total = "0";
+    let entries = 0;
+    for (const group of groups.values()) {
+      // The kernel owns each pair from here. Resolve a rule in force on this
+      // group's posting date; the advisory read usually serves it, while a
+      // different historical group may need a separate effective version.
+      const postingDate = group.postingDate || await businessToday(orgId);
+      let kernelRule = advisoryRule;
+      if (!kernelRule || kernelRule.version.effectiveFrom > postingDate ||
+          (kernelRule.version.effectiveTo != null && kernelRule.version.effectiveTo < postingDate)) {
+        kernelRule = await ensureOverheadKernelRule(orgId, actorId, settings.accountId, postingDate);
+      }
+      if (!kernelRule) throw new Error("overhead kernel rule is not in force for the posting date");
+      const kernelAccount = kernelRule.version.accountScope.kind === "accounts"
+        ? kernelRule.version.accountScope.accountIds[0] ?? null
+        : null;
+      if (kernelAccount !== settings.accountId) throw new Error("overhead policy changed during posting; retry the approval");
+      const built = buildNetZeroPairLines({
+        rule: kernelRule,
+        source: { accountId: settings.accountId!, subsidiaryId: group.subsidiaryId },
+        total: group.total,
+        targets: [...group.byProject].map(([projectId, amount]) => ({
+          projectId,
+          amount,
+          entries: group.entriesByProject.get(projectId) ?? [],
+        })),
+      });
 
-    // A released group (reverseOverheadForTime) can be re-applied with the
-    // same date and first member, so the entry number must be unique per
-    // physical journal under journal_entries_org_number.
-    const entryId = await postProjectGlEntryWithinTransaction(tx, {
-      orgId,
-      actorId,
-      origin: "overhead_applied",
-      entryNumber: `OVH-${postingDate}-${carried[0]!.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
-      postingDate,
-      memo: "Overhead applied with approved hours (net-zero pair)",
-      lines: built.map((leg) => ({
-        accountId: leg.line.accountId,
-        amount: leg.line.amount,
-        projectId: leg.line.projectId,
-        partyId: leg.line.partyId,
-        memo: leg.line.memo,
-        departmentId: leg.line.departmentId,
-        locationId: leg.line.locationId,
-        classId: leg.line.classId,
-        subsidiaryId: leg.line.subsidiaryId,
-        extraDims: leg.line.extraDims,
-        contributorKind: leg.line.contributorKind,
-        contributorRef: leg.line.contributorRef,
-      })),
-    });
-    if (!entryId) return none;
-    const stamped = (await tx.execute<{ id: string }>(sql`
-      update time_entries
-         set overhead_journal_entry_id = ${entryId},
-             updated_at = now(),
-             updated_by = ${actorId}
-       where org_id = ${orgId}
-         and id = any(${`{${carried.join(",")}}`}::uuid[])
-         and overhead_journal_entry_id is null
-       returning id`));
-    if (stamped.rows.length !== carried.length) {
-      throw new Error("overhead posting source claim changed before journal stamping");
+      // A released group can be re-applied with the same date and first
+      // member, so every physical journal gets its own unique entry number.
+      const entryId = await postProjectGlEntryWithinTransaction(tx, {
+        orgId,
+        actorId,
+        origin: "overhead_applied",
+        entryNumber: `OVH-${postingDate}-${group.carried[0]!.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
+        postingDate,
+        subsidiaryId: group.subsidiaryId ?? undefined,
+        memo: "Overhead applied with approved hours (net-zero pair)",
+        lines: built.map((leg) => ({
+          accountId: leg.line.accountId,
+          amount: leg.line.amount,
+          projectId: leg.line.projectId,
+          partyId: leg.line.partyId,
+          memo: leg.line.memo,
+          departmentId: leg.line.departmentId,
+          locationId: leg.line.locationId,
+          classId: leg.line.classId,
+          subsidiaryId: leg.line.subsidiaryId,
+          extraDims: leg.line.extraDims,
+          contributorKind: leg.line.contributorKind,
+          contributorRef: leg.line.contributorRef,
+        })),
+      });
+      if (!entryId) throw new Error("overhead journal group was not posted — no journal was written; retry the approval");
+      const stamped = (await tx.execute<{ id: string }>(sql`
+        update time_entries
+           set overhead_journal_entry_id = ${entryId},
+               updated_at = now(),
+               updated_by = ${actorId}
+         where org_id = ${orgId}
+           and id = any(${`{${group.carried.join(",")}}`}::uuid[])
+           and overhead_journal_entry_id is null
+         returning id`));
+      if (stamped.rows.length !== group.carried.length) {
+        throw new Error("overhead posting source claim changed before journal stamping");
+      }
+      entryIds.push(entryId);
+      entries += group.carried.length;
+      total = add(total, group.total);
+      for (const projectId of group.byProject.keys()) projects.add(projectId);
+
+      // The offset leg is the deterministic mirror, so lineage belongs only
+      // to the project legs. Lines post in order and map one-to-one.
+      const legLineIds = (await tx.execute<{ id: string; line_number: number }>(sql`
+        select id, line_number from journal_lines
+         where org_id = ${orgId} and entry_id = ${entryId}
+         order by line_number`)).rows;
+      for (let index = 0; index < built.length - 1; index += 1) {
+        const leg = built[index]!;
+        const journalLineId = legLineIds[index]?.id;
+        if (!journalLineId) throw new Error("overhead journal leg is missing its inserted line");
+        for (const draft of leg.lineage) {
+          await tx.execute(sql`insert into allocation_lineage
+            (id, org_id, mode, rule_id, version_id, definition_hash, run_id, document_id,
+             journal_entry_id, journal_line_id, source_journal_line_id, source_document_line_id,
+             target_document_line_id, source_time_entry_id, driver_id, driver_value, driver_total,
+             share, amount, residual)
+            values (${randomUUID()}, ${orgId}, ${draft.mode}, ${draft.ruleId}, ${draft.versionId},
+              ${draft.definitionHash}, null, null, ${entryId}, ${journalLineId}, null, null, null,
+              ${draft.sourceTimeEntryId}, ${draft.driverId}, ${draft.driverValue}, ${draft.driverTotal},
+              ${draft.share}, ${draft.amount}, ${draft.residual ?? "0"})`);
+        }
+      }
     }
     // Dust in a mixed batch stamps alongside the carried entries, in the
     // same unit: a crash between the two would strand the backlog again.
     await stampOverheadDust(tx, orgId, actorId, dust);
-    // Lineage: one row per carried entry against its project leg (the offset
-    // leg is the deterministic mirror — neg(total) of the same rule version —
-    // so it carries no row of its own). Legs post in order, so line numbers
-    // map 1:1 onto the inserted journal lines.
-    const legLineIds = (await tx.execute<{ id: string; line_number: number }>(sql`
-      select id, line_number from journal_lines
-       where org_id = ${orgId} and entry_id = ${entryId}
-       order by line_number`)).rows;
-    for (let index = 0; index < built.length - 1; index += 1) {
-      const leg = built[index]!;
-      const journalLineId = legLineIds[index]?.id;
-      if (!journalLineId) throw new Error("overhead journal leg is missing its inserted line");
-      for (const draft of leg.lineage) {
-        await tx.execute(sql`insert into allocation_lineage
-          (id, org_id, mode, rule_id, version_id, definition_hash, run_id, document_id,
-           journal_entry_id, journal_line_id, source_journal_line_id, source_document_line_id,
-           target_document_line_id, source_time_entry_id, driver_id, driver_value, driver_total,
-           share, amount, residual)
-          values (${randomUUID()}, ${orgId}, ${draft.mode}, ${draft.ruleId}, ${draft.versionId},
-            ${draft.definitionHash}, null, null, ${entryId}, ${journalLineId}, null, null, null,
-            ${draft.sourceTimeEntryId}, ${draft.driverId}, ${draft.driverValue}, ${draft.driverTotal},
-            ${draft.share}, ${draft.amount}, ${draft.residual ?? "0"})`);
-      }
-    }
-    return { entryId, total, entries: carried.length, projects: byProject.size, dust: dust.length };
+    return { entryId: entryIds[0] ?? null, entryIds, total, entries, projects: projects.size, dust: dust.length };
   });
 }
 
@@ -555,9 +599,11 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
   const r = (await db.execute<{ entries: number; hours: string }>(sql`
     select count(*)::int as entries, coalesce(sum(te.hours), 0) as hours
       from time_entries te
+      left join projects p on p.id = te.project_id and p.org_id = te.org_id
      where te.org_id = ${orgId} and te.status = 'approved' and te.project_id is not null
        and te.costing_basis = 'actual'
        and te.overhead_journal_entry_id is null
+       and coalesce(p.is_internal, false) = false
        and ${dustExclusion("te")}
        and exists (
          select 1 from overhead_rates r
@@ -601,9 +647,11 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
     const ids = (await db.execute<{ id: string }>(sql`
       select te.id
         from time_entries te
+        left join projects p on p.id = te.project_id and p.org_id = te.org_id
        where te.org_id = ${orgId} and te.status = 'approved' and te.project_id is not null
          and te.costing_basis = 'actual'
          and te.overhead_journal_entry_id is null
+         and coalesce(p.is_internal, false) = false
          and ${dustExclusion("te")}
          and exists (
            select 1 from overhead_rates r
@@ -639,7 +687,7 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
     entries += res.entries;
     dust += res.dust;
     total = add(total, res.total);
-    if (res.entryId) journals++;
+    journals += res.entryIds.length;
   }
   return { entries, total, journals, dust };
 }
@@ -683,11 +731,24 @@ export async function reverseOverheadForTime(
       await tx.execute(sql`
         update time_entries
            set overhead_journal_entry_id = null,
+               custom = coalesce(custom, '{}'::jsonb) - ${OVERHEAD_ZERO_APPLIED_MARKER},
                updated_at = now(),
                updated_by = ${actorId}
          where org_id = ${orgId}
            and overhead_journal_entry_id = ${entryId}`);
     }
+    // Applied-with-zero rows have no journal to reverse, but their marker is
+    // still a claim on the time entry. Clear it on release so edited or
+    // re-approved time can be evaluated against the current rate card.
+    await tx.execute(sql`
+      update time_entries
+         set custom = coalesce(custom, '{}'::jsonb) - ${OVERHEAD_ZERO_APPLIED_MARKER},
+             updated_at = now(),
+             updated_by = ${actorId}
+       where org_id = ${orgId}
+         and id = any(${idArr}::uuid[])
+         and overhead_journal_entry_id is null
+         and custom ? ${OVERHEAD_ZERO_APPLIED_MARKER}`);
   });
 }
 
