@@ -65,8 +65,12 @@ test('bank account tabs replace the active server list and preserve list and dra
     const { found, currentParams } = makeSpec(tab)
     const lists = found['registered-record-list'] ?? []
     assert.equal(lists.length, 1, `${tab} view exposes one independent list`)
-    assert.equal((lists[0].props as Record<string, unknown>).source, source)
-    const tabs = (found['module-home-tabs']?.[0].props as Record<string, unknown>).tabs as Array<{ href: string; active: boolean }>
+    const list = lists[0]
+    assert.ok(list)
+    assert.equal((list.props as Record<string, unknown>).source, source)
+    const tabsBlock = found['module-home-tabs']?.[0]
+    assert.ok(tabsBlock)
+    const tabs = (tabsBlock.props as Record<string, unknown>).tabs as Array<{ href: string; active: boolean }>
     assert.equal(tabs.find((entry) => entry.active)?.href.includes(`tab=${tab}`), true)
     const other = tabs.find((entry) => !entry.active)!
     const params = new URLSearchParams(other.href.split('?')[1])

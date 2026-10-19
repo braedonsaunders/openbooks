@@ -407,10 +407,10 @@ export function propertyManagementSpec(data: PropertyManagementData): PageSpec {
         f('listViewRefusal'),
       ),
       ...(data.metrics ? [grid('grid grid-cols-2 gap-3 xl:grid-cols-4', [
-        statTile({ iconKey: 'building', accent: 'teal', label: f('occupiedUnitsLabel'), value: f('occupiedUnitsValue'), sub: f('activeLeasesSub') }),
-        statTile({ iconKey: 'wallet', accent: 'emerald', label: f('monthlyBaseRentLabel'), value: f('monthlyBaseRentValue'), sub: f('monthlyBaseRentSub') }),
-        statTile({ iconKey: 'triangle-alert', accent: 'red', label: f('rentPastDueLabel'), value: f('rentPastDueValue'), sub: f('rentPastDueSub'), tone: f('rentPastDueTone') }),
-        statTile({ iconKey: 'shield-check', accent: 'violet', label: f('depositsHeldLabel'), value: f('depositsHeldValue'), sub: f('depositsHeldSub') }),
+        statTile({ iconKey: 'building', accent: 'teal', label: f('metrics.occupiedUnitsLabel'), value: f('metrics.occupiedUnitsValue'), sub: f('metrics.activeLeasesSub') }),
+        statTile({ iconKey: 'wallet', accent: 'emerald', label: f('metrics.monthlyBaseRentLabel'), value: f('metrics.monthlyBaseRentValue'), sub: f('metrics.monthlyBaseRentSub') }),
+        statTile({ iconKey: 'triangle-alert', accent: 'red', label: f('metrics.rentPastDueLabel'), value: f('metrics.rentPastDueValue'), sub: f('metrics.rentPastDueSub'), tone: f('metrics.rentPastDueTone') }),
+        statTile({ iconKey: 'shield-check', accent: 'violet', label: f('metrics.depositsHeldLabel'), value: f('metrics.depositsHeldValue'), sub: f('metrics.depositsHeldSub') }),
       ])] : []),
       // One active table body with URL-backed detail drawers. Its rows and
       // KPI inputs arrive from the scoped server loader above.

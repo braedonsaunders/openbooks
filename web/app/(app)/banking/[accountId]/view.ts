@@ -639,7 +639,7 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
       }),
     ],
     body: [
-      widget('module-home-tabs', {
+      widgetBlock('module-home-tabs', {
         tabs: [
           {
             href: mergeHref(data.basePath, data.currentParams, { tab: 'statements' }),
