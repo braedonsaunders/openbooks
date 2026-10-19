@@ -47,6 +47,7 @@ registerHooks({
           "data:text/javascript," +
           encodeURIComponent(
             `export async function getLocale() { return 'en'; }
+            export async function getTimeZone() { return 'UTC'; }
             export async function getTranslations(ns) {
               const root = { admin: globalThis.__docSecCatalogs.admin };
               const lookup = (key) => {

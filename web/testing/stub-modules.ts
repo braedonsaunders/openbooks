@@ -96,6 +96,7 @@ const INTL_SERVER_DEFAULT =
   `export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}` +
   `export async function getMessages(){return {}}` +
   `export async function getLocale(){return 'en'}` +
+  `export async function getTimeZone(){return 'UTC'}` +
   // Formatter in the same neutral locale and zone.
   `export async function getFormatter(){return {` +
   `dateTime:(value,options)=>new Intl.DateTimeFormat('en',{...(options??{}),timeZone:'UTC'}).format(value),` +

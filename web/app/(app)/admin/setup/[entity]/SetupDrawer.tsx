@@ -37,6 +37,8 @@ import { majorToMinor, minorToMajor } from '../../../../../lib/setup/money-field
 import { moneyRefusal } from '@openbooks/engine/money/decimal-refusal'
 import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import { formatDecimal } from '../../../../../lib/money-format'
+import { formatCivilDate } from '../../../../../lib/format'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'
 import { countryOptions } from '../../../../../lib/countries'
 import { timeZoneOptions } from '@/lib/zoned-date-time'
 import { DirtyDrawerFormScope, useDirtyDrawerState } from '@/components/dirty-url-drawer'
@@ -956,6 +958,8 @@ export function FieldControl({
     : selectedOption ? setupOptionLabel(selectedOption, t)
       : field.kind === 'boolean' && value !== null && value !== undefined && value !== '' ? common(value === true || value === 'true' ? 'labels.yes' : 'labels.no')
         : ['decimal', 'percent', 'integer', 'money'].includes(field.kind) && value !== null && value !== undefined && value !== '' ? formatDecimal(locale, String(value), { maximumFractionDigits: field.decimalScale ?? SETUP_DECIMAL_SCALE })
+          // A read-only civil date reads as its localized calendar day; the editable control keeps ISO.
+          : field.kind === 'date' && typeof value === 'string' && isIsoCalendarDate(value) ? formatCivilDate(value, locale)
           : Array.isArray(value) ? value.map(item => field.kind === 'multiref' ? refOptions.find(option => option.value === String(item))?.label ?? item : item).join(', ') : value
 
 
@@ -998,7 +1002,7 @@ export function FieldControl({
     return (
       <div className={wrap}>
         <Label help={help}>{label}</Label>
-        <div className={cn('min-h-10 w-full whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 [overflow-wrap:anywhere] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300', field.kind !== 'ref' && 'font-mono')}>
+        <div className={cn('min-h-10 w-full whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 [overflow-wrap:anywhere] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300', field.kind !== 'ref' && field.kind !== 'date' && 'font-mono')}>
           {String(lockedDisplay ?? '') || '—'}
         </div>
       </div>

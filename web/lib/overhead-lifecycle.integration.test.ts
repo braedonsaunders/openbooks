@@ -22,7 +22,7 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
       }
     `) }
   }
-  if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'data:text/javascript,export async function getTranslations(){const t=key=>key;t.has=()=>false;return t} export async function getLocale(){return "en"}' }
+  if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'data:text/javascript,export async function getTranslations(){const t=key=>key;t.has=()=>false;return t} export async function getLocale(){return "en"} export async function getTimeZone(){return "UTC"}' }
   if (specifier === 'next/headers') return { shortCircuit: true, url: 'data:text/javascript,export async function cookies(){return {get(){return undefined}}}' }
   return next(specifier, context)
 } })

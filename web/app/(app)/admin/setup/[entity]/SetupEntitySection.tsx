@@ -1,7 +1,8 @@
 import { clearSetupChildren, setupNavigationKeys } from '../../../../../lib/setup/navigation'
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
-import { getLocale, getTranslations } from 'next-intl/server'
+import { getLocale, getTimeZone, getTranslations } from 'next-intl/server'
+import { setupColumnSearchSql, setupDateLabel } from '../../../../../lib/setup/date-columns'
 import { formatDecimal } from '../../../../../lib/money-format'
 import { minorToMajor } from '../../../../../lib/setup/money-fields'
 import { db } from '@openbooks/engine/platform/db'
@@ -47,7 +48,8 @@ export function renderCell(
   refLabels: Record<string, Map<string, string>>,
   t: (k: string) => string,
   locale: string,
-  minorUnits?: Record<string, number>,
+  minorUnits: Record<string, number> | undefined,
+  timeZone: string,
 ) {
   const raw = row[toSnake(col.key)]
   const option = col.options?.find((candidate) => candidate.value === String(raw))
@@ -86,7 +88,7 @@ export function renderCell(
       return `${formatDecimal(locale, major, { minimumFractionDigits: exponent, maximumFractionDigits: exponent })} ${code}`.trim()
     }
     case 'date':
-      return raw ? String(raw) : '—'
+      return setupDateLabel(raw, locale, timeZone)
     case 'ref': {
       const label = col.ref ? refLabels[col.ref]?.get(String(raw)) : undefined
       return label ?? (raw ? String(raw) : '—')
@@ -265,7 +267,7 @@ export async function SetupEntitySection({
     ? Boolean(currentAuthz && can(currentAuthz, commandPermission))
     : canManage && !entity.readOnly && (!entity.writePermission || Boolean(currentAuthz && can(currentAuthz, entity.writePermission)))
   const t = await getTranslations('admin.setup')
-  const locale = await getLocale()
+  const [locale, timeZone] = await Promise.all([getLocale(), getTimeZone()])
   const rawRow = sp[rowParam]
   const openRow = typeof rawRow === 'string' ? rawRow : undefined
   const qParam = paramPrefix ? `${paramPrefix}Q` : 'q'
@@ -288,9 +290,7 @@ export async function SetupEntitySection({
   }
   const closeHref = mergeHref(basePath, Object.fromEntries(closeParams), {})
 
-  const searchColumns = entity.columns.map(
-    (column) => sql`cast(${sql.raw(toSnake(column.key))} as text) ilike ${`%${list.q ?? ''}%`}`,
-  )
+  const searchColumns = entity.columns.map((column) => setupColumnSearchSql(column, list.q ?? '', locale, timeZone))
   // Enum dropdown filters (`f_<key>` params). Only registry-declared option
   // values are honoured, so the raw param never reaches SQL unchecked.
   const activeFilters = (entity.filters ?? []).flatMap((filter) => {
@@ -577,7 +577,7 @@ export async function SetupEntitySection({
             header: t(column.labelKey ?? `fields.${column.key}`),
             cell: (row) => {
               const content = renderColumn?.(column, row) ??
-                renderCell(column, row, refLabels, t, locale, currencyMinorUnits)
+                renderCell(column, row, refLabels, t, locale, currencyMinorUnits, timeZone)
               return (canWriteEntity || (canManage && entity.readOnly)) && (index === 0 || entity.key === 'item-rate-books') ? (
                 <Link href={mergeHref(basePath, sp, { [rowParam]: String(row[idColumn]) })}
                   className="font-medium text-teal-700 hover:underline dark:text-teal-300">

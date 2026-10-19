@@ -469,6 +469,13 @@ test('effective-dated policy versions stay readable without offering an edit act
   assert.equal(seen.length, 0)
 })
 
+test('a read-only effective date reads as a localized calendar day', async (t) => {
+  await mountDrawer(t, { id: '00000000-0000-4000-8000-000000000001', rate_kind: 'closing', max_age_days: 7, effective_from: '2026-07-01' }, () => new Response('{}'), 'fx-rate-age-policies', undefined, undefined, undefined, false)
+  const text = document.body.textContent ?? ''
+  assert.ok(text.includes('Jul 1, 2026'), 'the stored civil date reads in the viewer locale')
+  assert.equal(text.includes('2026-07-01'), false, 'the raw ISO value is not shown')
+})
+
 const spendCurrencies = () => ({
   currencies: [
     { value: 'USD', label: 'US Dollar', minorUnits: 2 },

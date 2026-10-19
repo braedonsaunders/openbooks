@@ -5,7 +5,8 @@ import { loadHomeAnnouncementRows } from '../../../../../lib/setup/home-announce
 
 import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
-import { getLocale, getTranslations } from 'next-intl/server'
+import { getLocale, getTimeZone, getTranslations } from 'next-intl/server'
+import { setupColumnSearchSql, setupDateLabel } from '../../../../../lib/setup/date-columns'
 import { decimalLabel } from '../../../../../lib/format'
 import { db } from '@openbooks/engine/platform/db'
 import { TAX_RETURN_PACKS } from '@openbooks/engine/tax/seed-tax-forms'
@@ -135,6 +136,7 @@ function cellDisplay(
   refLabels: Record<string, Map<string, string>>,
   t: (k: string) => string,
   locale: string,
+  timeZone: string,
 ): { display: string; badgeVariant: SetupListCell['badgeVariant'] } {
   const raw = row[toSnake(col.key)]
   const option = col.options?.find((candidate) => candidate.value === String(raw))
@@ -165,7 +167,7 @@ function cellDisplay(
       }
     }
     case 'date':
-      return { display: raw ? String(raw) : '—', badgeVariant: null }
+      return { display: setupDateLabel(raw, locale, timeZone), badgeVariant: null }
     case 'ref': {
       const label = col.ref ? refLabels[col.ref]?.get(String(raw)) : undefined
       return { display: label ?? (raw ? String(raw) : '—'), badgeVariant: null }
@@ -243,7 +245,7 @@ export async function loadSetupEntity(
   if (entityKey === 'ai-rails-settings' && authz.allowedSubsidiaryIds === null) {
     await ensureAiRailsSettingsForOrg(orgId, authz.user.id)
   }
-  const locale = await getLocale()
+  const [locale, timeZone] = await Promise.all([getLocale(), getTimeZone()])
   const isRegistryList = entity !== null
 
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
@@ -251,7 +253,7 @@ export async function loadSetupEntity(
   const list = parseListParams(sp, { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 })
 
   const searchColumns = entity
-    ? entity.columns.map((c) => sql`cast(${sql.raw(toSnake(c.key))} as text) ilike ${`%${list.q ?? ''}%`}`)
+    ? entity.columns.map((c) => setupColumnSearchSql(c, list.q ?? '', locale, timeZone))
     : []
   const rowFilter = entity
     ? sql`where 1 = 1
@@ -340,7 +342,7 @@ export async function loadSetupEntity(
           const href = mergeHref(basePath, sp, { row: rowId })
           const cells: Record<string, SetupListCell> = {}
           for (const c of listColumns) {
-            const { display, badgeVariant } = cellDisplay(c, row, refLabels, t, locale)
+            const { display, badgeVariant } = cellDisplay(c, row, refLabels, t, locale, timeZone)
             cells[c.key] = {
               display,
               href,
