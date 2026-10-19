@@ -2,7 +2,12 @@ import { accountingPreferences } from "../organization/accounting-preferences.ts
 import { and, eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
-import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
+import {
+  mergeBeforePostCustomMutation,
+  resolveScriptUser,
+  runTriggerScripts,
+  type ScriptContext,
+} from "../scripting/scripting.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
@@ -137,7 +142,16 @@ async function submitForApprovalLocked(
     if (bad) {
       throw new Error(`script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`);
     }
-    const mutations = Object.assign({}, ...outcomes.map((o) => o.set ?? {}));
+    const mutations = outcomes.reduce<Record<string, unknown>>((merged, outcome) => {
+      for (const [field, value] of Object.entries(outcome.set ?? {})) {
+        if (field === "custom") {
+          merged.custom = mergeBeforePostCustomMutation(merged.custom ?? doc.custom, value);
+        } else {
+          merged[field] = value;
+        }
+      }
+      return merged;
+    }, {});
     if (Object.keys(mutations).length > 0) {
       // Script mutations write around applyDocumentEdit: prove shapes and org
       // ownership here, or a well-formed foreign id persists as a silent
