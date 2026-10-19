@@ -168,7 +168,7 @@ function mfnSafe(): DrawerProps {
     convertible: {
       status: 'outstanding', principal: '500000.0000', accruedInterest: '0.0000', convertingAmount: '500000.0000', endedOn: null, convertedOn: null, outstanding: '500000.0000',
       resultingSecurityId: null, resultingSecurityNumber: null, valuationCap: null, discountPercent: null, safeType: 'post_money', electionId: null,
-      issuedTerms: { valuationCap: null, discountPercent: null, safeType: 'post_money' }, invalidConversionTerms: null,
+      issuedTerms: { valuationCap: null, discountPercent: null, safeType: 'post_money' }, invalidConversionTerms: null, conversionDrift: null,
     },
     mfn: {
       candidates: [],

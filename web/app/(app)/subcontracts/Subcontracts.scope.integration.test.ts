@@ -12,7 +12,7 @@ const mockAuthz = `
   export async function requirePermission() { return state.authz }
   export function can(authz, permission) { return authz.permissions.has(permission) }
 `
-const mockIntl = `export async function getTranslations() { return key => key }`
+const mockIntl = `export async function getTranslations() { return key => key }; export async function getLocale() { return 'en' }`
 const mockFeature = `export async function isFeatureEnabled(_orgId, feature) { return feature === 'multiCurrency' }`
 const mockGate = `export async function requireSubcontractsFeature() {}`
 
@@ -30,7 +30,7 @@ stubModules({
 
 const { loadSubcontracts } = await import('./view.ts') as typeof import('./view.ts')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 
 function insertParty(orgId: string, id: string, name: string, subsidiaryId: string | null) {
   return db.execute(sql`
@@ -52,7 +52,16 @@ test('subcontract pickers expose only accounts, projects, and parties in the cal
   const hiddenAccountId = randomUUID()
   const orgWideAccountId = randomUUID()
   try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Scoped subcontract reader', 'subcontracts_reader'))
     await withBypassContext(async () => {
+      await grantScratchPermissions(org.orgId, actorId, ['ap.read'])
+      await db.execute(sql`update app_roles
+        set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
+        where org_id=${org.orgId} and key='subcontracts_reader' returning id`)
+      await db.execute(sql`update orgs
+        set settings=jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
+          || '{"projects":true,"subcontracts":true,"multiCurrency":true}'::jsonb)
+        where id=${org.orgId} returning id`)
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Subcontract Scope Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
@@ -83,8 +92,8 @@ test('subcontract pickers expose only accounts, projects, and parties in the cal
     })
 
     state.authz = {
-      user: { id: randomUUID(), orgId: org.orgId },
-      permissions: new Set(['ap.read', 'ap.create', 'ap.approve', 'ap.post', 'ap.pay']),
+      user: { id: actorId, orgId: org.orgId },
+      permissions: new Set(['ap.read']),
       allowedSubsidiaryIds: new Set([org.subsidiaryId]),
     }
     await withOrgContext(org.orgId, async () => {

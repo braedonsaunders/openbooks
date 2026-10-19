@@ -1139,8 +1139,8 @@ cases.push({name:"approved production employee hours consume once independently 
   assert.deepEqual(await counts(f),correctingCounts,'a revoked grant also refuses replay')
 }})
 
-async function inspectionPlan(f:Fixture,itemId:string,point:'receipt'|'operation') {
-  const input={id:randomUUID(),name:'Dimensional acceptance',itemId,point,operationSequence:point==='operation'?10:null,effectiveFrom:'2026-01-01',measures:[{key:'length',label:'Length',unit:'mm',required:true,minimum:'9.9999',maximum:'10.0001'}],reason:'Establish dimensional inspection policy'};
+async function inspectionPlan(f:Fixture,itemId:string,point:'receipt'|'operation',effectiveFrom='2026-01-01') {
+  const input={id:randomUUID(),name:'Dimensional acceptance',itemId,point,operationSequence:point==='operation'?10:null,effectiveFrom,measures:[{key:'length',label:'Length',unit:'mm',required:true,minimum:'9.9999',maximum:'10.0001'}],reason:'Establish dimensional inspection policy'};
   await run(tx=>saveInspectionPlan(tx,f.org.orgId,f.actorId,input));return input;
 }
 cases.push({name:'untracked items allow operation inspection policy but refuse receipt policy without creating plan or audit evidence',run:async f=>{
@@ -1265,7 +1265,7 @@ cases.push({name:'a serial-tracked work-order component returns to stock when it
   const serialState=()=>run(async tx=>(await tx.execute<{status:string;location:string|null}>(sql`select status,current_stock_location_id as location
     from serials where org_id=${f.org.orgId} and id=${serialId}`)).rows[0]);
   assert.deepEqual(await serialState(),{status:'shipped',location:null});
-  await withBypassContext(()=>reverseMaterialIssue(f.org.orgId,f.actorId,{movementId:issueMovement.id,reversalDate:f.postingDate,reason:'Return the unused serial component'}));
+  await reverseMaterialIssue(f.org.orgId,f.actorId,{movementId:issueMovement.id,reversalDate:f.postingDate,reason:'Return the unused serial component'});
   assert.deepEqual(await serialState(),{status:'in_stock',location:f.org.stockLocationId});
 }});
 
@@ -1804,7 +1804,9 @@ const redateCases: Case[] = [
     const profile = await run((tx) => tx.execute(sql`update item_inventory_profiles set tracking='lot'
       where org_id=${f.org.orgId} and item_id=${itemId} returning item_id`));
     assert.equal(profile.rows.length, 1);
-    await inspectionPlan(f, itemId, "receipt");
+    await inspectionPlan(f, itemId, "receipt", "2026-02-04");
+    await ensureMonthPeriod(f, 2026, 1);
+    await ensureMonthPeriod(f, 2026, 2);
     const wo = await prepare(f);
     await stockOn(f, f.org.items.component, "4", "3", "2026-01-15");
     await run((tx) => tx.execute(sql`update mfg_work_orders set started_at='2026-02-01T08:00:00Z'::timestamptz
@@ -1831,6 +1833,17 @@ const redateCases: Case[] = [
     assert.equal(oldState.sourceActive, false);
     assert.equal(newState.status, "pending");
     assert.equal(newState.sourceActive, true);
+    assert.deepEqual(newState.planSnapshot, oldState.planSnapshot, "date correction preserves the frozen hold even before its plan window");
+    await assert.rejects(run(tx => recordQualityInspection(tx, f.org.orgId, f.actorId, sourceInspection.id, {
+      outcome: 'pass', measurements: { length: '10' }, reason: 'Attempt inspection of the replaced receipt',
+    })), /reversed/i);
+    await run(tx => recordQualityInspection(tx, f.org.orgId, f.actorId, replacementInspection.id, {
+      outcome: 'pass', measurements: { length: '10' }, reason: 'Replacement output meets its frozen acceptance policy',
+    }));
+    const beforeRefusal = await counts(f);
+    await refuse(correctTo(f, wo.id, "2026-02-02"), "completion_receipt_inspected", "recorded quality inspection decision");
+    assert.deepEqual(await counts(f), beforeRefusal, "a recorded decision prevents correction without writing reversals");
+    assert.equal((await run(tx => loadInspection(tx, f.org.orgId, replacementInspection.id))).sourceActive, true);
   } },
   { name: "re-dating a completed receipt earlier makes a previously refused as-of issue possible", run: async (f) => {
     const { wo } = await februaryOrder(f);

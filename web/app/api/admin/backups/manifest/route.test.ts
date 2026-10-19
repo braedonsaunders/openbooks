@@ -28,8 +28,9 @@ const mockSources = new Map<string, string>([
   [
     "mock:authz",
     `
+      export { guardUnrestrictedScope } from ${JSON.stringify(import.meta.resolve("@/lib/authz"))}
       export async function guardPermission() {
-        return { user: { id: '${USER_ID}', orgId: '${ORG_ID}' } }
+        return { user: { id: '${USER_ID}', orgId: '${ORG_ID}' }, allowedSubsidiaryIds: null }
       }
     `,
   ],

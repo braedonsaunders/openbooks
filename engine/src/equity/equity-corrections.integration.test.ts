@@ -206,6 +206,7 @@ test("the instrument an MFN election adopted cannot be voided while the election
     const table = await loadCapTableView({ ...entity(w), asOf: "2026-09-03" });
     assert.equal(table.table.convertibles.find((item) => item.securityId === second.id)!.outstandingPrincipal, "0.0000");
 
+    assert.ok(again.eventId, "an applied conversion records its event identity");
     const lateIssue = await commonShares(w, '1000', '2026-07-01');
     const recorded = await loadEquityBookAtEvent(db, w.org.orgId, again.eventId);
     assert.ok(recorded?.securities.some((item) => item.id === again.resultingSecurityId), 'the recording transaction is included');

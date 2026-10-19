@@ -134,8 +134,6 @@ test("POST refuses to mint a key whose scopes are omitted or empty", async () =>
   assert.equal(empty.status, 422);
   assert.match((await empty.json()).error, /at least one scope is required/);
 
-  const unknown = await POST(jsonRequest({ name: "Unknown scopes", scopes: ["not.a.permission"] }));
-  assert.equal(unknown.status, 400);
 });
 
 test("PATCH refuses to clear a key's scopes to an empty set", async () => {
@@ -148,6 +146,23 @@ test("PATCH refuses to clear a key's scopes to an empty set", async () => {
   const nothing = await PATCH(jsonRequest({ id: randomUUID() }, "PATCH"));
   assert.equal(nothing.status, 400);
   assert.match((await nothing.json()).error, /nothing to update/);
+});
+
+test("an active API key owner cannot request unknown catalogue scopes", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const previousActor = { ...actorState };
+  try {
+    actorState.orgId = org.orgId;
+    actorState.userId = await seedOwner(org.orgId, ['*']);
+    const unknown = await withOrgContext(org.orgId, () => POST(jsonRequest({ name: "Unknown scopes", scopes: ["not.a.permission"] })));
+    assert.equal(unknown.status, 400);
+    assert.match((await unknown.json()).error, /known catalogue keys/);
+    const count = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from api_keys where org_id=${org.orgId}`));
+    assert.equal(count.rows[0]!.n, 0, 'an invalid authority never creates credential material');
+  } finally {
+    Object.assign(actorState, previousActor);
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
 });
 
 // ---------------------------------------------------------------------------

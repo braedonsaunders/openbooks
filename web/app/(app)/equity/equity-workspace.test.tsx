@@ -222,7 +222,7 @@ const runsView = (overrides: Record<string, unknown> = {}) => ({
     catchUpTotal: '0.0000', blocked: null,
     lines: [{ securityId: 'o1', securityNumber: 'OPT-0001', holderPartyId: EMPLOYEE, kind: 'option' as const, cumulative: '5250.0000', previous: '4000.0000', period: '1250.0000', catchUp: '0.0000' }],
   },
-  interest: null, refusal: null, catchUp: null, blocked: null,
+  interest: null, refusal: null, refusalAction: null, catchUp: null, blocked: null,
   compensationRuns: [{
     id: 'run1', throughDate: '2026-10-31', total: '4000.0000', currency: 'USD', journalEntryId: 'je1', entryNumber: 'EQ-SBC-2026-10-31',
     releaseTotal: '1800.0000', releaseJournalEntryId: 'je2', releaseEntryNumber: 'EQ-RSR-2026-10-31', createdAt: '2026-11-02',

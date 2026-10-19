@@ -2,6 +2,21 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+
+/** Customer-specific previews share the directory's organization and legal-entity fence. */
+export async function isPricingCustomerVisible(
+  orgId: string,
+  customerId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<boolean> {
+  const result = await db.execute<{ id: string }>(sql`
+    select p.id from parties p
+     where p.org_id = ${orgId} and p.id = ${customerId}
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+  `)
+  return result.rows.length > 0
+}
 
 export interface ResolvedItemPrice {
   unitPrice: string

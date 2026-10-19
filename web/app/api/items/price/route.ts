@@ -1,17 +1,14 @@
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
 import { exactMoney, nullableUuidId, uuidId } from '@/lib/api/json'
 import { isoDate } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { resolveItemPrice } from '@/lib/item-pricing'
+import { isPricingCustomerVisible, resolveItemPrice } from '@/lib/item-pricing'
 import { cmp } from '@openbooks/engine/money/money'
 import { notFound } from "@/lib/api/responses";
-import { guardSubsidiaryScope } from '@/lib/authz'
 
 
 const priceBody = z.object({
@@ -38,13 +35,8 @@ export const POST = defineRoute({
   if (!/^[A-Z]{3}$/.test(currency)) return NextResponse.json({ error: 'Currency must be a three-letter code' }, { status: 400 })
   if (!isIsoCalendarDate(onDate)) return NextResponse.json({ error: 'Pricing date must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
   if (lineQuantity === null || overallItemQuantity === null || cmp(lineQuantity, '0') <= 0 || cmp(overallItemQuantity, '0') <= 0) return NextResponse.json({ error: 'Pricing quantities must be greater than zero' }, { status: 400 })
-  if (customerId !== null) {
-    const customer = (await db.execute<{ subsidiaryId: string | null }>(sql`
-      select subsidiary_id as "subsidiaryId" from parties
-       where org_id = ${gate.user.orgId} and id = ${customerId}`)).rows[0]
-    if (!customer) return notFound('record')
-    const denied = guardSubsidiaryScope(gate, customer.subsidiaryId, { orgWideNull: true })
-    if (denied) return denied
+  if (customerId !== null && !(await isPricingCustomerVisible(gate.user.orgId, customerId, gate.allowedSubsidiaryIds))) {
+    return notFound('record')
   }
   try {
     const price = await resolveItemPrice({ orgId: gate.user.orgId, itemId, customerId, currency, onDate, lineQuantity, overallItemQuantity })

@@ -280,13 +280,15 @@ export async function correctWorkOrderCompletionDate(
   const receiptIds = receipts.map((row) => row.id);
   const moverEntries = entries.filter((entry) => movers.some((row) => row.journal_entry_id === entry.id));
 
-  // Inspection records are append-only and stay bound to the receipt movement.
+  // Recorded inspection decisions stay bound to the receipt; pending holds
+  // are copied with their frozen policy when the receipt is replaced.
   const inspected = (await tx.execute<{ id: string }>(sql`
-    select id from inventory_inspections where org_id=${orgId} and receipt_movement_id in (${idList(moverIds)}) limit 1`)).rows[0];
+    select id from inventory_inspections where org_id=${orgId} and receipt_movement_id in (${idList(moverIds)})
+      and status <> 'pending' limit 1`)).rows[0];
   if (inspected) {
     refuse(
-      `A receipt of work order ${order.number} has a quality inspection record, which stays bound to the original receipt.`,
-      "completion_receipt_inspected", "This completion cannot be re-dated while its inspection is recorded against it; record a governed inventory adjustment for the stock instead.", 409,
+      `A receipt of work order ${order.number} has a recorded quality inspection decision, which stays bound to the original receipt.`,
+      "completion_receipt_inspected", "This completion cannot be re-dated while its inspection decision is recorded against it; record a governed inventory adjustment for the stock instead.", 409,
     );
   }
   const custody = (await tx.execute<{ id: string }>(sql`
@@ -525,7 +527,7 @@ async function redateCompletionEntry(
          returning id`);
       if (serial.rows.length !== 1) throw new InventoryError("Serial " + (row.serial_number ?? "evidence") + " changed before the completion date correction.");
     }
-    await createReceiptInspection(tx, orgId, actorId, newMovementId);
+    await createReceiptInspection(tx, orgId, actorId, newMovementId, row.id);
     movementIds.push(newMovementId);
   }
 

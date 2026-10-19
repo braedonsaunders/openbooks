@@ -26,11 +26,6 @@ const mockAuthz = `
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
   }
-  export function guardSubsidiaryScope(authz, subsidiaryId, options = {}) {
-    if (authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(subsidiaryId) ||
-        (subsidiaryId == null && options.orgWideNull === true)) return null
-    return Response.json({ error: 'not_found' }, { status: 404 })
-  }
 `;
 
 stubModules({ authz: mockAuthz });

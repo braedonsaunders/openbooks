@@ -498,6 +498,8 @@ test(
     const actorId = null;
     const poId = randomUUID();
     const poLineId = randomUUID();
+    const cancelledPoId = randomUUID();
+    const cancelledPoLineId = randomUUID();
     const folderId = randomUUID();
     const fileId = randomUUID();
     try {
@@ -518,28 +520,33 @@ test(
           (id, org_id, kind, status, document_number, party_id, subsidiary_id,
            document_date, currency, subtotal, tax_total, total, created_by)
         values (${poId}, ${org.orgId}, 'purchase_order', 'draft', 'PO-CAPTURE-REG',
+                ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, 'CAD', 100, 0, 100, ${actorId}),
+               (${cancelledPoId}, ${org.orgId}, 'purchase_order', 'draft', 'PO-CAPTURE-CANCELLED',
                 ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, 'CAD', 100, 0, 100, ${actorId})
       `);
       await db.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, item_id, account_id, description,
            quantity, unit, unit_price, amount, tax_amount, is_billable,
-           quantity_fulfilled, quantity_billed, custom, extra_dims)
+           quantity_fulfilled, quantity_billed, quantity_cancelled, custom, extra_dims)
         values (${poLineId}, ${org.orgId}, ${poId}, 1, null, ${org.accounts.cogs},
-                'PO regression line', 10, 'ea', 10, 100, 0, false, 0, 4, '{}'::jsonb, '{}'::jsonb)
+                'PO regression line', 10, 'ea', 10, 100, 0, false, 0, 4, 0, '{}'::jsonb, '{}'::jsonb),
+               (${cancelledPoLineId}, ${org.orgId}, ${cancelledPoId}, 1, null, ${org.accounts.cogs},
+                'Previously cancelled PO remainder', 10, 'ea', 10, 100, 0, false, 0, 4, 5, '{}'::jsonb, '{}'::jsonb)
       `);
       await db.execute(sql`
         update documents set status = 'approved', updated_at = now()
-         where id = ${poId} and org_id = ${org.orgId}
+         where id in (${poId}, ${cancelledPoId}) and org_id = ${org.orgId}
       `);
 
       async function insertCapture(
         documentKind: "vendor_bill" | "vendor_credit",
         invoiceNumber: string,
         quantity: string,
+        purchaseOrder = { id: poId, lineId: poLineId },
       ): Promise<string> {
         const captureId = randomUUID();
-        const normalized = captureNormalized(invoiceNumber, quantity, poLineId, org.accounts.cogs);
+        const normalized = captureNormalized(invoiceNumber, quantity, purchaseOrder.lineId, org.accounts.cogs);
         await db.execute(sql`
           insert into ap_capture_items
             (id, org_id, file_id, status, original_filename, content_hash,
@@ -547,7 +554,7 @@ test(
              created_by, updated_by)
           values (${captureId}, ${org.orgId}, ${fileId}, 'ready', ${invoiceNumber + '.pdf'},
                   ${randomUUID().replaceAll('-', '').padEnd(64, '0')}, ${documentKind},
-                  ${JSON.stringify(normalized)}::jsonb, '[]'::jsonb, ${org.vendorId}, ${poId},
+                  ${JSON.stringify(normalized)}::jsonb, '[]'::jsonb, ${org.vendorId}, ${purchaseOrder.id},
                   ${actorId}, ${actorId})
         `);
         return captureId;
@@ -586,11 +593,8 @@ test(
       `)).rows[0]!.quantity_billed);
       assert.equal(billed, "4.0000", "an over-credit cannot underflow the PO billed balance");
 
-      await db.execute(sql`
-        update document_lines set quantity_cancelled = 5
-         where id = ${poLineId} and org_id = ${org.orgId}
-      `);
-      const overCancelledId = await insertCapture("vendor_bill", "BILL-CAPTURE-CANCELLED", "2.0000");
+      const overCancelledId = await insertCapture("vendor_bill", "BILL-CAPTURE-CANCELLED", "2.0000",
+        { id: cancelledPoId, lineId: cancelledPoLineId });
       await assert.rejects(
         materializeCapture({ orgId: org.orgId, captureItemId: overCancelledId, actorId, allowedSubsidiaryIds: null }),
         (error: unknown) => error instanceof CaptureMaterializationError && /only 1\.0000 remains/.test(error.message),
@@ -598,11 +602,11 @@ test(
       billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
       `)).rows[0]!.quantity_billed);
-      assert.equal(billed, "4.0000", "cancelled quantity is excluded from AP capture billing");
-      await db.execute(sql`
-        update document_lines set quantity_cancelled = 0
-         where id = ${poLineId} and org_id = ${org.orgId}
-      `);
+      assert.equal(billed, "4.0000", "a refused bill leaves the other order unchanged");
+      const cancelledBilled = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
+        select quantity_billed::text from document_lines where id = ${cancelledPoLineId}
+      `)).rows[0]!.quantity_billed);
+      assert.equal(cancelledBilled, "4.0000", "cancelled quantity is excluded from AP capture billing without advancing the source");
 
       const racingBillA = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-A", "4.0000");
       const racingBillB = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-B", "4.0000");

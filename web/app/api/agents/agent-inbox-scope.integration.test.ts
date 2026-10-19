@@ -167,7 +167,13 @@ test('restricted work-item actions follow document, reconciliation, budget, and 
     const reconciliationA = randomUUID()
     const budgetA = randomUUID()
     const budgetMixed = randomUUID()
+    const budgetAccountA = randomUUID()
+    const budgetAccountB = randomUUID()
     await withBypassContext(async () => {
+      await db.execute(sql`insert into accounts (id, org_id, number, name, type, subsidiary_id)
+        values (${budgetAccountA}, ${f.org.orgId}, ${'BA-' + budgetAccountA.slice(0, 8)}, 'Entity A budget expense', 'expense', ${f.org.subsidiaryId}),
+               (${budgetAccountB}, ${f.org.orgId}, ${'BB-' + budgetAccountB.slice(0, 8)}, 'Entity B budget expense', 'expense', ${f.subB})`)
+
       await db.execute(sql`
         insert into documents (id, org_id, kind, status, document_number, subsidiary_id, document_date, currency, subtotal, tax_total, total)
         values (${documentA}, ${f.org.orgId}, 'vendor_bill', 'draft', 'scope-a', ${f.org.subsidiaryId}, ${f.org.date}, 'CAD', 0, 0, 0),
@@ -184,9 +190,9 @@ test('restricted work-item actions follow document, reconciliation, budget, and 
       `)
       await db.execute(sql`
         insert into budget_lines (org_id, scenario_id, account_id, period_id, subsidiary_id, amount)
-        values (${f.org.orgId}, ${budgetA}, ${f.acctA}, ${f.org.periodId}, ${f.org.subsidiaryId}, 1),
-               (${f.org.orgId}, ${budgetMixed}, ${f.acctA}, ${f.org.periodId}, ${f.org.subsidiaryId}, 1),
-               (${f.org.orgId}, ${budgetMixed}, ${f.acctB}, ${f.org.periodId}, ${f.subB}, 1)
+        values (${f.org.orgId}, ${budgetA}, ${budgetAccountA}, ${f.org.periodId}, ${f.org.subsidiaryId}, 1),
+               (${f.org.orgId}, ${budgetMixed}, ${budgetAccountA}, ${f.org.periodId}, ${f.org.subsidiaryId}, 1),
+               (${f.org.orgId}, ${budgetMixed}, ${budgetAccountB}, ${f.org.periodId}, ${f.subB}, 1)
       `)
     })
     const itemDocumentA = await seedFinding(f.org.orgId, 'documents', documentA)

@@ -68,13 +68,11 @@ test('locale and time zone follow the verified active tenant', async () => {
 
 test('the account menu marks the stored choice of the identity the page renders for', async () => {
   reset(); state.locale = 'de'; state.timeZone = 'UTC'
-  // The session's home identity differs from the active one after a
-  // workspace switch; the preference is the active identity's, as the
-  // rendered language and the preference update are.
+  // Display and account-menu consumers share the verified preference read.
   const [rendered, chosen] = await withAuthzContext(principal('switched-tenant'), async () => [await resolveLocale(), await userLocalePreference()])
   assert.deepEqual([rendered, chosen], ['de', 'de'])
   assert.equal(queries.filter((q) => q.sql.includes('user_locale')).length, 1, 'one read answers both')
-  assert.deepEqual(queries[0]?.params, ['viewer-switched-tenant', 'switched-tenant', 'switched-tenant'])
+  assert.deepEqual(queries[0]?.params, ['switched-tenant', 'viewer-switched-tenant', 'switched-tenant'])
   reset(); state.locale = null
   assert.equal(await withAuthzContext(principal('switched-tenant'), () => userLocalePreference()), null, 'no stored choice inherits the tenant default')
 })
@@ -143,7 +141,7 @@ test('sandbox preference reads stay on the active acting user row', async () => 
 
   assert.deepEqual(result, ['ja', 'ja'])
   assert.deepEqual(queries.filter(q => q.sql.includes('user_locale'))[0]?.params, ['sandbox-org', 'sandbox-user', 'sandbox-org'])
-  assert.deepEqual(queries.filter(q => q.sql.includes('select locale from users'))[0]?.params, ['sandbox-user', 'sandbox-org'])
+  assert.equal(queries.length, 1, 'the active sandbox identity supplies both display and preference in one read')
 })
 
 test('invalid tenant time zones refuse all consumers and are retried by a fresh request', async () => {

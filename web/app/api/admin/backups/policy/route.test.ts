@@ -25,7 +25,7 @@ const stateKey = Symbol.for("openbooks.backup-policy-route-test");
 };
 
 const mockSources = new Map<string, string>([
-  ["mock:authz", `export async function guardPermission(){return {user:{id:'${USER_ID}',orgId:'${ORG_ID}'}}}`],
+  ["mock:authz", `export { guardUnrestrictedScope } from ${JSON.stringify(import.meta.resolve("@/lib/authz"))}; export async function guardPermission(){return {user:{id:'${USER_ID}',orgId:'${ORG_ID}'},allowedSubsidiaryIds:null}}`],
   ["mock:db", `
       export function pinnedTransactionExecutor() { throw new Error('unexpected pinned transaction in boundary test') }
       export function inExecutorTransaction() { throw new Error('unexpected inExecutorTransaction in route boundary test') }

@@ -608,9 +608,9 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
             new Map(subsidiaries.map(row => [row.id, row.id])), `promotion role ${target}`);
           const coverage = await loadSubsidiaryGrantCoverage(db, prod, actor);
           if (!authority.isSuperAdmin) {
-            const previousRestriction = before
+            const previousRestriction: SubsidiaryRestriction | null = before
               ? before.subsidiary_restriction as SubsidiaryRestriction | null
-              : { mode: "list", subsidiaryIds: [] } as const;
+              : { mode: "list", subsidiaryIds: [] };
             const edit = await resolveRestrictionEditScopes(db, prod, previousRestriction, nextRestriction);
             const outsideCoverage = edit.additions === undefined
               ? true

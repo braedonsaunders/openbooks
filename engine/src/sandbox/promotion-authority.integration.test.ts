@@ -3,7 +3,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
 import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 
@@ -74,6 +74,9 @@ test("role promotion checks the actor's raw subsidiary grant coverage", enabled,
   const applier = await createScratchUser(org.orgId, "Scope applier", "manager");
   let sandbox: Awaited<ReturnType<typeof createSandbox>> | undefined;
   try {
+    for (const actorId of [creator, reviewer, approver]) {
+      await grantScratchPermissions(org.orgId, actorId, ['admin.sandboxes.manage']);
+    }
     await db.execute(sql`update app_roles set permissions=${JSON.stringify(manager)}::jsonb,
       subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [] })}::jsonb
       where org_id=${org.orgId} and key='manager'`);

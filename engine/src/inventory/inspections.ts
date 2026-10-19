@@ -76,17 +76,45 @@ export async function resolveInspectionPlan(tx:SqlExecutor,orgId:string,itemId:s
 }
 
 /** Called by native receipt writers in the posting transaction. Pending quality prevents allocation immediately. */
-export async function createReceiptInspection(tx:SqlExecutor,orgId:string,actorId:string|null,movementId:string) {
+export async function createReceiptInspection(tx:SqlExecutor,orgId:string,actorId:string|null,movementId:string,replacementOf?:string) {
   if (!await lockAndCheckOrgFeature(tx,orgId,"manufacturing")) return;
   const movement=(await tx.execute<{itemId:string;subsidiaryId:string;locationId:string;quantity:string;lotId:string|null;serialId:string|null;date:string;workOrderId:string|null}>(sql`select movement.item_id as "itemId",movement.subsidiary_id as "subsidiaryId",movement.stock_location_id as "locationId",movement.quantity::text,movement.lot_id as "lotId",movement.serial_id as "serialId",movement.moved_at::date::text as date,work.id as "workOrderId" from inventory_movements movement left join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id left join mfg_work_orders work on work.org_id=entry.org_id and entry.origin='manufacturing' and work.number=entry.custom->>'work_order_number' where movement.org_id=${orgId} and movement.id=${movementId} and movement.status='posted' and movement.quantity>0 and movement.reverses_movement_id is null`)).rows[0];
   if (!movement) throw new InventoryError("Receipt inspection requires a posted inbound movement.");
-  const plan=await resolveInspectionPlan(tx,orgId,movement.itemId,'receipt',movement.date);
+  // A date correction preserves the pending receipt's frozen policy even
+  // when the replacement date falls outside the plan's effective window.
+  let carriedPlan: InspectionPlanSnapshot | null = null;
+  if (replacementOf) {
+    const source = (await tx.execute<{
+      plan: InspectionPlanSnapshot; status: string; sourceActive: boolean;
+      itemId: string; subsidiaryId: string; locationId: string | null;
+      lotId: string | null; serialId: string | null; quantity: string; workOrderId: string | null;
+    }>(sql`select inspection.plan_snapshot as plan, inspection.status,
+      ${inspectionSourceActive(sql`inspection`)} as "sourceActive",
+      inspection.item_id as "itemId", inspection.subsidiary_id as "subsidiaryId",
+      inspection.stock_location_id as "locationId", inspection.lot_id as "lotId",
+      inspection.serial_id as "serialId", inspection.quantity::text, inspection.work_order_id as "workOrderId"
+      from inventory_inspections inspection
+      where inspection.org_id=${orgId} and inspection.receipt_movement_id=${replacementOf}
+      for update of inspection`)).rows;
+    if (source.length > 1) throw new InventoryError("The original receipt has ambiguous inspection evidence.");
+    const original = source[0];
+    if (original) {
+      if (original.status !== 'pending' || original.sourceActive !== false || original.itemId !== movement.itemId
+        || original.subsidiaryId !== movement.subsidiaryId || original.locationId !== movement.locationId
+        || original.lotId !== movement.lotId || original.serialId !== movement.serialId
+        || original.workOrderId !== movement.workOrderId || cmp(original.quantity, movement.quantity) !== 0) {
+        throw new InventoryError("Only an unchanged replacement of a reversed receipt can carry its pending inspection.");
+      }
+      carriedPlan = original.plan;
+    }
+  }
+  const plan=carriedPlan ?? await resolveInspectionPlan(tx,orgId,movement.itemId,'receipt',movement.date);
   if (!plan) return;
   if (!movement.lotId && !movement.serialId) throw new InventoryError("This receipt requires lot or serial evidence for its inspection plan.");
   const saved=await tx.execute<{id:string}>(sql`insert into inventory_inspections(org_id,plan_id,plan_snapshot,item_id,subsidiary_id,stock_location_id,receipt_movement_id,work_order_id,lot_id,serial_id,quantity,created_by,updated_by)
     values(${orgId},${plan.id},${JSON.stringify(plan)}::jsonb,${movement.itemId},${movement.subsidiaryId},${movement.locationId},${movementId},${movement.workOrderId},${movement.lotId},${movement.serialId},${movement.quantity},${actorId},${actorId}) returning id`);
   if (saved.rows.length!==1) throw new InventoryError("The receipt inspection was not created.");
-  await audit(tx,orgId,actorId,'inventory_inspections',saved.rows[0]!.id,null,{...movement,planSnapshot:plan,status:'pending'});
+  await audit(tx,orgId,actorId,'inventory_inspections',saved.rows[0]!.id,null,{...movement,planSnapshot:plan,status:'pending',...(replacementOf ? {replacesMovementId:replacementOf} : {})});
 }
 
 export type InspectionRead = { id:string; planSnapshot:InspectionPlanSnapshot; itemId:string; subsidiaryId:string; stockLocationId:string|null; receiptMovementId:string|null; workOrderId:string|null; operationId:string|null; lotId:string|null; serialId:string|null; quantity:string; status:"pending"|"pass"|"fail"; disposition:"use_as_is"|"scrap"|"rework"|null; measurements:Record<string,string>; reason:string|null; dispositionResult:Record<string,unknown>|null; reworkWorkOrderId:string|null;reworkCompletedAt:Date|string|null;reworkResolved:boolean;reworkLoss:boolean; sourceActive:boolean };
