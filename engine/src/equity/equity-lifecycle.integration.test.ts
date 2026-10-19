@@ -21,9 +21,10 @@ import type { EquityError } from "./errors.ts";
 import { recordSecurityEvent } from "./events.ts";
 import { postInterestRun, previewInterestRun } from "./interest-run.ts";
 import { electMfnTerms } from "./mfn.ts";
-import { loadCapTableView, loadSecurityDetail } from "./read-model.ts";
+import { loadCapTableView, loadSecurityDetail, loadStructure } from "./read-model.ts";
 import { issueSecurity } from "./securities.ts";
 import { amendShareClass, createPlan, createRound, createShareClass, recordSplit } from "./structure.ts";
+import { loadEquityOverview } from "./overview.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -120,6 +121,12 @@ test("note interest accrues by idempotent runs on its day count and a conversion
     const converted = await recordSecurityEvent({ ...manage(w), securityId: issued.id, kind: "convert", effectiveOn: "2026-08-31", roundId: round.id });
     assert.ok(converted.accrualEntryId, "the interest since the last run accrues on the conversion date");
     assert.deepEqual((await entryLines(w.org.orgId, converted.accrualEntryId!)).map((line) => line.amount), ["679.4600", "-679.4600"]);
+    const structure = await loadStructure({ ...manage(w), subsidiaryId: w.org.subsidiaryId, asOf: "2026-08-31" });
+    const structureRound = structure.rounds.find((row) => row.id === round.id);
+    assert.ok(structureRound);
+    assert.deepEqual([structureRound.raised, structureRound.sharesIssued], ["0.0000", "0"], "conversion certificates are not new cash proceeds or priced-round shares");
+    const overviewAtConversion = await loadEquityOverview({ ...manage(w), subsidiaryId: w.org.subsidiaryId, asOf: "2026-08-31", yearStart: "2026-01-01" });
+    assert.equal(overviewAtConversion.latestRound?.raised, "0.0000", "post-money excludes note conversion proceeds");
     const lines = await entryLines(w.org.orgId, converted.journalEntryId!);
     assert.equal(linesBalance(lines), 0n);
     assert.deepEqual(lines.map((line) => [line.account_id, line.amount]), [
@@ -256,6 +263,10 @@ test("an early exercise issues restricted stock, holds the deposit, releases it 
       [w.accounts.deposit, "1000.0000"], [w.org.accounts.bank, "-500.0000"], [w.accounts.apic, "-500.0000"],
     ]);
     assert.equal(await accountBalance(w.org.orgId, w.accounts.deposit), "-3400.0000");
+    const overview = await loadEquityOverview({ ...manage(w), subsidiaryId: w.org.subsidiaryId, asOf: "2026-10-31", yearStart: "2026-01-01" });
+    const restrictedDeposit = overview.attention.find((item) => item.kind === "restricted_deposit" && item.securityId === certificateId);
+    assert.ok(restrictedDeposit && restrictedDeposit.kind === "restricted_deposit");
+    assert.equal(restrictedDeposit.shares, (await loadSecurityDetail({ ...manage(w), securityId: certificateId, asOf: "2026-10-31" })).state?.unvested);
     const optionCost = await loadSecurityDetail({ ...manage(w), securityId: option.id, asOf: "2026-10-31" });
     assert.equal(
       BigInt(optionCost.compensation!.expectedAfterForfeitures.replace(".", "")),
