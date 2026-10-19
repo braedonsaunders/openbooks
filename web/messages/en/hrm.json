@@ -849,6 +849,7 @@
     "emptyTitle": "No leave requests here",
     "emptyDescription": "Nothing in this segment yet.",
     "truncatedNote": "Showing the first {limit} requests.",
+    "strandedPayrollInputs": "{count} leave payroll inputs are held by unfinished pay runs — reopen or discard those runs so payroll can use these days again.",
     "unknownSegmentTitle": "Unknown segment",
     "unknownSegment": "There is no leave segment {segment}.",
     "refusedTitle": "Leave refused",

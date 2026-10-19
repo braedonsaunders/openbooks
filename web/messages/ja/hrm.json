@@ -849,6 +849,7 @@
     "emptyTitle": "ここには何もありません",
     "emptyDescription": "この区分にはまだ何もありません。",
     "truncatedNote": "最初の{limit}件を表示しています。",
+    "strandedPayrollInputs": "未完了の給与計算が休暇給与入力を{count}件保持しています。該当する給与計算を再開または破棄すると、これらの日を再処理できます。",
     "unknownSegmentTitle": "不明な区分",
     "unknownSegment": "{segment}という区分はありません。",
     "refusedTitle": "休暇は拒否されました",

@@ -3052,6 +3052,10 @@
         "singularTitle": "勤怠ポリシー",
         "description": "シフト表で勤怠を判定するための、適用日付きの打刻受付時間と猶予時間。"
       },
+      "leave-payroll-entitlement-mappings": {
+        "title": "休暇権利の割り当て",
+        "description": "有効日以降、積立休暇の種類を有効な時間単位の権利プランに割り当てます。"
+      },
       "equity-account-policies": {
         "title": "資本勘定",
         "singular": "資本勘定ポリシー",

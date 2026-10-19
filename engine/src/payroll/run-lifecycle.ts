@@ -21,6 +21,7 @@ import { resolvePayrollRunContext } from "./packs.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { type ScheduleRow, DAY, iso, at, nextPeriodAfter } from "./run-calendar.ts";
 import { type PayRunType } from "./run-contracts.ts";
+import { releaseLeavePayrollInputs } from "./leave-payroll-inputs.ts";
 import { isUuid } from "../platform/uuid.ts";
 
 const RUN_TYPE_MEMO: Record<PayRunType, string> = {
@@ -503,6 +504,7 @@ export async function discardPayRun(input: {
         `pay run ${number} is linked to other documents and cannot be discarded`,
       );
     }
+    await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
     await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     await clearCalculatedHolidayAllocations(tx, orgId, documentId);
     // Explicit deletes first: the ledger nulls its run link when the document
@@ -543,6 +545,7 @@ export async function invalidateCalculatedRun(
   input: { orgId: string; actorId: string; documentId: string },
 ): Promise<void> {
   const { orgId, actorId, documentId } = input;
+  await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
   await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
   await clearCalculatedHolidayAllocations(tx, orgId, documentId);
   // Derived bank movements must go before their stub lines; clearing a line

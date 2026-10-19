@@ -18,6 +18,7 @@ import { validateAgingBucketPolicyWrite, validateBusinessCalendarWrite } from '.
 import { validateAccountLocalizationWrite, validateSegmentDependencyWrite } from '../chart-validation'
 import { validateContributionWrite, validateDepartmentExpenseWrite, validateEntitlementPlan, validateServiceCredit, validateServiceTier, validateVacationTerm } from '../workforce-validation'
 import { validatePeriodEndPolicyWrite } from '../period-end-journal-validation'
+import { validateLeavePayrollEntitlementMapping } from '../workforce-validation'
 
 type CurrentIdentifier = { item_id: string; unit: string | null }
 type CurrentCustomerItemRef = { customer_id: string; item_id: string }
@@ -86,6 +87,7 @@ const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> =
   [PAYROLL_VACATION_TERMS_ENTITY.key]: validateVacationTerm,
   'entitlement-service-tiers': validateServiceTier,
   'entitlement-plans': validateEntitlementPlan,
+  'leave-payroll-entitlement-mappings': validateLeavePayrollEntitlementMapping,
   'item-identifiers': validateIdentifierWrite,
   'customer-item-refs': validateCustomerItemRefWrite,
   'marketplace-facilitators': validateMarketplaceFacilitatorWrite,

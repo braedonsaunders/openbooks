@@ -849,6 +849,7 @@
     "emptyTitle": "此处暂无",
     "emptyDescription": "此分组中还没有内容。",
     "truncatedNote": "仅显示前{limit}条申请。",
+    "strandedPayrollInputs": "未完成的工资单占用了{count}条休假工资输入。重新打开或丢弃这些工资单后即可再次处理这些日期。",
     "unknownSegmentTitle": "未知分组",
     "unknownSegment": "没有名为{segment}的分组。",
     "refusedTitle": "休假被拒绝",

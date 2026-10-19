@@ -36,6 +36,7 @@ import { resolveProtectionExemptFloors } from "./protection-classes.ts";
 import { applyEarningPaymentKinds, payableStubTotals } from "./non-cash-earnings.ts";
 import { appendRecurringBenefitLines, recurringBenefitSource } from './benefit-plan-inputs.ts';
 import { appendApprovedHolidaySettlements } from './holiday-settlements.ts';
+import { priceLeavePayrollInputs } from "./leave-payroll-effects.ts";
 /** Compute one employee's stub: earning phases, statutory passes and deduction protection. */
 export async function calculateStub(
   tx: Pick<typeof db, "execute">,
@@ -135,6 +136,37 @@ export async function calculateStub(
     periodsPerYear: P, baseComponent, oneOffRun, need: ctx.need,
     wageExpenseAccountId: ctx.wageExpenseAccountId, lines,
   });
+
+  const leaveInputs = ctx.leavePayrollInputs ?? [];
+  const leaveEffects = priceLeavePayrollInputs(
+    leaveInputs,
+    leaveInputs.some((input) => input.kind === "payout") && payRate ? payrollHourlyWage(payRate) : null,
+  );
+  for (const [index, payout] of leaveEffects.payouts.entries()) {
+    const sequence = Math.max(0, ...lines.map((line) => line.sequence)) + 1;
+    lines.push({
+      componentId: baseComponent.id as string,
+      kind: "earning",
+      description: "Leave payout",
+      hours: payout.hours,
+      amount: payout.amount,
+      earnedFrom: payout.absenceDate,
+      earnedTo: payout.absenceDate,
+      sequence: sequence + index,
+    });
+  }
+  for (const { planId, hours } of leaveEffects.bankIns) {
+    entitlementMovements.push({
+      planId,
+      employeePartyId,
+      movementDate: run.pay_date!,
+      amount: hours,
+      hours,
+      kind: "bank_in",
+      componentId: null,
+      note: "Approved leave bank-in",
+    });
+  }
 
   // Phase 1b — retroactive pay. A retro run pays the differences that were
   // QUANTIFIED and REVIEWED before it existed: one earning line per

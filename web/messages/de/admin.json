@@ -3052,6 +3052,10 @@
         "singularTitle": "Anwesenheitsrichtlinie",
         "description": "Datierte Stempelfenster und Toleranzminuten für die Anwesenheitsauswertung auf einem Schichtplan."
       },
+      "leave-payroll-entitlement-mappings": {
+        "title": "Zuordnungen von Urlaubsansprüchen",
+        "description": "Ordnen Sie angesparte Abwesenheitsarten ab einem Wirksamkeitsdatum aktiven Stundenkonten zu."
+      },
       "equity-account-policies": {
         "title": "Eigenkapitalkonten",
         "singular": "Eigenkapital-Kontenrichtlinie",

@@ -849,6 +849,7 @@
     "emptyTitle": "Keine Urlaubsanträge hier",
     "emptyDescription": "Noch nichts in diesem Bereich.",
     "truncatedNote": "Die ersten {limit} Anträge werden angezeigt.",
+    "strandedPayrollInputs": "{count} Urlaubsabrechnungen werden von unfertigen Lohnläufen gehalten — öffnen Sie diese Läufe erneut oder verwerfen Sie sie, damit die Tage wieder verarbeitet werden können.",
     "unknownSegmentTitle": "Unbekannter Bereich",
     "unknownSegment": "Es gibt keinen Urlaubsbereich {segment}.",
     "refusedTitle": "Urlaub abgelehnt",

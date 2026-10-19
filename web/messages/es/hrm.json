@@ -849,6 +849,7 @@
     "emptyTitle": "Nada aquí",
     "emptyDescription": "Aún nada en este segmento.",
     "truncatedNote": "Mostrando las primeras {limit} solicitudes.",
+    "strandedPayrollInputs": "{count} registros de ausencia están retenidos por nóminas sin terminar — vuelva a abrir o descarte esas nóminas para procesar esos días de nuevo.",
     "unknownSegmentTitle": "Segmento desconocido",
     "unknownSegment": "No existe el segmento {segment}.",
     "refusedTitle": "Ausencia denegada",

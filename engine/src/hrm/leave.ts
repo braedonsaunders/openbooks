@@ -1288,9 +1288,9 @@ async function writeApprovalEffects(
     }
     if (type.value_crossing === "payout" || type.value_crossing === "bank_in") {
       const input = (await exec.execute<{ id: string }>(sql`
-        insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, kind,
+        insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, leave_type_id, kind,
           absence_date, hours, source_leave_request_id, status, created_by, updated_by)
-        values (${orgId}, ${workerPartyId}, ${request.employment_id}, ${type.value_crossing},
+        values (${orgId}, ${workerPartyId}, ${request.employment_id}, ${type.id}, ${type.value_crossing},
           ${days[index]}, ${perDay[index]}, ${request.id}, 'pending', ${actorId}, ${actorId})
         returning id
       `)).rows[0];

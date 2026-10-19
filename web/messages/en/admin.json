@@ -2965,6 +2965,10 @@
         "singularTitle": "Attendance policy",
         "description": "Effective-dated check-in windows and grace minutes for observing attendance on a shift roster board."
       },
+      "leave-payroll-entitlement-mappings": {
+        "title": "Leave entitlement mappings",
+        "description": "Map banked leave types to active hourly entitlement plans from an effective date."
+      },
       "equity-account-policies": {
         "title": "Equity Accounts",
         "singular": "Equity account policy",

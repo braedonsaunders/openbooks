@@ -2965,6 +2965,10 @@
         "singularTitle": "Política de presença",
         "description": "Janelas de registro e minutos de tolerância com data de vigência para observar a presença em uma escala de turnos."
       },
+      "leave-payroll-entitlement-mappings": {
+        "title": "Mapeamentos de direitos de licença",
+        "description": "Associe tipos de licença acumulada a planos ativos de horas a partir de uma data de vigência."
+      },
       "equity-account-policies": {
         "title": "Contas de patrimônio",
         "singular": "Política de contas de patrimônio",

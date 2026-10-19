@@ -849,6 +849,7 @@
     "emptyTitle": "Rien ici",
     "emptyDescription": "Encore rien dans ce segment.",
     "truncatedNote": "Affichage des {limit} premières demandes.",
+    "strandedPayrollInputs": "{count} éléments de congé sont retenus par des paies inachevées — rouvrez ou supprimez ces paies pour que ces jours puissent être traités à nouveau.",
     "unknownSegmentTitle": "Segment inconnu",
     "unknownSegment": "Il n'existe pas de segment {segment}.",
     "refusedTitle": "Congé refusé",

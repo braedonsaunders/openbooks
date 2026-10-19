@@ -849,6 +849,7 @@
     "emptyTitle": "Nada aqui",
     "emptyDescription": "Ainda nada neste segmento.",
     "truncatedNote": "Mostrando as primeiras {limit} solicitações.",
+    "strandedPayrollInputs": "{count} lançamentos de licença estão retidos por folhas de pagamento inacabadas — reabra ou descarte essas folhas para processar os dias novamente.",
     "unknownSegmentTitle": "Segmento desconhecido",
     "unknownSegment": "Não existe o segmento {segment}.",
     "refusedTitle": "Licença recusada",

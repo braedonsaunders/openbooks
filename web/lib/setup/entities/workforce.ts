@@ -5,7 +5,7 @@ import { NON_CASH_OFFSET_ACCOUNT_TYPES } from '@openbooks/engine/payroll/non-cas
 import { OVERHEAD_RATE_KINDS, OVERHEAD_RATE_METHODS, PAY_FREQUENCIES, PAY_COMPONENT_KINDS, PAY_COMPONENT_COUNTRIES, PAY_COMPONENT_BASES, PAY_UNIT_OF_MEASURE, PAY_SUPPLEMENTAL_WAGE_CATEGORIES, PAY_STATUTORY_EXEMPTION_CATEGORIES, PAY_TAX_TREATMENTS, PAY_PROTECTION_BASES, PAY_PROTECTED_BASES, PAYROLL_PROGRAM_TYPES, PAYROLL_REMITTER_TYPES, ENTITLEMENT_UNITS, ENTITLEMENT_DIRECTIONS, ENTITLEMENT_ACCRUAL_METHODS, ENTITLEMENT_CAP_BEHAVIORS } from '../options'
 import { PAY_DERIVED_RULE_ENTITIES } from '../payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from '../payroll-holidays'
-import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from '../hrm-leave'
+import { LEAVE_PAYROLL_ENTITLEMENT_MAPPINGS_ENTITY, LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from '../hrm-leave'
 import { ACTION_REASONS_ENTITY } from '../hrm-action-reasons'
 import { DOCUMENT_CATEGORIES_ENTITY, DOCUMENT_TEMPLATES_ENTITY, RETENTION_SCHEDULES_ENTITY } from '../hrm-documents'
 import { BENEFIT_PLANS_ENTITY } from '../hrm-benefits'
@@ -237,6 +237,7 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
   // ./hrm-leave.ts; ordinary registry entities behind the hrm switch.
   LEAVE_TYPES_ENTITY,
   LEAVE_POLICIES_ENTITY,
+  LEAVE_PAYROLL_ENTITLEMENT_MAPPINGS_ENTITY,
   // HR action/reason codes. Declared in ./hrm-action-reasons.ts; rehomed
   // onto /hrm/change-requests (never a standalone setup page).
   // HR-16 begin

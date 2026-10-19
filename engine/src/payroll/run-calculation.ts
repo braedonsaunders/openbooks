@@ -33,6 +33,7 @@ import { calculateStub } from "./run-stub-compute.ts";
 import { capturePayRunCalculationEvidence, recordPayRunCalculationEvent } from "./run-calculation-audit.ts";
 import { employerEmployeeCount } from "./run-calculation-support.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
+import { consumeLeavePayrollInputs, releaseLeavePayrollInputs } from "./leave-payroll-inputs.ts";
 import {
   assertPeriodSequence, assertSupplementalSupported, listPeriodSiblings, loadPeriodPriors,
   periodRunIdentity, supplementalTaxMethodForOrg, type PayPeriodPriors,
@@ -463,6 +464,10 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
     const P = Number(run.periods_per_year ?? 0) || undefined;
 
+    if (PERIODIC_RUN_TYPES.has(runType) && !input.simulate) {
+      await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
+    }
+
     for (const emp of employees.rows) {
       if (excluded.has(emp.party_id!)) continue;
       const name = emp.display_name ?? emp.party_id!;
@@ -510,7 +515,17 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         // A named employee refusal must leave no partial stub or allocation.
         // Database failures abort the entire calculation and retain their
         // original cause; they cannot become acknowledgeable exclusions.
-        const result = await withTransactionSavepoint(tx, () => calculateStub(tx, {
+        const result = await withTransactionSavepoint(tx, async () => {
+          const leavePayrollInputs = PERIODIC_RUN_TYPES.has(runType)
+            ? await consumeLeavePayrollInputs(tx, {
+                orgId, runDocumentId: documentId,
+                periodStart: run.period_start!, periodEnd: run.period_end!,
+                employeePartyIds: [emp.party_id!],
+                releaseExisting: false,
+                simulate: input.simulate === true,
+              })
+            : [];
+          return calculateStub(tx, {
           orgId, actorId, documentId, run, emp, runContext, jurisdiction,
           periodsPerYear: P, employerEmployeeCount: employerCount, need, components: components.rows,
           wageExpenseAccountId: runWageExpenseAccountId,
@@ -523,8 +538,10 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           allowedSubsidiaryIds: input.allowedSubsidiaryIds,
           periodPriors: periodPriorsByEmployee.get(emp.party_id!),
           supplementalTaxMethod,
+          leavePayrollInputs,
           onBonusIncomeReference: source => { bonusIncomeReferences.push(source); },
-        }));
+        });
+        });
         grossTotal = add(grossTotal, result.gross);
         netTotal = add(netTotal, result.net);
         employerTotal = add(employerTotal, result.employerCost);

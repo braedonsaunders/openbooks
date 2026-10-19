@@ -27,6 +27,7 @@ import { add, cmp, neg } from "../money/money.ts";
 import { DownstreamConsumptionError, InventoryError } from "../inventory/contracts.ts";
 import { reverseInventoryJournal, reverseInventoryMovement } from "../inventory/reversal.ts";
 import { listReceiptVoidBlockers } from "../inventory/receipt-void-dependents.ts";
+import { releaseLeavePayrollInputs } from "../payroll/leave-payroll-inputs.ts";
 import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
 import { crossSubsidiaryFulfillmentHandler, crossSubsidiaryShipment } from "../inventory/cross-subsidiary.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
@@ -2165,6 +2166,8 @@ async function releaseVoidedPayRun(
       `this pay run is settled by committed retro pay run ${blocking.document_number}; void the retro run first`,
     );
   }
+
+  await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
 
   const run = (await tx.execute<{ document_id: string }>(sql`
     update pay_runs

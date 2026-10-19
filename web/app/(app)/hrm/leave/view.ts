@@ -87,6 +87,7 @@ export function leaveQueueSpec(
         },
         f('refusal'),
       ),
+      widgetBlock('page-notice', { message: f('strandedNote') }, f('strandedNote')),
       {
         ...grid('flex h-full min-h-0 flex-col gap-4', [
           // Each view's filters on the shared toolbar. Requests and Calendar
