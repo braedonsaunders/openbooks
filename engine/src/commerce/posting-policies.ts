@@ -174,8 +174,10 @@ export async function setPostingPolicy(
     }
     if (input.guestCustomerPartyId) {
       const guest = (await db.execute<{ id: string }>(sql`
-        select id from parties
-         where org_id = ${orgId} and id = ${input.guestCustomerPartyId} and kind = 'customer' and is_active`)).rows[0];
+        select p.id from parties p
+         where p.org_id = ${orgId} and p.id = ${input.guestCustomerPartyId} and p.is_active
+           and exists (select 1 from customer_roles cr
+             where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`)).rows[0];
       if (!guest) {
         refuse(
           "channel_policy_guest_unavailable",

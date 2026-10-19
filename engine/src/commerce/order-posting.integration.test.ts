@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -181,6 +182,14 @@ test("paid order posts one balanced cash sale with gateway tenders, tax and COGS
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("1001")));
     assert.equal(stored.postingStatus, "pending");
     assert.equal(stored.presentmentCurrency, "USD");
+    const customer = (await db.execute<{ kind: string; hasActiveRole: boolean }>(sql`
+      select p.kind, exists (select 1 from customer_roles cr
+        where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active) as "hasActiveRole"
+        from parties p where p.org_id = ${org.orgId} and p.id = ${stored.customerPartyId}`)).rows[0];
+    assert.deepEqual(customer, { kind: "company", hasActiveRole: true });
+    const emailMatch = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId,
+      paidOrder("1001-email-match", { customerExternalId: "cust-2" })));
+    assert.equal(emailMatch.customerPartyId, stored.customerPartyId);
     const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(outcome.status, "posted");
     assert.ok(outcome.documentId);
@@ -231,6 +240,28 @@ test("paid order posts one balanced cash sale with gateway tenders, tax and COGS
         && error.message.includes('cust-1') && error.remedy.includes('unlink it first'));
     assert.equal(await count(),before,'a refused customer mapping rolls back the new party');
     assert.equal((await db.execute(sql`select id from channel_orders where org_id=${org.orgId} and external_id='1001-conflict'`)).rows.length,0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("walk-in policy accepts an active company with a customer role", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const { channelId } = await setup(org, actor, "per_order");
+    const partyId = randomUUID();
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${partyId}, ${org.orgId}, 'company', 'Walk-in customer', true, '{}'::jsonb)`);
+    await db.execute(sql`insert into customer_roles (org_id, party_id, is_active)
+      values (${org.orgId}, ${partyId}, true)`);
+    const policy = await withBypass(() => setPostingPolicy(org.orgId, actor, {
+      channelId,
+      mode: "per_order",
+      guestCustomerPartyId: partyId,
+      effectiveFrom: "2026-07-16",
+    }));
+    assert.equal(policy.guestCustomerPartyId, partyId);
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -19,7 +19,9 @@ export const GET = defineRoute({
     const customers = (await db.execute<{ id: string; name: string; email: string | null }>(sql`
       select p.id, coalesce(nullif(p.display_name, ''), p.email, p.id) as name, p.email as email
         from parties p
-       where p.org_id = ${authz.user.orgId} and p.kind = 'customer' and p.is_active
+       where p.org_id = ${authz.user.orgId} and p.is_active
+         and exists (select 1 from customer_roles cr
+           where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
          ${scope}
        order by name limit 500`)).rows;
     return Response.json({ customers });

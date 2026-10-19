@@ -417,7 +417,9 @@ export async function linkStripeCustomer(
   const customerScope = subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true });
   const customer = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
     select p.id from parties p
-     where p.org_id = ${orgId} and p.id = ${customerId} and p.kind = 'customer'
+     where p.org_id = ${orgId} and p.id = ${customerId} and p.is_active
+       and exists (select 1 from customer_roles cr
+         where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
        ${customerScope}`))).rows[0];
   if (!customer) throw new ScopeNotFoundError();
   await saveStripeLink(orgId, actor, stripe.id, "customer", requiredString(stripeCustomerId, "customer id"), customer.id);
@@ -553,7 +555,9 @@ async function attemptObject<T>(
 async function customerEmailSuggestions(orgId: string): Promise<Map<string, string[]>> {
   const rows = (await db.execute<{ id: string; email: string | null }>(sql`
     select p.id, lower(btrim(p.email)) as email from parties p
-     where p.org_id = ${orgId} and p.kind = 'customer'
+     where p.org_id = ${orgId} and p.is_active
+       and exists (select 1 from customer_roles cr
+         where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
        and p.email is not null and btrim(p.email) <> ''`)).rows;
   const map = new Map<string, string[]>();
   for (const row of rows) {
@@ -696,7 +700,9 @@ async function importCustomers(
       if (existing) {
         const local = (await db.execute<{ id: string }>(sql`
           select p.id from parties p
-           where p.org_id=${orgId} and p.id=${existing.openbooks_id} and p.kind='customer'`)).rows[0];
+           where p.org_id=${orgId} and p.id=${existing.openbooks_id} and p.is_active
+             and exists (select 1 from customer_roles cr
+               where cr.org_id=p.org_id and cr.party_id=p.id and cr.is_active)`)).rows[0];
         if (!local) {
           refuse(
             "stripe_customer_mapping_missing_local",
@@ -1316,9 +1322,11 @@ export async function getStripeBillingOverview(orgId: string): Promise<StripeBil
     const names = new Map<string, string>();
     if (suggestedIds.length > 0) {
       const nameRows = (await db.execute<{ id: string; name: string }>(sql`
-        select id, coalesce(nullif(display_name, ''), email, id) as name from parties
-         where org_id = ${orgId} and kind = 'customer'
-           and id = any(${`{${suggestedIds.join(",")}}`}::uuid[])`)).rows;
+        select p.id, coalesce(nullif(p.display_name, ''), p.email, p.id) as name from parties p
+         where p.org_id = ${orgId} and p.is_active
+           and exists (select 1 from customer_roles cr
+             where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
+           and p.id = any(${`{${suggestedIds.join(",")}}`}::uuid[])`)).rows;
       for (const nameRow of nameRows) names.set(nameRow.id, nameRow.name);
     }
     const unlinked: StripeBillingUnlinkedCustomer[] = entries.map((entry) => ({

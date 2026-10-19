@@ -213,17 +213,21 @@ export async function resolveCustomer(
     });
     if (linked?.nativeTable === "parties") {
       const party = (await db.execute<{ id: string }>(sql`
-        select id from parties where org_id = ${orgId} and id = ${linked.nativeId} and is_active`)).rows[0];
+        select p.id from parties p
+         where p.org_id = ${orgId} and p.id = ${linked.nativeId} and p.is_active
+           and exists (select 1 from customer_roles cr
+             where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`)).rows[0];
       if (party) return party.id;
     }
   }
   const email = cleanText(order.customerEmail)?.toLowerCase() ?? null;
   if (email) {
     const party = (await db.execute<{ id: string }>(sql`
-      select id from parties
-       where org_id = ${orgId} and kind = 'customer' and is_active
-         and lower(email) = ${email}
-       order by created_at limit 1`)).rows[0];
+      select p.id from parties p
+       where p.org_id = ${orgId} and p.is_active and lower(p.email) = ${email}
+         and exists (select 1 from customer_roles cr
+           where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
+       order by p.created_at limit 1`)).rows[0];
     if (party) {
       if (order.customerExternalId) {
         await linkExternal(orgId, actor, {
@@ -243,11 +247,16 @@ export async function resolveCustomer(
   const displayName = cleanText(order.customerName) ?? (email ?? `Storefront customer ${order.customerExternalId ?? order.number}`);
   const inserted = await db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, email, is_active, custom, created_by, updated_by)
-    values (${orgId}, 'customer', ${displayName}, ${email},
+    values (${orgId}, 'company', ${displayName}, ${email},
       true, '{}'::jsonb, ${actor}, ${actor})
     returning id`);
   if (inserted.rows.length !== 1) throw new Error("Customer party insert returned an unexpected row count");
   const partyId = inserted.rows[0]!.id;
+  const customerRole = await db.execute<{ party_id: string }>(sql`
+    insert into customer_roles (org_id, party_id, is_active, created_by, updated_by)
+    values (${orgId}, ${partyId}, true, ${actor}, ${actor})
+    returning party_id`);
+  if (customerRole.rows.length !== 1) throw new Error("Storefront customer role insert returned an unexpected row count");
   if (order.customerExternalId) {
     await linkExternal(orgId, actor, {
       channelId: channel.id,
