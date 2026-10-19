@@ -110,9 +110,9 @@ export async function loadDemandPage(
          order by name
       `),
       db.execute<OpportunityOptionRow>(sql`
-        select o.id::text as id, o.name from crm_opportunities o
+        select o.id::text as id, o.title as name from crm_opportunities o
          where o.org_id = ${authz.user.orgId} ${crmOpportunityScope(authz.allowedSubsidiaryIds)}
-         order by o.name limit 500
+         order by o.title limit 500
       `),
       loadFieldDefs('res_demand_lines'),
     ])

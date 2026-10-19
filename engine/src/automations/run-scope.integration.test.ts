@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import {
@@ -12,6 +13,8 @@ import {
   listAutomationRuns,
   AutomationServiceError,
 } from "./services.ts";
+import { resolveRunSubjectSubsidiaries } from "./run-scope.ts";
+import { loadSubjectSnapshot } from "./registry.ts";
 
 /**
  * H-AUTORUNS: run history is scoped by the run subject's subsidiary.
@@ -134,6 +137,34 @@ test("the runs list filters to the caller lens, and omitting the lens resolves t
       all.map((run) => run.id).sort(),
       [h.runA, h.runB, h.runBare].sort(),
     );
+  } finally {
+    await withBypassContext(() => dropScratchOrg(h.orgId));
+  }
+});
+
+test("leave-request run scope resolves its employer subsidiary", { skip: !DB }, async () => {
+  const h = await seed();
+  try {
+    const employmentId = randomUUID();
+    const partyId = randomUUID();
+    const leaveTypeId = randomUUID();
+    const leaveRequestId = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${partyId}, ${h.orgId}, 'person', 'Run Scope Employee', true, '{}'::jsonb)`);
+      await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+        values (${employmentId}, ${h.orgId}, ${partyId}, ${h.subA}, 1)`);
+      await db.execute(sql`insert into hrm_leave_types (id, org_id, code, name)
+        values (${leaveTypeId}, ${h.orgId}, 'VAC', 'Vacation')`);
+      await db.execute(sql`insert into hrm_leave_requests (id, org_id, employment_id, leave_type_id, starts_on, ends_on, hours, status)
+        values (${leaveRequestId}, ${h.orgId}, ${employmentId}, ${leaveTypeId}, '2026-10-19', '2026-10-19', 8, 'submitted')`);
+    });
+    const scope = await withBypassContext(() => resolveRunSubjectSubsidiaries(h.orgId, [
+      { subjectKind: "leave_request", subjectId: leaveRequestId },
+    ]));
+    assert.equal(scope.get(`leave_request\u0001${leaveRequestId}`), h.subA);
+    const snapshot = await withBypassContext(() => loadSubjectSnapshot(h.orgId, "leave_request", leaveRequestId));
+    assert.equal(snapshot?.scope.subsidiaryId, h.subA);
   } finally {
     await withBypassContext(() => dropScratchOrg(h.orgId));
   }

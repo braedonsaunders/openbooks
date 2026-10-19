@@ -343,8 +343,14 @@ export async function loadBankingAccount(
   let drawer: BankingAccountData['drawer'] = null
   if (openStatementId && isUuid(openStatementId)) {
     const s = (await db.execute<StatementDetailRow>(sql`
-      select s.id, s.source, s.currency, s.statement_date, s.opening_balance, s.closing_balance, s.imported_at
-        from bank_statements s where s.id = ${openStatementId} and s.account_id = ${accountId} and s.org_id = ${orgId}
+      select s.id, s.source,
+             coalesce((select line.currency from bank_statement_lines line
+                        where line.statement_id = s.id and line.org_id = s.org_id
+                        order by line.line_number limit 1), a.currency_restriction) as currency,
+             s.statement_date, s.opening_balance, s.closing_balance, s.imported_at
+        from bank_statements s
+        join accounts a on a.id = s.account_id and a.org_id = s.org_id
+       where s.id = ${openStatementId} and s.account_id = ${accountId} and s.org_id = ${orgId}
     `))
     if (s.rows[0]) {
       const lineParams = parsePrefixedListParams(sp, 'sl', {
