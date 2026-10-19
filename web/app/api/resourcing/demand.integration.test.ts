@@ -96,6 +96,10 @@ test("demand creation fences, validates custom fields, replays idempotently, and
     const malformedPatch = await patchCall(id, { ...body, custom: ["Practice lead"] });
     assert.equal(malformedPatch.status, 422);
     assert.match((await malformedPatch.json() as { error: string }).error, /object|record/i);
+    state.authz = authz(new Set());
+    const emptyScopePatch = await patchCall(id, body);
+    assert.equal(emptyScopePatch.status, 404);
+    assert.deepEqual(await emptyScopePatch.json(), { error: "not_found" });
     const stored = await withBypassContext(() => db.execute<{ lines: string; audits: string }>(sql`
       select (select count(*)::text from res_demand_lines where org_id = ${org.orgId} and id = ${key}) as lines,
              (select count(*)::text from audit_log where org_id = ${org.orgId} and table_name = 'res_demand_lines' and row_id = ${key} and request_id = ${key}) as audits

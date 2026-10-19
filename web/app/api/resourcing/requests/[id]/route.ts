@@ -3,6 +3,7 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { projects, resRequests } from "@openbooks/schema";
 import { updateResourceRequestDraft } from "@openbooks/engine/resourcing/requests";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { db } from "@openbooks/engine/platform/db";
 import { defineRoute } from "@/lib/api/route";
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
@@ -31,6 +32,7 @@ export const PATCH = defineRoute({
   handler: async ({ authz, params, body }) => {
     let custom: Record<string, unknown> | undefined;
     if (body.custom !== undefined) {
+      if (authz.allowedSubsidiaryIds?.size === 0) throw new ScopeNotFoundError();
       const subsidiaryScope = authz.allowedSubsidiaryIds === null
         ? undefined
         : inArray(projects.subsidiaryId, [...authz.allowedSubsidiaryIds]);

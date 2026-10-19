@@ -9,9 +9,10 @@ import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organizati
 import { lockProjectForScope } from "../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { runRecordFlows } from "../flows/run.ts";
+import { MAX_AVAILABILITY_PERSON_WEEKS } from "./availability-read.ts";
 import { ResourcingRefusal } from "./errors.ts";
 import { upsertAssignment, validateAssignmentPlan } from "./assignments.ts";
-import { weeksBetween } from "./weeks.ts";
+import { assertSundayWindow, weeksBetween } from "./weeks.ts";
 
 type RequestRow = typeof resRequests.$inferSelect;
 type RequestWriteRow = RequestRow & Record<string, unknown>;
@@ -98,8 +99,9 @@ function requestWeeks(first: unknown, last: unknown): { firstWeek: string; lastW
   if (typeof first !== "string" || typeof last !== "string") {
     refuse(422, "resource_request_week_invalid", "resource request weeks must be civil dates", "choose Sunday dates for the request range", "firstWeek");
   }
+  let weekCount: number;
   try {
-    weeksBetween(first, last);
+    weekCount = assertSundayWindow(first, last);
   } catch {
     refuse(
       422,
@@ -107,6 +109,15 @@ function requestWeeks(first: unknown, last: unknown): { firstWeek: string; lastW
       "resource request weeks must start on Sunday, with the last week on or after the first",
       "choose Sunday dates in chronological order",
       first === last ? "firstWeek" : "lastWeek",
+    );
+  }
+  if (weekCount > MAX_AVAILABILITY_PERSON_WEEKS) {
+    refuse(
+      422,
+      "resource_request_range_too_large",
+      `resource request covers ${weekCount} person-weeks; the limit is ${MAX_AVAILABILITY_PERSON_WEEKS} per request`,
+      "choose a shorter date range and create separate requests for later weeks",
+      "lastWeek",
     );
   }
   return { firstWeek: first, lastWeek: last };
@@ -120,23 +131,41 @@ function requestReason(raw: unknown): string | null {
   return raw.trim() || null;
 }
 
-async function validateDraft(tx: SqlExecutor, input: ResourceRequestDraftInput) {
-  const range = requestWeeks(input.firstWeek, input.lastWeek);
+type RequestAssignmentPlanInput = Pick<
+  ResourceRequestDraftInput,
+  "orgId" | "actorId" | "allowedSubsidiaryIds" | "projectId" | "employeePartyId" | "jobTitle" | "hoursPerWeek" | "isBillable" | "billItemId"
+>;
+
+async function validateRequestAssignmentPlan(
+  tx: SqlExecutor,
+  input: RequestAssignmentPlanInput,
+  range: { firstWeek: string; lastWeek: string },
+) {
   const subject = input.employeePartyId !== undefined
     ? { employeePartyId: input.employeePartyId }
     : { jobTitle: input.jobTitle! };
-  const normalized = await validateAssignmentPlan(tx, {
-    orgId: input.orgId,
-    actorId: input.actorId,
-    allowedSubsidiaryIds: input.allowedSubsidiaryIds,
-    projectId: input.projectId,
-    ...subject,
-    weekStart: range.firstWeek,
-    plannedHours: input.hoursPerWeek,
-    isBillable: input.isBillable,
-    billItemId: input.billItemId,
-    source: "manual",
-  });
+  let normalized: Awaited<ReturnType<typeof validateAssignmentPlan>> | undefined;
+  for (const weekStart of weeksBetween(range.firstWeek, range.lastWeek)) {
+    normalized = await validateAssignmentPlan(tx, {
+      orgId: input.orgId,
+      actorId: input.actorId,
+      allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+      projectId: input.projectId,
+      ...subject,
+      weekStart,
+      plannedHours: input.hoursPerWeek,
+      isBillable: input.isBillable,
+      billItemId: input.billItemId,
+      source: "manual",
+    });
+  }
+  if (!normalized) throw new Error("resource request validation produced no weekly plan");
+  return normalized;
+}
+
+async function validateDraft(tx: SqlExecutor, input: ResourceRequestDraftInput) {
+  const range = requestWeeks(input.firstWeek, input.lastWeek);
+  const normalized = await validateRequestAssignmentPlan(tx, input, range);
   return {
     ...range,
     employeePartyId: input.employeePartyId ?? null,
@@ -273,10 +302,10 @@ export async function updateResourceRequestDraft(input: UpdateResourceRequestInp
       eq(resRequests.id, input.requestId),
     )).for("update"))[0];
     if (!current) refuse(409, "resource_request_unknown", `resource request ${input.requestId} is not visible`, "reload the resource request", "requestId");
+    await lockProjectForScope(tx, input.orgId, current.projectId, input.allowedSubsidiaryIds, "share");
     if (current.status !== "draft") {
       refuse(409, "resource_request_not_draft", `a ${current.status} resource request is frozen`, "edit a draft request or create a new request", "requestId");
     }
-    await lockProjectForScope(tx, input.orgId, current.projectId, input.allowedSubsidiaryIds, "share");
     const values = await validateDraft(tx, input);
     const rows = await tx.update(resRequests).set({
       projectId: input.projectId,
@@ -314,24 +343,24 @@ export async function submitResourceRequest(input: ResourceRequestIdInput): Prom
       eq(resRequests.id, input.requestId),
     )).for("update"))[0];
     if (!current) refuse(409, "resource_request_unknown", `resource request ${input.requestId} is not visible`, "reload the resource request", "requestId");
+    await lockProjectForScope(tx, input.orgId, current.projectId, input.allowedSubsidiaryIds, "share");
     if (current.status !== "draft") {
       refuse(409, "resource_request_not_draft", `a ${current.status} resource request cannot be submitted`, "submit a draft request", "requestId");
     }
+    const range = requestWeeks(current.firstWeek, current.lastWeek);
     const subject = current.employeePartyId
       ? { employeePartyId: current.employeePartyId }
       : { jobTitle: current.jobTitle! };
-    await validateAssignmentPlan(tx, {
+    await validateRequestAssignmentPlan(tx, {
       orgId: input.orgId,
       actorId: input.actorId,
       allowedSubsidiaryIds: input.allowedSubsidiaryIds,
       projectId: current.projectId,
       ...subject,
-      weekStart: current.firstWeek,
-      plannedHours: current.hoursPerWeek,
+      hoursPerWeek: current.hoursPerWeek,
       isBillable: current.isBillable,
       billItemId: current.billItemId,
-      source: "manual",
-    });
+    }, range);
     const flowResult = await runRecordFlows(
       { kind: "on_submit", source: "api" },
       RESOURCING_REQUEST_SUBJECT_KIND,
@@ -396,10 +425,10 @@ export async function cancelResourceRequest(input: CancelResourceRequestInput): 
       eq(resRequests.id, input.requestId),
     )).for("update"))[0];
     if (!current) refuse(409, "resource_request_unknown", `resource request ${input.requestId} is not visible`, "reload the resource request", "requestId");
+    await lockProjectForScope(tx, input.orgId, current.projectId, input.allowedSubsidiaryIds, "share");
     if (current.status !== "draft" && current.status !== "submitted") {
       refuse(409, "resource_request_not_cancellable", `a ${current.status} resource request cannot be cancelled`, "cancel a draft or submitted request", "requestId");
     }
-    await lockProjectForScope(tx, input.orgId, current.projectId, input.allowedSubsidiaryIds, "share");
     if (current.status === "submitted" && current.flowInstanceId) {
       const gateIds = (await tx.execute<RequestGateWriteRow>(sql`
         select id, status from flow_gates where org_id = ${input.orgId} and run_id = ${current.flowInstanceId}
@@ -456,10 +485,11 @@ export async function releaseResourceRequest(input: ReleaseResourceRequestInput)
       eq(resRequests.id, input.requestId),
     )).for("update"))[0];
     if (!current) refuse(409, "resource_request_unknown", `resource request ${input.requestId} is not visible`, "reload the resource request", "requestId");
+    await lockProjectForScope(tx, input.orgId, current.projectId, input.allowedSubsidiaryIds, "share");
     if (current.status !== "submitted") {
       refuse(409, "resource_request_not_submitted", `resource request ${input.requestId} is ${current.status}`, "decide a submitted resource request", "requestId");
     }
-    await lockProjectForScope(tx, input.orgId, current.projectId, input.allowedSubsidiaryIds, "share");
+    requestWeeks(current.firstWeek, current.lastWeek);
 
     const assignmentIds: string[] = [];
     const overallocations: string[] = [];

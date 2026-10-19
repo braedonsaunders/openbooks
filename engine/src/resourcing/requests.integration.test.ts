@@ -60,6 +60,29 @@ test("submit without an authored flow refuses with the existing Flows remedy", e
   assert.equal(cancelled.decisionComment, "No longer needed");
 }));
 
+test("resource requests validate every week and reject ranges beyond availability limits", enabled, async () => withFixture(async (f) => {
+  const input = requestInput(f, "2026-10-04", "2026-10-11");
+  const draft = await createResourceRequest(input);
+  await withBypassContext(() => write(sql`insert into work_schedules (org_id, employee_party_id, pattern, effective_from, is_active, created_by, updated_by) values (${f.orgId}, ${f.employeePartyId}, 'varies', '2026-10-11', true, ${f.actorId}, ${f.actorId}) returning id`));
+  await assert.rejects(submitResourceRequest({ ...ctx(f), requestId: draft.id }), (error: unknown) => {
+    assert.ok(error instanceof ResourcingRefusal);
+    assert.equal(error.code, "capacity_unknown");
+    return true;
+  });
+  const state = (await withBypassContext(() => db.execute<{ status: string }>(sql`select status from res_requests where org_id = ${f.orgId} and id = ${draft.id}`))).rows[0];
+  assert.deepEqual(state, { status: "draft" });
+  await assert.rejects(createResourceRequest(requestInput(f, "2026-10-04", "2026-10-11")), (error: unknown) => {
+    assert.ok(error instanceof ResourcingRefusal);
+    assert.equal(error.code, "capacity_unknown");
+    return true;
+  });
+  await assert.rejects(createResourceRequest(requestInput(f, "2026-10-04", "2036-10-05")), (error: unknown) => {
+    assert.ok(error instanceof ResourcingRefusal);
+    assert.equal(error.code, "resource_request_range_too_large");
+    return true;
+  });
+}));
+
 test("approval creates one hard request-linked assignment for every requested Sunday", enabled, async () => withFixture(async (f) => {
   await addApprovalFlow(f);
   const prior = await upsertAssignment({ ...ctx(f), projectId: f.projectId, employeePartyId: f.employeePartyId, weekStart: "2026-10-04", plannedHours: "8.0000" });

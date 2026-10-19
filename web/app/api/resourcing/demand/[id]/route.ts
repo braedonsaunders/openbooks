@@ -27,6 +27,7 @@ export const PATCH = defineRoute({
   body: Body,
   invalidBodyStatus: 422,
   handler: async ({ authz, params, body }) => {
+    if (authz.allowedSubsidiaryIds?.size === 0) throw new ScopeNotFoundError();
     const existing = (await db.select({ custom: resDemandLines.custom })
       .from(resDemandLines)
       .innerJoin(departments, and(
