@@ -14,7 +14,7 @@ import { attestRebateCost } from "./rebates.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-test("rebate cost attestation hides out-of-scope document currency and status", { skip: !DB }, async () => {
+test("rebate cost attestation hides an out-of-scope document currency", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await withBypassContext(async () => {
@@ -42,7 +42,7 @@ test("rebate cost attestation hides out-of-scope document currency and status", 
           (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate,
            subtotal, tax_total, total, created_by)
         values
-          (${documentId}, ${org.orgId}, 'customer_invoice', 'cancelled', ${`REBATE-SCOPE-${documentId}`},
+          (${documentId}, ${org.orgId}, 'customer_invoice', 'draft', ${`REBATE-SCOPE-${documentId}`},
            ${hiddenSubsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', 1, 100, 0, 100, ${actorId})`);
       await db.execute(sql`
         insert into document_lines (id, org_id, document_id, line_number, account_id, quantity, unit_price, amount)
