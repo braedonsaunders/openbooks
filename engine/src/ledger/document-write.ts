@@ -2868,6 +2868,13 @@ export interface DocumentCreateInput {
   subsidiaryId: string | null
   /** Full parsed request body for the idempotency image. */
   requestBody: unknown
+  /** Server-owned return request metadata that is not an editable custom field. */
+  nativeCustom?: {
+    portalRequest: {
+      resolution: 'refund' | 'exchange' | 'store_credit'
+      storeCreditBonusPercent: string
+    }
+  }
 }
 
 export interface DocumentCreateResult {
@@ -2906,6 +2913,7 @@ export interface DocumentCreateResult {
  */
 export async function createDocument(input: DocumentCreateInput): Promise<DocumentCreateResult> {
   const { orgId, userId, kind, key, body, subsidiaryId, requestBody } = input
+  if (input.nativeCustom && kind !== 'rma') throw new DocumentEditError(422, 'Native return metadata can be written only when creating a return authorization.')
   if (body.custom && ['withholdingDeposit','withholdingRemittance'].some(key => Object.hasOwn(body.custom!, key))) throw new DocumentEditError(422, 'Authority remittance source evidence is created only through the native withholding workflow.');
   const cfg = docKindConfig(kind)
   if (!cfg) throw new DocumentEditError(422, `kind "${kind}" is not editable`)
@@ -2918,7 +2926,11 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
   // are EXCLUDED — they depend on allocator state or legitimately advance
   // after creation, so comparing them would turn a genuine retry into a
   // conflict.
-  const match = { kind, body: requestBody }
+  const match = {
+    kind,
+    body: requestBody,
+    ...(input.nativeCustom ? { nativeCustom: input.nativeCustom } : {}),
+  }
 
   // Provider-dependent totals resolve BEFORE any lock or write: external tax
   // resolution must never run while the create holds advisory/row locks, and
@@ -2993,9 +3005,10 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
     const inserted = await tx.execute<{ id: string }>(sql`
       insert into documents
         (id, org_id, kind, subsidiary_id, document_number, document_date,
-         currency, subtotal, tax_total, total, created_by)
+         currency, subtotal, tax_total, total, custom, created_by)
       values (${key}, ${orgId}, ${kind}, ${subsidiaryId}, ${documentNumber},
-              ${effectiveBody.documentDate}, ${seedCurrency}, '0', '0', '0', ${userId})
+              ${effectiveBody.documentDate}, ${seedCurrency}, '0', '0', '0',
+              ${JSON.stringify(input.nativeCustom ?? {})}::jsonb, ${userId})
       -- A conflicting document identity returns no row and raises the scoped creation refusal below.
       on conflict (id) do nothing
       returning id`)

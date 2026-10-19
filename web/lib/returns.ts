@@ -137,6 +137,12 @@ export async function createReturnAuthorization(input: {
       })
     }
     const body: DocumentEditInput = { ...input.body, lines: documentLines }
+    const portalRequest = input.actorId === PORTAL_ACTOR_ID
+      ? portalReturnRequest(body.custom)
+      : null
+    if (input.actorId === PORTAL_ACTOR_ID && !portalRequest) {
+      throw new ReturnRefusal('The portal return request details are missing', 'invalid_input', 422, 'Ask the customer to submit the return again')
+    }
     const draft = await createDocument({
       orgId: input.orgId,
       userId: input.actorId,
@@ -146,6 +152,7 @@ export async function createReturnAuthorization(input: {
       subsidiaryId: body.subsidiaryId ?? null,
       requestBody: input.requestBody,
       onBehalfOfPartyId: input.onBehalfOfPartyId ?? null,
+      ...(portalRequest ? { nativeCustom: { portalRequest } } : {}),
     })
     if (draft.status === 'created') {
       await runRecordFlows({ kind: 'on_create', source: 'ui' }, 'rma', draft.id, { orgId: input.orgId, userId: input.actorId })
@@ -285,7 +292,7 @@ async function customerCreditLine(
       amount: source.amount,
       taxCodeId: source.tax_code_id,
       taxGroupId: source.tax_group_id,
-      taxOverridden: true,
+      taxOverridden: source.tax_code_id !== null || source.tax_group_id !== null,
       taxAmount: source.tax_amount,
       stockLocationId: line.dispositionLocationId,
       inventoryReturnSource,
@@ -380,7 +387,7 @@ async function customerCreditLine(
     amount: billed.amount,
     taxCodeId: billed.tax_code_id,
     taxGroupId: billed.tax_group_id,
-    taxOverridden: true,
+    taxOverridden: billed.tax_code_id !== null || billed.tax_group_id !== null,
     taxAmount: billed.tax_amount,
     stockLocationId: line.dispositionLocationId,
     inventoryReturnSource,
