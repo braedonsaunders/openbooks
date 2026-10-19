@@ -12,7 +12,12 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { assertUnrestrictedScope, lockProjectForScope, ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
+import {
+  assertUnrestrictedScope,
+  lockProjectForScope,
+  ScopeNotFoundError,
+  subsidiaryVisibleFilter,
+} from "../../organization/subsidiary-scope.ts";
 import { FieldTimeError, refuse } from "./errors.ts";
 import { FIELD_TIME_FEATURE } from "./settings.ts";
 import { hashDeviceToken, hashPin, issueDeviceToken, verifyPin } from "./pins.ts";
@@ -74,12 +79,30 @@ async function hasActiveEmployment(orgId: string, partyId: string): Promise<bool
  * location: assignment-location data may be incomplete, and hiding a worker
  * from the terminal denies their clock-in.
  */
-export async function listKioskWorkers(orgId: string): Promise<KioskWorker[]> {
+async function readKioskWorkers(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<KioskWorker[]> {
+  // A PIN is organization-wide, so a restricted operator may only choose a
+  // worker when every live employment is within that operator's scope.
+  const inaccessibleEmployment = allowedSubsidiaryIds === null
+    ? sql``
+    : sql`and not exists (
+        select 1
+          from worker_employments e
+          join worker_employment_versions v
+            on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
+         where e.org_id = p.org_id and e.worker_party_id = p.id
+           and v.status in ('active', 'on_leave')
+           and (e.employer_subsidiary_id is null
+             or e.employer_subsidiary_id <> all(${`{${[...allowedSubsidiaryIds].join(',')}}`}::uuid[]))
+      )`
   return withOrgTransaction(orgId, async () => {
     return (await db.execute<KioskWorker>(sql`
       select p.id::text as id, p.display_name as name
         from parties p
        where p.org_id = ${orgId} and p.is_active
+         ${inaccessibleEmployment}
          and exists (
            select 1
              from worker_employments e
@@ -87,9 +110,23 @@ export async function listKioskWorkers(orgId: string): Promise<KioskWorker[]> {
                on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
             where e.org_id = p.org_id and e.worker_party_id = p.id
               and v.status in ('active', 'on_leave')
+              ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowedSubsidiaryIds)}
          )
        order by p.display_name, p.id`)).rows;
   });
+}
+
+/** Organization-wide worker options for a kiosk authenticated by its device token. */
+export function listKioskWorkers(orgId: string): Promise<KioskWorker[]> {
+  return readKioskWorkers(orgId, null);
+}
+
+/** Worker options limited to an authenticated operator's visible employers. */
+export function listKioskWorkersInScope(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<KioskWorker[]> {
+  return readKioskWorkers(orgId, allowedSubsidiaryIds);
 }
 
 export async function registerKiosk(input: {

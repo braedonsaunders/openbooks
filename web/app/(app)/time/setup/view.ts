@@ -14,7 +14,7 @@ import {
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { listKioskWorkersInScope } from '@openbooks/engine/hrm/field-time/kiosk'
 
 /**
  * The field-time setup surface: declared rules, kiosks with token
@@ -75,26 +75,11 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
   // API's project visibility exactly.
   const canManageKiosks = can(authz, 'time.kiosk.manage')
   const canEditPolicy = authz.allowedSubsidiaryIds === null
-  const today = await businessToday(orgId)
   const settings = (await db.execute<{ settings: unknown }>(sql`
     select settings->'fieldTime' as settings from orgs where id = ${orgId}`)).rows[0]?.settings as Record<string, unknown> | null
-  const employees = (await db.execute<{ value: string; label: string }>(sql`
-    select distinct p.id::text as value, p.display_name as label
-      from worker_employments e
-      join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
-      join lateral (
-        select status
-          from worker_employment_versions v
-         where v.org_id = e.org_id and v.employment_id = e.id
-           and v.recorded_until is null
-           and v.effective_from <= ${today}::date
-           and (v.effective_to is null or v.effective_to > ${today}::date)
-         order by v.version_no desc
-         limit 1
-      ) current_status on current_status.status = 'active'
-     where e.org_id = ${orgId}
-       and ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, authz.allowedSubsidiaryIds)}
-     order by p.display_name`)).rows
+  const employees = canManageKiosks
+    ? (await listKioskWorkersInScope(orgId, authz.allowedSubsidiaryIds)).map((worker) => ({ value: worker.id, label: worker.name }))
+    : []
   const kiosks = !canManageKiosks
     ? []
     : (await db.execute<FieldSetupData['kiosks'][number]>(sql`

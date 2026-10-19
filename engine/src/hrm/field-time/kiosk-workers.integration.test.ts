@@ -14,7 +14,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
-import { identifyByPin, listKioskWorkers, registerKiosk, revokeKiosk, setWorkerPin } from "./kiosk.ts";
+import { identifyByPin, listKioskWorkers, listKioskWorkersInScope, registerKiosk, revokeKiosk, setWorkerPin } from "./kiosk.ts";
 import { FieldTimeError } from "./errors.ts";
 import { ScopeNotFoundError, UnrestrictedScopeError } from "../../organization/subsidiary-scope.ts";
 
@@ -85,6 +85,9 @@ test("the terminal lists active employees only, with no silent cap", { skip: !DB
     });
     const workers = await listKioskWorkers(org.orgId);
     assert.equal(workers.length, COUNT, `expected all ${COUNT} active employees, no cap`);
+    const visibleWorkers = await listKioskWorkersInScope(org.orgId, new Set([org.subsidiaryId]));
+    assert.equal(visibleWorkers.length, COUNT, "the visible employer retains all eligible workers");
+    assert.deepEqual(await listKioskWorkersInScope(org.orgId, new Set()), [], "an empty employer scope reveals no workers");
     const names = new Set(workers.map((worker) => worker.name));
     assert.ok(!names.has("Acme Customer"), "customers must not appear");
     assert.ok(!names.has("Supply Vendor"), "vendors must not appear");
@@ -126,10 +129,17 @@ test("kiosk-wide actions refuse restricted scope and PIN resets require every ac
     await enableFieldTime(org.orgId);
     const worker = randomUUID();
     const employmentId = randomUUID();
+    const outsideEmploymentId = randomUUID();
+    const outsideSubsidiaryId = randomUUID();
     await withOrg(org.orgId, async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${outsideSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Outside scope', 'USD', 'US')`);
       await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${worker}, ${org.orgId}, 'person', 'Scoped Worker')`);
       await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${employmentId}, ${org.orgId}, ${worker}, ${org.subsidiaryId}, 1)`);
       await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`);
+      await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${outsideEmploymentId}, ${org.orgId}, ${worker}, ${outsideSubsidiaryId}, 1)`);
+      await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${outsideEmploymentId}, 1, 'active', '2020-01-01'::date, null, now())`);
 
       await assert.rejects(
         registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Restricted", allowedSubsidiaryIds: new Set([org.subsidiaryId]) }),
@@ -138,6 +148,15 @@ test("kiosk-wide actions refuse restricted scope and PIN resets require every ac
       const { kiosk } = await registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Scoped", allowedSubsidiaryIds: null });
       await assert.rejects(
         setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: worker, pin: "4821", allowedSubsidiaryIds: new Set() }),
+        ScopeNotFoundError,
+      );
+      assert.deepEqual(
+        await listKioskWorkersInScope(org.orgId, new Set([org.subsidiaryId])),
+        [],
+        "the PIN picker excludes workers with another active employer outside the actor's scope",
+      );
+      await assert.rejects(
+        setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: worker, pin: "4821", allowedSubsidiaryIds: new Set([org.subsidiaryId]) }),
         ScopeNotFoundError,
       );
       await assert.rejects(
