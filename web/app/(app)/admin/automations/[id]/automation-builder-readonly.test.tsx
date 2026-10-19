@@ -9,11 +9,11 @@ import test from 'node:test'
 
 // jsdom first: the builder reads browser globals at render.
 const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/automations/00000000-0000-4000-8000-000000000000', matchMediaMatches: false, resizeObserver: false })
+await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/automations/00000000-0000-4000-8000-000000000000', matchMediaMatches: false, resizeObserver: true })
 
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return{push(){},replace(){},refresh(){}}}' })
+stubModules({ navigation: 'export function useRouter(){return{push(){},replace(){},refresh(){}}}export function usePathname(){return "/admin/automations/x"}export function useSearchParams(){return new URLSearchParams()}' })
 registerHooks({
   resolve(specifier, context, next) {
 
@@ -54,7 +54,7 @@ const AUTOMATION = {
   errorMessage: null,
 }
 
-const SAVE_LABELS = ['Save name', 'Save trigger', 'Save who and when', 'Save actions']
+const SAVE_LABELS = ['Save']
 const ADD_LABELS = ['Add action', 'Add condition', 'Remove']
 
 function buttons(host: HTMLElement): string[] {
@@ -71,6 +71,7 @@ async function mount(canManage: boolean): Promise<HTMLElement> {
         <AutomationBuilder
           automation={AUTOMATION}
           runs={[]}
+          scopeOptions={{ subsidiaries: [], departments: [], locations: [], positions: [], users: [], roles: [], processTemplates: [] }}
           canSimulate={true}
           canManage={canManage}
           saveFailed="Save failed"
@@ -119,7 +120,7 @@ test('the builder hides every mutating control from a reader', async () => {
     // Simulate is read-guarded server-side, so it stays; the recipe,
     // the runs tab, and the back link stay readable.
     assert.ok(labels.includes('Simulate'), 'read-only builder lost Simulate')
-    assert.ok(labels.includes('Runs'), 'read-only builder lost the runs tab')
+    assert.ok((host.textContent ?? '').includes('Runs'), 'read-only builder lost the runs tab')
     assert.ok(
       (host.textContent ?? '').includes('Read-only'),
       'read-only builder names no read-only notice',

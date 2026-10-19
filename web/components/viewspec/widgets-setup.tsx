@@ -418,6 +418,7 @@ export const SETUP_WIDGETS = {
     <AutomationBuilder
       automation={props.automation as ComponentProps<typeof AutomationBuilder>['automation']}
       runs={props.runs as ComponentProps<typeof AutomationBuilder>['runs']}
+      scopeOptions={props.scopeOptions as ComponentProps<typeof AutomationBuilder>['scopeOptions']}
       canSimulate={props.canSimulate === true}
       canManage={props.canManage === true}
       saveFailed={str(props, 'saveFailed') ?? ''}

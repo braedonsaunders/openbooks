@@ -46,7 +46,12 @@ export function UiLink({
 // DetailHeader/PageHeader gains this behaviour with no per-page change.
 
 /** The `back` fallback plus styling; the impl upgrades `href`/`label` at render. */
-export type BackLinkProps = { href: string; label: string; className?: string }
+export type BackLinkProps = {
+  href: string
+  label: string
+  className?: string
+  onClick?: AnchorHTMLAttributes<HTMLAnchorElement>['onClick']
+}
 export type BackLinkLike = ComponentType<BackLinkProps>
 
 const UiBackLinkContext = createContext<BackLinkLike | null>(null)
@@ -56,12 +61,12 @@ const UiBackLinkContext = createContext<BackLinkLike | null>(null)
  * `← label` anchor to `href`. Safe to use in server components (it's a client
  * component that reads context at render time).
  */
-export function UiBackLink({ href, label, className }: BackLinkProps) {
+export function UiBackLink({ href, label, className, onClick }: BackLinkProps) {
   const impl = useContext(UiBackLinkContext)
   // createElement, not a <Impl>-style JSX alias (see UiLink above).
-  if (impl) return createElement(impl, { href, label, className })
+  if (impl) return createElement(impl, { href, label, className, onClick })
   return (
-    <UiLink href={href} className={className}>
+    <UiLink href={href} className={className} onClick={onClick}>
       ← {label}
     </UiLink>
   )

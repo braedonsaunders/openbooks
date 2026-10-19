@@ -8,7 +8,7 @@ import test from 'node:test'
 
 // jsdom first: the builder reads browser globals at render.
 const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/automations/00000000-0000-4000-8000-000000000000', matchMediaMatches: false, resizeObserver: false })
+await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/automations/00000000-0000-4000-8000-000000000000', matchMediaMatches: false, resizeObserver: true })
 
 const posted: { url: string; body: unknown }[] = []
 const priorFetch = globalThis.fetch
@@ -23,7 +23,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return{push(){},replace(){},refresh(){}}}' })
+stubModules({ navigation: 'export function useRouter(){return{push(){},replace(){},refresh(){}}}export function usePathname(){return "/admin/automations/x"}export function useSearchParams(){return new URLSearchParams()}' })
 registerHooks({
   resolve(specifier, context, next) {
 
@@ -60,7 +60,7 @@ const AUTOMATION = {
   trigger: { kind: 'schedule', cron: '0 9 * * MON', timezone: 'UTC' },
   rules: {},
   conditions: {},
-  actions: [],
+  actions: [{ kind: 'send_notification', to: 'initiator', body: 'Schedule event.' }],
   errorMessage: null,
 }
 
@@ -84,6 +84,12 @@ function setSelectValue(sel: HTMLSelectElement, value: string) {
   sel.dispatchEvent(new window.Event('change', { bubbles: true }))
 }
 
+function setInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')!.set!
+  setter.call(input, value)
+  input.dispatchEvent(new window.Event('input', { bubbles: true }))
+}
+
 async function mount(): Promise<HTMLElement> {
   posted.length = 0
   const host = document.createElement('div')
@@ -95,6 +101,7 @@ async function mount(): Promise<HTMLElement> {
         <AutomationBuilder
           automation={AUTOMATION}
           runs={[]}
+          scopeOptions={{ subsidiaries: [], departments: [], locations: [], positions: [], users: [], roles: [], processTemplates: [] }}
           canSimulate={false}
           canManage={true}
           saveFailed="Save failed"
@@ -139,16 +146,19 @@ test('the saved trigger carries the restored per-kind config', async () => {
     await act(async () => {
       setSelectValue(kind, 'schedule')
     })
+    await act(async () => {
+      setInputValue(host.querySelector('#ab-cron') as HTMLInputElement, '15 9 * * MON')
+    })
     const save = [...host.querySelectorAll('button')].find(
-      (b) => (b.textContent ?? '').trim() === 'Save trigger',
+      (b) => (b.textContent ?? '').trim() === 'Save',
     )
-    assert.ok(save, 'save trigger button renders')
+    assert.ok(save, 'single save button renders')
     await act(async () => {
       save.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     })
-    assert.equal(posted.length, 1, 'one PATCH posts the trigger')
+    assert.equal(posted.length, 1, 'one PATCH posts the complete recipe')
     const trigger = (posted[0]!.body as { trigger: Record<string, unknown> }).trigger
-    assert.equal(trigger.cron, '0 9 * * MON', 'posted trigger lost the cron')
+    assert.equal(trigger.cron, '15 9 * * MON', 'posted trigger lost the edited cron')
     assert.equal(trigger.kind, 'schedule')
   } finally {
     host.remove()

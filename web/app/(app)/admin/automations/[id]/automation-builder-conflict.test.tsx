@@ -7,7 +7,7 @@ import test from 'node:test'
 
 // jsdom first: the builder reads browser globals at render.
 const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/automations/00000000-0000-4000-8000-000000000000', matchMediaMatches: false, resizeObserver: false })
+await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/automations/00000000-0000-4000-8000-000000000000', matchMediaMatches: false, resizeObserver: true })
 
 const posted: { url: string; body: Record<string, unknown> }[] = []
 let patchStatus = 200
@@ -67,7 +67,7 @@ const AUTOMATION = {
   trigger: { kind: 'manual' },
   rules: {},
   conditions: {},
-  actions: [],
+  actions: [{ kind: 'send_notification', to: 'initiator', body: 'Review the automation.' }],
   errorMessage: null,
 }
 
@@ -84,6 +84,7 @@ async function mount(): Promise<HTMLElement> {
         <AutomationBuilder
           automation={AUTOMATION}
           runs={[]}
+          scopeOptions={{ subsidiaries: [], departments: [], locations: [], positions: [], users: [], roles: [], processTemplates: [] }}
           canSimulate={false}
           canManage={true}
           saveFailed="Save failed"
@@ -102,11 +103,17 @@ function setInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new window.Event('input', { bubbles: true }))
 }
 
-async function clickSaveName(host: HTMLElement) {
+function setSelectValue(select: HTMLSelectElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(select), 'value')!.set!
+  setter.call(select, value)
+  select.dispatchEvent(new window.Event('change', { bubbles: true }))
+}
+
+async function clickSave(host: HTMLElement) {
   const save = [...host.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === 'Save name',
+    (b) => (b.textContent ?? '').trim() === 'Save',
   )
-  assert.ok(save, 'save name button renders')
+  assert.ok(save, 'single save button renders')
   await act(async () => {
     save.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
   })
@@ -116,16 +123,51 @@ async function clickSaveName(host: HTMLElement) {
   })
 }
 
-test('a save carries the loaded version and advances on success', async () => {
+test('one save carries the loaded version and complete edited recipe', async () => {
   const host = await mount()
   try {
-    await clickSaveName(host)
+    const name = host.querySelector('#ab-name') as HTMLInputElement
+    await act(async () => setInputValue(name, 'Automation ready'))
+    await clickSave(host)
     assert.equal(posted.length, 1, 'one PATCH posts the save')
     assert.equal(posted[0]!.body.expectedVersion, 3, 'the save carries the loaded version')
+    assert.equal(posted[0]!.body.name, 'Automation ready', 'the save posts the edited name')
+    assert.deepEqual(posted[0]!.body.trigger, { kind: 'manual' }, 'the save posts the complete trigger')
+    assert.deepEqual(posted[0]!.body.actions, AUTOMATION.actions, 'the save posts the complete action list')
     assert.ok(
       (host.textContent ?? '').includes('v4'),
       'the header advances to the saved version',
     )
+  } finally {
+    host.remove()
+  }
+})
+
+test('the update-field editor preserves the selected value type', async () => {
+  const host = await mount()
+  try {
+    const actionKind = [...host.querySelectorAll('select')].find((select) =>
+      [...select.options].some((option) => option.value === 'update_field'),
+    )
+    assert.ok(actionKind, 'action kind selector renders')
+    await act(async () => setSelectValue(actionKind as HTMLSelectElement, 'update_field'))
+    await act(async () => {
+      setInputValue(host.querySelector('#ab-action-entity-0') as HTMLInputElement, 'employment')
+      setInputValue(host.querySelector('#ab-action-field-0') as HTMLInputElement, 'status')
+    })
+    await act(async () => {
+      const valueType = [...host.querySelectorAll('select')].find((select) =>
+        [...select.options].some((option) => option.value === 'number'),
+      )
+      assert.ok(valueType, 'value type selector renders')
+      setSelectValue(valueType as HTMLSelectElement, 'number')
+    })
+    await act(async () => {
+      setInputValue(host.querySelector('#ab-action-value-0') as HTMLInputElement, '42')
+      host.querySelector('#ab-action-value-0')!.dispatchEvent(new window.FocusEvent('focusout', { bubbles: true }))
+    })
+    await clickSave(host)
+    assert.deepEqual(posted[0]!.body.actions, [{ kind: 'update_field', entity: 'employment', field: 'status', value: 42 }])
   } finally {
     host.remove()
   }
@@ -140,7 +182,7 @@ test('a 409 parks the named refusal, keeps the typed edits, and offers Reload', 
     await act(async () => {
       setInputValue(name, 'Renamed by the second editor')
     })
-    await clickSaveName(host)
+    await clickSave(host)
     const text = host.textContent ?? ''
     assert.ok(
       text.includes('now at version 5'),
