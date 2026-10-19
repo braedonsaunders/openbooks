@@ -264,7 +264,7 @@ test('DELETE of a never-effective schedule removes it, and of an ended schedule 
     const audits = (await db.execute<{ action: string }>(sql`select action from audit_log where org_id=${f.orgId} and table_name='item_price_schedules' and row_id=${futureId} order by id desc limit 1`)).rows
     assert.equal(audits[0]?.action, 'delete')
 
-    routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
+    routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, allowedSubsidiaryIds: null }
     const endedResponse = await POST(new Request(`http://openbooks.test/api/items/${f.itemId}/prices`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'Idempotency-Key': randomUUID() },
@@ -292,7 +292,7 @@ test('POST over a retained prior version is refused instead of forking history',
     // must edit it instead of forking a second row.
     const deactivated = await patchSchedule(f, { id: scheduleId, revision: 0, ...scheduleBody(f, effectiveFrom, '100.0000'), isActive: false })
     assert.equal(deactivated.status, 200)
-    routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
+    routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, allowedSubsidiaryIds: null }
     const forked = await POST(new Request(`http://openbooks.test/api/items/${f.itemId}/prices`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'Idempotency-Key': randomUUID() },

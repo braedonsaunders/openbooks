@@ -38,7 +38,8 @@ stubModules({
   },
 })
 
-const { GET, PATCH, DELETE } = (await import('./route.ts?item-price-route-boundary-test')) as typeof import('./route.ts')
+const routeUrl = './route.ts?item-price-route-boundary-test'
+const { GET, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
 
 function reset(): void {
   state.allowedSubsidiaryIds = null
