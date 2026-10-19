@@ -3,7 +3,8 @@ import { registerHooks } from "node:module";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../platform/db.ts";
+import { db, pool, withOrgContext } from "../platform/db.ts";
+import { recordProjectFinancialAdjustment } from "./financial-adjustments.ts";
 import {
   findDuplicateProjects,
   mergeProjects,
@@ -245,6 +246,40 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
     assert.equal(again.auditId, null);
     const after = await findDuplicateProjects(org.orgId);
     assert.ok(!after.some((group) => group.projects.some((p) => p.id === duplicate)));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("project merge refuses append-only financial evidence before moving references", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-IMM-1", "Survivor");
+    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-IMM-2", "Duplicate");
+    await withOrgContext(org.orgId, () => recordProjectFinancialAdjustment({
+      orgId: org.orgId,
+      projectId: duplicate,
+      adjustmentDate: "2026-08-04",
+      measure: "actual_cost",
+      amount: "25.00",
+      reason: "recorded project cost",
+    }));
+
+    await assert.rejects(
+      previewProjectMerge(org.orgId, survivor, duplicate),
+      /append-only history .*project_financial_adjustments.*keep the duplicate as the historical owner/,
+    );
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: null }),
+      /append-only history .*project_financial_adjustments.*keep the duplicate as the historical owner/,
+    );
+    const adjustment = await db.execute<{ project_id: string }>(sql`
+      select project_id from project_financial_adjustments
+       where org_id = ${org.orgId} and project_id = ${duplicate}`);
+    assert.equal(adjustment.rows.length, 1);
+    const marker = await db.execute<{ is_active: boolean }>(sql`
+      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`);
+    assert.equal(marker.rows[0]?.is_active, true);
   } finally {
     await dropScratchOrg(org.orgId);
   }
