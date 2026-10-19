@@ -113,6 +113,12 @@ test('a transfer respects a destination entity close on its effective fiscal cal
   try {
     const calendarId = randomUUID();
     const periodId = randomUUID();
+    const priorPeriodId = randomUUID();
+    const priorDefaultPeriodId = randomUUID();
+    const defaultCalendar = (await db.execute<{ id: string }>(sql`
+      select id from fiscal_calendars where org_id = ${f.org.orgId} and is_default and is_active
+    `)).rows[0];
+    assert.ok(defaultCalendar, 'the scratch organization has an active default calendar');
     await db.execute(sql`
       insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone,
                                     adjustment_period_enabled, is_default, is_active, config)
@@ -121,11 +127,21 @@ test('a transfer respects a destination entity close on its effective fiscal cal
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
                                       is_adjustment, fiscal_calendar_id)
+      values (${priorDefaultPeriodId}, ${f.org.orgId}, 2026, 6, '2026-06 Default', '2026-06-01', '2026-06-30', false, ${defaultCalendar.id})
+    `);
+    await db.execute(sql`
+      insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
+                                      is_adjustment, fiscal_calendar_id)
+      values (${priorPeriodId}, ${f.org.orgId}, 2026, 6, '2026-06 Receiving', '2026-06-01', '2026-06-30', false, ${calendarId})
+    `);
+    await db.execute(sql`
+      insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
+                                      is_adjustment, fiscal_calendar_id)
       values (${periodId}, ${f.org.orgId}, 2026, 7, '2026-07 Receiving', '2026-07-01', '2026-07-31', false, ${calendarId})
     `);
     await db.execute(sql`
       insert into subsidiary_accounting_preferences (org_id, subsidiary_id, effective_from, fiscal_calendar_id, reason, created_by)
-      values (${f.org.orgId}, ${f.otherId}, '2026-01-01', ${calendarId}, 'Use the receiving entity calendar', ${f.actorId})
+      values (${f.org.orgId}, ${f.otherId}, '2026-07-01', ${calendarId}, 'Use the receiving entity calendar', ${f.actorId})
     `);
     await db.execute(sql`
       insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
