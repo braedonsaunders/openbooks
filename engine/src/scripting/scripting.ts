@@ -176,13 +176,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Validate the only JSON shape that a before_post custom mutation may carry.
- * Returning a message (rather than throwing) lets the sandbox record a normal
+ * Validate the only JSON shape that a before_submit or before_post custom
+ * mutation may carry. Returning a message lets the sandbox record a normal
  * failed script run, exactly like a non-whitelisted header field.
  */
-export function beforePostCustomMutationError(value: unknown): string | null {
+export function beforePostCustomMutationError(
+  value: unknown,
+  trigger: "before_submit" | "before_post" = "before_post",
+): string | null {
   if (!isRecord(value)) {
-    return "before_post scripts may only set custom to an object";
+    return `${trigger} scripts may only set custom to an object`;
   }
   const protectedKey = Object.keys(value).find((key) =>
     BEFORE_POST_PROTECTED_CUSTOM_FIELDS.has(key),
@@ -207,9 +210,9 @@ export function beforePostCustomControlsChanged(previous: unknown, next: unknown
 }
 
 /**
- * Merge a validated before_post custom mutation without replacing existing
- * posting controls. This remains a second, posting-layer guard in case a
- * caller ever supplies a ScriptOutcome without going through runScript.
+ * Merge a validated before_* custom mutation without replacing existing
+ * fields. This remains a second guard in case a caller supplies a
+ * ScriptOutcome without going through runScript.
  */
 export function mergeBeforePostCustomMutation(
   existing: unknown,
@@ -1164,8 +1167,8 @@ export async function runScript(
             durationMs: Date.now() - started,
           };
         }
-        if (ctx.trigger === "before_post" && k === "custom") {
-          const customError = beforePostCustomMutationError(v);
+        if ((ctx.trigger === "before_submit" || ctx.trigger === "before_post") && k === "custom") {
+          const customError = beforePostCustomMutationError(v, ctx.trigger);
           if (customError) {
             return {
               status: "error",
