@@ -18,10 +18,11 @@ import { invoiceServiceWork, serviceDepositCandidates } from "./billing.ts";
 import { completeVisit, recordVisitPart } from "./completion.ts";
 import { assignVisit, dispatchVisit, loadDispatchDay, moveVisitBooking } from "./dispatch.ts";
 import { ServiceError } from "./errors.ts";
-import { createServiceJob } from "./jobs.ts";
+import { completeServiceJob, createServiceJob, reopenServiceJob } from "./jobs.ts";
 import { getServiceVisit, listMyVisits } from "./reads.ts";
 import { createPortalServiceRequest, createServiceRequest, listPortalServiceRequests } from "./requests.ts";
 import { cancelVisit, setVisitFieldStatus } from "./visits.ts";
+import { requestDocumentVoid } from "../ledger/document-void.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 installEngineSeams();
@@ -233,6 +234,35 @@ test("agreement generation is idempotent, keeps skipped occurrences and supersed
     "every unscheduled visit from the new date belongs to the new version");
   assert.equal(after.find((visit) => visit.id === first!.id)?.cancelKind, "skipped", "the skip stands across versions");
   assert.equal((await generateAgreementVisits({ ...as(f, f.dispatcher), agreementId })).generated, 0, "regeneration under the new version is idempotent too");
+}));
+
+test("voiding a per-job invoice releases its billing link before reopening the job", enabled, async () => fixture(async (f) => {
+  const { job, visitId } = await newJob(f, { billingMode: "per_job" });
+  assert.ok(visitId);
+  const assigned = await assignVisit({ ...as(f, f.dispatcher), boardId: f.dispatchBoard, visitId, expectedRevision: 1, workerPartyId: f.techA, startsAt: at(f.today, "14:00") });
+  const dispatched = await dispatchVisit({ ...as(f, f.dispatcher), boardId: f.dispatchBoard, visitId, expectedRevision: assigned.visitRevision });
+  const enRoute = await setVisitFieldStatus({ ...as(f, f.techAUser), visitId, expectedRevision: dispatched.visitRevision, to: "en_route" });
+  const onSite = await setVisitFieldStatus({ ...as(f, f.techAUser), visitId, expectedRevision: enRoute.revision, to: "on_site" });
+  await completeVisit({ ...as(f, f.techAUser), visitId, expectedRevision: onSite.revision, workNotes: "Completed the repair." });
+  const completedJob = await completeServiceJob({ ...as(f, f.dispatcher), jobId: job.id, expectedRevision: job.revision });
+  const invoice = await invoiceServiceWork({ ...as(f, f.dispatcher), jobId: job.id });
+  await withBypassContext(async () => {
+    await submitAndReleaseIfUngated("customer_invoice", invoice.invoiceId, f.dispatcher);
+    await postDocument(invoice.invoiceId, await controlDeps(f.org.orgId), { audit: { actorId: f.dispatcher, source: "api" } });
+    const voided = await requestDocumentVoid({
+      documentId: invoice.invoiceId, orgId: f.org.orgId, actorId: f.dispatcher,
+      reason: "Correct the service invoice", reversalDate: f.today, source: "api",
+    });
+    assert.equal(voided.status, "voided");
+  });
+
+  const reopened = await reopenServiceJob({ ...as(f, f.dispatcher), jobId: job.id, expectedRevision: completedJob.revision, reason: "Correct the completed scope" });
+  assert.equal(reopened.status, "open");
+  const released = (await withBypassContext(() => db.execute<{ releasedAt: string | null; reason: string | null }>(sql`
+    select released_at as "releasedAt", release_reason as reason from service_billings
+     where org_id = ${f.org.orgId} and job_id = ${job.id} and invoice_document_id = ${invoice.invoiceId}`))).rows[0]!;
+  assert.ok(released.releasedAt);
+  assert.equal(released.reason, "The invoice was voided");
 }));
 
 test("two dispatchers assigning the same visit: exactly one booking wins and the other is refused as stale", enabled, async () => fixture(async (f) => {

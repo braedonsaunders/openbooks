@@ -18,6 +18,7 @@ import { policyOn } from "./policy.ts";
 import { lockRequest, setRequestStatus } from "./requests.ts";
 import { requestIsOpen, responseHours, visitIsFinished, type JobStatus, type ServicePriority, type VisitStatus } from "./status.ts";
 import { cancelVisitInTransaction, insertVisit, lockVisit, normalizeVisitInput, type VisitInput } from "./visits.ts";
+import { releaseVoidedBillings } from "./billing-release.ts";
 
 export type BillingMode = "per_job" | "per_visit" | "not_billable";
 
@@ -233,6 +234,7 @@ export async function updateServiceJob(actor: ServiceActor & { jobId: string; ex
     checkJobRevision(job, actor.expectedRevision);
     const allowed = await serviceAuthority(actor, "service.manage", job.subsidiaryId);
     if (job.status !== "open") throw new ServiceError("Only an open job changes.", { status: 409, code: "service_invalid_transition", remedy: "Reopen the job first." });
+    await releaseVoidedBillings(actor, job.id);
     const customer = await resolveServiceCustomer(actor.orgId, allowed, { customerPartyId: job.customerPartyId, serviceAddressId: input.serviceAddressId, contactId: input.contactId, subsidiaryId: job.subsidiaryId });
     const labor = await validateLabor(actor.orgId, input);
     const mode = billingMode(input.billingMode);
@@ -262,6 +264,7 @@ export async function replaceJobLines(actor: ServiceActor & { jobId: string; exp
     checkJobRevision(job, actor.expectedRevision);
     await serviceAuthority(actor, "service.manage", job.subsidiaryId);
     if (job.status !== "open") throw new ServiceError("Only an open job's lines change.", { status: 409, code: "service_invalid_transition", remedy: "Reopen the job first." });
+    await releaseVoidedBillings(actor, job.id);
     const before = (await db.execute(sql`select line_number, item_id, description, quantity::text, unit_price::text, tax_code_id from service_job_lines
       where org_id = ${actor.orgId} and job_id = ${job.id} order by line_number`)).rows;
     const lines = await normalizeLines(actor.orgId, actor.lines);
@@ -322,6 +325,7 @@ export async function reopenServiceJob(actor: ServiceActor & { jobId: string; ex
     checkJobRevision(job, actor.expectedRevision);
     await serviceAuthority(actor, "service.manage", job.subsidiaryId);
     if (job.status !== "completed") throw new ServiceError("Only a completed job is reopened.", { status: 409, code: "service_invalid_transition", remedy: "Reload the job." });
+    await releaseVoidedBillings(actor, job.id);
     const row = requireOne((await db.execute<StoredJob>(sql`update service_jobs set status = 'open', completed_at = null, completed_by = null,
         revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
       where org_id = ${actor.orgId} and id = ${job.id} and revision = ${job.revision} returning ${JOB_COLUMNS}`)).rows, "The job");

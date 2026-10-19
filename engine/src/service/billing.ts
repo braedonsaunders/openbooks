@@ -29,6 +29,7 @@ import { auditService, lockServiceFeature, requireOne, requireUuid, serviceAutho
 import { ServiceError, serviceDatabaseRefusal } from "./errors.ts";
 import { lockJob, type StoredJob } from "./jobs.ts";
 import { lockVisit } from "./visits.ts";
+import { releaseVoidedBillings } from "./billing-release.ts";
 
 /** quantity × unit price, exact, rounded once to the ledger's four places. */
 export function lineAmount(quantity: string, unitPrice: string): string {
@@ -63,18 +64,6 @@ export interface ServiceInvoicePlan {
   readonly lines: readonly (PlannedLine & { amount: string })[];
   readonly total: string;
   readonly currency: string;
-}
-
-/** Release billing links whose invoice was voided natively, so the work can be invoiced again. */
-async function releaseVoidedBillings(actor: ServiceActor, jobId: string): Promise<void> {
-  const voided = (await db.execute<{ id: string }>(sql`select b.id from service_billings b
-    join documents d on d.org_id = b.org_id and d.id = b.invoice_document_id
-    where b.org_id = ${actor.orgId} and b.job_id = ${jobId} and b.released_at is null and d.status = 'voided' for update of b`)).rows;
-  for (const row of voided) {
-    requireOne((await db.execute(sql`update service_billings set released_at = now(), released_by = ${actor.actorId}, release_reason = 'The invoice was voided'
-      where org_id = ${actor.orgId} and id = ${row.id} and released_at is null returning id`)).rows, "The billing release");
-    await auditService({ orgId: actor.orgId, table: "service_billings", rowId: row.id, action: "update", actorId: actor.actorId, after: { released: true }, reason: "The invoice was voided" });
-  }
 }
 
 async function attemptNumber(orgId: string, jobId: string, visitId: string | null): Promise<number> {
