@@ -539,6 +539,11 @@ test("voids reverse card effects: a receipt returns its tender, a sale takes bac
     await voidDocument(receiptId, "Receipt keyed against the wrong invoice");
     const restored = await accountState(org.orgId, cardId);
     assert.deepEqual([restored.balance, restored.status], ["500000", "active"]);
+    const breakage = await runStoredValueBreakage();
+    assert.deepEqual(breakage.orgErrors, []);
+    assert.equal(breakage.recognizedAccounts, 0);
+    const afterBreakageScan = await accountState(org.orgId, cardId);
+    assert.deepEqual([afterBreakageScan.balance, afterBreakageScan.recognized], ["500000", "0"]);
     // Now unspent, the sale voids and takes the card back out of circulation.
     await voidDocument(saleId, "Gift card sold in error");
     const ended = await accountState(org.orgId, cardId);

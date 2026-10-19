@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
+import { addMonthsClamped } from "../platform/civil-date.ts";
 import { fromUnits, neg, roundDiv } from "../money/money.ts";
 import {
   expireStoredValueAccount,
@@ -67,11 +68,22 @@ function requireRecorded(replayed: boolean, codeLast4: string): void {
 async function recognizeProportional(
   orgId: string,
   account: StoredValueAccountRow,
-  redeemedMinor: bigint,
   postingDate: string,
   period: string,
 ): Promise<boolean> {
   const program = await loadStoredValueProgram(orgId, account.programId);
+  const redemption = (await db.execute<{ redeemed: string }>(sql`
+    select coalesce(-sum(e.amount_minor), 0)::text as redeemed
+      from stored_value_entries e
+     where e.org_id = ${orgId} and e.account_id = ${account.id} and e.kind = 'redeem'
+       and not exists (
+         select 1 from stored_value_entries reversal
+          where reversal.org_id = e.org_id and reversal.account_id = e.account_id
+            and reversal.kind = 'reversal'
+            and reversal.idempotency_key = 'stored-value:void-reversal:' || e.id::text
+       )
+  `)).rows[0];
+  const redeemedMinor = BigInt(redemption?.redeemed ?? "0");
   if (!program.breakageIncomeAccountId) {
     throw storedValueRefusal({
       message: `The ${program.name} program recognizes proportional breakage but names no breakage income account.`,
@@ -276,7 +288,7 @@ async function processOrgBreakage(orgId: string): Promise<number> {
       join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
      where a.org_id = ${orgId} and a.status = 'active'
        and p.breakage_policy = 'remote' and a.balance_minor > 0
-       and a.last_activity_on < CURRENT_DATE - make_interval(months => p.inactivity_months)
+       and a.last_activity_on < ${today}::date - make_interval(months => p.inactivity_months)
      order by a.id
   `)).rows;
   for (const row of remote) {
@@ -286,18 +298,17 @@ async function processOrgBreakage(orgId: string): Promise<number> {
     if (account.status !== "active" || account.balanceMinor <= 0n) continue;
     const program = await loadStoredValueProgram(orgId, account.programId);
     if (program.breakagePolicy !== "remote") continue;
+    const cutoff = addMonthsClamped(today, -program.inactivityMonths);
+    if (account.lastActivityOn >= cutoff) continue;
     if (await recognizeRemote(orgId, account, today)) recognized++;
   }
 
-  const proportional = (await db.execute<ScanCandidate & { redeemed: string }>(sql`
-    select a.id, coalesce(-sum(e.amount_minor) filter (where e.kind = 'redeem'), 0)::text as redeemed
+  const proportional = (await db.execute<ScanCandidate>(sql`
+    select a.id
       from stored_value_accounts a
       join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
-      left join stored_value_entries e
-        on e.org_id = a.org_id and e.account_id = a.id and e.kind = 'redeem'
      where a.org_id = ${orgId} and a.status = 'active'
        and p.breakage_policy = 'proportional' and a.balance_minor > 0
-     group by a.id
      order by a.id
   `)).rows;
   for (const row of proportional) {
@@ -305,7 +316,7 @@ async function processOrgBreakage(orgId: string): Promise<number> {
     if (account.status !== "active" || account.balanceMinor <= 0n) continue;
     const program = await loadStoredValueProgram(orgId, account.programId);
     if (program.breakagePolicy !== "proportional") continue;
-    if (await recognizeProportional(orgId, account, BigInt(row.redeemed), today, period)) recognized++;
+    if (await recognizeProportional(orgId, account, today, period)) recognized++;
   }
   return recognized;
 }
