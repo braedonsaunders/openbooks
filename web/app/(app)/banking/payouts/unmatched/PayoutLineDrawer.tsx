@@ -61,6 +61,14 @@ interface PayoutSuggestion {
   explanation: string
 }
 
+interface PayoutSuggestionState {
+  lineId: string
+  suggestion: PayoutSuggestion | null
+  loadError: string | null
+  loading: boolean
+  rank: number
+}
+
 function confidenceVariant(confidence: string): 'success' | 'secondary' | 'outline' {
   if (confidence === 'high') return 'success'
   if (confidence === 'medium') return 'secondary'
@@ -79,34 +87,27 @@ export function PayoutLineDrawer({ line }: { line: PayoutLineDrawerData }) {
   const t = useTranslations('banking.pspUnmatched')
   const router = useRouter()
   const { busy, refusal, execute } = useAppAction()
-  const [suggestion, setSuggestion] = React.useState<PayoutSuggestion | null>(null)
-  const [loadError, setLoadError] = React.useState<string | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [rank, setRank] = React.useState(0)
+  const [suggestionState, setSuggestionState] = React.useState<PayoutSuggestionState | null>(null)
+  const currentState = suggestionState?.lineId === line.id ? suggestionState : null
+  const suggestion = currentState?.suggestion ?? null
+  const loadError = currentState?.loadError ?? null
+  const loading = currentState?.loading ?? true
+  const rank = currentState?.rank ?? 0
 
   React.useEffect(() => {
     let live = true
-    setSuggestion(null)
-    setLoadError(null)
-    setLoading(true)
-    setRank(0)
     fetch(`/api/psp/settlement-lines/${line.id}/suggestion`, { cache: 'no-store' })
       .then(async (res) => {
         if (!res.ok) {
-          if (live) setLoadError(await readApiErrorMessage(res, strings.proposalFailed))
+          const error = await readApiErrorMessage(res, strings.proposalFailed)
+          if (live) setSuggestionState({ lineId: line.id, suggestion: null, loadError: error, loading: false, rank: 0 })
           return
         }
         const body = (await res.json()) as { suggestion: PayoutSuggestion }
-        if (live) {
-          setSuggestion(body.suggestion)
-          setRank(0)
-        }
+        if (live) setSuggestionState({ lineId: line.id, suggestion: body.suggestion, loadError: null, loading: false, rank: 0 })
       })
       .catch(() => {
-        if (live) setLoadError(strings.proposalFailed)
-      })
-      .finally(() => {
-        if (live) setLoading(false)
+        if (live) setSuggestionState({ lineId: line.id, suggestion: null, loadError: strings.proposalFailed, loading: false, rank: 0 })
       })
     return () => {
       live = false
@@ -114,6 +115,9 @@ export function PayoutLineDrawer({ line }: { line: PayoutLineDrawerData }) {
   }, [line.id, strings.proposalFailed])
 
   const candidate = suggestion?.candidates[rank] ?? null
+  const selectRank = (nextRank: number) => setSuggestionState((current) =>
+    current?.lineId === line.id ? { ...current, rank: nextRank } : current,
+  )
 
   const onApprove = async (applyToSimilar: boolean) => {
     if (!suggestion || !candidate || candidate.kind === 'manual') return
@@ -213,7 +217,7 @@ export function PayoutLineDrawer({ line }: { line: PayoutLineDrawerData }) {
                     size="sm"
                     variant={entry.rank === rank ? 'default' : 'outline'}
                     disabled={busy}
-                    onClick={() => setRank(entry.rank)}
+                    onClick={() => selectRank(entry.rank)}
                   >
                     {entry.label}
                   </Button>
