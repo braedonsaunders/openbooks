@@ -1,6 +1,5 @@
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadMaintenance } from './_data'
-import { maintenanceSpec } from './view'
+import { maintenanceSpec, loadMaintenance } from './view'
 
 export const dynamic = 'force-dynamic'
 

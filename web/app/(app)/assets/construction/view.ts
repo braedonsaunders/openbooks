@@ -1,7 +1,12 @@
+import 'server-only'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import type { ConstructionData } from './_data'
+import { loadConstruction as loadConstructionData, type ConstructionData } from './_data'
 
 const f = ref<ConstructionData>()
+
+export function loadConstruction(sp: Record<string, string | string[] | undefined>): Promise<ConstructionData> {
+  return loadConstructionData(sp)
+}
 
 export function constructionSpec(data: ConstructionData): PageSpec {
   return page({

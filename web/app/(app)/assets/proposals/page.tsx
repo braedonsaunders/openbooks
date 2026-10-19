@@ -1,6 +1,5 @@
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadProposals } from './_data'
-import { proposalsSpec } from './view'
+import { loadProposals, proposalsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 

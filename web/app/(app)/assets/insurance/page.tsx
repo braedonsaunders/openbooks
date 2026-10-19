@@ -1,6 +1,5 @@
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadInsurance } from './_data'
-import { insuranceSpec } from './view'
+import { insuranceSpec, loadInsurance } from './view'
 
 export const dynamic = 'force-dynamic'
 

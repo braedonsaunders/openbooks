@@ -1,7 +1,12 @@
+import 'server-only'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import type { InsuranceData } from './_data'
+import { loadInsurance as loadInsuranceData, type InsuranceData } from './_data'
 
 const f = ref<InsuranceData>()
+
+export function loadInsurance(sp: Record<string, string | string[] | undefined>): Promise<InsuranceData> {
+  return loadInsuranceData(sp)
+}
 
 export function insuranceSpec(data: InsuranceData): PageSpec {
   return page({

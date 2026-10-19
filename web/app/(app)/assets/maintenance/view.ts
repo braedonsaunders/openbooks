@@ -1,7 +1,12 @@
+import 'server-only'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import type { MaintenanceData } from './_data'
+import { loadMaintenance as loadMaintenanceData, type MaintenanceData } from './_data'
 
 const f = ref<MaintenanceData>()
+
+export function loadMaintenance(sp: Record<string, string | string[] | undefined>): Promise<MaintenanceData> {
+  return loadMaintenanceData(sp)
+}
 
 export function maintenanceSpec(data: MaintenanceData): PageSpec {
   return page({

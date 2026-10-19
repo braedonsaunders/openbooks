@@ -1,6 +1,5 @@
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadConstruction } from './_data'
-import { constructionSpec } from './view'
+import { constructionSpec, loadConstruction } from './view'
 
 export const dynamic = 'force-dynamic'
 

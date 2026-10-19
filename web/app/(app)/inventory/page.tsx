@@ -1,6 +1,5 @@
 import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadInventory } from './loader'
-import { inventorySpec } from './view'
+import { inventorySpec, loadInventory } from './view'
 
 export const dynamic = 'force-dynamic'
 

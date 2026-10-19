@@ -112,7 +112,7 @@ function statusVariant(status: string): RebateRegisterRow['statusVariant'] {
   return 'secondary'
 }
 
-export async function loadRebates(sp: SearchParams): Promise<RebatesData> {
+export async function loadRebates(sp: Record<string, string | string[] | undefined>): Promise<RebatesData> {
   const t = await getTranslations('rebates')
   const authz = await requirePermission('documents.read')
   const orgId = authz.user.orgId

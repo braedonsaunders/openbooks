@@ -108,7 +108,7 @@ const f = ref<ContractorWithholdingData>()
 
 export function contractorWithholdingSpec(data: ContractorWithholdingData): PageSpec {
   return page({
-    route: BASE,
+    route: '/contractor-withholding',
     layout: 'list',
     header: [pageHeader({
       title: f('title'),
