@@ -9,6 +9,7 @@ import {
   PropertyManagementError,
   billDueLeaseCharges,
   recordSecurityDeposit,
+  reverseSecurityDepositTransaction,
 } from "./management.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -107,6 +108,29 @@ test("cross-currency deposit application refuses by name", { skip: !DB }, async 
       where a.org_id=${org.orgId} and jl.entry_id=${applied.entryId}`)).rows;
     assert.equal(legs.length, 1);
     assert.deepEqual(legs[0], { source: "CAD", target: "CAD", rate: "1.0000000000", sourceRef: "same_currency" });
+
+    const applicationId = (await db.execute<{ id: string }>(sql`
+      select a.id from applications a join journal_lines l on l.org_id=a.org_id and l.id=a.from_line_id
+       where a.org_id=${org.orgId} and l.entry_id=${applied.entryId} and a.unapplied_at is null`)).rows[0]!.id;
+    await db.execute(sql`update applications set unapplied_at=now(),updated_at=now(),updated_by=${actor}
+      where org_id=${org.orgId} and id=${applicationId} and unapplied_at is null`);
+    const reversed = await reverseSecurityDepositTransaction({
+      orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null,
+      transactionId: applied.id, occurredOn: org.date, reason: "Correct the applied deposit",
+    });
+    assert.equal(reversed.balance, "100.0000");
+    const journalState = (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where org_id=${org.orgId} and id=${applied.entryId}`)).rows[0]!.status;
+    assert.equal(journalState, "reversed", "the source journal and its book copies leave live history");
+    const selfSettlement = (await db.execute<{ amount: string; unapplied_at: string | null }>(sql`
+      select a.amount::text as amount,a.unapplied_at::text as unapplied_at
+        from applications a
+        join journal_lines source on source.org_id=a.org_id and source.id=a.from_line_id
+        join journal_lines mirror on mirror.org_id=a.org_id and mirror.id=a.to_line_id
+       where a.org_id=${org.orgId} and source.entry_id=${applied.entryId} and mirror.entry_id=${reversed.entryId}
+    `)).rows;
+    assert.deepEqual(selfSettlement, [{ amount: "50.0000", unapplied_at: null }],
+      "the original open AR line is settled against its mirror even after its invoice application was released");
   } finally {
     await dropScratchOrg(org.orgId);
   }

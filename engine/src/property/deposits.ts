@@ -6,7 +6,7 @@ import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
-import { postEntry } from "../journal/post-entry.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { cmp, neg } from "../money/money.ts";
 import { assertEnabled, assertLockedSubsidiaryInScope, audit, DEPOSIT_OFFSET_EXCLUDED_TYPES, exactMoney, PropertyManagementError, validDate, type DepositContextRow, type DepositReversalRow } from "./management-foundation.ts";
 import { depositBalance, depositPostingShape, depositReversalKind, isSecurityDepositImportConflict } from "./management-foundation.ts";
@@ -29,12 +29,6 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
       throw new PropertyManagementError("Property management feature is disabled");
     }
     await tx.execute(sql`select id from subsidiaries where org_id=${input.orgId} order by id for share`);
-    // Deposit journals are ordinary postings: the period resolves through
-    // the shared covering-period resolver (default calendar, regular
-    // periods, deterministic) before the lease lock is taken.
-    const depositPeriod = await resolveCoveringPeriod(tx, input.orgId, occurredOn);
-    if (!depositPeriod) throw new PropertyManagementError("An open GL period is required");
-    const depositPeriodId: string = depositPeriod.id;
     // The lease lock serializes balance-changing deposit activity. The
     // property lock (exclusive, like the rehome path's own) serializes a
     // concurrent subsidiary move, so the subsidiary below is read current
@@ -51,6 +45,11 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     const row = ctx.rows[0];
     if (!row) throw new PropertyManagementError("Lease not found");
     assertLockedSubsidiaryInScope(input.allowedSubsidiaryIds, row.subsidiary_id);
+    // Resolve after locking the property's current entity so a rehome cannot
+    // route a new deposit through another subsidiary's fiscal calendar.
+    const depositPeriod = await resolveCoveringPeriod(tx, input.orgId, occurredOn, row.subsidiary_id);
+    if (!depositPeriod) throw new PropertyManagementError("An open GL period is required");
+    const depositPeriodId: string = depositPeriod.id;
     const liability = (await tx.execute<{ type: string }>(sql`select type from accounts
       where org_id=${input.orgId} and id=${row.deposit_liability_account_id} for share`)).rows[0];
     if (!row.deposit_liability_account_id || !liability || !["liability_current_other", "liability_long_term"].includes(liability.type)) {
@@ -246,12 +245,6 @@ export async function reverseSecurityDepositTransaction(input: {
        for update of l
     `);
     if (!lease.rows[0]) throw new PropertyManagementError("Deposit transaction not found");
-    // Reversals are ordinary corrections: the period resolves through the
-    // shared covering-period resolver (default calendar, regular periods,
-    // deterministic) before the transaction lock is taken.
-    const reversalPeriod = await resolveCoveringPeriod(tx, input.orgId, occurredOn);
-    if (!reversalPeriod) throw new PropertyManagementError("An open GL period is required for the reversal date");
-    const reversalPeriodId: string = reversalPeriod.id;
     const context = (await tx.execute<DepositReversalRow>(sql`
       select t.*,p.subsidiary_id,p.currency,s.base_currency,je.book_id,
         exists(select 1 from security_deposit_transactions r where r.org_id=t.org_id and r.reversal_of_id=t.id) as already_reversed
@@ -267,6 +260,9 @@ export async function reverseSecurityDepositTransaction(input: {
     // The property lock above serializes a concurrent rehome with the
     // lease lock taken at the top: the subsidiary is current here.
     assertLockedSubsidiaryInScope(input.allowedSubsidiaryIds, row.subsidiary_id);
+    const reversalPeriod = await resolveCoveringPeriod(tx, input.orgId, occurredOn, row.subsidiary_id);
+    if (!reversalPeriod) throw new PropertyManagementError("An open GL period is required for the reversal date");
+    const reversalPeriodId: string = reversalPeriod.id;
     if (row.reversal_of_id || row.already_reversed) throw new PropertyManagementError("Deposit transaction is already a reversal or has already been reversed");
     // One period gate: the shared GL check replaces the raw
     // period_module_is_closed finder predicate. A reversal is new local
@@ -296,6 +292,7 @@ export async function reverseSecurityDepositTransaction(input: {
     // API. Reversal line ids come back keyed by line number for the
     // application re-linking below.
     const mirrorSource = (await tx.execute<{
+      id: string;
       line_number: number;
       account_id: string;
       subsidiary_id: string;
@@ -318,11 +315,18 @@ export async function reverseSecurityDepositTransaction(input: {
       tax_code_id: string | null;
       custom: unknown;
     }>(sql`
-      select line_number,account_id,subsidiary_id,amount::text as amount,currency,txn_amount::text as txn_amount,fx_rate::text as fx_rate,
+      select id,line_number,account_id,subsidiary_id,amount::text as amount,currency,txn_amount::text as txn_amount,fx_rate::text as fx_rate,
         party_id,department_id,project_id,location_id,class_id,equipment_unit_id,payment_card_id,extra_dims,
         quantity::text as quantity,unit,due_date::text as due_date,is_open_item,tax_code_id,custom
       from journal_lines where org_id=${input.orgId} and entry_id=${row.journal_entry_id} order by line_number
     `)).rows;
+    await lockApplicationEvidence(
+      tx,
+      input.orgId,
+      mirrorSource.filter((line) => line.is_open_item).map((line) => line.id),
+      [],
+      [row.journal_entry_id],
+    );
     const postedDepReversal = await postEntry(tx, {
       orgId: input.orgId,
       bookId: row.book_id,
@@ -361,30 +365,26 @@ export async function reverseSecurityDepositTransaction(input: {
       })),
     });
     const entryId = postedDepReversal.entryId;
+    await markEntryReversed(tx, { orgId: input.orgId, entryId: row.journal_entry_id, actorId: input.actorId });
     const reversalLineByNumber = new Map(postedDepReversal.lines.map((line) => [line.lineNumber, line.id]));
 
-    const applications = (await tx.execute(sql`
-      select a.*,source.line_number
-      from applications a join journal_lines source on source.id=a.from_line_id and source.org_id=a.org_id
-      where a.org_id=${input.orgId} and source.entry_id=${row.journal_entry_id} and a.unapplied_at is null for update of a
-    `));
-    if (applications.rows.length) {
+    await tx.execute(sql`
+      update applications a set unapplied_at=now(),updated_at=now(),updated_by=${input.actorId}
+        from journal_lines source
+       where a.org_id=${input.orgId} and source.org_id=a.org_id and source.id=a.from_line_id
+         and source.entry_id=${row.journal_entry_id} and source.is_open_item and a.unapplied_at is null
+    `);
+    for (const line of mirrorSource.filter((source) => source.is_open_item)) {
+      const reversalLineId = reversalLineByNumber.get(line.line_number);
+      if (!reversalLineId) throw new PropertyManagementError("Security deposit reversal is missing its mirrored line");
+      const amount = cmp(line.amount, "0") < 0 ? neg(line.amount) : line.amount;
+      const transactionAmount = cmp(line.txn_amount, "0") < 0 ? neg(line.txn_amount) : line.txn_amount;
       await tx.execute(sql`
-        update applications set unapplied_at=now(),updated_at=now(),updated_by=${input.actorId}
-        where org_id=${input.orgId} and unapplied_at is null and from_line_id in
-          (select id from journal_lines where org_id=${input.orgId} and entry_id=${row.journal_entry_id})
+        insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,
+          target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by,updated_by)
+        values(${input.orgId},${line.id},${reversalLineId},${amount},${amount},${transactionAmount},${line.currency},
+          ${transactionAmount},${line.currency},1,'same_currency','Security deposit reversal',${occurredOn},${input.actorId},${input.actorId})
       `);
-      for (const application of applications.rows) {
-        const reversalLineId = reversalLineByNumber.get(Number(application.line_number));
-        if (!reversalLineId) throw new PropertyManagementError("Security deposit reversal is missing its mirrored line");
-        await tx.execute(sql`
-          insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,
-            target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by,updated_by)
-          values(${input.orgId},${application.from_line_id},${reversalLineId},${application.amount},${application.source_amount},
-            ${application.source_transaction_amount},${application.source_transaction_currency},${application.target_transaction_amount},${application.target_transaction_currency},
-            ${application.settlement_rate},${application.settlement_rate_source},'Security deposit reversal',${occurredOn},${input.actorId},${input.actorId})
-        `);
-      }
     }
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,journal_entry_id,reversal_of_id,memo,created_by,updated_by)

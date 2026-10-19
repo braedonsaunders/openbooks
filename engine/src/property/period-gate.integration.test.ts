@@ -147,6 +147,23 @@ test("rent levelling refuses a user-closed period", { skip: !DB }, async () => {
   }
 });
 
+test("rent levelling resolves the lease's effective subsidiary calendar", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const leaseId = await seedLevellingLease(org);
+    const periodId = await useEntityPostingCalendar(org);
+    await closeEntityGl(org, periodId);
+    const before = await journalCount(org.orgId);
+    await assert.rejects(
+      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null, asOf: org.date, onlyLeaseId: leaseId }),
+      /The GL period covering .* is closed; straight-line rent cannot post into it/,
+    );
+    assert.equal(await journalCount(org.orgId), before, "the entity close leaves no rent accrual journal");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("rent levelling refuses a source-owned imported lock", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
@@ -176,6 +193,53 @@ async function seedDepositLease(org: ScratchOrg, tag: string, subsidiaryId = org
     values(${leaseId},${org.orgId},${propertyId},${org.customerId},${`DEP-F2-${tag}`},'active',${org.date})`);
   return leaseId;
 }
+
+async function useEntityPostingCalendar(org: ScratchOrg): Promise<string> {
+  const calendarId = randomUUID();
+  const periodId = randomUUID();
+  await db.execute(sql`insert into fiscal_calendars (id,org_id,name,is_active,is_default)
+    values (${calendarId},${org.orgId},'Entity property calendar',true,false)`);
+  await db.execute(sql`insert into accounting_periods
+    (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on)
+    select ${periodId},org_id,${calendarId},fiscal_year,period_number,'Entity July',starts_on,ends_on
+      from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`);
+  await db.execute(sql`insert into subsidiary_accounting_preferences
+    (org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason)
+    values (${org.orgId},${org.subsidiaryId},'2026-07-01',${calendarId},'Use the entity property calendar')`);
+  return periodId;
+}
+
+async function closeEntityGl(org: ScratchOrg, periodId: string): Promise<void> {
+  await db.execute(sql`insert into period_locks
+    (org_id,period_id,book_id,subsidiary_id,module,state,reason)
+    values (${org.orgId},${periodId},${org.bookId},${org.subsidiaryId},'gl','closed','Entity GL close')`);
+}
+
+test("security deposits resolve recording and reversal periods through the property's entity calendar", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const leaseId = await seedDepositLease(org, "entity-calendar");
+    const periodId = await useEntityPostingCalendar(org);
+    const recorded = await recordSecurityDeposit({
+      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId,
+      occurredOn: org.date, kind: "received", amount: "100",
+    });
+    await closeEntityGl(org, periodId);
+    const before = await journalCount(org.orgId);
+    await assert.rejects(recordSecurityDeposit({
+      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId,
+      occurredOn: org.date, kind: "received", amount: "10",
+    }), /An open GL period is required/);
+    await assert.rejects(reverseSecurityDepositTransaction({
+      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, transactionId: recorded.id,
+      occurredOn: org.date, reason: "Correct the deposit in its entity period",
+    }), /An open GL period is required for the reversal date/);
+    assert.equal(await journalCount(org.orgId), before, "entity-closed deposit activity posts no journal");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("open period: a deposit still records (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {
   const org = await createScratchOrg();

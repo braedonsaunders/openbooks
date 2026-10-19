@@ -186,10 +186,9 @@ export async function levelLeaseRentStraightLine(
         throw new PropertyManagementError(`Property for lease ${lease.leaseNumber} has no rent income account`);
       }
 
-      // The levelling accrual is an ordinary posting: the period resolves
-      // through the shared covering-period resolver (default calendar,
-      // regular periods, deterministic).
-      const levelPeriod = await resolveCoveringPeriod(db, orgId, asOf);
+      // The levelling accrual is an ordinary posting: resolve it in the
+      // property's effective subsidiary calendar.
+      const levelPeriod = await resolveCoveringPeriod(db, orgId, asOf, lease.subsidiaryId);
       if (!levelPeriod) throw new PropertyManagementError(`No accounting period covers ${asOf}`);
       const levelPeriodId: string = levelPeriod.id;
       const ctx = (await db.execute<{ book_id: string | null }>(sql`
