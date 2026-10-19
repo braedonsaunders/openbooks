@@ -69,7 +69,8 @@ test('an unresolved statutory account refuses normalization atomically', { skip:
     const before=await snapshot(org.orgId);
     await assert.rejects(db.transaction(async tx=>{ await tx.execute(sql.raw(migration)); }),error=>{
       for(let cause:unknown=error;cause&&typeof cause==='object';cause=(cause as {cause?:unknown}).cause) {
-        if((cause as {message?:string}).message?.includes('map the statutory slot'))return true;
+        const detail=cause as {code?:string;message?:string};
+        if(detail.code==='P0001'&&detail.message?.includes('map the statutory slot'))return true;
       }
       return false;
     });
