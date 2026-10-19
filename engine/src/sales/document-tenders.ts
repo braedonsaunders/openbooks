@@ -717,10 +717,12 @@ export async function resolveCashPostingTenders(
       continue;
     }
     const accounts = (await runner.execute<{
-      program_id: string; kind: string; customerPartyId: string | null; status: string; expiresOn: string | null;
+      program_id: string; kind: string; customerPartyId: string | null; status: string;
+      expiresOn: string | null; liabilityAccountId: string | null;
     }>(sql`
       select program_id as program_id, kind, customer_party_id as "customerPartyId",
-             status, expires_on::text as "expiresOn" from stored_value_accounts
+             status, expires_on::text as "expiresOn",
+             liability_account_id as "liabilityAccountId" from stored_value_accounts
        where org_id = ${orgId} and id = ${row.storedValueAccountId}
     `)).rows;
     const programId = accounts[0]?.program_id;
@@ -760,7 +762,8 @@ export async function resolveCashPostingTenders(
       }
     }
     const program = await loadStoredValueProgram(orgId, programId, runner);
-    const liabilityAccountId = await programLiabilityAccount(orgId, program, runner);
+    const liabilityAccountId = accounts[0].liabilityAccountId
+      ?? await programLiabilityAccount(orgId, program, runner);
     resolved.push({
       kind: row.kind,
       methodLabel: row.methodLabel,
