@@ -77,7 +77,7 @@ export const CRM_SETUP_ENTITIES: SetupEntity[] = [
       { key: 'probability', kind: 'integer', min: 0, max: 100, defaultValue: 0, labelKey: 'crm.fields.probability' },
       { key: 'defaultForecastCategory', kind: 'select', required: true, defaultValue: 'upside', options: FORECAST_CATEGORY_OPTIONS, labelKey: 'crm.fields.forecastCategory' },
       { key: 'isClosed', kind: 'boolean', labelKey: 'crm.setup.fields.isClosed' },
-      { key: 'isWon', kind: 'boolean', showWhen: { field: 'isClosed', in: [true] }, clearWhenHidden: true, labelKey: 'crm.setup.fields.isWon' },
+      { key: 'isWon', kind: 'boolean', showWhen: { field: 'isClosed', in: ['true'] }, clearWhenHidden: true, labelKey: 'crm.setup.fields.isWon' },
       { key: 'isDefault', kind: 'boolean', labelKey: 'crm.setup.fields.isDefault' },
       { key: 'isActive', kind: 'boolean', defaultValue: true, labelKey: 'crm.setup.fields.isActive' },
       { key: 'requiresLines', kind: 'boolean', labelKey: 'crm.setup.fields.requiresLines' },

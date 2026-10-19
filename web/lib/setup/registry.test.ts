@@ -43,6 +43,9 @@ test('CRM setup lists are registry-backed, archived instead of deleted, and reta
     assert.equal(entity.naturalKey, 'key')
     assert.equal(entity.rehomed, true)
   }
+  const isWon = entities[1]!.fields.find((field) => field.key === 'isWon')!
+  assert.equal(setupFieldVisible(isWon, { isClosed: true }), true)
+  assert.equal(setupFieldVisible(isWon, { isClosed: false }), false)
   assert.ok(!setupEntitiesByGroup().get('sales')?.some((entity) => entity.key.startsWith('crm-')))
 })
 
