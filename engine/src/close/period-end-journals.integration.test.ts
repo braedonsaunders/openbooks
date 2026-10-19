@@ -59,7 +59,7 @@ async function incomeStatementTotal(org: ScratchOrg, endsOn: string): Promise<st
 test("generation closes every income-statement balance into retained earnings once, and reruns post nothing", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const { actors, december } = await readyYear(org);
+    const { actors, year, december } = await readyYear(org);
     const preview = await previewPeriodEndJournals(org.orgId, { periodId: december });
     assert.deepEqual(preview.problems, []);
     const entity = preview.entities.find((candidate) => candidate.subsidiaryId === org.subsidiaryId)!;
@@ -321,7 +321,7 @@ test("generation refuses an unready year by name and posts nothing", { skip: !DB
 test("period-end readiness scopes unassigned documents by effective posting date", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const { actors, year, december } = await readyYear(org);
+    const { actors, december } = await readyYear(org);
     const decemberEnd = (await db.execute<{ ends_on: string }>(sql`
       select ends_on::text as ends_on from accounting_periods
        where org_id = ${org.orgId} and id = ${december}`)).rows[0]?.ends_on;
