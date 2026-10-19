@@ -34,9 +34,9 @@ export const POST = defineRoute({
         orgId: user.orgId,
         actorId: user.id,
         assetId: body.assetId,
-        remainingConsiderationMinor: await parseCostAmountMinor(user.orgId, body.remainingConsideration, body.currency),
+        remainingConsiderationMinor: await parseCostAmountMinor(user.orgId, body.remainingConsideration, body.currency, { allowZero: true }),
         costsNotYetRecognizedMinor: body.costsNotYetRecognized
-          ? await parseCostAmountMinor(user.orgId, body.costsNotYetRecognized, body.currency)
+          ? await parseCostAmountMinor(user.orgId, body.costsNotYetRecognized, body.currency, { allowZero: true })
           : 0n,
         reason: body.reason,
         assessedOn: body.assessedOn,

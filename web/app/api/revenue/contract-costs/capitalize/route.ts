@@ -45,7 +45,7 @@ export const POST = defineRoute({
     try {
       const amountMinor = await parseCostAmountMinor(user.orgId, body.amount, body.currency)
       const renewalCommissionMinor = body.renewalCommission
-        ? await parseCostAmountMinor(user.orgId, body.renewalCommission, body.currency)
+        ? await parseCostAmountMinor(user.orgId, body.renewalCommission, body.currency, { allowZero: true })
         : undefined
       const result = await capitalizeContractCost({
         orgId: user.orgId,
