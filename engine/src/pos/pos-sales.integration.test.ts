@@ -194,12 +194,14 @@ test("a full discount needs the register override permission", { skip: !DB }, as
 
 test("voided POS sales do not count toward session totals or expected cash", { skip: !DB }, async () => {
   const f = await fixture();
+  let stage = "preparing the service item";
   try {
     const serviceItem = await withBypassContext(() => db.execute<{ id: string }>(sql`
       update items set recognition_rule_id = null, deferred_account_id = null
        where org_id = ${f.org.orgId} and id = ${f.org.items.service}
        returning id`));
     assert.equal(serviceItem.rows.length, 1, 'the sale fixture uses a non-recurring service item');
+    stage = "completing the sale";
     const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
       lines: [{ itemId: f.org.items.service, quantity: "1" }],
       payments: [{ kind: "cash", tendered: "10.00" }],
@@ -207,6 +209,7 @@ test("voided POS sales do not count toward session totals or expected cash", { s
     }), cashier, pricing));
     assert.equal(sold.total, "10.0000");
 
+    stage = "requesting the void";
     const requested = await withOrg(f.org.orgId, () => requestDocumentVoid({
       documentId: sold.documentId,
       orgId: f.org.orgId,
@@ -216,12 +219,20 @@ test("voided POS sales do not count toward session totals or expected cash", { s
       source: "api",
     }));
     assert.equal(requested.status, "voided");
+    stage = "completing the void";
     await withOrg(f.org.orgId, () => completeRequestedDocumentVoid(sold.documentId, f.org.orgId, null));
 
+    stage = "reading the session summary";
     const summary = await withOrg(f.org.orgId, () => readSessionSummary(db, f.org.orgId, f.sessionId, null));
     assert.deepEqual([summary.saleCount, summary.salesTotalMinor, summary.saleCashMinor, summary.expectedCashMinor], [0, 0n, 0n, 0n]);
+    stage = "listing the session";
     const sessions = await withOrg(f.org.orgId, () => listSessions(db, f.org.orgId, { registerId: f.registerId }, null));
     assert.deepEqual([sessions.rows[0]?.saleCount, sessions.rows[0]?.salesTotalMinor], [0, "0"]);
+  } catch (error) {
+    const detail = error instanceof Error
+      ? `${error.name}: ${error.message.replace(/\s+/g, " ")}; cause: ${error.cause instanceof Error ? error.cause.message.replace(/\s+/g, " ") : String(error.cause ?? "")}`
+      : String(error);
+    assert.fail(`Voided POS sales scenario failed while ${stage}: ${detail}`);
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
