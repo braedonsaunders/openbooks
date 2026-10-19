@@ -20,6 +20,62 @@ const evidence: PreflightTransitionEvidence = {
   pendingBeforeConsumer: new Set([next]), currentBody,
 };
 
+for (const definition of [
+  {
+    name: "scheduling",
+    basename: "0737_unified_scheduling_patterns_requests_attendance",
+    requirements: [
+      ["0737.scheduling_ledger_missing", "The unified scheduling tables this migration extends are unavailable", "generated/0583_unified_schedule_boards.sql"],
+      ["0737.retirement_fence_missing", "The tenant retirement fence is unavailable", "generated/0626_tenant_retirement.sql"],
+    ],
+  },
+  {
+    name: "equity lifecycle",
+    basename: "0738_equity_instrument_lifecycle",
+    requirements: [
+      ["0738.equity_tables_missing", "The equity tables this migration extends are unavailable", "generated/0733_equity_cap_table.sql"],
+    ],
+  },
+]) {
+  test(`${definition.name} waits for exact pending prerequisites while preserving catalog and data refusals`, () => {
+    const migration = `generated/${definition.basename}.sql`;
+    const publishers = definition.requirements.map(row => row[2]!);
+    const input = {
+      migration, consumerSql: read(`preflight/${definition.basename}.sql`),
+      published: new Map([migration, ...publishers].map(file => [file, read(file)])),
+      pendingBeforeConsumer: new Set(publishers),
+      findings: definition.requirements.map(([code, subject]) => ({
+        migration, code: code!, subject: subject!, severity: "refuse" as const,
+        detail: "The required native contract is absent", remedy: "Apply the published prerequisite",
+      })),
+    };
+    assert.equal(preflightNeedsPendingPrerequisite(input), true);
+    for (const [index, publisher] of publishers.entries()) {
+      // A recorded publisher with a missing object is drift, even if another
+      // independent prerequisite has not yet been installed.
+      assert.equal(preflightNeedsPendingPrerequisite({ ...input,
+        pendingBeforeConsumer: new Set(publishers.filter(file => file !== publisher)),
+        recordedPrerequisites: new Map([[publisher, hash(read(publisher))]]),
+      }), false);
+      assert.equal(preflightNeedsPendingPrerequisite({ ...input,
+        findings: [input.findings[index]!], pendingBeforeConsumer: new Set([publisher]),
+      }), true);
+    }
+    for (const file of [migration, ...publishers]) {
+      const changed = new Map(input.published); changed.set(file, changed.get(file)! + "\n");
+      assert.equal(preflightNeedsPendingPrerequisite({ ...input, published: changed }), false);
+    }
+    for (const changed of [
+      { consumerSql: input.consumerSql + "\n" },
+      { pendingBeforeConsumer: new Set<string>() },
+      { findings: [] },
+      { findings: [...input.findings, { ...input.findings[0]!, code: `${definition.basename.slice(0, 4)}.objects_exist` }] },
+      { findings: [{ ...input.findings[0]!, subject: "Unknown prerequisite" }] },
+      { findings: [{ ...input.findings[0]!, migration: "generated/0001_baseline.sql" }] },
+    ]) assert.equal(preflightNeedsPendingPrerequisite({ ...input, ...changed }), false);
+  });
+}
+
 test("reporting prerequisites defer only to their exact earlier pending publishers", () => {
   const migration = "generated/0726_payroll_ca_opening_reporting_source.sql";
   const publishers = ["generated/0710_payroll_opening_legal_employer_authority.sql", "generated/0719_payroll_opening_levy_source_authority.sql", "generated/0725_payroll_opening_levy_source_successors.sql"];

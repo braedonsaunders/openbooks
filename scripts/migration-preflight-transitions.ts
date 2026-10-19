@@ -95,6 +95,7 @@ const PREREQUISITE_PUBLISHERS = new Map([
   ["generated/0568_payroll_employee_employer_assignments.sql", "9d7d85b95d5a03f9a099babf18bdc9d77f07c86451250fa131aef55d20db980e"],
   ["generated/0401_clone_authority_role_bypass.sql", "493512b3fe66d23eeac33e9df1479a558fe47f3d78d6ba7a8c89fb646c1ceb5a"],
   ["generated/0579_bound_sales_clone_source_matching.sql", "fa8012e50ece4b535b06c8b06651c873541625325d83b1e5b4304b2337dc143c"],
+  ["generated/0583_unified_schedule_boards.sql", "73711881b0b413296e9be7eb72cdc960f9e9777f7b8c6c2b376ca910d0c442ca"],
   ["generated/0605_payroll_adjudicated_holiday_obligations.sql", "9ff4c24b2bb9d2227d2985cde027e6c31c389cbb9ba276f3a85bb71a8c069928"],
   ["generated/0619_operating_profiles_production_extensions.sql", "42daad13839b4303794f5c7ede20d0c3a02387c789ae4db41316ea6c2a2728fa"],
   ["generated/0626_tenant_retirement.sql", "4da9e2c44bff6ed85de4fa5eebf94075070e86f0308f65e243bb5c3a22352988"],
@@ -103,8 +104,24 @@ const PREREQUISITE_PUBLISHERS = new Map([
   ["generated/0719_payroll_opening_levy_source_authority.sql", "e22ac82217135ce739381cc215a387d60332c1ec64783c0a548f117ff9086c3e"],
   ["generated/0725_payroll_opening_levy_source_successors.sql", "29993271361b124a7c1bf9f50d0553bab5848476b486604d012367402918fc3e"],
   ["generated/0727_document_explicit_fx_rate_evidence.sql", "f7a2bc15649388124fdda0ad27ef9d4e48b4fb5e7769ea31de1f5197d76f28fe"],
+  ["generated/0733_equity_cap_table.sql", "dc61a5ec215bbb352ef9f6459a03d3f6f96c2d4fc8ecfca80f0e815dfc66f841"],
 ]);
 const PREREQUISITE_CONSUMERS = new Map<string, { source: string; preflight: string; prerequisites: ReadonlyMap<string, readonly string[]> }>([
+  ["generated/0737_unified_scheduling_patterns_requests_attendance.sql", {
+    source: "3dea9e5cb2416a9f903d149595cb4e543ee3650ce3d77a3b8a26edd22d52a3a6",
+    preflight: "29be8efd227f67e97d5f6b696bc07100558173716e0494c8f08f7743d17c294c",
+    prerequisites: new Map([
+      ["0737.scheduling_ledger_missing:The unified scheduling tables this migration extends are unavailable", ["generated/0583_unified_schedule_boards.sql"]],
+      ["0737.retirement_fence_missing:The tenant retirement fence is unavailable", ["generated/0626_tenant_retirement.sql"]],
+    ]),
+  }],
+  ["generated/0738_equity_instrument_lifecycle.sql", {
+    source: "92fe514c04caf062895ccd1b8a9191c5e0ebaac981d90848de50eac8a64cefeb",
+    preflight: "2428726109189303cd2e34c1361ba81c5a35d565614fab0b0a6cb0e04656ff6f",
+    prerequisites: new Map([
+      ["0738.equity_tables_missing:The equity tables this migration extends are unavailable", ["generated/0733_equity_cap_table.sql"]],
+    ]),
+  }],
   ["generated/0720_pay_component_statutory_treatment.sql", {
     source: "41cc73979c3678a97885c2818b50a27727c4b8faacdaa01c3fd266ab1d1bea8a",
     preflight: "9ae4c5b6eef09a6338af3ec3f5c582269f911c9d84d4ba93313d4e4eea49e0ba",
