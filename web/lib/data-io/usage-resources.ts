@@ -12,6 +12,7 @@ import {
   duplicateImportRowIndexes,
   RefResolver,
   subsidiaryReadFilter,
+  subsidiaryReadFilterWithUnassigned,
   type ReadCtx,
 } from './resource-core'
 
@@ -132,6 +133,14 @@ export function usageRecordsResource(orgId: string): DataResource {
       if (ctx.orgId !== orgId) {
         return { ...outcome, failed: rows.length, errors: rows.map((_, index) => ({ row: index + 1, message: 'resource belongs to another organization' })) }
       }
+      if (ctx.allowedSubsidiaryIds === undefined) {
+        return {
+          ...outcome,
+          failed: Math.max(rows.length, 1),
+          errors: [{ row: 0, message: 'allowedSubsidiaryIds is required — pass the caller subsidiary scope explicitly' }],
+        }
+      }
+      const allowedSubsidiaryIds = ctx.allowedSubsidiaryIds
       return withOrgTransaction(orgId, async () => {
         const resolver = new RefResolver(orgId)
         const prepared: ({ row: number; input: IngestUsageRecordInput } | { row: number; error: string; key: string | null })[] = []
@@ -185,8 +194,10 @@ export function usageRecordsResource(orgId: string): DataResource {
             alreadyStored = (await db.execute<{ id: string }>(sql`
               select r.id from usage_records r
                 join usage_meters m on m.org_id = r.org_id and m.id = r.meter_id
+                join parties c on c.org_id = r.org_id and c.id = r.customer_id
                where r.org_id = ${orgId} and m.key = ${row.input.meterKey}
                  and r.idempotency_key = ${row.input.idempotencyKey}
+                 ${subsidiaryReadFilterWithUnassigned(sql`c.subsidiary_id`, allowedSubsidiaryIds)}
                limit 1`)).rows.length > 0
           }
           if (alreadyStored) {
@@ -194,7 +205,7 @@ export function usageRecordsResource(orgId: string): DataResource {
           }
           await db.execute(sql`savepoint usage_record_validate`)
           try {
-            await ingestUsageRecords(orgId, ctx.actorId, [row.input])
+            await ingestUsageRecords(orgId, ctx.actorId, [row.input], allowedSubsidiaryIds)
             await db.execute(sql`rollback to savepoint usage_record_validate`)
             await db.execute(sql`release savepoint usage_record_validate`)
             valid.push(row)
@@ -213,7 +224,7 @@ export function usageRecordsResource(orgId: string): DataResource {
         if (valid.length) {
           await db.execute(sql`savepoint usage_record_commit`)
           try {
-            await ingestUsageRecords(orgId, ctx.actorId, valid.map(({ input }) => input))
+            await ingestUsageRecords(orgId, ctx.actorId, valid.map(({ input }) => input), allowedSubsidiaryIds)
             await db.execute(sql`release savepoint usage_record_commit`)
             outcome.created = valid.length
           } catch (error) {

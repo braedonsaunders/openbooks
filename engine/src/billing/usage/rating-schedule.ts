@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { addCalendarDays, calendarDaysBetween, endOfMonth, startOfMonth, addMonthsStart } from "../../platform/civil-date.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { db, orgContext, withBypass, withOrg } from "../../platform/db.ts";
-import { ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
+import { ScopeNotFoundError, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../../organization/org-feature-lock.ts";
 import { UsageBillingError } from "./errors.ts";
 import { commitRateRun, previewRateRun } from "./rate-run.ts";
@@ -265,12 +265,20 @@ export interface SaveUsageRatingScheduleInput {
 
 /** Every schedule row with its subscription context, org default first, so
  * the operator sees which links follow the default and which override it. */
-export async function listUsageRatingSettings(orgId: string): Promise<UsageRatingSettingRow[]> {
+export async function listUsageRatingSettings(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<UsageRatingSettingRow[]> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
+    const scopeFilter = allowedSubsidiaryIds === null
+      ? sql`TRUE`
+      : sql`g.link_id is not null ${subsidiaryVisibleFilter(
+        sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true },
+      )}`;
     return (await db.execute<UsageRatingSettingRow>(sql`
       select g.id, g.link_id as "linkId", l.subscription_id as "subscriptionId",
-             c.name as "customerName", g.cadence as "cadence",
+             c.display_name as "customerName", g.cadence as "cadence",
              g.grace_days as "graceDays", g.mode as "mode",
              g.last_rated_period_end::text as "lastRatedPeriodEnd"
         from usage_rating_settings g
@@ -278,6 +286,7 @@ export async function listUsageRatingSettings(orgId: string): Promise<UsageRatin
           on l.org_id = g.org_id and l.id = g.link_id
         left join parties c on c.org_id = l.org_id and c.id = l.customer_id
        where g.org_id = ${orgId}
+         and ${scopeFilter}
        order by g.link_id nulls first, g.updated_at desc`)).rows;
   });
 }
@@ -295,6 +304,7 @@ export async function saveUsageRatingSchedule(
   orgId: string,
   actorId: string | null,
   input: SaveUsageRatingScheduleInput,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<UsageRatingSettingRow> {
   const linkId = input.linkId ?? null;
   if (input.cadence !== undefined) asCadence(input.cadence, linkId ?? "default");
@@ -305,9 +315,15 @@ export async function saveUsageRatingSchedule(
     if (!(await lockAndCheckOrgFeature(db, orgId, "usageBilling"))) {
       refuse("feature_off", "Usage billing is turned off for this organization.", "Enable Usage Billing in Company Settings → Features.");
     }
+    if (linkId === null && allowedSubsidiaryIds !== null) throw new ScopeNotFoundError();
     if (linkId !== null) {
       const link = (await db.execute<{ id: string }>(sql`
-        select id from subscription_usage_links where org_id = ${orgId} and id = ${linkId}`)).rows[0];
+        select l.id
+          from subscription_usage_links l
+          join parties c on c.org_id = l.org_id and c.id = l.customer_id
+         where l.org_id = ${orgId} and l.id = ${linkId}
+           ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+         for share of l, c`)).rows[0];
       if (!link) throw new ScopeNotFoundError();
     }
     const current = (await db.execute<{
@@ -360,7 +376,7 @@ export async function saveUsageRatingSchedule(
               })}::jsonb,
               ${actorId})
     `);
-    const rows = await listUsageRatingSettings(orgId);
+    const rows = await listUsageRatingSettings(orgId, allowedSubsidiaryIds);
     const row = rows.find((candidate) => candidate.id === saved.id);
     if (!row) throw new Error("the rating schedule was not stored — no row was written; retry the action");
     return row;

@@ -36,6 +36,16 @@ test('usage setup delegates to the engine and imported records remain idempotent
     assert.deepEqual([preview.created, preview.failed], [1, 0])
     const committed = await withOrgContext(org.orgId, () => resource.write([row], 'insert', { ...ctx, dryRun: false }))
     assert.deepEqual([committed.created, committed.failed], [1, 0])
+    const outsideScope = await withOrgContext(org.orgId, () => resource.write(
+      [{ ...row, idempotencyKey: 'import-outside-scope' }],
+      'insert',
+      { ...ctx, dryRun: false, allowedSubsidiaryIds: new Set<string>() },
+    ))
+    assert.deepEqual([outsideScope.created, outsideScope.failed], [0, 1])
+    const hiddenImport = await withOrgContext(org.orgId, () => db.execute(sql`
+      select id from usage_records
+       where org_id = ${org.orgId} and meter_id = ${meterId} and idempotency_key = 'import-outside-scope'`))
+    assert.equal(hiddenImport.rows.length, 0)
     const stored = await withOrgContext(org.orgId, () => db.execute<{ source: string }>(sql`select source from usage_records where org_id = ${org.orgId} and meter_id = ${meterId} and idempotency_key = 'import-1'`))
     assert.equal(stored.rows[0]?.source, 'import')
     const replay = await withOrgContext(org.orgId, () => resource.write([row], 'upsert', { ...ctx, dryRun: false }))
