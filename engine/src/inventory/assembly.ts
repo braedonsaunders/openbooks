@@ -5,17 +5,18 @@ import { add, cmp, isZero, neg, normalizeMoney } from "../money/money.ts";
 import { bomRequiredQuantity, type BomQuantityBasis } from "./bom-scrap.ts";
 import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
+import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import type { AssemblyBomRevisionEvidence } from "@openbooks/schema";
 import { InventoryError, type InventoryProfile } from "./contracts.ts";
 import { inventoryRequestHash } from "./action-idempotency.ts";
 import { assertStockLocationAdmitsSubsidiary, assertNoForeignOnHand, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
-import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney, assertInventoryDate } from "./position.ts";
+import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney, assertInventoryDate, backdatedIssueShortage } from "./position.ts";
 import { consumeLayers, recordConsumptions, addLayerAtCost, type Consumption } from "./cost-layers.ts";
 import { type MovementResult } from "./movements.ts";
 import { assertItemsActive } from "./item-active.ts";
 import { assertNotKitItem } from "./kits.ts";
+import { assertSaleableStock } from "./stock-eligibility.ts";
 import { type ReverseInventoryInput, type ReverseInventoryResult, type ReversibleMovement, removeInboundLayer, restoreIssueLayers, reverseInventoryJournal } from "./reversal.ts";
 
 // ---------------------------------------------------------------------------
@@ -60,11 +61,10 @@ export async function buildAssembly(
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
-  const ctx = await loadSubsidiaryContext(db, orgId);
-  assertMovementOwner(ctx, input.subsidiaryId);
-
   return await db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
+    const ctx = await loadSubsidiaryContext(tx, orgId);
+    assertMovementOwner(ctx, input.subsidiaryId);
     // A build mints stock of the parent: a kit parent would create the very
     // position kits exist not to have. Kits sell straight from components.
     await assertNotKitItem(tx, orgId, input.assemblyItemId, "build");
@@ -201,11 +201,16 @@ export async function buildAssembly(
           `component ${itemNameById.get(component.component_item_id)} needs ${requirement.exactQuantity}, below the 0.0001 unit precision — build a larger quantity or adjust the recipe`,
         );
       }
-      components.push({
-        itemId: component.component_item_id,
-        profile,
-        reqQty,
-      });
+      const existing = components.find((entry) => entry.itemId === component.component_item_id);
+      if (existing) {
+        existing.reqQty = add(existing.reqQty, reqQty);
+      } else {
+        components.push({
+          itemId: component.component_item_id,
+          profile,
+          reqQty,
+        });
+      }
     }
 
     if (assembly.costingMethod === "standard") {
@@ -237,6 +242,19 @@ export async function buildAssembly(
       "inbound",
     );
     for (const component of components) {
+      await assertSaleableStock(tx, orgId, input.stockLocationId);
+      const backdated = await backdatedIssueShortage(
+        tx,
+        orgId,
+        {
+          itemId: component.itemId,
+          stockLocationId: input.stockLocationId,
+          subsidiaryId: input.subsidiaryId,
+        },
+        input.date,
+        component.reqQty,
+      );
+      if (backdated) throw new InventoryError(backdated);
       component.onHand = await getOnHandWith(
         tx,
         orgId,
@@ -331,6 +349,12 @@ export async function buildAssembly(
         memo: "Build variance",
       });
     }
+    await validateSubsidiaryRestrictions(tx, {
+      orgId,
+      ctx,
+      docSubsidiaryId: input.subsidiaryId,
+      lines: lines.map((line) => ({ ...line, subsidiaryId: input.subsidiaryId })),
+    });
     const entryId = await postInventoryEntry(tx, {
       orgId,
       bookId,
