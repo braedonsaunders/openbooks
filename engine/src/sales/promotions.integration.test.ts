@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { test } from 'node:test'
 import { sql } from 'drizzle-orm'
-import { toUnits } from '../money/money.ts'
+import { fromUnits, toUnits } from '../money/money.ts'
 import { db, withBypassContext, withOrg } from '../platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '../testing/fixtures.ts'
 import {
@@ -38,11 +38,12 @@ async function ensureIsoRegistry(): Promise<void> {
 
 async function draftSale(org: ScratchOrg, lines: { itemId: string; quantity: string; unitPrice: string; amount: string }[], currency = 'CAD'): Promise<string> {
   const documentId = randomUUID()
+  const subtotal = fromUnits(lines.reduce((sum, line) => sum + toUnits(line.amount), 0n))
   await db.execute(sql`
     insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
                            currency, fx_rate, status, subtotal, tax_total, total, custom)
     values (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-${documentId.slice(0, 8)}`}, ${org.customerId},
-            ${org.subsidiaryId}, ${org.date}, ${currency}, 1, 'draft', '0', '0', '0', '{}'::jsonb)`)
+            ${org.subsidiaryId}, ${org.date}, ${currency}, 1, 'draft', ${subtotal}, '0', ${subtotal}, '{}'::jsonb)`)
   let number = 1
   for (const line of lines) {
     await db.execute(sql`
@@ -91,6 +92,16 @@ test('percent promotion discounts every eligible line and sums exactly', { skip:
     })))
     assert.equal(applied.discountMinor, '5')
     assert.equal(applied.lines.length, 2)
+    const totals = (await withOrg(org.orgId, () => db.execute<{ subtotal: string; total: string; line_total: string; revision_seq: string; updated_by: string }>(sql`
+      select d.subtotal::text as subtotal, d.total::text as total, sum(l.amount)::text as line_total,
+             d.revision_seq::text as revision_seq, d.updated_by
+        from documents d
+        join document_lines l on l.org_id = d.org_id and l.document_id = d.id
+       where d.org_id = ${org.orgId} and d.id = ${documentId}
+       group by d.org_id, d.id`))).rows[0]!
+    assert.deepEqual([totals.subtotal, totals.total, totals.line_total], ['0.2500', '0.2500', '0.2500'])
+    assert.notEqual(totals.revision_seq, '0')
+    assert.equal(totals.updated_by, actorId)
     const stored = await withOrg(org.orgId, () => discountLines(org.orgId, documentId))
     assert.equal(stored.length, 2)
     const minors = stored.map((line) => toUnits(line.amount) / 100n)

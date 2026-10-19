@@ -482,8 +482,18 @@ export async function applyPromotion(
   // re-dealt across the same lines in proportion, summing exactly.
   const shares = computedMinor > remainingMinor ? apportion(remainingMinor, computed) : computed;
   const inserted = await insertDiscountLines(runner, orgId, actorId, document, promotion, lines, shares, discountAccountId, scale);
-  await countRedemption(runner, orgId, promotion);
   const total = shares.reduce((sum, share) => sum + share, 0n);
+  const discountAmount = fromUnits(total * scale);
+  const updatedDocument = await runner.execute(sql`
+    update documents
+       set subtotal = subtotal - ${discountAmount}::numeric,
+           total = total - ${discountAmount}::numeric,
+           updated_at = now(), updated_by = ${actorId}
+     where org_id = ${orgId} and id = ${document.id} and status = 'draft'`);
+  if (updatedDocument.rowCount !== 1) {
+    throw refusal(`Document ${document.document_number} changed while applying promotion ${promotion.code}`, "changed_concurrently", 409, "Reload the document and apply the promotion again");
+  }
+  await countRedemption(runner, orgId, promotion);
   await writeDocumentAudit(runner, orgId, actorId, document.id, {
     event: "promotion_applied",
     promotionId: promotion.id,
