@@ -147,6 +147,10 @@ test("rating schedules honor subsidiary visibility and protect the organization 
       linkId: null, cadence: "monthly",
     }, null);
     assert.equal(savedDefault.linkId, null, "the unrestricted operator can save the organization default");
+    const savedLink = await saveUsageRatingSchedule(org.orgId, actor, {
+      linkId: link.id, cadence: "billing_period",
+    }, null);
+    assert.equal(savedLink.linkId, link.id, "the fixture has a link-specific schedule to scope");
 
     const otherSubsidiaryId = randomUUID();
     await withOrgContext(org.orgId, async () => {

@@ -16,6 +16,9 @@ test('usage setup delegates to the engine and imported records remain idempotent
     await withOrgContext(org.orgId, async () => {
       await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', '{"subscriptionBilling":true,"usageBilling":true,"saasMetrics":true}'::jsonb) where id = ${org.orgId}`)
       await db.execute(sql`insert into customer_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.customerId}, true)`)
+      const customer = await db.execute(sql`update parties set subsidiary_id = ${org.subsidiaryId}
+        where org_id = ${org.orgId} and id = ${org.customerId} returning id`)
+      assert.equal(customer.rows.length, 1, 'the import customer belongs to a subsidiary for the scope refusal')
     })
     const created = await withOrgContext(org.orgId, () => createSetupRecord(
       { orgId: org.orgId, id: actorId, permissions: ['admin.setup.manage'] }, 'usage-meters',
