@@ -132,6 +132,10 @@ test('statement currency filters include only customers in the caller’s subsid
   try {
     await withOrg(org.orgId, async () => {
       await db.execute(sql`
+        update parties set subsidiary_id = ${org.subsidiaryId}
+         where org_id = ${org.orgId} and id = ${org.customerId}
+      `)
+      await db.execute(sql`
         insert into customer_roles (org_id, party_id, currency)
         values (${org.orgId}, ${org.customerId}, 'CAD')
         on conflict (party_id) do update set currency = excluded.currency
