@@ -4,7 +4,7 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { assertUnrestrictedScope } from "../organization/subsidiary-scope.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { db, withOrgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { sealSecret } from "../platform/secrets.ts";
 import { connectorUrlRefusal } from "../connectors/ssrf-guard.ts";
 import { FANOUT_EVENT_TYPES } from "./catalog.ts";
@@ -342,6 +342,7 @@ export type RedeliverResult = {
 export async function redeliverWebhookDelivery(
   orgId: string,
   actorId: string,
+  endpointId: string,
   deliveryId: string,
 ): Promise<RedeliverResult> {
   await requireWebhooksManage(orgId, actorId);
@@ -349,7 +350,8 @@ export async function redeliverWebhookDelivery(
     await requireWebhooksGate(db, orgId);
     const row = (await db.execute<{ eventId: string; status: string }>(sql`
       select event_id as "eventId", status from webhook_deliveries
-       where org_id = ${orgId} and id = ${deliveryId}::uuid limit 1
+       where org_id = ${orgId} and endpoint_id = ${endpointId}::uuid
+         and id = ${deliveryId}::uuid limit 1
     `)).rows[0];
     if (!row) {
       throw new WebhookEndpointError("the delivery is gone — it may have been cleaned up; reload the list and try again", 404);
@@ -364,7 +366,8 @@ export async function redeliverWebhookDelivery(
       update webhook_deliveries
          set status = 'pending', attempt_count = 0, first_attempt_at = null,
              next_attempt_at = now(), last_error = null, updated_at = now()
-       where org_id = ${orgId} and id = ${deliveryId}::uuid
+       where org_id = ${orgId} and endpoint_id = ${endpointId}::uuid
+         and id = ${deliveryId}::uuid
     `);
     if ((reset.rowCount ?? 0) !== 1) {
       throw new WebhookEndpointError("the delivery was not re-queued — no row was written; retry the action");
@@ -384,10 +387,12 @@ export async function redeliverWebhookDelivery(
     return row.eventId;
   });
   await attemptDeliveryNow(orgId, deliveryId);
-  const outcome = (await db.execute<{ status: string; code: number | null; error: string | null }>(sql`
-    select status, last_response_code as code, last_error as error from webhook_deliveries
-     where id = ${deliveryId}::uuid limit 1
-  `)).rows[0];
+  const outcome = await withOrgContext(orgId, async () =>
+    (await db.execute<{ status: string; code: number | null; error: string | null }>(sql`
+      select status, last_response_code as code, last_error as error from webhook_deliveries
+       where org_id = ${orgId} and id = ${deliveryId}::uuid limit 1
+    `)).rows[0],
+  );
   if (!outcome) throw new WebhookEndpointError("the redelivered delivery vanished — reload the list and try again");
   return { deliveryId, eventId, status: outcome.status, responseCode: outcome.code, error: outcome.error };
 }

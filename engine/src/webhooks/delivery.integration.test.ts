@@ -387,12 +387,19 @@ test("test pings and manual redeliveries run synchronously with audit", { skip: 
     capture.respondWith = { status: 400, body: "bad" };
     const badPing = await sendWebhookTestPing(org.orgId, adminId, endpoint.id);
     assert.equal(badPing.status, "failed");
+    const otherEndpoint = await makeEndpoint(org.orgId, adminId, capture.url, ["item.updated"], "other-endpoint");
+    const otherBadPing = await sendWebhookTestPing(org.orgId, adminId, otherEndpoint.id);
+    await assert.rejects(
+      redeliverWebhookDelivery(org.orgId, adminId, endpoint.id, otherBadPing.deliveryId),
+      (error: unknown) => error instanceof Error && "status" in error && error.status === 404,
+      "an endpoint cannot redeliver another endpoint's delivery",
+    );
     capture.respondWith = { status: 200, body: "{}" };
-    const redelivered = await redeliverWebhookDelivery(org.orgId, adminId, badPing.deliveryId);
+    const redelivered = await redeliverWebhookDelivery(org.orgId, adminId, endpoint.id, badPing.deliveryId);
     assert.equal(redelivered.status, "delivered");
     assert.equal(redelivered.responseCode, 200);
     await assert.rejects(
-      redeliverWebhookDelivery(org.orgId, adminId, redelivered.deliveryId),
+      redeliverWebhookDelivery(org.orgId, adminId, endpoint.id, redelivered.deliveryId),
       /already succeeded/,
       "a delivered delivery refuses redelivery by name",
     );

@@ -136,7 +136,7 @@ export const PATCH = defineRoute({
       }
       if (op === "redeliver") {
         if (!body.deliveryId) return NextResponse.json({ error: "deliveryId is required to redeliver" }, { status: 400 });
-        const result = await redeliverWebhookDelivery(orgId, actorId, body.deliveryId);
+        const result = await redeliverWebhookDelivery(orgId, actorId, body.id, body.deliveryId);
         return NextResponse.json(result);
       }
       const pinged = await sendWebhookTestPing(orgId, actorId, body.id);
