@@ -12,7 +12,7 @@ import {
 } from '@openbooks/engine/commerce'
 import type { CellValue, ImportMode, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
 import type { DataResource, WriteCtx } from './resource-core'
-import { duplicateImportRowIndexes } from './resource-core'
+import { duplicateImportRowIndexes, subsidiaryReadFilter } from './resource-core'
 
 export const CHANNEL_AD_SPEND_KEY = 'channel-ad-spend'
 
@@ -47,11 +47,20 @@ function describeRefusal(error: unknown): string {
  * account), so a CSV naming a duplicated display name refuses instead of
  * attributing spend to whichever row the lookup finds first.
  */
-async function resolveChannelId(orgId: string, channel: string): Promise<string> {
+function explicitChannelSpendScope(ctx: import('./resource-core').ReadCtx | WriteCtx | undefined): ReadonlySet<string> | null {
+  if (!ctx || !Object.hasOwn(ctx, 'allowedSubsidiaryIds') || ctx.allowedSubsidiaryIds === undefined) {
+    throw new Error('allowedSubsidiaryIds is required — pass the caller subsidiary scope explicitly')
+  }
+  return ctx.allowedSubsidiaryIds
+}
+
+async function resolveChannelId(orgId: string, channel: string, scope: ReadonlySet<string> | null): Promise<string> {
   const value = channel.trim()
   if (!value) throw new Error('channel is required')
   const rows = (await db.execute<{ id: string }>(sql`
-    select id from sales_channels where org_id = ${orgId} and (name = ${value} or id::text = ${value})`)).rows
+    select id from sales_channels c
+     where c.org_id = ${orgId} and (c.name = ${value} or c.id::text = ${value})
+       ${subsidiaryReadFilter(sql`c.subsidiary_id`, scope)}`)).rows
   if (rows.length === 0) throw new Error(`channel "${value}" not found — create it under Channels first`)
   if (rows.length > 1) {
     throw new Error(
@@ -69,8 +78,8 @@ type AdSpendInput = {
   source: string
 }
 
-async function prepareRow(orgId: string, source: Record<string, unknown>): Promise<AdSpendInput> {
-  const channelId = await resolveChannelId(orgId, String(source.channel ?? ''))
+async function prepareRow(orgId: string, source: Record<string, unknown>, scope: ReadonlySet<string> | null): Promise<AdSpendInput> {
+  const channelId = await resolveChannelId(orgId, String(source.channel ?? ''), scope)
   const spendDate = String(source.spendDate ?? '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(spendDate)) {
     throw new Error(`spend date "${spendDate}" is not a calendar day (YYYY-MM-DD)`)
@@ -92,6 +101,7 @@ export function channelAdSpendResource(orgId: string): DataResource {
     async fields() { return channelAdSpendFields() },
     async columns() { return channelAdSpendFields().map(({ key, label }) => ({ key, label })) },
     async read(ctx?: import('./resource-core').ReadCtx) {
+      const scope = explicitChannelSpendScope(ctx)
       const result = await readExportWindow<{
         channel: string; spend_date: string; amount_minor: string; currency: string; source: string | null;
       }>(db, sql`
@@ -100,6 +110,7 @@ export function channelAdSpendResource(orgId: string): DataResource {
           ${transferId(ctx, sql`s.id`)} from channel_ad_spend s
           join sales_channels c on c.org_id = s.org_id and c.id = s.channel_id
          where s.org_id = ${orgId}
+           ${subsidiaryReadFilter(sql`c.subsidiary_id`, scope)}
            ${transferWhere(ctx, sql`s.id`)} order by ${transferOrder(ctx, sql`s.id`, sql`s.spend_date desc, s.id`)}
          limit ${ctx?.page ? transferLimit(ctx) : 10001}`, ctx)
       finishExportPage(result.rows, CHANNEL_AD_SPEND_DESCRIPTOR.label, ctx)
@@ -133,13 +144,19 @@ export function channelAdSpendResource(orgId: string): DataResource {
       if (ctx.orgId !== orgId) {
         return { ...outcome, failed: rows.length, errors: rows.map((_, index) => ({ row: index + 1, message: 'resource belongs to another organization' })) }
       }
+      let scope: ReadonlySet<string> | null
+      try {
+        scope = explicitChannelSpendScope(ctx)
+      } catch (error) {
+        return { ...outcome, failed: Math.max(rows.length, 1), errors: [{ row: 0, message: describeRefusal(error) }] }
+      }
       return withOrgTransaction(orgId, async () => {
         const prepared: ({ row: number; input: AdSpendInput } | { row: number; error: string; key: string | null })[] = []
         for (let index = 0; index < rows.length; index++) {
           const source = rows[index]!
           const identityKey = `${String(source.channel ?? '').trim()}\0${String(source.spendDate ?? '').trim()}\0${String(source.source ?? '').trim()}`
           try {
-            prepared.push({ row: index + 1, input: await prepareRow(orgId, source) })
+            prepared.push({ row: index + 1, input: await prepareRow(orgId, source, scope) })
           } catch (error) {
             prepared.push({ row: index + 1, error: describeRefusal(error), key: identityKey })
           }

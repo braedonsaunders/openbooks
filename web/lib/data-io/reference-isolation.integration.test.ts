@@ -322,10 +322,12 @@ test(
       const actorA = randomUUID()
       const resource = propertyDataResource(orgA.orgId, 'properties')
       assert.ok(resource)
+      assert.equal(resource.descriptor.scopedWrite, true)
+      assert.equal(resource.descriptor.writePermission, 'ar.create')
       const refused = await resource.write(
         [{ code: 'SMUGGLED', name: 'Smuggled', subsidiary: orgB.subsidiaryId, propertyType: 'residential' }],
         'insert',
-        { orgId: orgA.orgId, actorId: actorA, dryRun: true },
+        { orgId: orgA.orgId, actorId: actorA, dryRun: true, allowedSubsidiaryIds: new Set([orgA.subsidiaryId]) },
       )
       assert.equal(refused.created, 0)
       assert.equal(refused.failed, 1)
@@ -336,7 +338,7 @@ test(
       const preview = await resource.write(
         [{ code: 'PREVIEW', name: 'Preview', subsidiary: ownSubsidiary, propertyType: 'residential' }],
         'insert',
-        { orgId: orgA.orgId, actorId: actorA, dryRun: true },
+        { orgId: orgA.orgId, actorId: actorA, dryRun: true, allowedSubsidiaryIds: new Set([orgA.subsidiaryId]) },
       )
       assert.deepEqual(
         { created: preview.created, failed: preview.failed },
@@ -374,7 +376,9 @@ test(
       await recordSecurityDeposit({ orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, kind: 'adjustment_increase', occurredOn: org.date, amount: '125.50', offsetAccountId: org.accounts.adjustment, memo: 'Opening deposit', importKey: externalKey })
       const resource = propertyDataResource(org.orgId, 'security-deposit-opening-balances')
       assert.ok(resource)
-      const context = { orgId: org.orgId, actorId, dryRun: false }
+      assert.equal(resource.descriptor.scopedWrite, true)
+      assert.equal(resource.descriptor.writePermission, 'gl.post')
+      const context = { orgId: org.orgId, actorId, dryRun: false, allowedSubsidiaryIds: null }
       const identical = await resource.write([{ externalKey, leaseNumber, occurredOn: org.date, amount: '125.5000', offsetAccount: account.number, memo: 'Opening deposit' }], 'upsert', context)
       assert.deepEqual({ created: identical.created, updated: identical.updated, failed: identical.failed }, { created: 0, updated: 0, failed: 0 })
       const changed = await resource.write([{ externalKey, leaseNumber, occurredOn: org.date, amount: '126', offsetAccount: account.number, memo: 'Opening deposit' }], 'upsert', context)

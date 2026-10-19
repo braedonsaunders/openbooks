@@ -33,6 +33,7 @@ test('channel ad-spend imports daily figures through the margin restatement', { 
       createChannel(org.orgId, actorId, {
         kind: 'shopify',
         name: 'Test Shop',
+        subsidiaryId: org.subsidiaryId,
         currency: 'USD',
         externalAccount: 'test.myshopify.com',
         settings: {},
@@ -75,8 +76,34 @@ test('channel ad-spend imports daily figures through the margin restatement', { 
     assert.equal(restated.rows.length, 1)
     assert.equal(restated.rows[0]!.amount, '10000')
 
+    const otherSubsidiaryId = randomUUID()
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other subsidiary', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`))
+    await withOrgContext(org.orgId, () => createChannel(org.orgId, actorId, {
+      kind: 'shopify',
+      name: 'Other Shop',
+      subsidiaryId: otherSubsidiaryId,
+      currency: 'USD',
+      externalAccount: 'other.myshopify.com',
+      settings: {},
+    }))
+    const otherSpend = { channel: 'Other Shop', spendDate: '2026-07-19', amount: '70.00', currency: 'USD', source: 'other-export' }
+    const otherSpendWrite = await withOrgContext(org.orgId, () => resource.write([otherSpend], 'insert', { ...ctx, dryRun: false }))
+    assert.deepEqual([otherSpendWrite.created, otherSpendWrite.failed], [1, 0])
+    const scopedExport = await withOrgContext(org.orgId, () => resource.read({ allowedSubsidiaryIds: new Set([org.subsidiaryId]) }))
+    assert.ok(scopedExport.rows.some((item) => item.channel === 'Test Shop'))
+    assert.equal(scopedExport.rows.some((item) => item.channel === 'Other Shop'), false)
+    const scopedWrite = await withOrgContext(org.orgId, () => resource.write(
+      [otherSpend],
+      'insert',
+      { ...ctx, dryRun: false, allowedSubsidiaryIds: new Set([org.subsidiaryId]) },
+    ))
+    assert.equal(scopedWrite.failed, 1)
+    assert.match(scopedWrite.errors[0]?.message ?? '', /not found/)
+
     // The export renders the figure back in major units for the next file.
-    const exported = await withOrgContext(org.orgId, () => resource.read())
+    const exported = await withOrgContext(org.orgId, () => resource.read({ allowedSubsidiaryIds: null }))
     const exportedRow = exported.rows.find((item) => item.channel === 'Test Shop')
     assert.equal(exportedRow?.amount, '100.00')
 
@@ -85,7 +112,7 @@ test('channel ad-spend imports daily figures through the margin restatement', { 
     await withOrgContext(org.orgId, () => db.execute(sql`
       update channel_ad_spend set currency = 'ZZZ'
        where org_id = ${org.orgId} and channel_id = ${channelId}`))
-    await assert.rejects(() => withOrgContext(org.orgId, () => resource.read()), (error: unknown) => {
+    await assert.rejects(() => withOrgContext(org.orgId, () => resource.read({ allowedSubsidiaryIds: null })), (error: unknown) => {
       assert.ok(error instanceof CommerceError)
       assert.equal(error.code, 'ad_spend_currency_unsupported')
       assert.match(error.message, /Test Shop.*ZZZ/)

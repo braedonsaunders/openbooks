@@ -16,7 +16,7 @@ registerHooks({
     const wrap = (path: string, source: string) => ({ shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export * from ${JSON.stringify(root + path)};${source}`) });
     if (s === './resource-core') return wrap('web/lib/data-io/resource-core.ts', 'export async function orgFeatureEnabled(){return true}');
     if (s === '../custom-fields' && c.parentURL?.endsWith('/resourcing-resources.ts')) return wrap('web/lib/custom-fields.ts', 'export async function loadFieldDefs(){return []}');
-    if (s === '@openbooks/engine/platform/db' && c.parentURL?.endsWith('/resourcing-resources.ts')) return wrap('engine/src/platform/db.ts', 'export async function withOrgTransaction(orgId,fn){return fn()}');
+    if (s === '@openbooks/engine/platform/db' && c.parentURL?.endsWith('/resourcing-resources.ts')) return wrap('engine/src/platform/db.ts', 'export const db={execute:async()=>({rows:[{id:"00000000-0000-4000-8000-000000000004"}]})};export async function withOrgTransaction(orgId,fn){return fn()}');
     if (s === '../list/entity-reader' && c.parentURL?.endsWith('/resourcing-resources.ts')) return wrap('web/lib/list/entity-reader.ts', `export async function readEntityListPage(input){globalThis.__assignmentResourceBoundary.reads.push(input);return {ok:false,error:'scope_required',remedy:'Pass the acting user and explicit subsidiary scope'}}`);
     if (s === '@/lib/authz') return wrap('web/lib/authz.ts', `export async function guardPermission(){const s=globalThis.__assignmentResourceBoundary;return {user:{id:s.actorId,orgId:s.orgId},permissions:new Set(['data.export','resourcing.read']),allowedSubsidiaryIds:s.scope}}`);
     return resolveAppModule(s, c, next, root) ?? next(s, c);
@@ -24,7 +24,6 @@ registerHooks({
 });
 
 const m = await import("./resourcing-resources.ts");
-const { RefResolver } = await import('./resource-core.ts');
 const { POST } = await import('../../app/api/data/export/route.ts');
 
 test("assignment plan imports and exports under the resourcing grants", () => {
@@ -44,8 +43,7 @@ test("retainer balances are export-only, per-currency, with no import surface", 
   assert.equal("DRAWDOWN_IMPORT_DESCRIPTOR" in m, false);
 });
 
-test("assignment imports surface the real engine refusal and its remedy without writing", async (t) => {
-  t.mock.method(RefResolver.prototype, 'resolveId', async () => '00000000-0000-4000-8000-000000000004');
+test("assignment imports surface the real engine refusal and its remedy without writing", async () => {
   for (const dryRun of [true, false]) {
     const result = await m.assignmentPlanResource(orgId).write([
       { project: 'PROJECT', jobTitle: 'Engineer', weekStart: '2026-01-05', plannedHours: '8' },

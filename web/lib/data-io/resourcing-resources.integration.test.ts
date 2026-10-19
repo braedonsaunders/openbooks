@@ -19,11 +19,15 @@ async function fixture() {
     `);
     assert.equal(grant.rows.length, 1, "the resource importer fixture grants one actor both the list and write permissions");
     assert.equal((await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true,"retainerBilling":true}'::jsonb) where id = ${org.orgId} returning id`)).rows.length, 1, "resourcing and retainer resource fixture feature setup updates one organization");
-    const employee = randomUUID(), project = randomUUID();
+    const employee = randomUUID(), project = randomUUID(), outsideSubsidiary = randomUUID(), outsideProject = randomUUID(), outsideEmployee = randomUUID();
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${employee}, ${org.orgId}, 'person', 'Import', ${org.subsidiaryId}, true, '{}'::jsonb)`);
     await db.execute(sql`insert into employee_roles (org_id, party_id, job_title, hired_on, is_active) values (${org.orgId}, ${employee}, 'Consultant', '2026-01-01', true)`);
     await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom) values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'IM', 'Import project', null, 'active', true, '{}'::jsonb)`);
-    return { actorId, project };
+    await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom) values (${outsideSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Outside import scope', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${outsideEmployee}, ${org.orgId}, 'person', 'Outside employee', ${outsideSubsidiary}, true, '{}'::jsonb)`);
+    await db.execute(sql`insert into employee_roles (org_id, party_id, job_title, hired_on, is_active) values (${org.orgId}, ${outsideEmployee}, 'Consultant', '2026-01-01', true)`);
+    await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom) values (${outsideProject}, ${org.orgId}, ${outsideSubsidiary}, 'OUTSIDE', 'Outside project', null, 'active', true, '{}'::jsonb)`);
+    return { actorId, project, outsideProject };
   });
   return { org, ...ids };
 }
@@ -43,6 +47,8 @@ test("assignment round-trip preserves validation and scope", enabled, async () =
     assert.deepEqual([first.created, first.updated, first.failed], [1, 0, 0], JSON.stringify(first.errors));
     const again = await res.write([row(f)], "upsert", ctx(f));
     assert.deepEqual([again.created, again.updated, again.failed], [0, 1, 0]);
+    const wildcard = await res.write([row(f)], "upsert", ctx(f, { permissions: new Set(["*"]) }));
+    assert.deepEqual([wildcard.created, wildcard.updated, wildcard.failed], [0, 1, 0], "wildcard role grants cover resourcing.manage");
     const noManage = await res.write([row(f)], "upsert", ctx(f, { permissions: new Set(["resourcing.read"]) }));
     const { actorId: _omit, ...dropped } = ctx(f);
     const noActor = await res.write([row(f)], "upsert", dropped as never);
@@ -56,6 +62,20 @@ test("assignment round-trip preserves validation and scope", enabled, async () =
     assert.equal(scoped.failed, 1);
     const dryScoped = await res.write([row(f)], "upsert", ctx(f, { dryRun: true, allowedSubsidiaryIds: new Set([randomUUID()]) }));
     assert.equal(dryScoped.failed, 1, "dry-run shares the governed scope decision");
+    const outOfScopeProject = await res.write(
+      [{ project: "OUTSIDE", jobTitle: "Consultant", weekStart: "2026-10-04", plannedHours: "8" }],
+      "upsert",
+      ctx(f, { allowedSubsidiaryIds: new Set([f.org.subsidiaryId]) }),
+    );
+    assert.equal(outOfScopeProject.failed, 1);
+    assert.match(outOfScopeProject.errors[0]!.message, /project .* not found in the caller's subsidiary scope/);
+    const outOfScopeEmployee = await res.write(
+      [{ project: "IM", employee: "Outside employee", weekStart: "2026-10-04", plannedHours: "8" }],
+      "upsert",
+      ctx(f, { allowedSubsidiaryIds: new Set([f.org.subsidiaryId]) }),
+    );
+    assert.equal(outOfScopeEmployee.failed, 1);
+    assert.match(outOfScopeEmployee.errors[0]!.message, /employee .* not found in the caller's subsidiary scope/);
   } finally { await dropScratchOrgReporting(f.org.orgId); }
 });
 

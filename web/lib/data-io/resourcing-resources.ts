@@ -8,13 +8,14 @@ import { upsertAssignment, validateAssignmentPlan } from '@openbooks/engine/reso
 import { loadRetainerKpis } from '../resourcing/retainer-kpis'
 import { readEntityListPage } from '../list/entity-reader'
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from '../custom-fields'
+import { permissionSetCovers } from '../permissions'
 import {
   duplicateImportRowIndexes,
   enforceExportRowLimit,
   importRowAction,
   MAX_EXPORT_ROWS,
   orgFeatureEnabled,
-  RefResolver,
+  subsidiaryReadFilter,
   type DataResource,
   type ReadCtx,
   type ReadResult,
@@ -118,11 +119,25 @@ async function findStored(orgId: string, projectId: string, weekStart: string, e
 }
 
 async function projectIdByCodeOrName(orgId: string, raw: string, scope: ReadonlySet<string> | null): Promise<string | null> {
-  const scopeCond = scope === null
-    ? sql`true`
-    : scope.size === 0 ? sql`false` : sql`subsidiary_id in (${sql.join([...scope].map((id) => sql`${id}`), sql`, `)})`
   const rows = (await db.execute<{ id: string }>(sql`
-    select id from projects where org_id = ${orgId} and (code = ${raw} or name = ${raw}) and ${scopeCond} limit 1`)).rows
+    select p.id from projects p
+     where p.org_id = ${orgId}
+       and (p.code = ${raw} or p.name = ${raw} or p.id::text = ${raw})
+       ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
+     limit 2`)).rows
+  if (rows.length > 1) throw new Error(`project "${raw}" is ambiguous in the caller's subsidiary scope — use its project code or id`)
+  return rows[0]?.id ?? null
+}
+
+async function employeeIdByNameOrNumber(orgId: string, raw: string, scope: ReadonlySet<string> | null): Promise<string | null> {
+  const rows = (await db.execute<{ id: string }>(sql`
+    select p.id from parties p
+      join employee_roles er on er.org_id = p.org_id and er.party_id = p.id and er.is_active
+     where p.org_id = ${orgId} and p.is_active
+       and (p.id::text = ${raw} or p.short_code = ${raw} or p.display_name = ${raw} or er.employee_number = ${raw})
+       ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
+     limit 2`)).rows
+  if (rows.length > 1) throw new Error(`employee "${raw}" is ambiguous in the caller's subsidiary scope — use the employee number or id`)
   return rows[0]?.id ?? null
 }
 
@@ -211,7 +226,7 @@ export function assignmentPlanResource(orgId: string): DataResource {
       if (!ctx || typeof ctx !== 'object' || !Object.hasOwn(ctx, 'actorId') || ctx.actorId === undefined) {
         return { created: 0, updated: 0, failed: Math.max(rows.length, 1), errors: [{ row: 0, message: 'actorId is required — the import route threads the acting user into every resource write' }] }
       }
-      if (!ctx.permissions || !ctx.permissions.has('resourcing.manage')) {
+      if (!ctx.permissions || !permissionSetCovers(ctx.permissions, 'resourcing.manage')) {
         return { created: 0, updated: 0, failed: Math.max(rows.length, 1), errors: [{ row: 0, message: 'resourcing.manage is required to import the assignment plan — ask an administrator for the grant, then import again' }] }
       }
       if (!(await orgFeatureEnabled(orgId, 'resourcing'))) {
@@ -231,7 +246,6 @@ export function assignmentPlanResource(orgId: string): DataResource {
       }
       const scope = ctx.allowedSubsidiaryIds
       const definitions = await loadFieldDefs('res_assignments')
-      const resolver = new RefResolver(orgId)
       const resolvedKeys: (string | null)[] = rows.map(() => null)
       const dupes = duplicateImportRowIndexes(rows.map(duplicateKey))
       for (let index = 0; index < rows.length; index++) {
@@ -240,14 +254,12 @@ export function assignmentPlanResource(orgId: string): DataResource {
           if (dupes.has(index)) throw new Error('this project, subject, and week appears more than once in the file — keep one row per booking week')
           const projectRaw = cell(src, 'project')
           if (!projectRaw) throw new Error('Project is required')
-          const projectId = (await resolver.resolveId({ resource: 'projects', by: 'code' }, projectRaw))
-            ?? await projectIdByCodeOrName(orgId, projectRaw, scope)
-          if (!projectId) throw new Error(`unknown project "${projectRaw}" — use the project code or name`)
+          const projectId = await projectIdByCodeOrName(orgId, projectRaw, scope)
+          if (!projectId) throw new Error(`project "${projectRaw}" was not found in the caller's subsidiary scope — use an accessible project code or name, or ask an administrator for access`)
           const employeeRaw = cell(src, 'employee')
           const jobTitleRaw = cell(src, 'jobTitle')
-          const employeePartyId = employeeRaw
-            ? ((await resolver.resolveId({ resource: 'employees', by: 'name' }, employeeRaw)) ?? (() => { throw new Error(`unknown employee "${employeeRaw}" — use the name, payroll number, or id`) })())
-            : null
+          const employeePartyId = employeeRaw ? await employeeIdByNameOrNumber(orgId, employeeRaw, scope) : null
+          if (employeeRaw && !employeePartyId) throw new Error(`employee "${employeeRaw}" was not found in the caller's subsidiary scope — use an accessible name or payroll number, or ask an administrator for access`)
           const jobTitle = employeePartyId ? null : jobTitleRaw || null
           if ((employeePartyId === null) === (jobTitle === null)) {
             throw new Error('an assignment must identify exactly one employee or generic job title')
