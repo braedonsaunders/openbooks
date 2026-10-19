@@ -136,8 +136,8 @@ export function meSpec(data: MeOverviewData): PageSpec {
                 blocks: [
                   textBlock(latestPay ? `${data.payColumns?.payDate ?? ''}: ${latestPay.payDate} · ${data.payColumns?.netPay ?? ''}: ${latestPay.netPay}` : data.payEmpty ?? ''),
                   ...(latestPay ? [
-                    widget('link-button', { href: latestPay.explainHref, label: latestPay.explainLabel, variant: 'outline' }),
-                    widget('link-button', { href: '/me/compensation', label: compensationLabel, variant: 'outline' }),
+                    widgetBlock('link-button', { href: latestPay.explainHref, label: latestPay.explainLabel, variant: 'outline' }),
+                    widgetBlock('link-button', { href: '/me/compensation', label: compensationLabel, variant: 'outline' }),
                   ] : []),
                 ],
               }),

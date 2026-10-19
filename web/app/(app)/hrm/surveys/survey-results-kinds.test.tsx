@@ -82,6 +82,7 @@ const drawer = {
     cancel: 'Cancel',
   },
 } as unknown as Drawer
+assert.ok(drawer)
 
 async function renderText(target: Drawer = drawer): Promise<{ text: string; heatClasses: string[]; unmount: () => Promise<void> }> {
   const { JSDOM } = await import('jsdom')

@@ -73,9 +73,20 @@ const vendorFields = new Set([
 ])
 const spendFields = new Set(['spendOpenAlerts', 'spendSavingsPotential', 'vendorPeriodLabel'])
 
-for (const Refusal of [MissingExchangeRateError, ReportCurrencyBasisError]) {
-  test(`vendor widgets report ${Refusal.name} as unavailable`, async () => {
-    const error = new Refusal('currency coverage is unavailable')
+const refusals = [
+  {
+    name: MissingExchangeRateError.name,
+    create: () => new MissingExchangeRateError('USD', 'CAD', '2026-07-01'),
+  },
+  {
+    name: ReportCurrencyBasisError.name,
+    create: () => new ReportCurrencyBasisError(),
+  },
+] as const
+
+for (const refusal of refusals) {
+  test(`vendor widgets report ${refusal.name} as unavailable`, async () => {
+    const error = refusal.create()
     state.vendorError = error
     state.spendError = null
     const metrics = await loadVendorWidgetMetrics(ctx, (...fields) => fields.some((field) => vendorFields.has(field)))
@@ -85,8 +96,8 @@ for (const Refusal of [MissingExchangeRateError, ReportCurrencyBasisError]) {
     assert.equal(metrics.vendorPeriodLabel, 'July 2026')
   })
 
-  test(`spend widgets report ${Refusal.name} as unavailable`, async () => {
-    const error = new Refusal('currency coverage is unavailable')
+  test(`spend widgets report ${refusal.name} as unavailable`, async () => {
+    const error = refusal.create()
     state.vendorError = null
     state.spendError = error
     const metrics = await loadVendorWidgetMetrics(ctx, (...fields) => fields.some((field) => spendFields.has(field)))

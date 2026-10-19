@@ -288,7 +288,7 @@ export function AutomationBuilder({
   }
 
   function recipientOptions(selected = ''): { value: string; label: string; hint?: string; disabled?: boolean }[] {
-    const options = [
+    const options: { value: string; label: string; hint?: string; disabled?: boolean }[] = [
       { value: 'initiator', label: t('builder.recipientInitiator') },
       { value: 'manager', label: t('builder.recipientManager') },
       ...scopeOptions.roles.map((role) => ({ value: `role:${role.value}`, label: t('builder.recipientRole', { role: role.label }) })),
