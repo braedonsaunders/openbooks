@@ -168,7 +168,7 @@ export async function deleteDocument(
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         select org_id, 'service_billings', id, 'update',
                jsonb_build_object('before', jsonb_build_object('jobId', job_id, 'visitId', visit_id, 'invoiceId', invoice_document_id), 'after', null,
-                 'reason', ${audit.reason?.trim() || "draft_discarded"}),
+                 'reason', ${audit.reason?.trim() || "draft_discarded"}::text),
                ${userId ?? null}
           from service_billings where org_id = ${doc.orgId} and invoice_document_id = ${documentId}`);
       await tx.execute(sql`delete from service_billings where org_id = ${doc.orgId} and invoice_document_id = ${documentId}`);
