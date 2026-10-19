@@ -45,7 +45,10 @@ const { EmailSettingsForm } = await import("./EmailSettingsForm");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-async function renderForm(readiness: NonNullable<React.ComponentProps<typeof EmailSettingsForm>["initial"]["readiness"]> = { state: "ready" }) {
+async function renderForm(
+  readiness: NonNullable<React.ComponentProps<typeof EmailSettingsForm>["initial"]["readiness"]> = { state: "ready" },
+  overrides: Partial<React.ComponentProps<typeof EmailSettingsForm>["initial"]> = {},
+) {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -62,6 +65,7 @@ async function renderForm(readiness: NonNullable<React.ComponentProps<typeof Ema
             hasSecret: true,
             updatedAt: null,
             readiness,
+            ...overrides,
           }}
         />
       </NextIntlClientProvider>,
@@ -136,4 +140,49 @@ test("a ready organization shows no readiness banner", async (t) => {
   const { unmount } = await renderForm({ state: "ready" });
   t.after(unmount);
   assert.equal(document.querySelector('[role="status"]'), null);
+});
+
+test("cleared provider fields remain explicit in the save payload", async (t) => {
+  const priorFetch = globalThis.fetch;
+  const payloads: Record<string, unknown>[] = [];
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    payloads.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return Response.json({ enabled: true, provider: "smtp", hasSecret: true, updatedAt: "2" });
+  }) as typeof fetch;
+  const { unmount } = await renderForm({ state: "ready" }, {
+    provider: "smtp",
+    smtpHost: "smtp.example.com",
+    smtpPort: 587,
+    smtpUsername: "legacy-user",
+  });
+  t.after(async () => {
+    globalThis.fetch = priorFetch;
+    await unmount();
+  });
+
+  await act(async () => {
+    const textInputs = [...document.querySelectorAll("input")].filter((input) => input.type === "text");
+    const numberInput = document.querySelector('input[type="number"]') as HTMLInputElement | null;
+    assert.ok(textInputs.length >= 5, "the SMTP host and username fields are rendered");
+    assert.ok(numberInput, "the SMTP port field is rendered");
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    setter?.call(textInputs[3], "");
+    textInputs[3]?.dispatchEvent(new window.Event("input", { bubbles: true }));
+    setter?.call(numberInput, "");
+    numberInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+    setter?.call(textInputs[4], "");
+    textInputs[4]?.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
+  await act(async () => {
+    const save = [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Enregistrer");
+    assert.ok(save, "the settings form offers its save action");
+    save.click();
+    await tick();
+  });
+
+  assert.equal(payloads.length, 1, "saving issues one settings update");
+  assert.equal(payloads[0]?.smtpHost, "", "clearing a provider text field sends the empty value");
+  assert.equal(payloads[0]?.smtpPort, null, "clearing a numeric field sends an explicit null");
+  assert.equal(payloads[0]?.smtpUsername, "", "clearing a username sends the empty value");
 });
