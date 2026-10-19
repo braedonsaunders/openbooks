@@ -371,13 +371,13 @@ test("label access and carrier adjustments honor shipment subsidiary scope", { s
     const shipmentId = await draftShipment(org, userId, "SO-SHIP-SCOPE", org.items.fifo);
     await withOrg(org.orgId, () => db.transaction((tx) =>
       getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl, shipmentId) })));
-    const bought = await withOrg(org.orgId, () => db.transaction((tx) =>
+    const bought = await withSimClock(org.date, () => withOrg(org.orgId, () => db.transaction((tx) =>
       buyShipmentLabel(tx, org.orgId, userId, {
         shipmentId,
         providerRateId: RATE_GROUND,
         accountId,
         ...callOpts(baseUrl, shipmentId),
-      })));
+      }))));
     const deniedScope = new Set<string>();
     const notFound = (error: unknown) => error instanceof ShippingRefusal && error.code === "not_found";
 
