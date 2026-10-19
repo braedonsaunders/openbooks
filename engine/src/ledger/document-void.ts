@@ -2210,8 +2210,7 @@ async function releaseVoidedPayRun(
       (org_id, plan_id, employee_party_id, movement_date, amount, hours, kind,
        pay_run_document_id, note, created_by, updated_by)
     select l.org_id, l.plan_id, l.employee_party_id,
-           (select void_reversal_date from documents
-             where id = ${documentId} and org_id = ${orgId}),
+           max(l.movement_date),
            -sum(l.amount), -sum(l.hours), 'adjustment', ${documentId},
            'Reversal: voided pay run',
            (select void_requested_by from documents where id = ${documentId} and org_id = ${orgId}),
