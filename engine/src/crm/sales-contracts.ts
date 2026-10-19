@@ -131,6 +131,9 @@ export type SalesWorkspaceData = {
   canApprove: boolean;
   selected: SalesRecord | null;
   creating: boolean;
+  /** A new representative form's employee selection, resolved from the
+   * caller's already-scoped employee options. */
+  creatingEmployee: SalesOption | null;
   periodStart: string;
   periodEnd: string;
   summary: {

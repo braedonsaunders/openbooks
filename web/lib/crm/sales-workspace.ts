@@ -295,6 +295,9 @@ export async function loadSalesWorkspace(
     canApprove: can(authz, "crm.forecasts.override"),
     selected,
     creating: params.row === "new",
+    creatingEmployee: page === "representatives" && params.row === "new"
+      ? employees.find((employee) => employee.id === params.employee) ?? null
+      : null,
     periodStart,
     periodEnd,
     summary,
