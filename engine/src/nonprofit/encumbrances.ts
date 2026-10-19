@@ -247,10 +247,33 @@ export async function createEncumbrance(input: CreateEncumbranceInput): Promise<
   if (input.sourceKind === "purchase_order" && !input.sourceId) {
     throw refuse("A purchase order commitment requires its source record.", "encumbrance_source_required", "Choose the purchase order that created this commitment.", 422, "sourceId");
   }
+  if (input.sourceKind === "manual" && input.sourceId != null) {
+    throw refuse("A manual commitment cannot reference a source document.", "encumbrance_source_invalid", "Remove the source record from a manual commitment.", 422, "sourceId");
+  }
+  if (input.sourceKind === "purchase_order" && !isUuid(input.sourceId)) {
+    throw refuse("The purchase order reference is invalid.", "encumbrance_source_invalid", "Choose a purchase order from this organization.", 422, "sourceId");
+  }
   const amount = positiveAmount(input.amount);
   let dims = validExtraDims(input.extraDims);
   return withOrgTransaction(input.orgId, async () => {
     await requireEnabledForWrite(input.orgId);
+    let sourceId: string | null = null;
+    if (input.sourceKind === "purchase_order") {
+      const source = (await db.execute<{ id: string }>(sql`
+        select id from documents
+         where org_id = ${input.orgId} and id = ${input.sourceId}
+           and kind = 'purchase_order' and subsidiary_id = ${input.subsidiaryId}
+         for share
+      `)).rows[0];
+      if (!source) throw refuse(
+        "The purchase order does not exist in this organization and subsidiary.",
+        "encumbrance_source_invalid",
+        "Choose a purchase order from the selected subsidiary in this organization.",
+        422,
+        "sourceId",
+      );
+      sourceId = source.id;
+    }
     if (typeof dims.fund !== "string") {
       const defaultFund = (await db.execute<{ id: string | null }>(sql`
         select default_value_id as id from segment_definitions
@@ -281,7 +304,7 @@ export async function createEncumbrance(input: CreateEncumbranceInput): Promise<
         (org_id, encumbrance_number, source_kind, source_id, account_id, subsidiary_id,
          department_id, project_id, location_id, class_id, extra_dims, amount, status,
          custom, created_by, updated_by)
-      values (${input.orgId}, ${encumbranceNumber}, ${input.sourceKind}, ${input.sourceId ?? null},
+      values (${input.orgId}, ${encumbranceNumber}, ${input.sourceKind}, ${sourceId},
         ${input.accountId}, ${input.subsidiaryId}, ${cell.departmentId}, ${cell.projectId},
         ${cell.locationId}, ${cell.classId}, ${JSON.stringify(dims)}::jsonb, ${amount},
         'open', ${JSON.stringify(input.custom ?? {})}::jsonb, ${input.actorId ?? null}, ${input.actorId ?? null})
@@ -293,7 +316,7 @@ export async function createEncumbrance(input: CreateEncumbranceInput): Promise<
     await audit(db, {
       orgId: input.orgId, rowId: inserted.id, action: "insert",
       changes: { after: {
-        encumbranceNumber, sourceKind: input.sourceKind, sourceId: input.sourceId ?? null,
+        encumbranceNumber, sourceKind: input.sourceKind, sourceId,
         accountId: input.accountId, subsidiaryId: input.subsidiaryId,
         departmentId: cell.departmentId, projectId: cell.projectId, locationId: cell.locationId,
         classId: cell.classId, extraDims: dims, amount, status: "open",

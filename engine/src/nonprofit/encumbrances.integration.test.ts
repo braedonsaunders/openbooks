@@ -83,6 +83,7 @@ async function seedBudget(org: ScratchOrg & { fundId: string }, actorId: string,
 test("commitments and budget control preserve posting policy and derived balances", { skip: !DB }, async () => {
   const scratch = await withBypass(() => createScratchOrg());
   const org = scratch as ScratchOrg & { fundId: string };
+  let foreignOrg: ScratchOrg | null = null;
   clearBalancingLegProviders();
   try {
     const actorId = await withBypass(() => createScratchUser(org.orgId, "Budget Controller", "admin"));
@@ -112,6 +113,55 @@ test("commitments and budget control preserve posting policy and derived balance
       actorId,
     });
     org.fundId = fund.defaultFundId;
+    foreignOrg = await withBypass(() => createScratchOrg());
+    const otherSubsidiaryId = randomUUID();
+    const sourceDocuments = await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${otherSubsidiaryId}, ${org.orgId}, 'Other Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+      `);
+      const purchaseOrder = async (orgId: string, subsidiaryId: string, kind: string, number: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into documents (id, org_id, kind, document_number, party_id, document_date, currency, status, subsidiary_id)
+          values (${id}, ${orgId}, ${kind}, ${number}, ${orgId === org.orgId ? org.vendorId : foreignOrg!.vendorId},
+            ${org.date}, 'CAD', 'approved', ${subsidiaryId})
+        `);
+        return id;
+      };
+      return {
+        valid: await purchaseOrder(org.orgId, org.subsidiaryId, 'purchase_order', 'ENC-VALID-PO'),
+        otherSubsidiary: await purchaseOrder(org.orgId, otherSubsidiaryId, 'purchase_order', 'ENC-OTHER-SUB-PO'),
+        wrongKind: await purchaseOrder(org.orgId, org.subsidiaryId, 'vendor_bill', 'ENC-NOT-PO'),
+        foreign: await purchaseOrder(foreignOrg!.orgId, foreignOrg!.subsidiaryId, 'purchase_order', 'ENC-FOREIGN-PO'),
+      };
+    });
+    const rejectSource = (sourceId: string) => createEncumbrance({
+      orgId: org.orgId, accountId: org.accounts.adjustment, subsidiaryId: org.subsidiaryId,
+      sourceKind: "purchase_order", sourceId, amount: "10.0000", extraDims: { fund: org.fundId }, actorId,
+    });
+    await assert.rejects(
+      createEncumbrance({ orgId: org.orgId, accountId: org.accounts.adjustment, subsidiaryId: org.subsidiaryId,
+        sourceKind: "manual", sourceId: sourceDocuments.valid, amount: "10.0000", extraDims: { fund: org.fundId }, actorId }),
+      (error) => error instanceof NonprofitError && error.code === "encumbrance_source_invalid",
+      "manual commitments cannot retain a source document reference",
+    );
+    for (const [name, sourceId] of [
+      ["another organization", sourceDocuments.foreign],
+      ["another subsidiary", sourceDocuments.otherSubsidiary],
+      ["a non-purchase-order document", sourceDocuments.wrongKind],
+    ] as const) {
+      await assert.rejects(rejectSource(sourceId),
+        (error) => error instanceof NonprofitError && error.code === "encumbrance_source_invalid",
+        `purchase order source must not resolve to ${name}`,
+      );
+    }
+    const validPurchaseOrder = await createEncumbrance({
+      orgId: org.orgId, accountId: org.accounts.adjustment, subsidiaryId: org.subsidiaryId,
+      sourceKind: "purchase_order", sourceId: sourceDocuments.valid, amount: "10.0000",
+      extraDims: { fund: org.fundId }, actorId,
+    });
+    assert.equal(validPurchaseOrder.status, "open");
     const scenarioId = await seedBudget(org, actorId, "1000.0000");
     await withOrgContext(org.orgId, () => db.execute(sql`
       update funds set budgetary_control = 'hard' where org_id = ${org.orgId} and id = ${org.fundId}
@@ -294,6 +344,7 @@ test("commitments and budget control preserve posting policy and derived balance
     assert.equal(await openBalance(), "75.0000");
   } finally {
     clearBalancingLegProviders();
+    if (foreignOrg) await dropScratchOrg(foreignOrg.orgId);
     await dropScratchOrg(org.orgId);
   }
 });
