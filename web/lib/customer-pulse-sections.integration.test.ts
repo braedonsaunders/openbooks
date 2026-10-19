@@ -276,10 +276,10 @@ test('customer pulse keeps money exact through aggregation and JSON', { skip: !e
         values (${scratch.orgId}, ${scratch.customerId}, 10000, 'CAD')`)
       for (const [id, amount] of [[randomUUID(), '0.10'], [randomUUID(), '0.20']] as const) {
         await db.execute(sql`insert into documents
-          (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date,
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, due_date,
            currency, fx_rate, subtotal, tax_total, total, created_by)
           values (${id}, ${scratch.orgId}, 'customer_invoice', 'draft', ${id}, ${scratch.subsidiaryId},
-            ${scratch.customerId}, ${scratch.date}, 'CAD', '1', ${amount}, 0, ${amount}, ${actor})`)
+            ${scratch.customerId}, ${scratch.date}, '2099-12-31', 'CAD', '1', ${amount}, 0, ${amount}, ${actor})`)
         await db.execute(sql`insert into document_lines
           (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
           values (${scratch.orgId}, ${id}, 1, ${scratch.accounts.revenue}, 1, ${amount}, ${amount}, 0, ${amount})`)
