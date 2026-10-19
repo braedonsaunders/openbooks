@@ -133,6 +133,12 @@ test("note interest accrues by idempotent runs on its day count and a conversion
     const certificate = await loadSecurityDetail({ ...manage(w), securityId: converted.resultingSecurityId!, asOf: "2026-08-31" });
     assert.equal(certificate.security.quantity, "101336", "101,336.99 converts at 1.00 into whole shares");
     await assert.rejects(postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" }), refusal("equity_run_nothing_due"), "a converted note stops accruing, so no run is due");
+    await recordSecurityEvent({ ...manage(w), securityId: converted.resultingSecurityId!, kind: "void", effectiveOn: "2026-10-01", reason: "Conversion certificate recorded in error" });
+    const accrual = (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where org_id = ${w.org.orgId} and id = ${converted.accrualEntryId}`)).rows[0]!;
+    assert.equal(accrual.status, "reversed", "voiding a conversion reverses its settlement-date interest accrual");
+    const resumed = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-10-31" }));
+    assert.equal(resumed.total, "2016.4400", "the note resumes accruing without counting the voided settlement accrual");
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
   }
@@ -153,6 +159,18 @@ test("a note is repaid with its accrued interest, a SAFE repays only its purchas
     assert.equal(await accountBalance(w.org.orgId, w.accounts.accruedInterest), "0.0000");
     assert.equal(await accountBalance(w.org.orgId, w.accounts.interestExpense), "346.5800");
     await assert.rejects(recordSecurityEvent({ ...manage(w), ...repayment, amount: "1" }), refusal("equity_convertible_settled"));
+    await recordSecurityEvent({
+      ...manage(w), securityId: issued.id, kind: "reverse", effectiveOn: "2026-08-01", reversesEventId: repaid.eventId,
+      reason: "Repayment was recorded in error",
+    });
+    const settlementAccrual = (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where org_id = ${w.org.orgId} and id = ${repaid.accrualEntryId}`)).rows[0]!;
+    assert.equal(settlementAccrual.status, "reversed", "reversing a settlement also reverses its interest accrual entry");
+    const historicalRun = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-15" }));
+    assert.equal(historicalRun.total, "115.0700", "a later reversed settlement does not block an earlier interest run");
+    const repaidAgain = await recordSecurityEvent({ ...manage(w), ...repayment, effectiveOn: "2026-08-02", amount: "50263.01" });
+    assert.ok(repaidAgain.accrualEntryId);
+    assert.deepEqual((await entryLines(w.org.orgId, repaidAgain.accrualEntryId!)).map((line) => line.amount), ["147.9400", "-147.9400"], "settlement only tops up interest still accrued after reversals");
 
     const instrument = await safe(w, { considerationAmount: "25000" });
     await assert.rejects(

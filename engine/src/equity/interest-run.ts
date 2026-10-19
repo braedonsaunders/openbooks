@@ -85,9 +85,11 @@ async function accrued(orgId: string, subsidiaryId: string, through?: string): P
        where l.org_id = ${orgId} and l.subsidiary_id = ${subsidiaryId}
          ${through ? sql`and r.through_date <= ${through}::date` : sql``}
       union all
-      select security_id, interest_accrued_amount from equity_security_events
-       where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and interest_accrued_amount is not null
-         ${through ? sql`and effective_on <= ${through}::date` : sql``}
+      select e.security_id, e.interest_accrued_amount from equity_security_events e
+       where e.org_id = ${orgId} and e.subsidiary_id = ${subsidiaryId} and e.interest_accrued_amount is not null
+         ${through ? sql`and e.effective_on <= ${through}::date` : sql``}
+         and not exists (select 1 from equity_security_events r where r.org_id = e.org_id and r.kind = 'reverse' and r.reverses_event_id = e.id)
+         and not exists (select 1 from equity_security_events v where v.org_id = e.org_id and v.kind = 'void' and v.security_id = e.resulting_security_id)
     ) accruals group by security_id`)).rows;
   return new Map(rows.map((row) => [row.security_id, toUnits(row.amount)]));
 }

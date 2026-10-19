@@ -61,9 +61,11 @@ export async function accruedToDate(orgId: string, securityId: string, asOf?: st
                       join equity_interest_runs r on r.org_id = l.org_id and r.id = l.run_id
                      where l.org_id = ${orgId} and l.security_id = ${securityId}
                        ${asOf ? sql`and r.through_date <= ${asOf}::date` : sql``}), 0)::text as runs,
-           coalesce((select sum(interest_accrued_amount) from equity_security_events
-                     where org_id = ${orgId} and security_id = ${securityId}
-                       ${asOf ? sql`and effective_on <= ${asOf}::date` : sql``}), 0)::text as events`)).rows[0];
+           coalesce((select sum(e.interest_accrued_amount) from equity_security_events e
+                     where e.org_id = ${orgId} and e.security_id = ${securityId}
+                       ${asOf ? sql`and e.effective_on <= ${asOf}::date` : sql``}
+                       and not exists (select 1 from equity_security_events r where r.org_id = e.org_id and r.kind = 'reverse' and r.reverses_event_id = e.id)
+                       and not exists (select 1 from equity_security_events v where v.org_id = e.org_id and v.kind = 'void' and v.security_id = e.resulting_security_id)), 0)::text as events`)).rows[0];
   return toUnits(row?.runs ?? "0") + toUnits(row?.events ?? "0");
 }
 
