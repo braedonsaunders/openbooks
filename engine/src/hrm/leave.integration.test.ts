@@ -20,7 +20,7 @@ import {
   withHarness,
 } from "../testing/hrm-harness.ts";
 import { decideGate } from "../flows/gates.ts";
-import { LeaveError } from "./leave-errors.ts";
+import { LeaveError, postgresErrorCode } from "./leave-errors.ts";
 import {
   cancelLeaveRequest,
   createLeavePolicy,
@@ -942,9 +942,7 @@ test("same-scope overlapping policies refuse by name; other scopes and adjacent 
       assert.fail("a raw overlapping insert must die on the exclusion");
     } catch (error) {
       // db.execute wraps the PG error: the exclusion code rides on cause.
-      const pgCode = (error as { code?: string }).code
-        ?? (error as { cause?: { code?: string } }).cause?.code;
-      assert.equal(pgCode, "23P01");
+      assert.equal(postgresErrorCode(error), "23P01");
     }
     const windows = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_leave_policies
