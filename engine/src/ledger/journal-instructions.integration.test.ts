@@ -81,7 +81,7 @@ test("scheduled reversals include live allocation entries in secondary books",{s
   const reversals=(await db.execute<{book_id:string;reverses_entry_id:string;period_id:string}>(sql`
    select book_id,reverses_entry_id,period_id from journal_entries
     where org_id=${org.orgId} and reverses_entry_id in (${sourceEntry},${allocation.entryId}) and status='posted'
-    order by book_id`)).rows;
+    order by (book_id = ${org.bookId}) desc, book_id`)).rows;
   assert.deepEqual(reversals,[
    {book_id:org.bookId,reverses_entry_id:sourceEntry,period_id:org.periodId},
    {book_id:secondaryBook,reverses_entry_id:allocation.entryId,period_id:org.periodId},
