@@ -1284,7 +1284,7 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       const m = await import('../app/(app)/channels/view')
       return {
         load: () => m.loadChannelsHome(),
-        spec: () => m.channelsHomeSpec(),
+        spec: (data) => m.channelsHomeSpec(data as never),
       }
     },
   },

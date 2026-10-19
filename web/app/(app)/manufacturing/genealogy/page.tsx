@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 const Kind = z.enum(["lot", "serial"]);
 const Direction = z.enum(["forward", "backward"]);
-const Id = uuidString;
+const Id = uuidString();
 const MaxDepth = z.coerce.number().int().min(1).max(32);
 
 function first(value: string | string[] | undefined) {

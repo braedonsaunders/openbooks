@@ -172,7 +172,7 @@ export function serviceHomeSpec(data: ServiceHomeData): PageSpec {
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             className: 'min-h-0 lg:col-span-2',
             blocks: [
-              widget('module-home-tabs', { tabs: data.workTabs, placement: 'local' }),
+              widgetBlock('module-home-tabs', { tabs: data.workTabs, placement: 'local' }),
               widgetBlock('entity-list-view', {
                 recordType: data.activeWork === 'requests' ? 'service_request' : 'service_visit',
                 sp: data.currentParams,
