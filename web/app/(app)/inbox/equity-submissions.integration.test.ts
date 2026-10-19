@@ -199,10 +199,13 @@ test("All approvals lists every pending approval in the organization within the 
   const w = await withBypassContext(() => setupEquityWorld());
   try {
     const { org } = w;
-    const controllerId = await withBypassContext(async () => {
+    const { controllerId, adminId } = await withBypassContext(async () => {
       await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,flows}', 'true') where id = ${org.orgId}`);
       await createScratchUser(org.orgId, "Accounting Approver", "approver");
-      return createScratchUser(org.orgId, "Org Controller", "controller");
+      return {
+        controllerId: await createScratchUser(org.orgId, "Org Controller", "controller"),
+        adminId: await createScratchUser(org.orgId, "Org Admin", "admin"),
+      };
     });
     await withBypassContext(() => seedApprovalFlow(org.orgId, {
       subjectKind: "equity_action",
@@ -236,6 +239,7 @@ test("All approvals lists every pending approval in the organization within the 
     assert.equal(changeRow.kindLabel, financialChangeEventLabel("revaluation"), "an accounting event names its operation");
     for (const row of [equityRow, changeRow]) {
       assert.equal(row.canDecide, false, "another approver's gate offers no decision");
+      assert.equal(row.canDelegate, false, "nor a hand-off the delegate path would refuse");
       assert.equal(row.awaitingAnotherApprover, false);
     }
     assert.equal(all!.emptyTitle, "Nothing pending");
@@ -279,7 +283,15 @@ test("All approvals lists every pending approval in the organization within the 
     state.authz = authzFor(org.orgId, w.approverId, "equity_approver", ["flows.manage", "flows.approve", "equity.read", "equity.approve"]);
     const approverView = await withOrgContext(org.orgId, () => loadApprovals({ tab: "all" }));
     assert.equal(approverView!.approvalRows.find((r) => r.kind === "equity_action")?.canDecide, true);
+    assert.equal(approverView!.approvalRows.find((r) => r.kind === "equity_action")?.canDelegate, true, "the direct assignee may delegate");
     assert.equal(approverView!.approvalRows.find((r) => r.gateId === change.gateId)?.canDecide, false);
+
+    // An organization admin decides and delegates any gate, as the decide path allows.
+    state.authz = authzFor(org.orgId, adminId, "admin", ["flows.manage", "flows.approve"]);
+    const adminView = await withOrgContext(org.orgId, () => loadApprovals({ tab: "all" }));
+    const adminChange = adminView!.approvalRows.find((r) => r.gateId === change.gateId);
+    assert.equal(adminChange?.canDecide, true);
+    assert.equal(adminChange?.canDelegate, true);
 
     // Without flows.manage the tab falls back to the caller's own worklist.
     state.authz = authzFor(org.orgId, controllerId, "controller", ["flows.approve"]);

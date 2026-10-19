@@ -36,6 +36,8 @@ export type ApprovalWorklistItem =
        * the caller's own worklist carries only gates that reach them.
        */
       canDecide?: boolean;
+      /** The viewer may hand this gate to another user (delegateGate's rule). */
+      canDelegate?: boolean;
     } & WorklistGate)
   | ({ kind: "document" } & WorklistDocument)
   | ({ kind: "budget" } & WorklistBudget)
@@ -131,8 +133,13 @@ export async function approvalWorklistPageForAuthz(
       // the page renders "awaiting another approver" instead of offering an
       // Approve that refuses on click. Bounded by the page window.
       if (mayFlows) {
-        const awaitingAnotherApprover = (await gateDecisionCapability(item.gate.id, authz.user.id)).sodBlocked;
-        out.push({ ...item.gate, kind: "flow_gate", awaitingAnotherApprover });
+        const capability = await gateDecisionCapability(item.gate.id, authz.user.id);
+        out.push({
+          ...item.gate,
+          kind: "flow_gate",
+          awaitingAnotherApprover: capability.sodBlocked,
+          canDelegate: capability.canDelegate,
+        });
       }
     } else if (item.kind === "document") {
       if (mayFlows) out.push({ ...item.document, kind: "document" });
@@ -205,6 +212,7 @@ export async function approvalWorklistOrganizationPageForAuthz(
         kind: "flow_gate",
         canDecide: capability.canAct,
         awaitingAnotherApprover: capability.sodBlocked,
+        canDelegate: capability.canDelegate,
       });
     } else if (item.kind === "document") {
       out.push({ ...item.document, kind: "document" });

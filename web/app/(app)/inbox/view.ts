@@ -496,7 +496,9 @@ export async function loadApprovals(
       // The caller's own worklist lists only gates that reach them; the
       // organization view resolved each row through the native gate check.
       canDecide: g.canDecide ?? true,
-      canDelegate: canManageFlows || g.assigneeUserId === user.id,
+      // Delegate is offered exactly where delegateGate accepts it: the
+      // gate's direct assignee or an organization admin.
+      canDelegate: g.canDelegate === true,
       quorumAll: g.quorum === 'all',
       signatureRequired: g.signatureRequired,
       // Separation-of-duties blocked for this viewer: the row renders

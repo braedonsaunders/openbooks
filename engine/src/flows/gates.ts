@@ -271,23 +271,26 @@ export function sodBlockedIds(
  * excludes them as submitter/maker): surfaces render those rows as
  * "awaiting another approver" with no decision actions, instead of offering
  * Approve and refusing on click. Any other denial (not assigned, not
- * pending) leaves `sodBlocked` false.
+ * pending) leaves `sodBlocked` false. `canDelegate` is delegateGate's own
+ * rule — the gate's direct assignee or an organization admin — so a surface
+ * offers Delegate exactly where the hand-off will be accepted.
  */
 export async function gateDecisionCapability(
   gateId: string,
   userId: string,
-): Promise<{ canAct: boolean; signatureRequired: boolean; sodBlocked: boolean }> {
+): Promise<{ canAct: boolean; signatureRequired: boolean; sodBlocked: boolean; canDelegate: boolean }> {
   const gate = await loadGate(gateId);
   if (!gate || gate.status !== "pending") {
-    return { canAct: false, signatureRequired: false, sodBlocked: false };
+    return { canAct: false, signatureRequired: false, sodBlocked: false, canDelegate: false };
   }
+  const canDelegate = gate.assigneeUserId === userId || (await userRoleKeys(gate.orgId, userId)).has(GATE_ADMIN_ROLE);
   let authorized = await canActOnGate(gate, userId);
   if (!authorized && gate.assigneeUserId) {
     authorized =
       (await activeDelegationPrincipal(gate.orgId, gate.assigneeUserId, userId)) !== null;
   }
   if (!authorized) {
-    return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: false };
+    return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: false, canDelegate };
   }
   const adapter = getFlowAdapter(gate.subjectKind);
   const subject = await adapter?.loadContext(gate.subjectId);
@@ -298,10 +301,10 @@ export async function gateDecisionCapability(
       !node ||
       node.preventSelfApproval !== false
     ) {
-      return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: true };
+      return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: true, canDelegate };
     }
   }
-  return { canAct: true, signatureRequired: gate.signatureRequired, sodBlocked: false };
+  return { canAct: true, signatureRequired: gate.signatureRequired, sodBlocked: false, canDelegate };
 }
 
 /** The gate node's authored GateData, for escalation targets. */
