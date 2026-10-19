@@ -38,8 +38,20 @@
     "details": "基金の詳細",
     "code": "コード",
     "kind": "種別",
+    "kinds": {
+      "operating": "運営",
+      "restricted": "使途制限",
+      "endowment": "恒久基金",
+      "plant": "設備",
+      "board_designated": "理事会指定"
+    },
     "restrictionClass": "制限区分",
     "budgetaryControl": "予算統制",
+    "controlModes": {
+      "off": "オフ",
+      "advisory": "助言",
+      "hard": "厳格"
+    },
     "status": "ステータス",
     "active": "有効",
     "archived": "アーカイブ済み",

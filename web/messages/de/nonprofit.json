@@ -38,8 +38,20 @@
     "details": "Fondsdetails",
     "code": "Code",
     "kind": "Art",
+    "kinds": {
+      "operating": "Operativ",
+      "restricted": "Zweckgebunden",
+      "endowment": "Stiftungsvermögen",
+      "plant": "Anlagevermögen",
+      "board_designated": "Vom Vorstand bestimmt"
+    },
     "restrictionClass": "Zweckbindungsklasse",
     "budgetaryControl": "Budgetkontrolle",
+    "controlModes": {
+      "off": "Aus",
+      "advisory": "Hinweisend",
+      "hard": "Verbindlich"
+    },
     "status": "Status",
     "active": "Aktiv",
     "archived": "Archiviert",

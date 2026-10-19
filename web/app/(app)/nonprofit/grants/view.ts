@@ -78,6 +78,7 @@ export interface GrantRecordDrawer {
 
 export interface GrantCreateDrawer {
   mode: 'create'
+  remountKey: 'new'
   fundOptions: { id: string; code: string; name: string }[]
   groupOptions: GrantGroupOption[]
   sponsorOptions: { id: string; displayName: string }[]
@@ -148,6 +149,7 @@ export async function loadGrants(
       ...base,
       drawer: {
         mode: 'create',
+        remountKey: 'new',
         fundOptions: funds.rows,
         groupOptions: groups.rows,
         sponsorOptions: sponsors.rows.map((row) => ({ id: row.id, displayName: row.display_name })),

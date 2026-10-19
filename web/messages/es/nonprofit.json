@@ -38,8 +38,20 @@
     "details": "Detalle del fondo",
     "code": "Código",
     "kind": "Tipo",
+    "kinds": {
+      "operating": "Operativo",
+      "restricted": "Restringido",
+      "endowment": "Fondo patrimonial",
+      "plant": "Inmovilizado",
+      "board_designated": "Designado por la junta"
+    },
     "restrictionClass": "Clase de restricción",
     "budgetaryControl": "Control presupuestario",
+    "controlModes": {
+      "off": "Desactivado",
+      "advisory": "Informativo",
+      "hard": "Estricto"
+    },
     "status": "Estado",
     "active": "Activo",
     "archived": "Archivado",

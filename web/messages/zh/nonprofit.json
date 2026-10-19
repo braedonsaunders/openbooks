@@ -38,8 +38,20 @@
     "details": "基金详情",
     "code": "代码",
     "kind": "种类",
+    "kinds": {
+      "operating": "运营",
+      "restricted": "受限",
+      "endowment": "永久基金",
+      "plant": "固定资产",
+      "board_designated": "董事会指定"
+    },
     "restrictionClass": "限制类别",
     "budgetaryControl": "预算控制",
+    "controlModes": {
+      "off": "关闭",
+      "advisory": "提示",
+      "hard": "严格"
+    },
     "status": "状态",
     "active": "有效",
     "archived": "已归档",
