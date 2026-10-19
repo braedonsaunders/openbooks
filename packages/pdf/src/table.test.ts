@@ -59,12 +59,13 @@ test('impossible automatic and weighted grids refuse with an actionable 422', ()
   } finally { doc.end() }
 })
 
-test('Unicode line-break opportunities do not make a CJK paragraph indivisible', () => {
+test('Unicode zero-width break opportunities keep long text wrappable', () => {
   const doc = document()
   try {
-    // An ASCII-capable font can still prove the allocator uses Unicode break
-    // opportunities; the document's selected font owns glyph coverage.
-    const widths = computeColumnWidths(doc, group(['Text'], [['株式証明書'.repeat(100)]]), 100, theme)
+    const text = 'Aktien\u200b'.repeat(100)
+    doc.font(theme.font).fontSize(theme.table)
+    assert.ok(doc.widthOfString(text) > 100, 'the complete text cannot fit on one line')
+    const widths = computeColumnWidths(doc, group(['Text'], [[text]]), 100, theme)
     assert.deepEqual(widths, [100])
   } finally { doc.end() }
 })
