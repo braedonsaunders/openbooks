@@ -1753,6 +1753,7 @@ async function stockOn(f: Fixture, itemId: string, quantity: string, unitCost: s
 }
 /** A completed order whose materials were issued and whose operations began on 1 February; the receipt is recorded today. */
 async function februaryOrder(f: Fixture) {
+  await ensureMonthPeriod(f, 2026, 1);
   await ensureMonthPeriod(f, 2026, 2);
   const wo = await prepare(f);
   await stockOn(f, f.org.items.component, "4", "3", "2026-01-15");
