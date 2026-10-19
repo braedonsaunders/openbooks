@@ -24,6 +24,8 @@ const MEASURES = new Set([
   "gross_profit",
 ]);
 
+type FinancialAdjustmentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 export type AdjustableProjectFinancialMeasure =
   | "actual_cost"
   | "invoiced_to_date"
@@ -59,8 +61,9 @@ export interface ProjectFinancialAdjustmentRecord {
  * Stable source identity makes cutover/import operators idempotent. Conflicting
  * reuse fails closed; corrections are exact, separately audited reversal rows.
  */
-export async function recordProjectFinancialAdjustment(
+async function recordProjectFinancialAdjustmentWithExecutor(
   input: RecordProjectFinancialAdjustmentInput,
+  txOverride?: FinancialAdjustmentTransaction,
 ): Promise<ProjectFinancialAdjustmentRecord> {
   if (!DATE.test(input.adjustmentDate)) {
     throw new Error("adjustmentDate must be YYYY-MM-DD");
@@ -90,8 +93,12 @@ export async function recordProjectFinancialAdjustment(
     throw new Error("project financial adjustment evidence must be an object");
   }
 
-  return db.transaction(async (tx) => {
+  const persist = async (tx: FinancialAdjustmentTransaction): Promise<ProjectFinancialAdjustmentRecord> => {
     if (sourceSystem && sourceRef) {
+      await tx.execute(sql`
+        select pg_advisory_xact_lock(hashtextextended(
+          ${`project-financial-adjustment:${input.orgId}:${sourceSystem}:${sourceRef}`}, 0
+        ))`);
       const prior = (await tx.execute<{
           id: string;
           project_id: string;
@@ -174,7 +181,14 @@ export async function recordProjectFinancialAdjustment(
       )
     `);
     return { id, measure: input.measure, amount, existing: false };
-  });
+  };
+  return txOverride ? persist(txOverride) : db.transaction(persist);
+}
+
+export async function recordProjectFinancialAdjustment(
+  input: RecordProjectFinancialAdjustmentInput,
+): Promise<ProjectFinancialAdjustmentRecord> {
+  return recordProjectFinancialAdjustmentWithExecutor(input);
 }
 
 export async function reverseProjectFinancialAdjustment(input: {
@@ -186,32 +200,78 @@ export async function reverseProjectFinancialAdjustment(input: {
   sourceSystem?: string | null;
   sourceRef?: string | null;
 }): Promise<ProjectFinancialAdjustmentRecord> {
-  const original = (await db.execute<{
+  if (!DATE.test(input.adjustmentDate)) {
+    throw new Error("adjustmentDate must be YYYY-MM-DD");
+  }
+  const reason = input.reason.trim();
+  if (reason.length < 8 || reason.length > 500) {
+    throw new Error("project financial adjustment reason must be 8-500 characters");
+  }
+  const sourceSystem = input.sourceSystem?.trim() || null;
+  const sourceRef = input.sourceRef?.trim() || null;
+  if ((sourceSystem === null) !== (sourceRef === null)) {
+    throw new Error("sourceSystem and sourceRef must either both be provided or both be absent");
+  }
+
+  return db.transaction(async (tx) => {
+    const row = (await tx.execute<{
       project_id: string;
       measure: AdjustableProjectFinancialMeasure;
       amount: string;
       evidence: Record<string, unknown>;
     }>(sql`
-    select project_id, measure, amount::text, evidence
-      from project_financial_adjustments
-     where org_id = ${input.orgId} and id = ${input.adjustmentId}
-  `));
-  const row = original.rows[0];
-  if (!row) throw new Error("project financial adjustment not found");
-  return recordProjectFinancialAdjustment({
-    orgId: input.orgId,
-    projectId: row.project_id,
-    adjustmentDate: input.adjustmentDate,
-    measure: row.measure,
-    amount: neg(row.amount),
-    reason: input.reason,
-    actorId: input.actorId,
-    sourceSystem: input.sourceSystem,
-    sourceRef: input.sourceRef,
-    reversesAdjustmentId: input.adjustmentId,
-    evidence: {
-      reversalOf: input.adjustmentId,
-      originalEvidence: row.evidence,
-    },
+      select project_id, measure, amount::text, evidence
+        from project_financial_adjustments
+       where org_id = ${input.orgId} and id = ${input.adjustmentId}
+       for update
+    `)).rows[0];
+    if (!row) throw new Error("project financial adjustment not found");
+
+    const amount = persistProjectFinancialAdjustmentAmount(neg(row.amount));
+    const evidence = { reversalOf: input.adjustmentId, originalEvidence: row.evidence };
+    const existing = (await tx.execute<{
+      id: string;
+      project_id: string;
+      adjustment_date: string;
+      measure: AdjustableProjectFinancialMeasure;
+      amount: string;
+      reason: string;
+      source_system: string | null;
+      source_ref: string | null;
+      evidence_matches: boolean;
+    }>(sql`
+      select id, project_id, adjustment_date::text as adjustment_date, measure,
+             amount::text, reason, source_system, source_ref,
+             evidence = ${JSON.stringify(evidence)}::jsonb as evidence_matches
+        from project_financial_adjustments
+       where org_id = ${input.orgId} and reverses_adjustment_id = ${input.adjustmentId}
+       for update
+    `)).rows[0];
+    if (existing) {
+      const equivalent = existing.project_id === row.project_id &&
+        existing.adjustment_date === input.adjustmentDate &&
+        existing.measure === row.measure &&
+        normalizeMoney(existing.amount) === amount && existing.reason === reason &&
+        existing.source_system === sourceSystem && existing.source_ref === sourceRef &&
+        existing.evidence_matches;
+      if (!equivalent) {
+        throw new Error(`project financial adjustment ${input.adjustmentId} already has a reversal with different evidence`);
+      }
+      return { id: existing.id, measure: existing.measure, amount, existing: true };
+    }
+
+    return recordProjectFinancialAdjustmentWithExecutor({
+      orgId: input.orgId,
+      projectId: row.project_id,
+      adjustmentDate: input.adjustmentDate,
+      measure: row.measure,
+      amount,
+      reason,
+      actorId: input.actorId,
+      sourceSystem,
+      sourceRef,
+      reversesAdjustmentId: input.adjustmentId,
+      evidence,
+    }, tx);
   });
 }

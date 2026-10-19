@@ -22,7 +22,7 @@ import { db, withOrg } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { loadEntities, type PartyMirrorOutcome } from "./migrate.ts";
 import type { EntityStream, MigrationSource, SourceEntity } from "./source.ts";
-import { applySourcePartyMerge, PARTY_MERGE_REF_COVERAGE } from "./party-merges.ts";
+import { applySourcePartyMerge, PARTY_MERGE_REF_COVERAGE, PartyMergeError } from "./party-merges.ts";
 import { buildNativeContext } from "./native.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -630,6 +630,84 @@ test("an unreferenced disappearance is left untouched and an incremental absence
     const incrementalStats = await loadParties(org, adapter, [party("A", "A Co")], new Date(), incrementalOutcome);
     assert.equal(incrementalStats.parties?.failed ?? 0, 0);
     assert.deepEqual(incrementalOutcome, { merges: [], holds: [] });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a party merge refuses append-only entitlement history with an actionable reason", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const adapter = ADAPTERS[0]!;
+  try {
+    await loadParties(org, adapter, [party("A", "Survivor Co"), party("B", "Absorbed Co")], null,
+      { merges: [], holds: [] });
+    const survivorId = await partyIdByRef(org.orgId, adapter.refKey, "A");
+    const absorbedId = await partyIdByRef(org.orgId, adapter.refKey, "B");
+    const planId = randomUUID();
+    await db.execute(sql`
+      insert into entitlement_plans (id, org_id, code, name)
+      values (${planId}, ${org.orgId}, 'MERGE-VAC', 'Merge protection vacation')`);
+    await db.execute(sql`
+      insert into entitlement_ledger (org_id, plan_id, employee_party_id, movement_date, amount, kind)
+      values (${org.orgId}, ${planId}, ${absorbedId}, ${org.date}, '8', 'accrual')`);
+
+    await assert.rejects(withOrg(org.orgId, () => applySourcePartyMerge({
+      orgId: org.orgId, sourceName: adapter.name, absorbedRef: "B", survivorRef: "A",
+      absorbedId, survivorId, actorId: null, runId: null,
+    })), (error: unknown) => error instanceof PartyMergeError &&
+      error.message.includes("earned entitlement movement history"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a submitted scorecard stays attributed to its interviewer during a party merge", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const adapter = ADAPTERS[0]!;
+  try {
+    await loadParties(org, adapter, [party("A", "Survivor Co"), party("B", "Interviewer")], null,
+      { merges: [], holds: [] });
+    const survivorId = await partyIdByRef(org.orgId, adapter.refKey, "A");
+    const absorbedId = await partyIdByRef(org.orgId, adapter.refKey, "B");
+    const templateId = randomUUID();
+    const stageId = randomUUID();
+    const requisitionId = randomUUID();
+    const candidateId = randomUUID();
+    const applicationId = randomUUID();
+    const interviewId = randomUUID();
+    const scorecardId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_pipeline_templates (id, org_id, name)
+      values (${templateId}, ${org.orgId}, 'Party merge interview pipeline')`);
+    await db.execute(sql`
+      insert into hrm_pipeline_stages (id, org_id, template_id, position, key, name, kind)
+      values (${stageId}, ${org.orgId}, ${templateId}, 0, 'screen', 'Screen', 'screening')`);
+    await db.execute(sql`
+      insert into hrm_requisitions (id, org_id, requisition_number, title, employer_subsidiary_id, headcount,
+                                    pipeline_template_id)
+      values (${requisitionId}, ${org.orgId}, ${`REQ-${requisitionId.slice(0, 8)}`}, 'Interviewer role',
+              ${org.subsidiaryId}, 1, ${templateId})`);
+    await db.execute(sql`
+      insert into hrm_candidates (id, org_id, display_name)
+      values (${candidateId}, ${org.orgId}, 'Candidate for interviewer merge test')`);
+    await db.execute(sql`
+      insert into hrm_applications (id, org_id, requisition_id, candidate_id, stage_id, applied_on)
+      values (${applicationId}, ${org.orgId}, ${requisitionId}, ${candidateId}, ${stageId}, ${org.date})`);
+    await db.execute(sql`
+      insert into hrm_interviews (id, org_id, application_id, kind, scheduled_at)
+      values (${interviewId}, ${org.orgId}, ${applicationId}, 'phone', now())`);
+    await db.execute(sql`
+      insert into hrm_scorecards (id, org_id, interview_id, interviewer_party_id, overall, submitted_at)
+      values (${scorecardId}, ${org.orgId}, ${interviewId}, ${absorbedId}, 'yes', now())`);
+
+    const result = await withOrg(org.orgId, () => applySourcePartyMerge({
+      orgId: org.orgId, sourceName: adapter.name, absorbedRef: "B", survivorRef: "A",
+      absorbedId, survivorId, actorId: null, runId: null,
+    }));
+    assert.equal(result.survivorId, survivorId);
+    const scorecard = (await db.execute<{ interviewer_party_id: string }>(sql`
+      select interviewer_party_id from hrm_scorecards where org_id = ${org.orgId} and id = ${scorecardId}`)).rows[0]!;
+    assert.equal(scorecard.interviewer_party_id, absorbedId);
   } finally {
     await dropScratchOrg(org.orgId);
   }
