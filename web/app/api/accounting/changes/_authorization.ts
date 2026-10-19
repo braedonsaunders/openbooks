@@ -8,16 +8,7 @@ import {
 import { getAuthz, can } from "@/lib/authz";
 import { isFeatureEnabled } from "@/lib/features";
 import { isUuid } from "@/lib/list-params";
-export const changeAuthority = {
-  manufacturing: {permission: "manufacturing.manage", feature: "manufacturing"},
-  payroll: { permission: "payroll.run", feature: "payroll" },
-  sales: {permission:"ar.post",feature:"dropShipping"},
-  provision: { permission: "gl.manage", applyPermission: "gl.post", feature: null },
-  lease: { permission: "assets.manage", feature: "fixedAssets" },
-  asset: { permission: "assets.manage", feature: "fixedAssets" },
-  revenue: { permission: "ar.post", feature: "revenueRecognition" },
-  consolidation: { permission: "close.run", feature: "multiSubsidiary" },
-} as const;
+import { changeAuthority } from "@/lib/accounting-change-authority";
 export async function authorizeChange(id: string, intent: "submit" | "apply" = "submit") {
   const auth = await getAuthz();
   if (!auth)

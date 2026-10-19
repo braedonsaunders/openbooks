@@ -15,6 +15,7 @@ import { useBusinessToday } from "@/components/business-date-provider";
 import { useDirtyClose } from "@/lib/use-dirty-close";
 import { useTranslations } from "next-intl";
 import { DateField } from '../../../../components/date-field';
+import { initialLossOfControlFormState } from '../../../../lib/loss-of-control-form-state';
 type Setup = {
   interest: { investment_account_id: string; equity_income_account_id: string };
   subsidiaries: { id: string; name: string; base_currency: string }[];
@@ -48,13 +49,9 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     [setup, setSetup] = useState<Setup | null>(null),
-    [values, setValues] = useState<Record<string, string>>({
-      effectiveOn: today,
-      retainedMethod: "none",
-      parentRetainedCarrying: "0",
-      retainedPercent: "0",
-      retainedFairValue: "0",
-    }),
+    [values, setValues] = useState<Record<string, string>>(() =>
+      initialLossOfControlFormState(today, null, "").values,
+    ),
     [rates, setRates] = useState<Record<string, string>>({}),
     [oci, setOci] = useState<Oci[]>([]),
     [adjustments, setAdjustments] = useState<
@@ -67,9 +64,24 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
     setKey(crypto.randomUUID());
     setError(null);
   };
+  const resetForm = (defaults: Setup["interest"] | null) => {
+    const state = initialLossOfControlFormState(
+      today,
+      defaults,
+      crypto.randomUUID(),
+    );
+    setValues(state.values);
+    setRates(state.rates);
+    setOci(state.oci);
+    setAdjustments(state.adjustments);
+    setError(state.error);
+    setDirty(state.dirty);
+    setKey(state.key);
+  };
   const closeDrawer = () => {
     setOpen(false);
-    setDirty(false);
+    setSetup(null);
+    resetForm(null);
   };
   const closeGuard = useDirtyClose({
     dirty, busy, onClose: closeDrawer,
@@ -95,11 +107,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
       }
       const s = (await r.json()) as Setup;
       setSetup(s);
-      setValues((v) => ({
-        ...v,
-        retainedAccountId: s.interest.investment_account_id,
-        equityIncomeAccountId: s.interest.equity_income_account_id,
-      }));
+      resetForm(s.interest);
       setOpen(true);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("loadFailed"));
