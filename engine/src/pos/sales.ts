@@ -938,7 +938,7 @@ export async function readPosReceipt(
   const tenders = (await runner.execute<{ kind: string; method_label: string; amount_minor: string; reference: string | null }>(sql`
     select kind, method_label, amount_minor::text as amount_minor, reference
       from document_tenders where org_id = ${orgId} and document_id = ${doc.id} order by position`)).rows;
-  const refunded = doc.kind === "cash_sale" ? await refundedByLine(runner, orgId, doc.id) : new Map<number, bigint>();
+  const refunded = doc.kind === "cash_sale" ? await refundedByLine(runner, orgId, doc.id) : new Map<number, RefundedLineTotals>();
   const evidence = new Map<number, { listUnitPrice: string | null; lineDiscount: string; orderDiscount: string }>();
   const pricedLines = attribution?.pricing && Array.isArray((attribution.pricing as { lines?: unknown }).lines)
     ? (attribution.pricing as { lines: Array<{ lineNumber: number; listUnitPrice: string | null; lineDiscount: string; orderDiscount: string }> }).lines
