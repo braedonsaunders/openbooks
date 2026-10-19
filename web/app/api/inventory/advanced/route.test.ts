@@ -57,6 +57,11 @@ const mockSources = new Map<string, string>([
           // Like the engine's: runs the work in the org's transaction scope,
       // where the ambient db proxy answers every query.
       export async function withOrgTransaction(_orgId, work) { return work() }
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
     `,
   ],
   [

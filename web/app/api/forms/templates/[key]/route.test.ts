@@ -90,6 +90,11 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.form-template-route-test')]
       const sqlText = globalThis.openbooksSqlText
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       const templateRow = () => ({
         id: 'template-1', key: 'intake', name: 'Intake', category: null,
         description: null, status: 'draft', kind: 'form', allowed_roles: null,

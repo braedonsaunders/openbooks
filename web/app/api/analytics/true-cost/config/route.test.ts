@@ -70,6 +70,11 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.true-cost-config-route-test')]
       const sqlText = globalThis.openbooksTrueCostSqlText
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       export const db = {
         async execute(query) {
           const text = sqlText(query)

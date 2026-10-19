@@ -87,6 +87,11 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       export * from '${import.meta.resolve('@openbooks/engine/platform/db')}'
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       export const db = { execute: async () => ({ rows: [{ rowId: '${ROW_A}' }] }) }
     `,
   ],

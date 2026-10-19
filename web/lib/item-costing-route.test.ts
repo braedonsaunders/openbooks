@@ -92,6 +92,8 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       export * from '${import.meta.resolve('@openbooks/engine/platform/db')}'
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
       const state = globalThis[Symbol.for('openbooks.item-costing-route-test')]
       const sqlText = globalThis.openbooksSqlText
       const sqlParams = globalThis.openbooksSqlParams

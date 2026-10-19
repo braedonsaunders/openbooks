@@ -111,7 +111,7 @@ const mockSources = new Map<string, string>([
     `export * from "@openbooks/engine/platform/business-date/module"
       export async function businessToday() { return '2026-08-28' }`,
   ],
-  ["mock:features", `export async function subsidiaryFeatureEnabled() { return true }`],
+  ["mock:features", `export async function subsidiaryFeatureEnabled() { return true }; export async function isFeatureEnabled() { return true }`],
 ]);
 
 const mockUrls = new Map<string, string>([
