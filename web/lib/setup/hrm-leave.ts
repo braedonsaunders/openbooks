@@ -148,3 +148,33 @@ export const LEAVE_POLICIES_ENTITY: SetupEntity = {
     { key: 'isActive', kind: 'boolean', defaultValue: true },
   ],
 }
+
+export const LEAVE_PAYROLL_ENTITLEMENT_MAPPINGS_ENTITY: SetupEntity = {
+  key: 'leave-payroll-entitlement-mappings',
+  parentRecords: [{ entityKey: 'leave-types', fieldKey: 'leaveTypeId' }],
+  table: 'hrm_leave_payroll_entitlement_mappings',
+  groupKey: 'workforce',
+  featureKey: 'hrm',
+  iconKey: 'landmark',
+  orgScoped: true,
+  actorCols: true,
+  orderBy: 'effective_from desc',
+  hasActive: true,
+  allowUpdate: false,
+  allowDelete: false,
+  docSlug: 'leave-time-versus-value',
+  columns: [
+    { key: 'leaveTypeId', kind: 'ref', ref: 'leave-types' },
+    { key: 'entitlementPlanId', kind: 'ref', ref: 'entitlement-plans', labelKey: 'fields.planId' },
+    { key: 'effectiveFrom', kind: 'date' },
+    { key: 'reason', kind: 'text' },
+    { key: 'isActive', kind: 'badge-active' },
+  ],
+  fields: [
+    { key: 'leaveTypeId', kind: 'ref', ref: 'leave-types', required: true },
+    { key: 'entitlementPlanId', kind: 'ref', ref: 'entitlement-plans', required: true, labelKey: 'fields.planId' },
+    { key: 'effectiveFrom', kind: 'date', required: true },
+    { key: 'reason', kind: 'textarea', required: true },
+    { key: 'isActive', kind: 'boolean', defaultValue: true },
+  ],
+}

@@ -7,6 +7,7 @@ import {
   applyOverheadForTime,
   backfillOverhead,
   countUnappliedOverheadTime,
+  reverseOverheadForTime,
 } from "./overhead-post.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
@@ -103,6 +104,13 @@ test("dust stamps applied-with-zero and clears the backlog", async () => {
     assert.equal(lateCustom.source, "import");
     assert.equal((await countUnappliedOverheadTime(f.orgId)).entries, 0);
     assert.equal((await countUnappliedOverheadTime(f.orgId)).hours, "0");
+
+    await reverseOverheadForTime(f.orgId, f.actorId, [f.dustLate], "Re-evaluate edited time", "2026-07-20");
+    assert.equal((await customOf(f.orgId, f.dustLate)).overheadZeroApplied, undefined);
+    assert.equal((await countUnappliedOverheadTime(f.orgId)).entries, 1, "released dust returns to the apply queue");
+    const reapplied = await applyOverheadForTime(f.orgId, f.actorId, [f.dustLate]);
+    assert.equal(reapplied.dust, 1);
+    assert.equal((await customOf(f.orgId, f.dustLate)).overheadZeroApplied, true);
   } finally {
     await dropScratchOrg(f.orgId);
   }

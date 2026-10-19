@@ -101,6 +101,7 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
   ["revenue_contracts", "project_id"],
   ["res_assignments", "project_id"],
   ["schedule_boards", "project_id"],
+  ["schedule_patterns", "project_id"],
   ["schedule_entries", "project_id"],
   ["res_requests", "project_id"],
   ["res_retainers", "project_id"],
@@ -116,8 +117,29 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
   ["hrm_per_diem_entries", "project_id"],
   ["hrm_travel_pay_entries", "project_id"],
   ["hrm_compliance_findings", "project_id"],
+  ["hrm_benefit_program_scopes", "project_id"],
   ["expense_amortization_schedules", "project_id"],
 ];
+
+/**
+ * Project evidence whose project attribution is immutable after recording.
+ * Merges keep this evidence on its original project and refuse when the
+ * duplicate owns any such rows.
+ */
+const APPEND_ONLY_PROJECT_REFERENCES = [
+  ["project_overhead_adjustments", "project_id"],
+  ["project_financial_adjustments", "project_id"],
+  ["project_budget_baselines", "project_id"],
+  ["project_budget_baseline_lines", "project_id"],
+  ["project_forecasts", "project_id"],
+  ["project_progress_entries", "project_id"],
+  ["project_revenue_accruals", "project_id"],
+  ["provision_obligations", "project_id"],
+  ["field_ticket_source_certifications", "native_project_id"],
+] as const;
+const APPEND_ONLY_PROJECT_REF_TABLES: ReadonlySet<string> = new Set(
+  APPEND_ONLY_PROJECT_REFERENCES.map(([table]) => table),
+);
 
 /**
  * Typed `project_id` columns that deliberately do NOT follow a merge, each
@@ -127,8 +149,30 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
  */
 export const PROJECT_MERGE_EXCLUSIONS: readonly (readonly [table: string, reason: string])[] = [
   [
+    "provision_obligations",
+    "A provision obligation is an immutable accounting identity bound to its original project and legal entity; keep it with that project and release it through an approved assessment before creating a corrected obligation.",
+  ],
+  [
     "hrm_certified_payroll_runs",
     "filed compliance evidence stays on its original project: generated and submitted runs snapshot the week's project data into a payload whose rendered report file is housed in that project's file folder, amendment chains link runs across weeks, and draft members of a chain stay with the filed runs they amend. Re-pointing any of them would rewrite filed history — amend or regenerate under the survivor instead.",
+  ],
+];
+
+/** Direct project foreign keys with a column-specific merge strategy. */
+export const PROJECT_MERGE_SPECIAL_FK_HANDLINGS: readonly (readonly [
+  table: string,
+  column: string,
+  reason: string,
+])[] = [
+  [
+    "projects",
+    "parent_id",
+    "Child project hierarchy is re-parented to the survivor; a survivor beneath the duplicate adopts the duplicate's parent.",
+  ],
+  [
+    "field_ticket_source_certifications",
+    "native_project_id",
+    "Identity certifications bind an exact native Field Ticket to its original project and are append-only; merges refuse while a certification names the duplicate.",
   ],
 ];
 
@@ -461,6 +505,49 @@ async function planMerge(
       `cannot merge: ${closedLines} posted journal line(s) sit in a closed GL period; reopen the period before merging`,
     );
   }
+  // Baseline sequence is unique per project. Report a collision directly
+  // before the broader immutable-evidence refusal so the operator can see
+  // why a copy could not be reassigned even if reassignment were available.
+  const baselineCollisions = (await runner.execute<{ sequence: number }>(sql`
+    select d.sequence
+      from project_budget_baselines d
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+       and exists (select 1 from project_budget_baselines s
+                    where s.org_id = ${orgId} and s.project_id = ${survivorId}
+                      and s.sequence = d.sequence)
+     order by d.sequence
+     limit 5`)).rows;
+  if (baselineCollisions.length > 0) {
+    throw new ProjectMergeError(
+      `cannot merge: budget baseline sequence ${baselineCollisions.map((row) => row.sequence).join(", ")} exists on both projects; retain each recorded baseline with its original project`,
+    );
+  }
+  const benefitScopeCollisions = (await runner.execute<{ program_id: string }>(sql`
+    select d.program_id::text as program_id
+      from hrm_benefit_program_scopes d
+      join hrm_benefit_program_scopes s
+        on s.org_id = d.org_id and s.program_id = d.program_id
+       and s.project_id = ${survivorId}
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+     order by d.program_id
+     limit 5`)).rows;
+  if (benefitScopeCollisions.length > 0) {
+    throw new ProjectMergeError(
+      "cannot merge: a benefit program has project scopes on both projects; reconcile the program's project scope so one effective inclusion or exclusion remains for the surviving project, then retry the merge",
+    );
+  }
+  const appendOnlyEvidence: string[] = [];
+  for (const [table, column] of APPEND_ONLY_PROJECT_REFERENCES) {
+    const count = (await runner.execute<{ n: string }>(sql`
+      select count(*)::text as n from ${sql.identifier(table)}
+       where org_id = ${orgId} and ${sql.identifier(column)} = ${duplicateId}`)).rows[0]?.n;
+    if (count !== "0") appendOnlyEvidence.push(`${count ?? "0"} ${table}.${column}`);
+  }
+  if (appendOnlyEvidence.length > 0) {
+    throw new ProjectMergeError(
+      `cannot merge: the duplicate project has append-only history (${appendOnlyEvidence.join(", ")}); keep the duplicate as the historical owner and close it if it should no longer receive work, then use each record's correction or reversal workflow for adjustments`,
+    );
+  }
   // Storage-level collisions fail closed before anything moves.
   const budgetCollision = (await runner.execute<{ n: string }>(sql`
     select count(*)::text as n
@@ -715,9 +802,13 @@ async function moveJournalLinesForProjectMerge(
     period_id: string;
     memo: string | null;
     origin: string;
+    source_document_id: string | null;
+    reverses_entry_id: string | null;
+    custom: Record<string, unknown>;
   }>(sql`
     select distinct e.id, e.status, e.book_id, e.subsidiary_id, e.entry_number,
-           e.posting_date::text as posting_date, e.period_id, e.memo, e.origin
+           e.posting_date::text as posting_date, e.period_id, e.memo, e.origin,
+           e.source_document_id, e.reverses_entry_id, e.custom
       from journal_entries e
       join journal_lines jl on jl.entry_id = e.id and jl.org_id = e.org_id
      where e.org_id = ${orgId} and jl.project_id = ${duplicateId}
@@ -772,7 +863,6 @@ async function moveJournalLinesForProjectMerge(
       periodId: entry.period_id,
       memo: entry.memo,
       origin: entry.origin,
-      reversesEntryId: entry.id,
       currency: null,
       closeModules: ["gl"],
       allowImportedLocks: true,
@@ -781,6 +871,7 @@ async function moveJournalLinesForProjectMerge(
     await postEntry(tx, {
       ...posting,
       entryNumber: `${entry.entry_number}-R`,
+      reversesEntryId: entry.id,
       lines: legs.map((leg) => ({
         ...leg,
         amount: neg(leg.amount),
@@ -791,6 +882,9 @@ async function moveJournalLinesForProjectMerge(
     const replacement = await postEntry(tx, {
       ...posting,
       entryNumber: `${entry.entry_number}-C`,
+      reversesEntryId: entry.reverses_entry_id,
+      sourceDocumentId: entry.source_document_id,
+      custom: entry.custom,
       lines: legs.map((leg) => ({
         ...leg,
         projectId: leg.projectId === duplicateId ? survivorId : leg.projectId,
@@ -803,6 +897,13 @@ async function moveJournalLinesForProjectMerge(
         `cannot move project attribution on ${entry.status} journal entry ${entry.id}; only draft, posted, and reversed entries move`,
       );
     }
+    await tx.execute(sql`
+      update time_entries
+         set cost_journal_entry_id = case when cost_journal_entry_id = ${entry.id} then ${replacement.entryId} else cost_journal_entry_id end,
+             overhead_journal_entry_id = case when overhead_journal_entry_id = ${entry.id} then ${replacement.entryId} else overhead_journal_entry_id end
+       where org_id = ${orgId}
+         and (cost_journal_entry_id = ${entry.id} or overhead_journal_entry_id = ${entry.id})
+    `);
     const oldByNumber = new Map(
       rows.map((row) => [Number(row.line_number), String(row.id)]),
     );
@@ -902,11 +1003,21 @@ export async function mergeProjects(
       for (const [table, column] of PROJECT_REFS) {
         // Journal lines move by reversal plus repost below: the append-only
         // guard refuses in-place project moves on posted history.
-        if (table === "journal_lines") continue;
-        const updated = (await tx.execute<{ id: string }>(sql`
-          update ${sql.identifier(table)} set ${sql.identifier(column)} = ${opts.survivorId}
-           where org_id = ${orgId} and ${sql.identifier(column)} = ${opts.duplicateId}
-          returning id`)).rows;
+        // Other append-only project evidence refuses the merge in planMerge;
+        // keep this update guard so a concurrent append cannot reach its
+        // immutable storage trigger as a raw error.
+        if (table === "journal_lines" || APPEND_ONLY_PROJECT_REF_TABLES.has(table)) continue;
+        const updated = table === "schedule_patterns"
+          ? (await tx.execute<{ id: string }>(sql`
+              update schedule_patterns
+                 set project_id = ${opts.survivorId}, revision = revision + 1,
+                     updated_at = now(), updated_by = ${opts.actorId}
+               where org_id = ${orgId} and project_id = ${opts.duplicateId}
+              returning id`)).rows
+          : (await tx.execute<{ id: string }>(sql`
+              update ${sql.identifier(table)} set ${sql.identifier(column)} = ${opts.survivorId}
+               where org_id = ${orgId} and ${sql.identifier(column)} = ${opts.duplicateId}
+              returning id`)).rows;
         if (updated.length > 0) movedCounts[table] = updated.length;
       }
       const journalLinesMoved = await moveJournalLinesForProjectMerge(

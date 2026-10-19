@@ -72,6 +72,7 @@ test('record-owned setup collections leave the rail and declare their parent bin
     'benefit-contribution-rule-components': ['benefit-contribution-rules'],
     'benefit-enrollment-terms': ['benefit-enrollment-configuration'],
     'leave-policies': ['leave-types'],
+    'leave-payroll-entitlement-mappings': ['leave-types'],
     'hrm-competencies': ['hrm-competency-frameworks'],
     'customer-price-level-assignments': ['price-levels'],
     'item-identifiers': ['items'],

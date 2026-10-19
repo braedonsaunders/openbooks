@@ -234,7 +234,8 @@ export async function createFieldTicket(
     const period = input.period ?? (await resolveTicketPeriod(orgId, input.projectId ?? null, anchorDate))
     const window = ticketWindow(period, anchorDate)
     const org = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
-    const foreman = (await db.execute<{ party_id: string | null }>(sql`select party_id from users where id = ${userId}`))
+    const foreman = (await db.execute<{ party_id: string | null }>(sql`
+      select party_id from users where id = ${userId} and org_id = ${orgId}`))
     const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', ticketSubsidiaryId ?? undefined)
     const row = (await db.execute<{ id: string; document_number: string }>(sql`
       insert into documents (id, org_id, kind, document_number, document_date, currency, status, party_id, project_id,
@@ -326,15 +327,46 @@ export async function updateTicketHeader(
           select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
             from projects p where p.id = ${patch.projectId} and p.org_id = ${orgId} and p.is_active for share`))
         if (!proj.rows[0]) throw new FieldTicketError('Project not found')
-        const linkedTime = (await tx.execute<{ status: string }>(sql`
-          select status from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}
-          order by id for update`)).rows
+        const linkedTime = (await tx.execute<{
+          status: string
+          employee_party_id: string
+          employee_subsidiary_id: string | null
+        }>(sql`
+          select te.status, te.employee_party_id, p.subsidiary_id as employee_subsidiary_id
+            from time_entries te
+            join parties p on p.id = te.employee_party_id and p.org_id = te.org_id
+           where te.org_id = ${orgId} and te.field_ticket_id = ${ticketId}
+           order by te.id for update of te, p`)).rows
         if (linkedTime.some(entry => entry.status !== 'draft')) {
           throw new FieldTicketError('This ticket has submitted or approved time. Resolve that time through its review workflow before changing the project.')
         }
-        projChange = proj.rows[0]
-        if (!subsidiaryScopeAllows(allowedSubsidiaryIds, projChange.subsidiary_id)) {
+        const newProject = proj.rows[0]
+        projChange = newProject
+        if (!subsidiaryScopeAllows(allowedSubsidiaryIds, newProject.subsidiary_id)) {
           throw new FieldTicketNotFoundError('Ticket not found')
+        }
+        if (doc.subsidiaryId !== newProject.subsidiary_id) {
+          if (linkedTime.some(entry =>
+            newProject.subsidiary_id !== null && entry.employee_subsidiary_id !== newProject.subsidiary_id
+          )) {
+            throw new FieldTicketError(
+              'This ticket has draft crew hours from another legal entity. Remove those hours before changing the project, then add crew from the new project’s legal entity.',
+            )
+          }
+          const equipmentLines = (await tx.execute<{ subsidiary_id: string }>(sql`
+            select eu.subsidiary_id
+              from document_lines dl
+              join equipment_units eu on eu.id = dl.equipment_unit_id and eu.org_id = dl.org_id
+             where dl.org_id = ${orgId} and dl.document_id = ${ticketId}
+               and dl.equipment_unit_id is not null
+             order by eu.id for update of dl, eu`)).rows
+          if (equipmentLines.some(line =>
+            newProject.subsidiary_id !== null && line.subsidiary_id !== newProject.subsidiary_id
+          )) {
+            throw new FieldTicketError(
+              'This ticket has equipment lines from another legal entity. Remove those lines before changing the project, then add equipment assigned to the new project’s legal entity.',
+            )
+          }
         }
         // Re-resolve the period for the new job unless the caller pinned one.
         if (patch.period === undefined) {
@@ -353,6 +385,29 @@ export async function updateTicketHeader(
         ft.period = period
         ft.periodStart = window.start
         ft.periodEnd = window.end
+      }
+      const nextForemanPartyId = patch.foremanPartyId !== undefined
+        ? patch.foremanPartyId
+        : ft.foremanPartyId
+      if (nextForemanPartyId && (patch.foremanPartyId !== undefined || projChange)) {
+        const targetSubsidiaryId = projChange ? projChange.subsidiary_id : doc.subsidiaryId
+        const foremanEntityFilter = targetSubsidiaryId === null
+          ? sql``
+          : sql`and p.subsidiary_id = ${targetSubsidiaryId}`
+        const validForeman = (await tx.execute<{ id: string }>(sql`
+          select p.id from parties p
+           where p.id = ${nextForemanPartyId} and p.org_id = ${orgId} and p.is_active
+             and exists (
+               select 1 from employee_roles r
+                where r.party_id = p.id and r.org_id = p.org_id and r.is_active
+             )
+             ${foremanEntityFilter}
+           for update of p`)).rows[0]
+        if (!validForeman) {
+          throw new FieldTicketError(
+            'Choose an active employee in this ticket’s legal entity, or clear the foreman before saving.',
+          )
+        }
       }
       if (patch.foremanPartyId !== undefined) ft.foremanPartyId = patch.foremanPartyId
 

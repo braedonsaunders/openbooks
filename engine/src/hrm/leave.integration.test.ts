@@ -20,7 +20,7 @@ import {
   withHarness,
 } from "../testing/hrm-harness.ts";
 import { decideGate } from "../flows/gates.ts";
-import { LeaveError } from "./leave-errors.ts";
+import { LeaveError, postgresErrorCode } from "./leave-errors.ts";
 import {
   cancelLeaveRequest,
   createLeavePolicy,
@@ -45,6 +45,7 @@ import {
   releaseLeavePayrollInputs,
   strandedLeavePayrollInputs,
 } from "./leave-payroll-inputs.ts";
+import { LeavePayrollInputError } from "../payroll/leave-payroll-inputs.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
 // Gate releases and post_document run through the installed engine
@@ -620,7 +621,7 @@ test("consume is idempotent per run, refuses foreign runs and stale parties; rel
       });
       assert.fail("a foreign run's rows must never be absorbed");
     } catch (error) {
-      assert.ok(error instanceof LeaveError);
+      assert.ok(error instanceof LeavePayrollInputError);
       assert.match((error as Error).message, new RegExp(runA));
     }
 
@@ -651,7 +652,7 @@ test("consume is idempotent per run, refuses foreign runs and stale parties; rel
       });
       assert.fail("a stale party must refuse by name");
     } catch (error) {
-      assert.ok(error instanceof LeaveError);
+      assert.ok(error instanceof LeavePayrollInputError);
       assert.match((error as Error).message, /now points at party/);
     }
   });
@@ -685,6 +686,50 @@ test("commit gate refuses pending rows until the run consumes them", { skip: !DB
     assert.match(pending!.message, /recalculate/);
     await consumeLeavePayrollInputs(db, scope);
     assert.equal(await leavePayrollInputProblems(db, scope), null, "a fully consumed period gates clean");
+  });
+});
+
+test("banked leave refuses without a mapping and records the effective plan when consumed", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    await seedLeaveFlow(h.org.orgId, h.approverId);
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "bank_in" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id);
+    const request = await fileLeaveRequest({
+      orgId: h.org.orgId, actorId: h.employeeId, employmentId,
+      leaveTypeId: type.id, startsOn: "2026-09-14", endsOn: "2026-09-14", hours: "8",
+    });
+    await submitLeaveRequest({ orgId: h.org.orgId, actorId: h.employeeId, requestId: request.id });
+    await approveThroughGate(h.org.orgId, h.approverId, request.id);
+    const runId = await seedRun(h.org.orgId, h.managerId, h.org.subsidiaryId, workerParty, {
+      runStatus: "calculated", docStatus: "draft",
+      periodStart: "2026-09-01", periodEnd: "2026-09-15", number: "PAY-BANK-1",
+      employmentId,
+    });
+    const query = {
+      orgId: h.org.orgId, runDocumentId: runId,
+      periodStart: "2026-09-01", periodEnd: "2026-09-15", employeePartyIds: [workerParty],
+    };
+    await assert.rejects(
+      () => consumeLeavePayrollInputs(db, query),
+      (error: unknown) => error instanceof LeavePayrollInputError && /Setup.*Leave types/.test(error.message),
+    );
+    const planId = randomUUID();
+    await db.execute(sql`
+      insert into entitlement_plans (id, org_id, code, name, unit, direction, accrual_method, created_by, updated_by)
+      values (${planId}, ${h.org.orgId}, ${`LEAVE-${planId.slice(0, 8)}`}, 'Banked leave', 'hours', 'accrue', 'manual', ${h.managerId}, ${h.managerId})
+    `);
+    await db.execute(sql`
+      insert into hrm_leave_payroll_entitlement_mappings
+        (org_id, leave_type_id, entitlement_plan_id, effective_from, reason, created_by, updated_by)
+      values (${h.org.orgId}, ${type.id}, ${planId}, '2026-09-01', 'Bank approved leave in the hours plan', ${h.managerId}, ${h.managerId})
+    `);
+    const consumed = await consumeLeavePayrollInputs(db, query);
+    assert.equal(consumed.length, 1);
+    assert.equal(consumed[0]!.entitlementPlanId, planId);
+    assert.ok(consumed[0]!.entitlementMappingId);
+    assert.ok(consumed[0]!.entitlementPlanUpdatedAt);
   });
 });
 
@@ -897,9 +942,7 @@ test("same-scope overlapping policies refuse by name; other scopes and adjacent 
       assert.fail("a raw overlapping insert must die on the exclusion");
     } catch (error) {
       // db.execute wraps the PG error: the exclusion code rides on cause.
-      const pgCode = (error as { code?: string }).code
-        ?? (error as { cause?: { code?: string } }).cause?.code;
-      assert.equal(pgCode, "23P01");
+      assert.equal(postgresErrorCode(error), "23P01");
     }
     const windows = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_leave_policies

@@ -9,6 +9,7 @@ import {
   listOrgLeaveRequests,
   myLeaveRequests,
   payrollBankBalances,
+  strandedLeavePayrollInputs,
   type LeaveRequestSummary,
 } from '@openbooks/engine/hrm/leave-read'
 import {
@@ -81,6 +82,7 @@ export interface LeaveQueueData {
   total: number
   truncated: boolean
   truncatedNote: string
+  strandedNote: string | null
   segments: LeaveSegment[]
   currentParams: Record<string, string | string[] | undefined>
   columns: { employee: string; type: string; range: string; hours: string }
@@ -181,6 +183,10 @@ export async function loadLeaveQueue(
   const orgId = authz.user.orgId
   const t = await getTranslations('hrm')
   const today = await businessToday(orgId)
+  const strandedInputs = await strandedLeavePayrollInputs(db, orgId)
+  const strandedNote = strandedInputs.length > 0
+    ? t('leave.strandedPayrollInputs', { count: strandedInputs.length })
+    : null
   // Requests and the calendar are two VIEWS of leave, not two
   // sections of one page. Stacked, the calendar sat below a table that fills
   // the viewport, so nobody scrolled to it and neither surface could be read
@@ -215,6 +221,7 @@ export async function loadLeaveQueue(
     emptyTitle: t('leave.emptyTitle'),
     emptyDescription: t('leave.emptyDescription'),
     truncatedNote: t('leave.truncatedNote', { limit: QUEUE_LIMIT }),
+    strandedNote,
     canFile: can(authz, 'hrm.leave.request') || can(authz, 'hrm.leave.manage'),
     canRecord: can(authz, 'hrm.leave.manage'),
     // Withdraw/cancel routes require hrm.leave.request exactly (manage does

@@ -23,6 +23,8 @@ import { lockStatutoryRatesForPayRun } from "./statutory-rates.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
 import { assertPeriodSequence, periodRunIdentity } from "./period-priors.ts";
 import { lockPayrollAnomalyReview, payrollAnomalyFinalizeCheck } from "./anomaly-finalize-gate.ts";
+import { leavePayrollInputProblems } from "./leave-payroll-inputs.ts";
+import { allowancePayrollInputProblem } from "./allowance-payroll-inputs.ts";
 import { type PayRunGlLeg, payRunGlLegCustom, payRunGlLegs } from "./run-gl-legs.ts";
 export { payRunGlLegCustom, payRunGlCodingKey, payRunGlLegs } from "./run-gl-legs.ts";
 export type { PayRunGlLegKind, EntitlementReliefBasis, EntitlementReliefLine, PayRunGlLeg, FrozenPayRunGlBasis, PayRunGlRelief } from "./run-gl-legs.ts";
@@ -315,6 +317,34 @@ export async function commitPayRun(input: {
       input.allowedSubsidiaryIds,
     );
     if (!currentSource) throw new PayrollError("pay run not found");
+    if (PERIODIC_RUN_TYPES.has(run.run_type ?? "regular")) {
+      const periodStart = typeof run.period_start === "string" ? run.period_start : null;
+      const periodEnd = typeof run.period_end === "string" ? run.period_end : null;
+      if (!periodStart || !periodEnd) {
+        throw new PayrollError("pay run period is incomplete — set its payroll period and recalculate before committing");
+      }
+      const parties = (await tx.execute<{ employee_party_id: string }>(sql`
+        select distinct employee_party_id::text as employee_party_id
+          from pay_stubs
+         where org_id = ${orgId} and pay_run_document_id = ${documentId}
+      `)).rows.map((row) => row.employee_party_id);
+      const leaveProblem = await leavePayrollInputProblems(tx, {
+        orgId,
+        runDocumentId: documentId,
+        periodStart,
+        periodEnd,
+        employeePartyIds: parties,
+      });
+      if (leaveProblem) throw new PayrollError(leaveProblem.message);
+      const allowanceProblem = await allowancePayrollInputProblem(tx, {
+        orgId,
+        runDocumentId: documentId,
+        periodStart,
+        periodEnd,
+        employeePartyIds: parties,
+      });
+      if (allowanceProblem) throw new PayrollError(allowanceProblem.message);
+    }
     const changes = payRunCalculationSourceChanges(storedSource, currentSource);
     if (changes.holidayObligations) throw new PayrollError("Approved holiday entitlements, their dated wages or payment claims changed since calculation; recalculate this editable pay run before committing.");
     if (changes.compensationPackages) throw new PayrollError('Approved compensation terms or their native component policy changed since calculation — recalculate this editable pay run before committing.');

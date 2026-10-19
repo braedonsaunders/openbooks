@@ -64,6 +64,11 @@ export async function registerNodeInstrumentation() {
   // runs scripts, so install the composition root beside the web handlers.
   const { installEngineSeams } = await import('@openbooks/engine/composition/install')
   installEngineSeams()
+  const { registerScheduleNoticeDelivery } = await import('@openbooks/engine/schedule-boards/distribution-hooks')
+  const { deliverScheduleNotices } = await import('./lib/scheduling/notify')
+  registerScheduleNoticeDelivery(async (args) => {
+    await deliverScheduleNotices(args)
+  })
 
   registerFlowPdfRenderer(async ({ orgId, subjectKind, subjectId }) => {
     const { PDF_RECORD_TYPE_BY_KEY } = await import('./lib/pdf-templates/catalog')

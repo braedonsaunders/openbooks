@@ -18,7 +18,7 @@ import { type Line } from "./run-stub-records.ts";
 export async function settleTerminationBankPayouts(
   tx: Pick<typeof db, "execute">,
   args: {
-    orgId: string; documentId: string; payDate: string;
+    orgId: string; documentId: string; payDate: string; payCurrency: string;
     employeePartyId: string; employmentId?: string;
     /** Employee display name, for the unvalued-hours refusal. */
     employeeName: string;
@@ -29,7 +29,7 @@ export async function settleTerminationBankPayouts(
   },
 ): Promise<void> {
   const {
-    orgId, documentId, payDate, employeePartyId, employeeName,
+    orgId, documentId, payDate, payCurrency, employeePartyId, employeeName,
     terminationRun, plans, lines, entitlementMovements,
   } = args;
   // A final pay must clear every accrued bank: the carried balance is paid out
@@ -43,6 +43,7 @@ export async function settleTerminationBankPayouts(
   if (terminationRun && plans.length > 0) {
     const balances = await entitlementBalances(orgId, employeePartyId, payDate, {
       executor: tx, employmentId: args.employmentId, excludeRunDocumentId: documentId, plans,
+      payCurrency, lockWage: true,
     });
     for (const balance of balances) {
       if (cmp(balance.balance, "0") <= 0) continue;

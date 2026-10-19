@@ -1,12 +1,17 @@
 import { sql } from "drizzle-orm";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { lockProjectForScope } from "../organization/subsidiary-scope.ts";
+import {
+  lockProjectForScope,
+  subsidiaryScopeAllows,
+} from "../organization/subsidiary-scope.ts";
+import { loadSubsidiaryContext, restrictionAdmits } from "../organization/subsidiaries.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { roundCurrencyMoney, settleCumulativeRetainage } from "../fx/currencies.ts";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "../money/money.ts";
 import { parseMoney, type Money } from "../money/brands.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Construction progress billing engine (AIA G702/G703). An Application for
@@ -693,6 +698,58 @@ export async function voidPayApplication(
   });
 }
 
+/** Validate a pinned SOV income account against its project and caller scope. */
+export async function assertProjectIncomeAccountUsable(
+  runner: SqlExecutor,
+  orgId: string,
+  accountId: string,
+  projectSubsidiaryId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ id: string }> {
+  if (!isUuid(accountId)) {
+    throw new ConstructionBillingError("Income account not found");
+  }
+  const account = (await runner.execute<{
+    id: string;
+    type: string;
+    subsidiary_id: string | null;
+    include_children: boolean;
+  }>(sql`
+    select id, type, subsidiary_id, subsidiary_include_children as include_children
+      from accounts
+     where org_id = ${orgId} and id = ${accountId}
+       and is_active and not is_summary
+     for share
+  `)).rows[0];
+  if (!account) {
+    throw new ConstructionBillingError("Income account not found");
+  }
+  if (account.type !== "income" && account.type !== "other_income") {
+    throw new ConstructionBillingError(
+      "Choose an active, postable Income or Other Income account for this schedule line",
+    );
+  }
+  const context = await loadSubsidiaryContext(runner, orgId);
+  const projectEntity = projectSubsidiaryId ?? context.rootId;
+  if (
+    !subsidiaryScopeAllows(allowedSubsidiaryIds, projectEntity) ||
+    !subsidiaryScopeAllows(allowedSubsidiaryIds, account.subsidiary_id, {
+      orgWideNull: true,
+    }) ||
+    !restrictionAdmits(
+      context,
+      account.subsidiary_id,
+      account.include_children,
+      projectEntity,
+    )
+  ) {
+    throw new ConstructionBillingError(
+      "Choose an income account visible to you and available to the project's subsidiary",
+    );
+  }
+  return { id: account.id };
+}
+
 /**
  * Bill an application: build the customer_invoice (income lines gross + one
  * negative Retainage Receivable line) and mark the application posted. The
@@ -792,14 +849,19 @@ export async function generatePayApplicationInvoice(
           `Schedule-of-values line "${src.description}" has no income account. Configure its income account before creating an invoice`,
         );
       }
-      const account = (await tx.execute<{ id: string }>(sql`
-        select id from accounts
-         where org_id = ${orgId} and id = ${src.income_account_id} and is_active and not is_summary
-         for share
-      `)).rows[0];
-      if (!account) {
+      let account: { id: string };
+      try {
+        account = await assertProjectIncomeAccountUsable(
+          tx,
+          orgId,
+          src.income_account_id,
+          project.subsidiary_id,
+          allowedSubsidiaryIds,
+        );
+      } catch (error) {
+        if (!(error instanceof ConstructionBillingError)) throw error;
         throw new ConstructionBillingError(
-          `Schedule-of-values line "${src.description}" requires an active, non-summary account in this organization. Correct its income account before creating an invoice`,
+          `Schedule-of-values line "${src.description}" requires an active Income or Other Income account available to the project's subsidiary. Correct its income account before creating an invoice`,
         );
       }
       preparedLines.push({ accountId: account.id, description: src.description, amount: c.grossThisPeriod });

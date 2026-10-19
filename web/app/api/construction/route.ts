@@ -7,6 +7,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, type SqlExecutor } from "@openbooks/engine/platform/db";
 import {
   ConstructionBillingError,
+  assertProjectIncomeAccountUsable,
   approvePayApplication,
   createPayApplication,
   generatePayApplicationInvoice,
@@ -253,7 +254,9 @@ export const GET = defineRoute({
         select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
                l.retainage_percent as "retainagePercent", l.income_account_id as "incomeAccountId",
                l.sort_order as "sortOrder", l.change_order_id as "changeOrderId",
-               exists(select 1 from pay_application_lines pal where pal.org_id = ${orgId} and pal.sov_line_id = l.id) as "usedByApplication"
+               exists(select 1 from pay_application_lines pal
+                 join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
+                where pal.org_id = ${orgId} and pal.sov_line_id = l.id and pa.status <> 'void') as "usedByApplication"
           from sov_lines l where l.org_id = ${orgId} and l.project_id = ${projectId} order by l.sort_order
       `);
         const cos = await db.execute(sql`
@@ -306,6 +309,8 @@ async function pinIncomeAccount(
   exec: SqlExecutor,
   orgId: string,
   accountId: unknown,
+  projectSubsidiaryId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<string | null> {
   if (accountId == null || accountId === "") return null;
   const id = String(accountId);
@@ -313,13 +318,15 @@ async function pinIncomeAccount(
   // a PostgreSQL uuid cast error escaping as a 500.
   if (!isUuid(id))
     throw new ConstructionBillingError("Income account not found");
-  const owned = await exec.execute(sql`
-    select 1 from accounts
-     where org_id = ${orgId} and id = ${id} and is_active and not is_summary
-  `);
-  if (!owned.rows.length)
-    throw new ConstructionBillingError("Income account not found");
-  return id;
+  return (
+    await assertProjectIncomeAccountUsable(
+      exec,
+      orgId,
+      id,
+      projectSubsidiaryId,
+      allowedSubsidiaryIds,
+    )
+  ).id;
 }
 
 /**
@@ -358,18 +365,33 @@ async function resolveCarriedIncomeAccount(
   tx: SqlExecutor,
   orgId: string,
   stored: string | null,
+  projectSubsidiaryId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<string | null> {
   if (stored) {
     try {
-      return await pinIncomeAccount(tx, orgId, stored);
+      return await pinIncomeAccount(
+        tx,
+        orgId,
+        stored,
+        projectSubsidiaryId,
+        allowedSubsidiaryIds,
+      );
     } catch (error) {
-      if (!(error instanceof ConstructionBillingError)) throw error;
+      if (
+        !(error instanceof ConstructionBillingError) ||
+        error.message !== "Income account not found"
+      ) {
+        throw error;
+      }
     }
   }
   return pinIncomeAccount(
     tx,
     orgId,
     await projectDefaultIncomeAccount(tx, orgId),
+    projectSubsidiaryId,
+    allowedSubsidiaryIds,
   );
 }
 
@@ -634,11 +656,6 @@ export const POST = defineRoute({
             throw new ConstructionBillingError(
               "Sort order must be a whole number the schedule can store",
             );
-          const incomeAccountId = await pinIncomeAccount(
-            db,
-            orgId,
-            body.incomeAccountId,
-          );
           const id = await db.transaction(async (tx) => {
             // Fenced recheck inside the write transaction: the entry guard
             // above may be stale by the time this write lands, and a Projects
@@ -652,7 +669,14 @@ export const POST = defineRoute({
             // The entry scope check is unlocked: recheck under the project
             // lock, so a rehome racing this insert refuses instead of
             // billing B's project. Missing and out-of-scope share one 404.
-            await lockEntryProject(tx);
+            const lockedProject = await lockEntryProject(tx);
+            const incomeAccountId = await pinIncomeAccount(
+              tx,
+              orgId,
+              body.incomeAccountId,
+              lockedProject.subsidiaryId,
+              authz.allowedSubsidiaryIds,
+            );
             // The same billing-has-begun predicate the project header edit
             // enforces for contract value: one rule, one owner.
             if (await projectBillingHasBegun(tx, orgId, body.projectId as string))
@@ -679,7 +703,7 @@ export const POST = defineRoute({
             // and a rehome racing this update must refuse before any line
             // moves. The child→project link never moves, so the entry
             // project's id stays the right row to lock.
-            await lockEntryProject(tx);
+            const lockedProject = await lockEntryProject(tx);
             const before = await tx.execute(
               sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`,
             );
@@ -687,7 +711,9 @@ export const POST = defineRoute({
               throw new ConstructionBillingError("Schedule line not found");
             const stored = before.rows[0];
             const used = await tx.execute(
-              sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`,
+              sql`select 1 from pay_application_lines pal
+                    join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
+                   where pal.org_id = ${orgId} and pal.sov_line_id = ${body.id} and pa.status <> 'void' limit 1`,
             );
             const locked =
               used.rows.length > 0 || stored.change_order_id != null;
@@ -695,6 +721,8 @@ export const POST = defineRoute({
               tx,
               orgId,
               body.incomeAccountId,
+              lockedProject.subsidiaryId,
+              authz.allowedSubsidiaryIds,
             );
             if (locked) {
               // Contract value stays controlled once billing begins, but the
@@ -826,7 +854,9 @@ export const POST = defineRoute({
             if (!before.rows[0])
               throw new ConstructionBillingError("Schedule line not found");
             const used = await tx.execute(
-              sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`,
+              sql`select 1 from pay_application_lines pal
+                    join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
+                   where pal.org_id = ${orgId} and pal.sov_line_id = ${body.id} and pa.status <> 'void' limit 1`,
             );
             if (used.rows.length || before.rows[0].change_order_id)
               throw new ConstructionBillingError(
@@ -874,11 +904,6 @@ export const POST = defineRoute({
           // Targeted orders reprice the line's own
           // account, so the writer only reads this for untargeted ones;
           // pinned like a hand-added SOV line either way.
-          const incomeAccountId = await pinIncomeAccount(
-            db,
-            orgId,
-            body.incomeAccountId,
-          );
           if (!number || cmp(amount, "0") === 0)
             throw new ConstructionBillingError(
               "Change-order number and a non-zero amount are required",
@@ -899,7 +924,7 @@ export const POST = defineRoute({
             }
             // Recheck scope under the project lock: a rehome racing this
             // insert must refuse before the change order lands on B's project.
-            await lockEntryProject(tx);
+            const lockedProject = await lockEntryProject(tx);
             // Numbers are unique per project in storage: fail closed with the
             // domain error here so a double submit or retry never escapes as
             // a unique violation (the route maps the residual race below).
@@ -922,6 +947,13 @@ export const POST = defineRoute({
                   "The target schedule line does not belong to this project",
                 );
             }
+            const incomeAccountId = await pinIncomeAccount(
+              tx,
+              orgId,
+              body.incomeAccountId,
+              lockedProject.subsidiaryId,
+              authz.allowedSubsidiaryIds,
+            );
             const created = await tx.execute<{ id: string }>(sql`
             insert into change_orders (org_id, project_id, number, description, amount, target_sov_line_id, income_account_id, created_by, updated_by)
             values (${orgId}, ${body.projectId}, ${number}, ${body.description ?? null}, ${amount}, ${targetSovLineId}, ${incomeAccountId}, ${userId}, ${userId}) returning id
@@ -955,7 +987,7 @@ export const POST = defineRoute({
             // Lock the project before its change order: approval moves contract
             // value and lands SOV lines, so a rehome racing this commit must
             // refuse before anything posts to B's project.
-            await lockEntryProject(tx);
+            const lockedProject = await lockEntryProject(tx);
             const co = await tx.execute<{
               project_id: string;
               number: string;
@@ -1076,6 +1108,8 @@ export const POST = defineRoute({
                 tx,
                 orgId,
                 row.income_account_id ?? null,
+                lockedProject.subsidiaryId,
+                authz.allowedSubsidiaryIds,
               );
               const sov = await tx.execute<{ id: string }>(sql`
               insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, change_order_id, income_account_id,

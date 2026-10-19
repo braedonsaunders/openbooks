@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import "../../../../lib/feature-gates";
-import { guardRootSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { parseJsonBody } from "../../../../lib/api/json";
 import { z } from "zod";
@@ -17,8 +16,6 @@ export const GET = defineRoute({
   permission: "payroll.manage",
   feature: "payroll",
   handler: async ({ request: request, authz: gate }) => {
-    const scopeDenied = await guardRootSubsidiaryScope(gate);
-    if (scopeDenied) return scopeDenied;
     const orgId = gate.user.orgId;
     const employees = await db.execute<{ employmentId: string; employeeName: string; subsidiaryName: string }>(sql`
       select employment.id as "employmentId", party.display_name as "employeeName",
@@ -96,8 +93,6 @@ export const POST = defineRoute({
   permission: "payroll.manage",
   feature: "payroll",
   handler: async ({ request: request, authz: gate }) => {
-    const scopeDenied = await guardRootSubsidiaryScope(gate);
-    if (scopeDenied) return scopeDenied;
     const parsed = await parseJsonBody(request, saveSchema, { status: 422 });
     if (!parsed.ok) return parsed.response;
     const value = parsed.data;
@@ -139,8 +134,6 @@ export const PATCH = defineRoute({
   permission: "payroll.manage",
   feature: "payroll",
   handler: async ({ request: request, authz: gate }) => {
-    const scopeDenied = await guardRootSubsidiaryScope(gate);
-    if (scopeDenied) return scopeDenied;
     const parsed = await parseJsonBody(request, updateSchema, { status: 422 });
     if (!parsed.ok) return parsed.response;
     const value = parsed.data;

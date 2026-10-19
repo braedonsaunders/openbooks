@@ -17,6 +17,9 @@ import { hasUsablePayRateSql } from "./rate.ts";
 import { loadWageTimeEntries, sumWageHoursByEmployee } from "./wage-hours.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { parsePayRunCalculationSource, payRunCalculationSource, payRunCalculationSourceChanges, payRunCalculationSourceDigest } from "./run-calculation-evidence.ts";
+import { leavePayrollInputProblems } from "./leave-payroll-inputs.ts";
+import { allowancePayrollInputProblem } from "./allowance-payroll-inputs.ts";
+import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
 import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import {
@@ -715,6 +718,34 @@ export async function payRunReadiness(
   // tally(0) reports zero blockers for a run that does not exist.
   if (!run) throw new PayrollError("pay run not found");
   const people = await scope(orgId, documentId, run, allowedSubsidiaryIds);
+  if (PERIODIC_RUN_TYPES.has(run.run_type)) {
+    const problem = await leavePayrollInputProblems(db, {
+      orgId,
+      runDocumentId: documentId,
+      periodStart: run.period_start,
+      periodEnd: run.period_end,
+      employeePartyIds: people.map((person) => person.employee_party_id),
+    });
+    if (problem) {
+      flag("blocker", `payroll.${problem.code.toLowerCase()}`, people, {
+        detail: problem.message,
+        href: "/admin/setup/leave-types?setupTab=leave-payroll-entitlement-mappings",
+      });
+    }
+    const allowanceProblem = await allowancePayrollInputProblem(db, {
+      orgId,
+      runDocumentId: documentId,
+      periodStart: run.period_start,
+      periodEnd: run.period_end,
+      employeePartyIds: people.map((person) => person.employee_party_id),
+    });
+    if (allowanceProblem) {
+      flag("blocker", `payroll.${allowanceProblem.code.toLowerCase()}`, people, {
+        detail: allowanceProblem.message,
+        href: "/hrm/compliance",
+      });
+    }
+  }
 
   // --- Org configuration: a commit cannot balance without these ------------
   const setupHref = "/admin/setup/payroll";
@@ -1524,6 +1555,7 @@ export async function payRunStaleness(
 ): Promise<PayRunStaleness> {
   const rows = (await executor.execute<{
       calculated_at: Date | string | null; never_calculated: boolean;
+      run_type: string; period_start: string; period_end: string;
       calculation_source_snapshot: unknown; calculation_source_digest: string | null;
       adjustments_changed: boolean; assertions_changed: boolean; time_changed: boolean;
       wages_changed: boolean; schedule_changed: boolean; statutory_rates_changed: boolean;
@@ -1535,6 +1567,7 @@ export async function payRunStaleness(
       settings_changed: boolean; org_setting_changes: unknown[]; ytd_changed: boolean; opening_balances_changed: boolean;
     }>(sql`
     select r.calculated_at, r.calculation_source_snapshot, r.calculation_source_digest,
+           r.run_type, r.period_start::text as period_start, r.period_end::text as period_end,
            r.calculated_at is null as never_calculated,
            exists (
              select 1 from pay_run_adjustments a
@@ -1843,6 +1876,38 @@ export async function payRunStaleness(
   let exactBankCashInputsChanged = false;
   let exactLevyAdjustmentsChanged = false;
   let exactDeclaredVacationAccrualsChanged = false;
+  let exactLeaveInputsChanged = false;
+  let exactAllowanceInputsChanged = false;
+  if (PERIODIC_RUN_TYPES.has(row.run_type)) {
+    const parties = (await executor.execute<{ party_id: string }>(sql`
+      select distinct employee_party_id::text as party_id
+        from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
+      union
+      select distinct error->>'employeePartyId' as party_id
+        from pay_runs r
+        cross join lateral jsonb_array_elements(
+          case when jsonb_typeof(r.calculation_errors) = 'array' then r.calculation_errors else '[]'::jsonb end
+        ) error
+       where r.org_id = ${orgId} and r.document_id = ${documentId}
+         and error->>'employeePartyId' is not null
+    `)).rows.map((entry) => entry.party_id);
+    const problem = await leavePayrollInputProblems(executor, {
+      orgId,
+      runDocumentId: documentId,
+      periodStart: row.period_start,
+      periodEnd: row.period_end,
+      employeePartyIds: parties,
+    });
+    exactLeaveInputsChanged = problem !== null;
+    const allowanceProblem = await allowancePayrollInputProblem(executor, {
+      orgId,
+      runDocumentId: documentId,
+      periodStart: row.period_start,
+      periodEnd: row.period_end,
+      employeePartyIds: parties,
+    });
+    exactAllowanceInputsChanged = allowanceProblem !== null;
+  }
   const storedSource = parsePayRunCalculationSource(row.calculation_source_snapshot);
   // Legacy calculated rows predate migration 0040. Keep their informational
   // timestamp display intact; commit itself refuses the missing evidence and
@@ -1878,7 +1943,7 @@ export async function payRunStaleness(
   }
   const reasons = [
     selectionChanged ? "selection" : null,
-    row.adjustments_changed || row.assertions_changed || exactIncomeTaxOverridesChanged || exactBankCashInputsChanged || exactDeclaredVacationAccrualsChanged || exactLevyAdjustmentsChanged ? "adjustments" : null,
+    row.adjustments_changed || row.assertions_changed || exactIncomeTaxOverridesChanged || exactBankCashInputsChanged || exactDeclaredVacationAccrualsChanged || exactLevyAdjustmentsChanged || exactAllowanceInputsChanged ? "adjustments" : null,
     row.time_changed || exactTimeChanged ? "time" : null,
     row.wages_changed || exactWagesChanged ? "wages" : null,
     row.schedule_changed ? "schedule" : null,
@@ -1889,7 +1954,7 @@ export async function payRunStaleness(
     row.component_definitions_changed ? "componentDefinitions" : null,
     exactCompensationPackagesChanged ? "compensationPackages" : null,
     row.derived_rules_changed ? "derivedRules" : null,
-    row.entitlements_changed ? "entitlements" : null,
+    row.entitlements_changed || exactLeaveInputsChanged ? "entitlements" : null,
     row.worker_comp_changed ? "workerComp" : null,
     row.time_types_changed || exactTimeTypesChanged ? "timeTypes" : null,
     exactItemsChanged ? "items" : null,

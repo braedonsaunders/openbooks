@@ -22,6 +22,7 @@ import {
 } from '../../../../components/paged-table'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useMoney } from '../../../../components/money-provider'
+import { summarizeRetroSelection } from '../../../../lib/payroll/retro-selection'
 import { compareDecimal } from '@openbooks/engine/money/decimal'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useHeaderAction } from '../_ui/use-header-action'
@@ -240,9 +241,11 @@ export function RetroWorkspace({
 
   const payable =
     proposal?.periods.filter((period) => period.outcome === 'payable') ?? []
-  const selected = payable.filter(
-    (period) => !excluded.includes(period.candidate.sourcePayRunDocumentId),
+  const selection = summarizeRetroSelection(
+    payable,
+    excluded,
   )
+  const selected = selection.selected
   const outcomeTone: Record<RetroPeriod['outcome'], string> = {
     payable: 'text-emerald-700 dark:text-emerald-400',
     none: 'text-slate-500 dark:text-slate-400',
@@ -465,17 +468,11 @@ export function RetroWorkspace({
           <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Tile
               label={text('retro.summary.payable', 'Owed')}
-              value={money(proposal.payableTotal)}
-              hint={text(
-                'retro.summary.payableHint',
-                'Sum of every positive difference found.',
-              )}
+              value={money(selection.owed)}
             />
             <Tile
               label={text('retro.summary.employees', 'Employees')}
-              value={String(
-                new Set(payable.map((p) => p.candidate.employeePartyId)).size,
-              )}
+              value={String(selection.employeeCount)}
             />
             <Tile
               label={text('retro.summary.periods', 'Periods')}
@@ -727,7 +724,8 @@ export function RetroWorkspace({
                       key: 'hours',
                       header: text('retro.columns.hours', 'Hours'),
                       align: 'right',
-                      cell: (row: RetroBucket) => row.originalHours ?? '—',
+                      cell: (row: RetroBucket) =>
+                        row.recomputedHours ?? row.originalHours ?? '—',
                     },
                     {
                       key: 'paid',

@@ -99,6 +99,13 @@ function AssignmentDrawerContent({
     assignment, createMode, prefill, projectLabel: null, people, projects, items, tasks,
     capacity, actuals, absenceRows, customDefs,
   }))
+  const [subjectType, setSubjectType] = useState<'person' | 'job-title'>(() =>
+    assignment?.employeePartyId || prefill.employeePartyId
+      ? 'person'
+      : assignment?.jobTitle || prefill.jobTitle
+        ? 'job-title'
+        : 'person',
+  )
   const baseline = useMemo(() => JSON.stringify(initialForm({
     assignment, createMode, prefill, projectLabel: null, people, projects, items, tasks,
     capacity, actuals, absenceRows, customDefs,
@@ -113,7 +120,7 @@ function AssignmentDrawerContent({
   const readyToCreate = Boolean(
     form.projectId && form.weekStart && (form.employeePartyId || form.jobTitle.trim()) && form.plannedHours.trim(),
   )
-  const genericMode = !assignment?.employeePartyId && Boolean(assignment?.jobTitle) || (!assignment && !form.employeePartyId && Boolean(form.jobTitle))
+  const genericMode = subjectType === 'job-title'
 
   function change<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }))
@@ -121,18 +128,18 @@ function AssignmentDrawerContent({
   }
 
   async function readFailure(response: Response): Promise<void> {
-    const body = await response.json() as {
+    const body = await response.json().catch(() => null) as {
       message?: string
       error?: string
       remedy?: string
       fields?: Record<string, string>
-    }
-    const fields = body.fields
+    } | null
+    const fields = body?.fields
     // The message reads through the shared helper so message and code
     // render; the remedy stays separate because the drawer renders it alone.
     setRefusal({
-      message: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: t('assignments.saveFailed') }) ?? t('assignments.saveFailed'),
-      remedy: body.remedy,
+      message: refusalMessageFromBody({ ...(body ?? {}), remedy: undefined }, { fallback: t('assignments.saveFailed') }) ?? t('assignments.saveFailed'),
+      remedy: body?.remedy,
       fields,
     })
   }
@@ -255,7 +262,16 @@ function AssignmentDrawerContent({
               <Select
                 value={genericMode ? 'job-title' : 'person'}
                 disabled={!canManage || busy || Boolean(assignment)}
-                onChange={(event) => setForm((current) => ({ ...current, employeePartyId: event.target.value === 'person' ? (people[0]?.id ?? '') : '', jobTitle: event.target.value === 'job-title' ? (jobTitles[0] ?? '') : '' }))}
+                onChange={(event) => {
+                  const nextSubjectType = event.target.value as 'person' | 'job-title'
+                  setSubjectType(nextSubjectType)
+                  setForm((current) => ({
+                    ...current,
+                    employeePartyId: nextSubjectType === 'person' ? (people[0]?.id ?? '') : '',
+                    jobTitle: nextSubjectType === 'job-title' ? (jobTitles[0] ?? '') : '',
+                  }))
+                  setRefusal(null)
+                }}
               >
                 <option value="person">{t('assignments.person')}</option>
                 <option value="job-title">{t('assignments.jobTitle')}</option>

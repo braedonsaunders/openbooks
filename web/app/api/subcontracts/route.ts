@@ -352,7 +352,12 @@ async function dispatchSubcontractAction(request: Request) {
           body.currency !== undefined &&
           !(await isFeatureEnabled(orgId, "multiCurrency"))
         ) {
-          return notFound("record");
+          return apiErrorResponse(
+            new SubcontractError(
+              "Multi-currency is disabled; enable it in Company Settings → Features before choosing a subcontract transaction currency",
+            ),
+            { safeStatus: 422 },
+          );
         }
         const originalCommitment = exactMoney(body.originalCommitment);
         if (originalCommitment === null) return invalidDecimal("Original commitment", body.originalCommitment);

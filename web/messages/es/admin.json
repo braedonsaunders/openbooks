@@ -2890,6 +2890,10 @@
         "singularTitle": "Política de asistencia",
         "description": "Ventanas de fichaje y minutos de tolerancia con fecha de vigencia para observar la asistencia en un cuadrante de turnos."
       },
+      "leave-payroll-entitlement-mappings": {
+        "title": "Asignaciones de derechos de ausencia",
+        "description": "Asigne los tipos de ausencia acumulables a planes activos de horas desde una fecha de vigencia."
+      },
       "equity-account-policies": {
         "title": "Cuentas de patrimonio",
         "singular": "Política de cuentas de patrimonio",

@@ -16,6 +16,8 @@ import { setPackSlotAccount } from "./packs.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { recurringBenefitSource } from "./benefit-plan-inputs.ts";
+import { entitlementBalances, planBalanceExcludingRun } from "./entitlements-db.ts";
+import { employeesNearLimit } from "./entitlements-reports.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { upsertUnionFringe } from "./union.ts";
 import { requestDocumentVoid } from '../ledger/document-void.ts';
@@ -113,6 +115,16 @@ test('native recurring elections produce taxable non-cash, employer cost and emp
     assert.ok((await allocations()).every(a=>a.status==='voided'));
     assert.equal((await db.execute<{balance:string}>(sql`select sum(l.amount)::text as balance from entitlement_ledger l join entitlement_plans p on p.org_id=l.org_id and p.id=l.plan_id
       where l.org_id=${fx.orgId} and l.employee_party_id=${worker} and p.system_key='vacation'`)).rows[0]!.balance,'0.0000','controlled reversal restores the complete vacation bank');
+    const originalMovementDate=(await db.execute<{movement_date:string}>(sql`select max(movement_date)::text as movement_date from entitlement_ledger
+      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and kind<>'adjustment'`)).rows[0]!.movement_date;
+    const reversalDates=(await db.execute<{movement_date:string}>(sql`select movement_date::text as movement_date from entitlement_ledger
+      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and kind='adjustment'`)).rows.map(row=>row.movement_date);
+    assert.deepEqual(reversalDates,[originalMovementDate],'void reversals use the source run movement date');
+    const balanceAtRunDate=(await db.execute<{balance:string}>(sql`select sum(l.amount)::text as balance from entitlement_ledger l
+      join entitlement_plans p on p.org_id=l.org_id and p.id=l.plan_id
+      where l.org_id=${fx.orgId} and l.employee_party_id=${worker} and p.system_key='vacation'
+        and l.movement_date<=${originalMovementDate}::date`)).rows[0]!.balance;
+    assert.equal(balanceAtRunDate,'0.0000','a later void date cannot leave the voided bank movement in earlier balances');
 
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
@@ -177,6 +189,31 @@ test('unpaid employer coverage enters the native owe bank and recovers two actua
     assert.equal(await balance(),'-38.0000');
     const receipt=(await db.execute<{stub_line_id:string|null}>(sql`select stub_line_id from entitlement_ledger where org_id=${fx.orgId} and plan_id=${bank} and pay_run_document_id=${returned} and kind='repayment'`)).rows[0]!;
     assert.ok(receipt.stub_line_id,'native repayment links to the real payroll deduction');
+
+    const committedBalance = await balance();
+    await db.execute(sql`insert into entitlement_plan_limits
+      (org_id,plan_id,employee_party_id,max_balance,notify_balance,effective_from,created_by,updated_by)
+      values(${fx.orgId},${bank},${worker},'1','1','2026-01-01',${fx.actorId},${fx.actorId})`);
+    await hours(fx,worker,'2026-08-04','40');
+    const draft=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,periodStart:'2026-08-02',periodEnd:'2026-08-08',employeePartyIds:[worker]});
+    assert.deepEqual((await calculatePayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:draft.documentId})).errors,[]);
+    const draftState=(await db.execute<{run_status:string}>(sql`select run_status from pay_runs where org_id=${fx.orgId} and document_id=${draft.documentId}`)).rows[0]!;
+    assert.equal(draftState.run_status,'draft');
+    const draftMovements=(await db.execute<{kind:string}>(sql`select kind from entitlement_ledger
+      where org_id=${fx.orgId} and plan_id=${bank} and employee_party_id=${worker} and pay_run_document_id=${draft.documentId}`)).rows;
+    assert.ok(draftMovements.length>0,'calculation writes entitlement movements before run commit');
+    await db.execute(sql`insert into entitlement_ledger
+      (org_id,plan_id,employee_party_id,movement_date,amount,kind,pay_run_document_id,note,created_by,updated_by)
+      values(${fx.orgId},${bank},${worker},'2026-08-11','1000','adjustment',${draft.documentId},'draft scope fixture',${fx.actorId},${fx.actorId})`);
+
+    const reported=(await entitlementBalances(fx.orgId,worker,'2026-08-11',{executor:db})).find(item=>item.plan.id===bank);
+    assert.equal(reported?.balance,committedBalance,'employee balances ignore every draft run');
+    assert.equal(await planBalanceExcludingRun(db,fx.orgId,bank,worker,'2026-08-11',null),committedBalance,'calculation balances ignore other draft runs');
+    assert.deepEqual(await employeesNearLimit(fx.orgId,{asOf:'2026-08-11',planId:bank}),[],'draft movements do not create a near-limit alert');
+    const nextSource=await recurringBenefitSource(db,{orgId:fx.orgId,employmentId,subsidiaryId:fx.subsidiaryId,
+      periodStart:'2026-08-02',periodEnd:'2026-08-08',payDate:'2026-08-11',lock:false});
+    const recoveryEntries=nextSource.enrollments.flatMap(enrollment=>enrollment.recoveryLedger);
+    assert.ok(!recoveryEntries.some(entry=>entry.documentId===draft.documentId),'benefit recovery ignores draft entitlement movements');
   } finally {await dropScratchOrgReporting(fx.orgId);}
 });
 

@@ -96,6 +96,7 @@ registerHooks({
             export async function myLeaveRequests() { return []; }
             export async function leaveEmploymentBalances() { return []; }
             export async function payrollBankBalances() { return []; }
+            export async function strandedLeavePayrollInputs() { return []; }
             export async function timeBalanceAsOf() { return null; }`,
           ),
       };

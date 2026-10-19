@@ -159,7 +159,13 @@ test("a job is dispatched, worked, completed with a stock part and labor, and in
   const issued = (await withBypassContext(() => db.execute<{ movementId: string | null }>(sql`select inventory_movement_id as "movementId" from service_visit_parts where id = ${part.partId}`))).rows[0]!;
   assert.ok(issued.movementId, "the part issued from stock at completion");
   const labor = (await withBypassContext(() => db.execute<{ status: string; hours: string; billable: boolean }>(sql`select status, hours::text, is_billable as billable from time_entries where service_visit_id = ${visitId}`))).rows;
-  assert.deepEqual(labor, [{ status: "submitted", hours: "1.5000", billable: true }], "labor lands in the technician's timesheet for approval");
+  assert.deepEqual(labor, [{ status: "draft", hours: "1.5000", billable: true }], "labor stays available for submission from the technician's timesheet");
+  const week = (await withBypassContext(() => db.execute<{ status: string }>(sql`
+    select distinct w.status from timesheet_weeks w
+    join time_entries te on te.org_id = w.org_id and te.employee_party_id = w.employee_party_id
+      and te.worked_on between w.week_start and w.week_start + 6
+    where te.service_visit_id = ${visitId}`))).rows;
+  assert.deepEqual(week, [{ status: "draft" }], "the week remains submittable through the timesheet workflow");
   await assert.rejects(invoiceServiceWork({ ...as(f, f.dispatcher), jobId: job.id, visitId }), code("service_labor_unapproved"));
   // Timesheet approval is the native approver's decision.
   await withBypassContext(() => db.execute(sql`update time_entries set status = 'approved', approved_by = ${f.dispatcher}, approved_at = now() where service_visit_id = ${visitId}`));
@@ -267,7 +273,7 @@ test("voiding a per-job invoice releases its billing link before reopening the j
   assert.equal(released.reason, "The invoice was voided");
 }));
 
-test("rejecting a completion removes submitted labor from a later invoice", enabled, async () => fixture(async (f) => {
+test("rejecting a completion removes draft labor from a later invoice", enabled, async () => fixture(async (f) => {
   const { job, visitId } = await newJob(f);
   assert.ok(visitId);
   await withBypassContext(() => seedApprovalFlow(f.org.orgId, {

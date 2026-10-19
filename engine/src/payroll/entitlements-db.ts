@@ -5,6 +5,7 @@ import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { cmp, div, isZero, mulDecimal, roundMoney } from "../money/money.ts";
 import { pickPlanLimit } from "./entitlements-limits.ts";
+import { resolveEntitlementWage } from "./run-entitlement-valuation.ts";
 import {
   type ResolvedServiceTiers,
   resolveServiceTiersFrom,
@@ -256,6 +257,10 @@ export async function entitlementBalances(
     excludeRunDocumentId?: string | null;
     /** Plans to report on; loaded from the org when omitted. */
     plans?: readonly EntitlementPlan[];
+    /** Pay-run currency to use when valuing an hours bank for a cheque. */
+    payCurrency?: string;
+    /** Lock the selected wage row when called during calculation. */
+    lockWage?: boolean;
   } = {},
 ): Promise<EntitlementBalance[]> {
   const executor = opts.executor ?? db;
@@ -264,20 +269,22 @@ export async function entitlementBalances(
   if (plans.length === 0) return [];
   const onDate = asOf ?? (await businessToday(orgId));
   const sums = (await executor.execute<{ plan_id: string; balance: string; last_movement: string | null }>(sql`
-    select plan_id, sum(amount) as balance, max(movement_date) as last_movement
-      from entitlement_ledger
-     where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-       and movement_date <= ${onDate}
+    select l.plan_id, sum(l.amount) as balance, max(l.movement_date) as last_movement
+      from entitlement_ledger l
+      left join pay_runs r on r.org_id = l.org_id and r.document_id = l.pay_run_document_id
+     where l.org_id = ${orgId} and l.employee_party_id = ${employeePartyId}
+       and l.movement_date <= ${onDate}
+       and r.run_status is distinct from 'draft'
        and (${excludeRunDocumentId}::uuid is null
-            or pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
-     group by plan_id
+            or l.pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
+     group by l.plan_id
   `));
   const byPlan = new Map(sums.rows.map((row) => [row.plan_id, row]));
 
-  // One wage lookup serves every plan's hours view.
-  const { resolveWage, laborCostingSettings } = await import("../projects/labor-costing.ts");
-  const wageSettings = await laborCostingSettings(orgId);
-  const resolved = await resolveWage(orgId, employeePartyId, onDate, { annualHoursDefault: wageSettings.annualHours });
+  // One transaction-bound wage lookup serves every plan's hours view.
+  const resolved = await resolveEntitlementWage(
+    executor, orgId, employeePartyId, onDate, opts.payCurrency, opts.lockWage ?? false,
+  );
   const wage = resolved && cmp(resolved.wage, "0") > 0 ? resolved.wage : null;
   const scope = await employeeScope(executor, orgId, employeePartyId, { onDate, employmentId: opts.employmentId });
 
@@ -333,13 +340,15 @@ export async function planBalanceExcludingRun(
   excludeRunDocumentId: string | null,
 ): Promise<string> {
   const r = (await executor.execute<{ balance: string }>(sql`
-    select coalesce(sum(amount), 0) as balance
-      from entitlement_ledger
-     where org_id = ${orgId} and plan_id = ${planId}
-       and employee_party_id = ${employeePartyId}
-       and movement_date <= ${onDate}
+    select coalesce(sum(l.amount), 0) as balance
+      from entitlement_ledger l
+      left join pay_runs r on r.org_id = l.org_id and r.document_id = l.pay_run_document_id
+     where l.org_id = ${orgId} and l.plan_id = ${planId}
+       and l.employee_party_id = ${employeePartyId}
+       and l.movement_date <= ${onDate}
+       and r.run_status is distinct from 'draft'
        and (${excludeRunDocumentId}::uuid is null
-            or pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
+            or l.pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
   `));
   return roundMoney(String(r.rows[0]?.balance ?? "0"), 4);
 }

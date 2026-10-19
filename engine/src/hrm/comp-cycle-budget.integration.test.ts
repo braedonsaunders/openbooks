@@ -38,6 +38,7 @@ import {
   proposeLine,
   pushCycle,
   reopenLine,
+  setCycleBudgets,
   submitCycleForApproval,
 } from "./compensation/index.ts";
 import { installEngineSeams } from "../composition/install.ts";
@@ -918,5 +919,62 @@ test("pacing and lines refuse a missing round instead of reading an empty envelo
     } finally {
       await dropScratchOrg(other.org.orgId);
     }
+  });
+});
+
+test("bottom-up department budgets pace effective-date assignments and refuse currency drift", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
+    const { org } = h;
+    const { level } = await seedArchitecture(org.orgId, h.hrId);
+    const departmentId = randomUUID();
+    await db.execute(sql`
+      insert into departments (id, org_id, name, subsidiary_id)
+      values (${departmentId}, ${org.orgId}, 'Engineering', ${org.subsidiaryId})
+    `);
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, {
+      levelId: level.id, displayName: "Budget Worker", departmentId,
+    });
+    const manager = await seedPositionedEmployment(org.orgId, org.subsidiaryId, {
+      levelId: level.id, displayName: "Budget Manager",
+    });
+    await db.execute(sql`
+      insert into reporting_relationships (org_id, employment_id, manager_employment_id,
+        kind, relationship_id, effective_from, created_by, updated_by)
+      values (${org.orgId}, ${emp.employmentId}, ${manager.employmentId}, 'line', ${randomUUID()},
+        '2020-01-01'::date, ${h.hrId}, ${h.hrId})
+    `);
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000", { reason: "bottom-up budget test wage" });
+    await seedWage(org.orgId, h.hrId, manager.workerPartyId, "100000", { reason: "bottom-up manager wage" });
+    const cycle = await createCycle({
+      orgId: org.orgId, actorId: h.hrId, name: "Department budget 2025", kind: "merit",
+      effectiveOn: "2025-04-01", budgetBasis: "bottom_up", currency: "CAD", guidelineKind: "matrix",
+      guideline: GUIDELINE,
+    });
+    await assert.rejects(
+      setCycleBudgets({
+        orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id,
+        budgets: [
+          { departmentId, currency: "USD", amount: "2000" },
+          { managerPartyId: manager.workerPartyId, currency: "USD", amount: "2000" },
+        ],
+      }),
+      /must match the cycle currency CAD/,
+    );
+    await setCycleBudgets({
+      orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id,
+      budgets: [
+        { departmentId, currency: "CAD", amount: "2000" },
+        { managerPartyId: manager.workerPartyId, currency: "CAD", amount: "2000" },
+      ],
+    });
+    await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    const lines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    const line = lines.find((candidate) => candidate.employmentId === emp.employmentId)!;
+    await assert.rejects(
+      proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line.id, proposedPct: "3" }),
+      /over-budget pacing needs a reason/,
+    );
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line.id, proposedPct: "3", reason: "approved department envelope" });
+    assert.deepEqual(await cyclePacing(org.orgId, h.hrId, cycle.id), { totalPct: 150, overBudget: true });
   });
 });

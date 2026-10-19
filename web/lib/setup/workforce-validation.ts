@@ -39,6 +39,43 @@ export const validateEntitlementPlan: SetupEntityValidationHook = async ({ body,
   catch (error) { if (error instanceof PayrollError) return error.message; throw error }
 }
 
+export const validateLeavePayrollEntitlementMapping: SetupEntityValidationHook = async ({ body, orgId, rowId, executor }) => {
+  const { sql } = await import('drizzle-orm')
+  const current = rowId
+    ? (await executor.execute<{ leave_type_id: string; entitlement_plan_id: string; is_active: boolean }>(sql`
+        select leave_type_id::text, entitlement_plan_id::text, is_active
+          from hrm_leave_payroll_entitlement_mappings where org_id = ${orgId} and id = ${rowId}`)).rows[0]
+    : null
+  if (rowId && !current) return 'The leave entitlement mapping no longer exists; reopen the leave type in Setup'
+  const leaveTypeId = String(body.leaveTypeId ?? current?.leave_type_id ?? '')
+  const planId = String(body.entitlementPlanId ?? current?.entitlement_plan_id ?? '')
+  const effectiveFrom = String(body.effectiveFrom ?? '')
+  const active = body.isActive === undefined ? current?.is_active ?? true : body.isActive === true
+  const reason = String(body.reason ?? '').trim()
+  if (!leaveTypeId || !planId || !effectiveFrom) return null
+  if (reason.length < 8 || reason.length > 500) return 'Enter a change reason from 8 to 500 characters for the leave entitlement mapping.'
+  await executor.execute(sql`select pg_advisory_xact_lock(hashtextextended(${orgId} || ':' || ${leaveTypeId}, 0))`)
+  const alreadyCalculated = (await executor.execute(sql`
+    select 1 from hrm_payroll_inputs
+     where org_id = ${orgId} and leave_type_id = ${leaveTypeId}
+       and status = 'consumed' and absence_date >= ${effectiveFrom}::date
+     limit 1
+  `)).rows[0]
+  if (alreadyCalculated) return 'This effective date would change leave already calculated in payroll; choose a later date, or release and recalculate the affected pay run before adding the mapping.'
+  const leaveType = (await executor.execute<{ value_crossing: string }>(sql`
+    select value_crossing from hrm_leave_types where org_id = ${orgId} and id = ${leaveTypeId}`)).rows[0]
+  if (!leaveType) return 'Choose a leave type in this organization'
+  if (leaveType.value_crossing !== 'bank_in') return 'Only a leave type that banks approved hours can map to an entitlement plan; change its payroll treatment to bank_in first.'
+  if (!active) return null
+  const plan = (await executor.execute<{ unit: string; direction: string; system_key: string | null; is_active: boolean }>(sql`
+    select unit, direction, system_key, is_active from entitlement_plans
+     where org_id = ${orgId} and id = ${planId}`)).rows[0]
+  if (!plan?.is_active || plan.unit !== 'hours' || plan.direction !== 'accrue' || plan.system_key === 'vacation') {
+    return 'Choose an active hours-based accruing entitlement plan other than Vacation in Benefits, then add a new effective-dated mapping.'
+  }
+  return null
+}
+
 export const validateVacationTerm: SetupEntityValidationHook = async ({ body, orgId, rowId, executor }) => {
   const { sql } = await import('drizzle-orm')
   const { validateVacationTermConfiguration } = await import('@openbooks/engine/payroll/entitlements')

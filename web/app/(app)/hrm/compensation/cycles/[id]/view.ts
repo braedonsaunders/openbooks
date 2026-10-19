@@ -50,7 +50,7 @@ export function compCycleSpec(data: NonNullable<Awaited<ReturnType<typeof loadCo
       }),
     ],
     body: [
-      widgetBlock('hrm-pacing-bar', { pct: f('pacingPct'), note: f('pacingNote') }),
+      widgetBlock('hrm-pacing-bar', { pct: f('pacingPct'), note: f('pacingNote'), over: f('pacingOver') }),
       // The lifecycle block (open/submit/push/close/cancel) sits above the
       // team grid while the loader arms it — null for readers, so the move
       // buttons never appear where the POST endpoint would refuse them.

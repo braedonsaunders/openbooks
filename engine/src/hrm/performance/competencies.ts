@@ -15,6 +15,7 @@ import { HrmPerformanceError, isUniqueViolationOn, mathRefusal } from "./errors.
 import { inputGuards } from "../input-guards.ts";
 import { parseAppliesScope } from "./performance-math.ts";
 import { HRM_PERFORMANCE_KEY } from "./one-on-ones.ts";
+import { subsidiaryScopeAllows } from "../../organization/subsidiary-scope.ts";
 
 /**
  * Governed HRM competency frameworks (0228, HR-17): frameworks,
@@ -154,6 +155,38 @@ async function requireCompetencyFrameworkInManageScope(
     throw new HrmPerformanceError("NOT_FOUND", "competency was not found — choose a competency in this organization");
   }
   await requireFrameworkInManageScope(exec, orgId, competency.framework_id, allowed);
+}
+
+async function requireOrgWideCompetencyFramework(
+  exec: SqlExecutor,
+  orgId: string,
+  competencyId: string,
+): Promise<void> {
+  const framework = (await exec.execute<{ appliesTo: unknown }>(sql`
+    select f.applies_to as "appliesTo"
+      from hrm_competencies c
+      join hrm_competency_frameworks f on f.org_id = c.org_id and f.id = c.framework_id
+     where c.org_id = ${orgId} and c.id = ${competencyId}
+  `)).rows[0];
+  if (!framework) {
+    throw new HrmPerformanceError("NOT_FOUND", "competency was not found — choose a competency in this organization");
+  }
+  const appliesTo = mathRefusal("REFUSED", () => parseAppliesScope(framework.appliesTo));
+  if (appliesTo.employerSubsidiaryId !== null || appliesTo.departmentId !== null) {
+    throw new HrmPerformanceError(
+      "FORBIDDEN",
+      "job levels and review template sections are organization-wide and require a competency from an unrestricted framework — choose or create a framework with no subsidiary or department scope",
+    );
+  }
+}
+
+function requireUnrestrictedCompetencyTarget(allowed: Set<string> | null): void {
+  if (allowed !== null) {
+    throw new HrmPerformanceError(
+      "FORBIDDEN",
+      "job levels and review template sections are organization-wide settings and require unrestricted subsidiary access — ask an unrestricted HR administrator to configure these competency links",
+    );
+  }
 }
 
 export interface CompetencyLevelDTO {
@@ -469,7 +502,10 @@ export async function linkCompetency(args: {
   await withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
-    await requireCompetencyFrameworkInManageScope(db, orgId, competencyId, allowed);
+    const orgWideTarget = args.targetKind !== "position";
+    if (orgWideTarget) requireUnrestrictedCompetencyTarget(allowed);
+    if (orgWideTarget) await requireOrgWideCompetencyFramework(db, orgId, competencyId);
+    else await requireCompetencyFrameworkInManageScope(db, orgId, competencyId, allowed);
     const competency = (await db.execute<{ id: string }>(sql`
       select id from hrm_competencies where org_id = ${orgId} and id = ${competencyId}
     `)).rows[0];
@@ -481,10 +517,20 @@ export async function linkCompetency(args: {
     // query per kind (no dynamic table names cross this boundary).
     const target =
       args.targetKind === "job_level"
-        ? (await db.execute<{ id: string }>(sql`select id from hrm_job_levels where org_id = ${orgId} and id = ${targetId}`)).rows[0]
+        ? (await db.execute<{ id: string; employerSubsidiaryId?: string | null }>(sql`select id from hrm_job_levels where org_id = ${orgId} and id = ${targetId}`)).rows[0]
         : args.targetKind === "position"
-          ? (await db.execute<{ id: string }>(sql`select id from positions where org_id = ${orgId} and id = ${targetId}`)).rows[0]
-          : (await db.execute<{ id: string }>(sql`select id from hrm_review_template_sections where org_id = ${orgId} and id = ${targetId}`)).rows[0];
+          ? (await db.execute<{ id: string; employerSubsidiaryId?: string | null }>(sql`
+              select p.id, live.employer_subsidiary_id as "employerSubsidiaryId"
+                from positions p
+                join lateral (
+                  select v.employer_subsidiary_id
+                    from position_versions v
+                   where v.org_id = p.org_id and v.position_id = p.id and v.recorded_until is null
+                   order by v.version_no desc limit 1
+                ) live on true
+               where p.org_id = ${orgId} and p.id = ${targetId}
+            `)).rows[0]
+          : (await db.execute<{ id: string; employerSubsidiaryId?: string | null }>(sql`select id from hrm_review_template_sections where org_id = ${orgId} and id = ${targetId}`)).rows[0];
     if (!target) {
       const remedy =
         args.targetKind === "job_level"
@@ -493,6 +539,9 @@ export async function linkCompetency(args: {
             ? "pick a position from the directory"
             : "pick a section from an existing review template";
       throw new HrmPerformanceError("NOT_FOUND", `${args.targetKind} was not found in this organization — ${remedy}`);
+    }
+    if (args.targetKind === "position" && !subsidiaryScopeAllows(allowed, target.employerSubsidiaryId)) {
+      throw new HrmAuthorizationError("position is not visible in this organization and legal-entity scope");
     }
     const person = await loadApprovalPerson(db, orgId, actorId);
     await db.execute(sql`
@@ -528,8 +577,9 @@ export async function setSectionCompetency(args: {
   await withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    requireUnrestrictedCompetencyTarget(allowed);
     if (args.competencyId !== null) {
-      await requireCompetencyFrameworkInManageScope(db, orgId, args.competencyId, allowed);
+      await requireOrgWideCompetencyFramework(db, orgId, args.competencyId);
     }
     const section = (await db.execute<{ id: string; draft:unknown; published:unknown }>(sql`
       select s.id, t.draft_document as draft, t.published_document as published from hrm_review_template_sections s join hrm_review_templates t on t.org_id=s.org_id and t.id=s.template_id where s.org_id = ${orgId} and s.id = ${sectionId} for update of t

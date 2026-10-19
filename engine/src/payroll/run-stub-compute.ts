@@ -36,6 +36,8 @@ import { resolveProtectionExemptFloors } from "./protection-classes.ts";
 import { applyEarningPaymentKinds, payableStubTotals } from "./non-cash-earnings.ts";
 import { appendRecurringBenefitLines, recurringBenefitSource } from './benefit-plan-inputs.ts';
 import { appendApprovedHolidaySettlements } from './holiday-settlements.ts';
+import { priceLeavePayrollInputs } from "./leave-payroll-effects.ts";
+import { priceAllowancePayrollInputs } from "./allowance-payroll-inputs.ts";
 /** Compute one employee's stub: earning phases, statutory passes and deduction protection. */
 export async function calculateStub(
   tx: Pick<typeof db, "execute">,
@@ -135,6 +137,57 @@ export async function calculateStub(
     periodsPerYear: P, baseComponent, oneOffRun, need: ctx.need,
     wageExpenseAccountId: ctx.wageExpenseAccountId, lines,
   });
+
+  const allowanceEarnings = priceAllowancePayrollInputs(ctx.allowancePayrollInputs ?? [], run.doc_currency!);
+  for (const [index, allowance] of allowanceEarnings.entries()) {
+    const component = ctx.components.find((candidate) => candidate.id === allowance.payComponentId);
+    if (!component || component.kind !== "earning" || typeof component.name !== "string") {
+      throw new PayrollError(
+        `approved allowance input ${allowance.id} has no active earning component in this payroll calculation — choose an active earning component on its policy, then void, recompute and approve the entry`,
+      );
+    }
+    const sequence = Math.max(0, ...lines.map((line) => line.sequence)) + 1;
+    lines.push({
+      componentId: allowance.payComponentId,
+      kind: "earning",
+      description: `${component.name} · ${allowance.coverageDate}`,
+      amount: allowance.amount,
+      earnedFrom: allowance.coverageDate,
+      earnedTo: allowance.coverageDate,
+      sequence: sequence + index,
+    });
+  }
+
+  const leaveInputs = ctx.leavePayrollInputs ?? [];
+  const leaveEffects = priceLeavePayrollInputs(
+    leaveInputs,
+    leaveInputs.some((input) => input.kind === "payout") && payRate ? payrollHourlyWage(payRate) : null,
+  );
+  for (const [index, payout] of leaveEffects.payouts.entries()) {
+    const sequence = Math.max(0, ...lines.map((line) => line.sequence)) + 1;
+    lines.push({
+      componentId: baseComponent.id as string,
+      kind: "earning",
+      description: "Leave payout",
+      hours: payout.hours,
+      amount: payout.amount,
+      earnedFrom: payout.absenceDate,
+      earnedTo: payout.absenceDate,
+      sequence: sequence + index,
+    });
+  }
+  for (const { planId, hours } of leaveEffects.bankIns) {
+    entitlementMovements.push({
+      planId,
+      employeePartyId,
+      movementDate: run.pay_date!,
+      amount: hours,
+      hours,
+      kind: "bank_in",
+      componentId: null,
+      note: "Approved leave bank-in",
+    });
+  }
 
   // Phase 1b — retroactive pay. A retro run pays the differences that were
   // QUANTIFIED and REVIEWED before it existed: one earning line per
@@ -342,7 +395,7 @@ export async function calculateStub(
   else if (vacationTier != null && (vacationPercent == null || cmp(vacationTier, vacationPercent) > 0)) vacationPercent = vacationTier;
 
   await settleTerminationBankPayouts(tx, {
-    orgId, documentId, payDate: run.pay_date!, employeePartyId, employmentId,
+    orgId, documentId, payDate: run.pay_date!, payCurrency: run.doc_currency!, employeePartyId, employmentId,
     employeeName: emp.display_name ?? employeePartyId,
     terminationRun, plans, lines, entitlementMovements,
   });
@@ -381,7 +434,7 @@ export async function calculateStub(
   await stampEarningLineStatutoryTreatments(tx, { orgId, payDate: run.pay_date!, workerCompGroupId, lines });
 
   vacationAccrued = await applyEntitlementPlanMovements(tx, {
-    orgId, documentId, employeePartyId, payDate: run.pay_date!,
+    orgId, documentId, employeePartyId, payDate: run.pay_date!, payCurrency: run.doc_currency!,
     employeeName: emp.display_name ?? employeePartyId,
     employmentId: emp.employment_id ?? undefined, policyDate: entitlementPolicyDate, vacationPercent, payVacationInCash, excludeVacationAccrual: paidLeave || vacationElection === null, vacationPlan, plans,
     lines, entitlementMovements, entitlementWarnings, declaredVacationAccruals,

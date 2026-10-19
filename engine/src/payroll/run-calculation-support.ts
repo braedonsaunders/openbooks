@@ -22,6 +22,8 @@ import type { StatutoryRateResolution } from "./statutory-rates.ts";
 import type { StatutoryHolidayEligibilityFacts } from "./holidays.ts";
 import type { PayrollSubsidiaryScope } from "./scope.ts";
 import type { PayPeriodPriors } from "./period-priors.ts";
+import type { LeavePayrollInput } from "./leave-payroll-inputs.ts";
+import type { AllowancePayrollInput } from "./allowance-payroll-inputs.ts";
 export interface StubComputation {
   employeePartyId: string;
   province: string;
@@ -312,4 +314,8 @@ export type StubComputationInput = {
   /** The org's supplemental income-tax method, resolved once per run. */
   supplementalTaxMethod?: SupplementalTaxMethod;
   onBonusIncomeReference?: (source: CaBonusIncomeReferenceSource) => void;
+  /** Approved leave inputs consumed with this employee's calculation. */
+  leavePayrollInputs?: readonly LeavePayrollInput[];
+  /** Approved per-diem and travel inputs consumed with this employee's calculation. */
+  allowancePayrollInputs?: readonly AllowancePayrollInput[];
 };

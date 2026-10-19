@@ -27,6 +27,8 @@ import { add, cmp, neg } from "../money/money.ts";
 import { DownstreamConsumptionError, InventoryError } from "../inventory/contracts.ts";
 import { reverseInventoryJournal, reverseInventoryMovement } from "../inventory/reversal.ts";
 import { listReceiptVoidBlockers } from "../inventory/receipt-void-dependents.ts";
+import { releaseLeavePayrollInputs } from "../payroll/leave-payroll-inputs.ts";
+import { releaseAllowancePayrollInputs } from "../payroll/allowance-payroll-inputs.ts";
 import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
 import { crossSubsidiaryFulfillmentHandler, crossSubsidiaryShipment } from "../inventory/cross-subsidiary.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
@@ -2166,6 +2168,9 @@ async function releaseVoidedPayRun(
     );
   }
 
+  await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
+  await releaseAllowancePayrollInputs(tx, { orgId, runDocumentId: documentId });
+
   const run = (await tx.execute<{ document_id: string }>(sql`
     update pay_runs
        set run_status = 'voided', updated_at = now(), updated_by = ${actorId}
@@ -2205,8 +2210,7 @@ async function releaseVoidedPayRun(
       (org_id, plan_id, employee_party_id, movement_date, amount, hours, kind,
        pay_run_document_id, note, created_by, updated_by)
     select l.org_id, l.plan_id, l.employee_party_id,
-           (select void_reversal_date from documents
-             where id = ${documentId} and org_id = ${orgId}),
+           max(l.movement_date),
            -sum(l.amount), -sum(l.hours), 'adjustment', ${documentId},
            'Reversal: voided pay run',
            (select void_requested_by from documents where id = ${documentId} and org_id = ${orgId}),

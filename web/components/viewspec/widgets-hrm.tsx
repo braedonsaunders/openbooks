@@ -657,7 +657,7 @@ export const HRM_WIDGETS = {
   ),
   /** Cycle budget pacing bar: computed percent with the over-budget
    *  tone, loader-resolved. */
-  'hrm-pacing-bar': (props) => <PacingBar pct={num(props, 'pct') ?? null} note={str(props, 'note') ?? ''} />,
+  'hrm-pacing-bar': (props) => <PacingBar pct={num(props, 'pct') ?? null} note={str(props, 'note') ?? ''} over={props.over === true} />,
   /** The cycle line drawer: propose form, decide buttons, and the
    *  append-only event history, opened from the line's `line` param. */
   'hrm-comp-line-drawer': (props) => {

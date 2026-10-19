@@ -108,13 +108,20 @@ export async function updateChangeRequestPayload(
   return withOrgTransaction(orgId, async () => {
     await lockFlowSubjectDecision(orgId, HRM_CHANGE_REQUEST_SUBJECT_KIND, requestId);
     const current = await loadRequestForUpdate(db, orgId, requestId);
-    // The gate follows the incoming kind: a profile proposal is the
-    // person's own to edit, an employment proposal is HR's.
-    await requireAuthoringAccess(db, orgId, actorId, current.employment_id, payload);
+    const storedPayload = validateChangePayload(current.payload);
+    // The draft's existing kind owns the authoring boundary until it is
+    // submitted; a caller cannot cross that boundary by replacing the kind.
+    await requireAuthoringAccess(db, orgId, actorId, current.employment_id, storedPayload);
     if (current.status !== "draft") {
       throw new HrmChangeRequestError(
         "BAD_STATE",
         `a ${current.status} request is frozen — file a new request for a revised proposal instead`,
+      );
+    }
+    if (payload.kind !== storedPayload.kind) {
+      throw new HrmChangeRequestError(
+        "BAD_STATE",
+        "a draft request's kind cannot be changed — create a new request for a different change",
       );
     }
     await assertKindPreconditions(db, orgId, current.employment_id, payload);

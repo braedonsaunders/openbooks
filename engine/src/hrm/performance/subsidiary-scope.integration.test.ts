@@ -11,7 +11,7 @@ import { closeCycle, createCycle, moveToCalibrating, openCycle } from "./review-
 import { acknowledgeReview, calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
 import {
   addCompetencyLevel, competencyProfileForEmployment, createCompetency, createFramework,
-  getFramework, listFrameworks, setFrameworkActive, setSectionCompetency,
+  getFramework, linkCompetency, listFrameworks, setFrameworkActive, setSectionCompetency,
 } from "./competencies.ts";
 import { createGoal } from "./goals.ts";
 import { fulfillRequest, listFeedback, listOpenRequestsForParty, retractFeedback, writeFeedback } from "./feedback.ts";
@@ -468,7 +468,13 @@ scopeMatrix([
       const framework = await createFramework({ orgId, actorId: w.hrFull, name: "Engineering", appliesTo: entity(w.subB) });
       const competency = await createCompetency({ orgId, actorId: w.hrFull, frameworkId: framework.id, code: "IMPACT", name: "Customer impact" });
       await addCompetencyLevel({ orgId, actorId: w.hrFull, competencyId: competency.id, levelRank: 1, label: "Meets", expectation: "Ships working software" });
-      await setSectionCompetency({ orgId, actorId: w.hrFull, sectionId, competencyId: competency.id });
+      // Seed a legacy scoped link so the historical cycle snapshot still proves profile applicability.
+      const linkedLegacySection = await db.execute(sql`
+        update hrm_review_template_sections
+           set competency_id = ${competency.id}, updated_by = ${w.hrFull}, updated_at = now()
+         where org_id = ${orgId} and id = ${sectionId}
+        returning id`);
+      assert.equal(linkedLegacySection.rows.length, 1, "the historical template section exists for the profile snapshot");
       // An org-wide cycle, so both sides hold a calibrated, shared manager review.
       const cycleId = await openedCycle(w, templateId, "FY26 profile scope");
       for (const subject of [people.a, people.b]) {
@@ -492,7 +498,7 @@ scopeMatrix([
   scopeRow({
     name: "competency framework reads and writes obey the subsidiary applicability",
     features: PERF_FEATURES,
-    permissions: PERF,
+    permissions: [...PERF, "hrm.position.manage"],
     actors: HR,
     seed: async (w) => {
       const orgId = w.orgId;
@@ -502,14 +508,32 @@ scopeMatrix([
       const departmentOnlyB = await createFramework({
         orgId, actorId: w.hrFull, name: "B department-only framework", appliesTo: { employer_subsidiary_id: null, department_id: departmentB },
       });
+      const frameworkWide = await createFramework({ orgId, actorId: w.hrFull, name: "Organization framework" });
+      const competencyA = await createCompetency({ orgId, actorId: w.hrFull, frameworkId: frameworkA.id, code: "A-SKILL", name: "A-only skill" });
       const competencyB = await createCompetency({ orgId, actorId: w.hrFull, frameworkId: frameworkB.id, code: "B-SKILL", name: "B-only skill" });
-      return { frameworkA: frameworkA.id, frameworkB: frameworkB.id, departmentOnlyB: departmentOnlyB.id, competencyB: competencyB.id };
+      const competencyWide = await createCompetency({ orgId, actorId: w.hrFull, frameworkId: frameworkWide.id, code: "ORG-SKILL", name: "Organization skill" });
+      const positionB = await createPosition({
+        orgId, actorId: w.hrFull, positionCode: "SCOPE-B", title: "B position", employerSubsidiaryId: w.subB,
+        status: "open", effectiveFrom: "2026-01-01", reason: "competency scope test",
+      });
+      const jobLevel = (await db.execute<{ id: string }>(sql`
+        insert into hrm_job_levels (org_id, code, name, rank, created_by, updated_by)
+        values (${orgId}, 'SCOPE-LEVEL', 'Scope test level', 1, ${w.hrFull}, ${w.hrFull}) returning id`)).rows[0]!.id;
+      const templateId = await mkReviewTemplate(orgId, w.hrFull, { name: "Scope template", scaleLabels: [] });
+      const sectionId = (await db.execute<{ id: string }>(sql`
+        select id from hrm_review_template_sections where org_id = ${orgId} and template_id = ${templateId}`)).rows[0]!.id;
+      return {
+        frameworkA: frameworkA.id, frameworkB: frameworkB.id, departmentOnlyB: departmentOnlyB.id,
+        frameworkWide: frameworkWide.id, competencyA: competencyA.id, competencyB: competencyB.id, competencyWide: competencyWide.id,
+        positionB: positionB.id, jobLevel, sectionId,
+      };
     },
-    read: async (w, { frameworkA, frameworkB, departmentOnlyB }) => {
-      assert.deepEqual((await listFrameworks({ orgId: w.orgId, actorId: w.hrA })).map((framework) => framework.id), [frameworkA]);
+    read: async (w, { frameworkA, frameworkB, departmentOnlyB, frameworkWide }) => {
+      const visibleFrameworks = (await listFrameworks({ orgId: w.orgId, actorId: w.hrA })).map((framework) => framework.id);
+      assert.deepEqual(visibleFrameworks, [frameworkA, frameworkWide]);
       for (const id of [frameworkB, departmentOnlyB]) assert.equal(await getFramework({ orgId: w.orgId, actorId: w.hrA, id }), null);
     },
-    write: async (w, { frameworkB, competencyB }) => {
+    write: async (w, { frameworkB, competencyA, competencyB, competencyWide, positionB, jobLevel, sectionId }) => {
       const orgId = w.orgId;
       for (const call of [
         () => createFramework({ orgId, actorId: w.hrA, name: "Unrestricted framework" }),
@@ -517,6 +541,24 @@ scopeMatrix([
         () => createCompetency({ orgId, actorId: w.hrA, frameworkId: frameworkB, code: "A-CANNOT-ADD", name: "Out-of-scope skill" }),
         () => addCompetencyLevel({ orgId, actorId: w.hrA, competencyId: competencyB, levelRank: 1, label: "Entry", expectation: "A B-only expectation" }),
       ]) await denied(call());
+
+      const linkCount = () => countRows(sql`from hrm_competency_links where org_id = ${orgId}`);
+      const beforeLinks = await linkCount();
+      await denied(linkCompetency({ orgId, actorId: w.hrA, competencyId: competencyA, targetKind: "position", targetId: positionB }));
+      assert.equal(await linkCount(), beforeLinks, "a cross-subsidiary position link is not stored");
+      await refused(linkCompetency({ orgId, actorId: w.hrA, competencyId: competencyA, targetKind: "job_level", targetId: jobLevel }), "FORBIDDEN", /unrestricted subsidiary access/);
+      await refused(linkCompetency({ orgId, actorId: w.hrA, competencyId: competencyA, targetKind: "review_template_section", targetId: sectionId }), "FORBIDDEN", /unrestricted subsidiary access/);
+      await refused(setSectionCompetency({ orgId, actorId: w.hrA, sectionId, competencyId: null }), "FORBIDDEN", /unrestricted subsidiary access/);
+      assert.equal(await linkCount(), beforeLinks, "restricted HR cannot mutate organization-wide competency links");
+
+      await refused(linkCompetency({ orgId, actorId: w.hrFull, competencyId: competencyA, targetKind: "job_level", targetId: jobLevel }), "FORBIDDEN", /unrestricted framework/);
+      await refused(setSectionCompetency({ orgId, actorId: w.hrFull, sectionId, competencyId: competencyB }), "FORBIDDEN", /unrestricted framework/);
+      await linkCompetency({ orgId, actorId: w.hrFull, competencyId: competencyWide, targetKind: "job_level", targetId: jobLevel });
+      await linkCompetency({ orgId, actorId: w.hrFull, competencyId: competencyWide, targetKind: "review_template_section", targetId: sectionId });
+      await setSectionCompetency({ orgId, actorId: w.hrFull, sectionId, competencyId: competencyWide });
+      const storedSection = (await db.execute<{ competencyId: string | null }>(sql`
+        select competency_id as "competencyId" from hrm_review_template_sections where org_id = ${orgId} and id = ${sectionId}`)).rows[0];
+      assert.equal(storedSection?.competencyId, competencyWide, "an unrestricted framework can serve organization-wide review sections");
     },
   }),
   scopeRow({

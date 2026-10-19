@@ -2965,6 +2965,10 @@
         "singularTitle": "考勤政策",
         "description": "按生效日期设定的打卡窗口和宽限分钟数，用于判定班次表上的考勤。"
       },
+      "leave-payroll-entitlement-mappings": {
+        "title": "休假权益映射",
+        "description": "从生效日期起，将可累计的休假类型映射到有效的小时权益计划。"
+      },
       "equity-account-policies": {
         "title": "权益科目",
         "singular": "权益科目策略",

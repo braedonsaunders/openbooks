@@ -8,6 +8,8 @@ import { add, isZero, neg, normalizeMoney } from "../money/money.ts";
 import {
   overheadRateAppliesToTimeEntry,
   applyOverheadForTime,
+  backfillOverhead,
+  countUnappliedOverheadTime,
   reverseOverheadForTime,
 } from "./overhead-post.ts";
 import { OVERHEAD_SYSTEM_RULE_KEY, overheadApplicationSettings } from "./overhead-sync.ts";
@@ -106,6 +108,10 @@ interface Fixture {
   orgId: string;
   actorId: string;
   accountId: string;
+  customerId: string;
+  rootSubsidiaryId: string;
+  rootProjectId: string;
+  employeeId: string;
   setA: string[];
   setB: string[];
   excluded: string[];
@@ -187,6 +193,8 @@ async function seed(): Promise<Fixture> {
     }
     return {
       orgId: org.orgId, actorId, accountId: org.accounts.adjustment,
+      customerId: org.customerId, rootSubsidiaryId: org.subsidiaryId,
+      rootProjectId: projP1, employeeId,
       setA, setB,
       excluded: [setA[4]!, setA[5]!, setB[4]!, setB[5]!],
     };
@@ -224,6 +232,84 @@ async function journalProjection(orgId: string, entryId: string): Promise<LinePr
     department: (row["department"] as string | null) ?? null,
   }));
 }
+
+test("overhead postings keep subsidiary and accounting-period groups intact", { skip: !DB }, async () => {
+  const f = await seed();
+  try {
+    const childSubsidiaryId = randomUUID();
+    const childProjectId = randomUUID();
+    const internalProjectId = randomUUID();
+    const childEntries = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    await db.execute(sql`insert into subsidiaries
+      (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values(${childSubsidiaryId},${f.orgId},${f.rootSubsidiaryId},
+        'Overhead child','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
+    const calendarId = (await db.execute<{ id: string }>(sql`select id from fiscal_calendars
+      where org_id=${f.orgId} and is_default and is_active`)).rows[0]!.id;
+    await db.execute(sql`insert into accounting_periods
+      (org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
+      values(${f.orgId},2026,8,'2026-08','2026-08-01','2026-08-31',false,${calendarId})`);
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom,is_internal)
+      values(${childProjectId},${f.orgId},${childSubsidiaryId},'OVH-CHILD','Overhead child project',${f.customerId},'active',true,'{}'::jsonb,false),
+            (${internalProjectId},${f.orgId},${f.rootSubsidiaryId},'OVH-INTERNAL','Internal overhead project',null,'active',true,'{}'::jsonb,true)`);
+    const specs = [
+      { id: childEntries[0]!, projectId: f.rootProjectId, workedOn: "2026-07-20" },
+      { id: childEntries[1]!, projectId: f.rootProjectId, workedOn: "2026-08-03" },
+      { id: childEntries[2]!, projectId: childProjectId, workedOn: "2026-07-20" },
+      { id: childEntries[3]!, projectId: internalProjectId, workedOn: "2026-07-20" },
+    ];
+    for (const entry of specs) {
+      await db.execute(sql`insert into time_entries
+        (id,org_id,employee_party_id,worked_on,hours,project_id,department_id,status,cost_rate,
+         cost_rate_currency,cost_rate_subsidiary_id,costing_basis,is_billable,custom,created_by,updated_by)
+        values(${entry.id},${f.orgId},${f.employeeId},${entry.workedOn},2,${entry.projectId},null,'approved',25,
+          'CAD',${f.rootSubsidiaryId},
+          'actual',false,'{}'::jsonb,${f.actorId},${f.actorId})`);
+    }
+
+    const applied = await applyOverheadForTime(f.orgId, f.actorId, childEntries);
+    assert.equal(applied.entryIds.length, 3);
+    assert.equal(applied.entries, 3);
+    assert.equal(applied.total, "30.0000");
+    const journalGroups = async () => (await db.execute<{
+      subsidiary_id: string; period_name: string; posting_date: string; journals: number; lines_match_entity: boolean;
+    }>(sql`
+      select je.subsidiary_id::text as subsidiary_id, ap.name as period_name, je.posting_date::text as posting_date,
+             count(distinct je.id)::int as journals, bool_and(jl.subsidiary_id = je.subsidiary_id) as lines_match_entity
+        from time_entries te
+        join journal_entries je on je.org_id = te.org_id and je.id = te.overhead_journal_entry_id
+        join accounting_periods ap on ap.org_id = je.org_id and ap.id = je.period_id
+        join journal_lines jl on jl.org_id = je.org_id and jl.entry_id = je.id
+       where te.org_id = ${f.orgId} and te.id = any(${`{${childEntries.join(",")}}`}::uuid[])
+       group by je.subsidiary_id, ap.name, je.posting_date
+       order by ap.name, je.subsidiary_id`)).rows;
+    const firstGroups = (await journalGroups()).map((row) => ({
+      subsidiaryId: row.subsidiary_id,
+      period: row.period_name,
+      postingDate: row.posting_date,
+      journals: row.journals,
+      linesMatchEntity: row.lines_match_entity,
+    }));
+    const ordered = (groups: typeof firstGroups) => groups.sort((left, right) =>
+      `${left.period}|${left.subsidiaryId}`.localeCompare(`${right.period}|${right.subsidiaryId}`));
+    assert.deepEqual(ordered(firstGroups), ordered([
+      { subsidiaryId: f.rootSubsidiaryId, period: "2026-07", postingDate: "2026-07-20", journals: 1, linesMatchEntity: true },
+      { subsidiaryId: childSubsidiaryId, period: "2026-07", postingDate: "2026-07-20", journals: 1, linesMatchEntity: true },
+      { subsidiaryId: f.rootSubsidiaryId, period: "2026-08", postingDate: "2026-08-03", journals: 1, linesMatchEntity: true },
+    ]));
+
+    await reverseOverheadForTime(f.orgId, f.actorId, childEntries, "Reapply by subsidiary and period", "2026-08-31");
+    const backfill = await backfillOverhead(f.orgId, f.actorId);
+    assert.equal(backfill.journals, 3, "backfill posts one journal for each subsidiary and accounting period group");
+    assert.equal((await journalGroups()).length, 3);
+    assert.equal((await countUnappliedOverheadTime(f.orgId)).entries, 0);
+    const internalUnposted = await db.execute<{ overhead_journal_entry_id: string | null }>(sql`
+      select overhead_journal_entry_id from time_entries where org_id = ${f.orgId} and id = ${childEntries[3]}`);
+    assert.equal(internalUnposted.rows[0]?.overhead_journal_entry_id, null);
+  } finally {
+    await dropScratchOrg(f.orgId);
+  }
+});
 
 test("folded overhead posts byte-identical lines to the pre-fold builder", { skip: !DB }, async () => {
   const f = await seed();

@@ -9,8 +9,10 @@ import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { decideGate } from "../flows/gates.ts";
 import { applyBoardChanges, publishBoard } from "./entries.ts";
+import type { ScheduleNotice } from "./entries.ts";
 import { publishScheduleBoard } from "./publications.ts";
 import { ScheduleError } from "./errors.ts";
+import { registerScheduleNoticeDelivery } from "./distribution-hooks.ts";
 import { closeAssignment, createAssignment, generateAssignment, listBoardAssignments, recordPatternException, revokePatternException, savePattern, type PatternInput } from "./pattern-store.ts";
 import { loadMySchedule } from "./mine.ts";
 import { createOwnShiftRequest, listBoardShiftRequests, listSwapCandidates, respondToSwap, withdrawOwnShiftRequest } from "./requests.ts";
@@ -192,6 +194,9 @@ test("without a Flow a governed publication applies at once, records that no app
 
 test("a Schedule publication Flow owns governed publishing: the changes wait, the submitter cannot decide, and the decider publishes exactly what was submitted", enabled, async () => fixture(async (f) => {
   const scheduler = as(f, f.scheduler);
+  const delivered: ScheduleNotice[][] = [];
+  registerScheduleNoticeDelivery(async ({ notices }) => { delivered.push([...notices]); });
+  await withBypassContext(() => db.execute(sql`update schedule_boards set notify_assignees = true where org_id = ${f.org.orgId} and id = ${f.governed}`));
   await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "schedule_publication", assignees: [{ type: "user", userId: f.approver }, { type: "user", userId: f.scheduler }], mode: "any" }));
   const pattern = await savePattern(scheduler, daily(f, "ICU", { horizonDays: 3 }));
   const key = randomUUID();
@@ -210,6 +215,8 @@ test("a Schedule publication Flow owns governed publishing: the changes wait, th
   const second = await publishScheduleBoard({ ...scheduler, boardId: f.governed, from: start, through: addCalendarDays(start, 7) });
   await decide(f, (await gate(f, "schedule_publication", second.publicationId!))!, f.approver, "approved", "Covered");
   assert.ok((await live(f, key)).every((row) => row.status === "published"));
+  assert.equal(delivered.length, 1, "only the approved publication delivers notices");
+  assert.ok(delivered[0]!.some((notice) => notice.workerPartyId === f.ana && notice.change === "booked"));
   const decided = (await withBypassContext(() => db.execute<{ decidedBy: string; released: boolean }>(sql`select decided_by as "decidedBy", released_without_approval as released
     from schedule_publications where org_id = ${f.org.orgId} and id = ${second.publicationId}`))).rows[0];
   assert.deepEqual(decided, { decidedBy: f.approver, released: false });
@@ -262,6 +269,20 @@ test("without a Flow employee releases, changes and swaps apply when submitted a
 
 test("a Shift request Flow owns the decision: the requester cannot decide, concurrent decisions apply once", enabled, async () => fixture(async (f) => {
   const scheduler = as(f, f.scheduler), ana = as(f, f.anaUser);
+  const delivered: ScheduleNotice[][] = [];
+  registerScheduleNoticeDelivery(async ({ notices }) => { delivered.push([...notices]); });
+  await withBypassContext(async () => {
+    await db.execute(sql`update schedule_boards set notify_assignees = true where org_id = ${f.org.orgId} and id = ${f.roster}`);
+    const graph = {
+      schemaVersion: 1,
+      nodes: [
+        { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_update" } } },
+        { id: "email", position: { x: 200, y: 0 }, data: { kind: "action", action: { action: "distribute_schedule" } } },
+      ],
+      edges: [{ id: "next", source: "trigger", target: "email", sourceHandle: "next" }],
+    };
+    await db.execute(sql`insert into flows(org_id,name,subject_kind,enabled,graph) values(${f.org.orgId},'Roster update','schedule_distribution',true,${JSON.stringify(graph)}::jsonb)`);
+  });
   await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "schedule_entry_request", assignees: [{ type: "user", userId: f.approver }, { type: "user", userId: f.scheduler }, { type: "user", userId: f.anaUser }], mode: "any" }));
   const id = randomUUID();
   await applyBoardChanges({ ...scheduler, boardId: f.roster, changes: [{ op: "create", id, workerPartyId: f.ana, onDate: addCalendarDays(f.today, 2), target: null, span: { mode: "timed", starts: "09:00", ends: "17:00", breakMinutes: 30 } }] });
@@ -276,6 +297,10 @@ test("a Shift request Flow owns the decision: the requester cannot decide, concu
     r.released_without_approval as released from schedule_entry_requests r join schedule_entries e on e.org_id = r.org_id and e.id = r.entry_id
     where r.org_id = ${f.org.orgId} and r.id = ${submitted.request.id}`));
   assert.deepEqual(status.rows[0], { request: "approved", entry: "cancelled", released: false });
+  assert.equal(delivered.length, 1, "the approved release delivers its assignee notice once");
+  assert.ok(delivered[0]!.some((notice) => notice.workerPartyId === f.ana && notice.change === "removed"));
+  const distributionRuns = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from flow_runs where org_id = ${f.org.orgId} and subject_kind = 'schedule_distribution'`));
+  assert.ok(distributionRuns.rows[0]!.n > 0, "an approved shift request fires the on_update schedule distribution Flow");
   assert.deepEqual((await listBoardShiftRequests({ ...scheduler, boardId: f.roster, status: "open" })).map((request) => request.id), []);
 }));
 

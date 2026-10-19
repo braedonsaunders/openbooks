@@ -66,9 +66,10 @@ function refuse(code: ProjectHeaderControlCode): never {
 }
 
 /**
- * Billing has begun once the project has any application for payment. This is
- * the one predicate behind every contract-value control (the schedule-of-values
- * insert and the header edit alike).
+ * Billing has begun once the project has a non-void application for payment.
+ * Voided draft history remains auditable but does not freeze the baseline.
+ * This is the one predicate behind every contract-value control (the
+ * schedule-of-values insert and the header edit alike).
  */
 export async function projectBillingHasBegun(
   runner: SqlExecutor,
@@ -76,7 +77,7 @@ export async function projectBillingHasBegun(
   projectId: string,
 ): Promise<boolean> {
   const prior = await runner.execute(
-    sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${projectId} limit 1`,
+    sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${projectId} and status <> 'void' limit 1`,
   );
   return prior.rows.length > 0;
 }

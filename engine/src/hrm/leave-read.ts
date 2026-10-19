@@ -36,6 +36,8 @@ import {
 } from "./leave-math.ts";
 import { inputGuards } from "./input-guards.ts";
 
+export { strandedLeavePayrollInputs } from "../payroll/leave-payroll-inputs.ts";
+
 /**
  * HRM leave reads (HR-5). Two balances, never conflated in code or copy:
  *

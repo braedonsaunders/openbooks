@@ -3,12 +3,14 @@ import { registerHooks } from "node:module";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../platform/db.ts";
+import { db, pool, withOrgContext } from "../platform/db.ts";
+import { recordProjectFinancialAdjustment } from "./financial-adjustments.ts";
 import {
   findDuplicateProjects,
   mergeProjects,
   previewProjectMerge,
   PROJECT_MERGE_EXCLUSIONS,
+  PROJECT_MERGE_SPECIAL_FK_HANDLINGS,
   PROJECT_REFS,
   ProjectMergeError,
 } from "./merge.ts";
@@ -103,13 +105,17 @@ async function seedPostedEntry(args: {
   bankAccount: string;
   projectId: string;
   tag: string;
-}): Promise<void> {
+  sourceDocumentId?: string;
+  custom?: Record<string, unknown>;
+}): Promise<string> {
   const entry = randomUUID();
   await db.execute(sql`
     insert into journal_entries
-      (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin,
+       source_document_id, custom)
     values (${entry}, ${args.orgId}, ${args.bookId}, ${args.subsidiaryId}, ${`JE-${args.tag}`},
-            ${args.date}, ${args.periodId}, 'merge posted lines', 'draft', 'manual')`);
+            ${args.date}, ${args.periodId}, 'merge posted lines', 'draft', 'manual',
+            ${args.sourceDocumentId ?? null}, ${JSON.stringify(args.custom ?? {})}::jsonb)`);
   // One balanced pair: the deferred entry-balance trigger fires at commit.
   await db.execute(sql`
     insert into journal_lines
@@ -118,6 +124,7 @@ async function seedPostedEntry(args: {
       (${args.orgId}, ${entry}, 1, ${args.adjustmentAccount}, ${args.subsidiaryId}, ${args.projectId}, '25', 'CAD', '25', '1'),
       (${args.orgId}, ${entry}, 2, ${args.bankAccount}, ${args.subsidiaryId}, ${args.projectId}, '-25', 'CAD', '-25', '1')`);
   await db.execute(sql`update journal_entries set status = 'posted' where id = ${entry} and org_id = ${args.orgId}`);
+  return entry;
 }
 
 async function seedReferences(
@@ -183,6 +190,22 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
       nsId: "100",
     });
     await seedReferences(org.orgId, org.subsidiaryId, duplicate, "DUP", actor, org.accounts.ap);
+    const programId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_benefit_programs
+        (id, org_id, code, name, family, currency, effective_from, created_by, updated_by)
+      values (${programId}, ${org.orgId}, 'MERGE-SCOPE', 'Merge scope', 'custom', 'CAD', '2026-01-01', ${actor}, ${actor})`);
+    await db.execute(sql`
+      insert into hrm_benefit_program_scopes
+        (org_id, program_id, project_id, created_by, updated_by)
+      values (${org.orgId}, ${programId}, ${duplicate}, ${actor}, ${actor})`);
+    await db.execute(sql`
+      insert into schedule_patterns
+        (org_id, subsidiary_id, code, name, time_zone, cycle_days, cycle_anchor, slots,
+         target_kind, project_id, reason, created_by, updated_by)
+      values (${org.orgId}, ${org.subsidiaryId}, 'MERGE-PATTERN', 'Merge pattern', 'America/Toronto', 7,
+              '2026-01-05', '[{"position":0,"starts":"09:00","ends":"17:00","breakMinutes":30,"qualificationTypeIds":[]}]'::jsonb,
+              'project', ${duplicate}, 'Pattern follows its project through a merge', ${actor}, ${actor})`);
     // A project custom reference pointing at the duplicate follows the merge.
     await db.execute(sql`
       insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
@@ -205,17 +228,23 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
     assert.equal(moved.get("sov_lines"), 1);
     assert.equal(moved.get("encumbrances"), 1);
     assert.equal(moved.get("functional_mappings"), 1);
+    assert.equal(moved.get("hrm_benefit_program_scopes"), 1);
+    assert.equal(moved.get("schedule_patterns"), 1);
     assert.equal(preview.customRefs.length, 1);
 
     const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
     assert.equal(result.alreadyMerged, false);
     assert.ok(result.auditId);
-    for (const table of ["documents", "document_lines", "time_entries", "change_orders", "sov_lines", "encumbrances", "functional_mappings"]) {
+    for (const table of ["documents", "document_lines", "time_entries", "change_orders", "sov_lines", "encumbrances", "functional_mappings", "hrm_benefit_program_scopes", "schedule_patterns"]) {
       const left = await db.execute<{ n: string }>(sql`
         select count(*)::text as n from ${sql.identifier(table)}
          where org_id = ${org.orgId} and project_id = ${duplicate}`);
       assert.equal(left.rows[0]?.n, "0", table);
     }
+    const movedPattern = await db.execute<{ project_id: string; revision: number }>(sql`
+      select project_id, revision from schedule_patterns
+       where org_id = ${org.orgId} and code = 'MERGE-PATTERN'`);
+    assert.deepEqual(movedPattern.rows, [{ project_id: survivor, revision: 2 }]);
     const customLeft = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from documents
        where org_id = ${org.orgId} and custom ->> 'job_ref' = ${duplicate}`);
@@ -240,6 +269,87 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
     assert.equal(again.auditId, null);
     const after = await findDuplicateProjects(org.orgId);
     assert.ok(!after.some((group) => group.projects.some((p) => p.id === duplicate)));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("project merge reconciles overlapping benefit scopes and preserves provision identity", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-BEN-A", "Benefit Alpha");
+    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-BEN-B", "Benefit Beta");
+    const programId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_benefit_programs
+        (id, org_id, code, name, family, currency, effective_from, created_by, updated_by)
+      values (${programId}, ${org.orgId}, 'MERGE-COLLISION', 'Merge collision', 'custom', 'CAD', '2026-01-01', ${actor}, ${actor})`);
+    await db.execute(sql`
+      insert into hrm_benefit_program_scopes
+        (org_id, program_id, project_id, created_by, updated_by)
+      values (${org.orgId}, ${programId}, ${a}, ${actor}, ${actor}),
+             (${org.orgId}, ${programId}, ${b}, ${actor}, ${actor})`);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
+      /benefit program has project scopes on both projects/,
+    );
+    const scopeCount = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from hrm_benefit_program_scopes
+       where org_id = ${org.orgId} and program_id = ${programId}`)).rows[0]?.n;
+    assert.equal(scopeCount, "2");
+
+    const provisionProject = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PROV", "Provision owner");
+    const provisionId = randomUUID();
+    await db.execute(sql`
+      insert into provision_obligations
+        (id, org_id, subsidiary_id, book_id, name, currency, expense_account_id,
+         liability_account_id, created_by, project_id)
+      values (${provisionId}, ${org.orgId}, ${org.subsidiaryId}, ${org.bookId}, 'Project obligation', 'CAD',
+              ${org.accounts.cogs}, ${org.accounts.ap}, ${actor}, ${provisionProject})`);
+    const other = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PROV-S", "Provision survivor");
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: other, duplicateId: provisionProject, actorId: actor }),
+      /append-only history .*provision_obligations\.project_id/,
+    );
+    const retained = (await db.execute<{ project_id: string }>(sql`
+      select project_id::text as project_id from provision_obligations
+       where org_id = ${org.orgId} and id = ${provisionId}`)).rows[0]?.project_id;
+    assert.equal(retained, provisionProject);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("project merge refuses append-only financial evidence before moving references", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-IMM-1", "Survivor");
+    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-IMM-2", "Duplicate");
+    await withOrgContext(org.orgId, () => recordProjectFinancialAdjustment({
+      orgId: org.orgId,
+      projectId: duplicate,
+      adjustmentDate: "2026-08-04",
+      measure: "actual_cost",
+      amount: "25.00",
+      reason: "recorded project cost",
+    }));
+
+    await assert.rejects(
+      previewProjectMerge(org.orgId, survivor, duplicate),
+      /append-only history .*project_financial_adjustments.*keep the duplicate as the historical owner/,
+    );
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: null }),
+      /append-only history .*project_financial_adjustments.*keep the duplicate as the historical owner/,
+    );
+    const adjustment = await db.execute<{ project_id: string }>(sql`
+      select project_id from project_financial_adjustments
+       where org_id = ${org.orgId} and project_id = ${duplicate}`);
+    assert.equal(adjustment.rows.length, 1);
+    const marker = await db.execute<{ is_active: boolean }>(sql`
+      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`);
+    assert.equal(marker.rows[0]?.is_active, true);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -456,11 +566,27 @@ test("merge moves posted journal lines in open periods by reversal plus repost",
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J1", "Posted one");
     const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J2", "Posted two");
-    await seedPostedEntry({
+    const sourceDocumentId = randomUUID();
+    await db.execute(sql`
+      insert into documents (id, org_id, subsidiary_id, kind, status, document_number, document_date, currency, project_id)
+      values (${sourceDocumentId}, ${org.orgId}, ${org.subsidiaryId}, 'vendor_bill', 'draft',
+              ${`BILL-${randomUUID()}`}, ${org.date}, 'CAD', ${duplicate})`);
+    const originalEntryId = await seedPostedEntry({
       orgId: org.orgId, subsidiaryId: org.subsidiaryId, bookId: org.bookId, periodId: org.periodId,
       date: org.date, adjustmentAccount: org.accounts.adjustment, bankAccount: org.accounts.bank,
-      projectId: duplicate, tag: "JOPEN",
+      projectId: duplicate, tag: "JOPEN", sourceDocumentId, custom: { mergeMarker: "preserve" },
     });
+    const employee = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${employee}, ${org.orgId}, 'person', 'Merge labor worker', true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into time_entries
+        (org_id, employee_party_id, worked_on, hours, project_id, status, is_billable,
+         billing_status, costing_basis, cost_journal_entry_id, overhead_journal_entry_id,
+         created_by, updated_by)
+      values (${org.orgId}, ${employee}, ${org.date}, '2', ${duplicate}, 'approved', false,
+              'unbilled', 'actual', ${originalEntryId}, ${originalEntryId}, ${actor}, ${actor})`);
     const preview = await previewProjectMerge(org.orgId, survivor, duplicate);
     assert.equal(preview.moved.find((m) => m.table === "journal_lines")?.rows, 2);
     const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
@@ -489,6 +615,28 @@ test("merge moves posted journal lines in open periods by reversal plus repost",
       { entry_number: "JE-JOPEN-C", status: "posted" },
       { entry_number: "JE-JOPEN-R", status: "posted" },
     ]);
+    const replacement = await db.execute<{
+      id: string; source_document_id: string | null; reverses_entry_id: string | null; merge_marker: string | null;
+    }>(sql`
+      select id, source_document_id::text, reverses_entry_id::text, custom->>'mergeMarker' as merge_marker
+        from journal_entries where org_id = ${org.orgId} and entry_number = 'JE-JOPEN-C'
+    `);
+    assert.deepEqual(replacement.rows[0], {
+      id: replacement.rows[0]?.id,
+      source_document_id: sourceDocumentId,
+      reverses_entry_id: null,
+      merge_marker: "preserve",
+    });
+    const timeEvidence = await db.execute<{
+      cost_journal_entry_id: string | null; overhead_journal_entry_id: string | null;
+    }>(sql`
+      select cost_journal_entry_id::text, overhead_journal_entry_id::text from time_entries
+       where org_id = ${org.orgId} and employee_party_id = ${employee}
+    `);
+    assert.deepEqual(timeEvidence.rows[0], {
+      cost_journal_entry_id: replacement.rows[0]?.id,
+      overhead_journal_entry_id: replacement.rows[0]?.id,
+    });
     // The merge adds no money: posted entries still balance overall.
     const books = await db.execute<{ balance: string }>(sql`
       select coalesce(sum(jl.amount), 0)::text as balance
@@ -941,10 +1089,9 @@ test("project merge refuses field-time and HRM day/kind collisions by name", { s
 // project_id column in the catalog must either move with the merge
 // (PROJECT_REFS, each with its both-sides collision guard where storage
 // keys collide) or carry an explicit reviewed exclusion naming why
-// (PROJECT_MERGE_EXCLUSIONS). Foreign keys to projects agree: the only
-// project-linked column that is neither a project_id move nor an exclusion
-// is projects.parent_id, which the merge handles as hierarchy, not as a
-// reference row.
+// (PROJECT_MERGE_EXCLUSIONS). Direct project foreign keys outside project_id
+// carry a column-specific handling, including hierarchy and immutable source
+// identity certifications that block the merge.
 
 test("project merge covers every catalog project_id column or excludes it by review", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -959,15 +1106,26 @@ test("project merge covers every catalog project_id column or excludes it by rev
     assert.ok(columns.length > 30, "catalog enumeration returned a plausible project_id population");
     const refs = new Map(PROJECT_REFS.map(([table, column]) => [`${table}.${column}`, table]));
     const exclusions = new Map(PROJECT_MERGE_EXCLUSIONS);
+    const specialForeignKeys = new Map(
+      PROJECT_MERGE_SPECIAL_FK_HANDLINGS.map(([table, column, reason]) => [
+        `${table}.${column}`,
+        reason,
+      ]),
+    );
     for (const [table, reason] of PROJECT_MERGE_EXCLUSIONS) {
       assert.ok(reason.length > 50, `${table} exclusion carries a reviewed reason, not a stub`);
+    }
+    for (const [reference, reason] of specialForeignKeys) {
+      assert.ok(reason.length > 50, `${reference} carries a reviewed merge handling, not a stub`);
     }
     const uncovered = columns.filter(
       (row) => !refs.has(`${row.table_name}.${row.column_name}`) && !exclusions.has(row.table_name),
     );
+    const uncoveredReferences = uncovered.map((row) => `${row.table_name}.${row.column_name}`);
     assert.deepEqual(
-      uncovered.map((row) => `${row.table_name}.${row.column_name}`),
+      uncoveredReferences,
       [],
+      `Project references require merge handling or a reviewed exclusion: ${JSON.stringify(uncoveredReferences)}`,
     );
     // No stale entries either: every listed table still carries the column.
     const catalogTables = new Set(columns.map((row) => row.table_name));
@@ -993,12 +1151,21 @@ test("project merge covers every catalog project_id column or excludes it by rev
            and c.confrelid = 'projects'::regclass and fa.attname = 'id'`)
     ).rows;
     const projectIdSet = new Set(columns.map((row) => `${row.table_name}.${row.column_name}`));
+    const directForeignKeys = new Set(fkColumns.map((row) => `${row.table_name}.${row.column_name}`));
+    const unhandledForeignKeys = fkColumns
+        .filter((row) => {
+          const reference = `${row.table_name}.${row.column_name}`;
+          return !projectIdSet.has(reference) && !specialForeignKeys.has(reference);
+        })
+        .map((row) => `${row.table_name}.${row.column_name}`);
     assert.deepEqual(
-      fkColumns
-        .filter((row) => !projectIdSet.has(`${row.table_name}.${row.column_name}`))
-        .map((row) => `${row.table_name}.${row.column_name}`),
-      ["projects.parent_id"],
+      unhandledForeignKeys,
+      [],
+      `Project foreign keys require merge handling: ${JSON.stringify(unhandledForeignKeys)}`,
     );
+    for (const reference of specialForeignKeys.keys()) {
+      assert.ok(directForeignKeys.has(reference), `${reference} is listed but has no direct project foreign key`);
+    }
   } finally {
     await dropScratchOrg(org.orgId);
   }

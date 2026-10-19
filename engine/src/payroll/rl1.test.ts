@@ -36,11 +36,12 @@ const aggregates = (overrides: Partial<Rl1SlipAggregates> = {}): Rl1SlipAggregat
   ...overrides,
 });
 
-test("rl1YearCaps: 2026 published maximums; unknown years refuse", () => {
+test("rl1YearCaps resolves published maximums per tax year and refuses unknown years", () => {
   // TP-1015.F-V (2026-01) p. 7: YMPE 74,600; additional maximum 85,000;
   // QPIP maximum insurable earnings 103,000.
   assert.deepEqual(rl1YearCaps(2026), CAPS_2026);
-  assert.throws(() => rl1YearCaps(2025));
+  assert.deepEqual(rl1YearCaps(2024), { ympe: "68500", yampe: "73200", qpipMie: "94000" });
+  assert.deepEqual(rl1YearCaps(2025), { ympe: "71300", yampe: "81200", qpipMie: "98000" });
   assert.throws(() => rl1YearCaps(2027));
 });
 

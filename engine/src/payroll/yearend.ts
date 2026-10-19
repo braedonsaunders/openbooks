@@ -33,7 +33,8 @@ import {
   type PayrollFilingData,
   type PayrollFilingIssue,
 } from "./filing-registry.ts";
-import { QPIP_PROVINCE, RATES_2026_JAN } from "./canada/rates.ts";
+import { QPIP_PROVINCE } from "./canada/rates.ts";
+import { canadianYearEndCaps } from "./canada/yearend-caps.ts";
 import {
   assertPayrollTaxYearSupported,
   payrollFilingYearOptions,
@@ -64,7 +65,7 @@ import { PayrollError } from "./error.ts";
 const num = (value: unknown): string => (value == null ? "0" : String(value));
 
 /**
- * Statutory caps per tax year (extend each January alongside the engines).
+ * Statutory caps per tax year, resolved from the published T4127 edition.
  *
  * REFUSES an unknown year rather than returning null. Boxes 24 and 26 are
  * capped at the year's MIE and YAMPE; with no caps the cap became a no-op and
@@ -75,17 +76,8 @@ const num = (value: unknown): string => (value == null ? "0" : String(value));
  * constants must fail the same way, not the opposite way.
  */
 function caYearCaps(taxYear: number): { mie: string; yampe: string; qpipMie: string } {
-  if (taxYear === 2026) {
-    return {
-      mie: RATES_2026_JAN.ei.mie,
-      yampe: RATES_2026_JAN.cpp.yampe,
-      qpipMie: RATES_2026_JAN.qpip.mie,
-    };
-  }
-  throw new PayrollError(
-    `no CRA maximums for tax year ${taxYear} — T4 boxes 24 and 26 cannot be capped. `
-    + "This year is not yet supported by the CA pack; contact support.",
-  );
+  const caps = canadianYearEndCaps(taxYear);
+  return { mie: caps.mie, yampe: caps.cppYampe, qpipMie: caps.qpipMie };
 }
 
 /**

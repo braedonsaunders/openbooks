@@ -16,6 +16,7 @@ import {
   nativePointInTimeFingerprint,
   type CertifyFieldTicketSourceIdentityInput,
 } from "./field-ticket-source-certification.ts";
+import { mergeProjects } from "./merge.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const enabled = { skip: !DB };
@@ -153,6 +154,37 @@ async function certificationCount(orgId: string): Promise<number> {
     select count(*)::text as count from field_ticket_source_certifications where org_id = ${orgId}
   `)).rows[0]!.count);
 }
+
+test("project merge refuses to reassign an immutable Field Ticket identity certification", enabled, async () => {
+  const row = await fixture("draft");
+  try {
+    await certifyFieldTicketSourceIdentity(
+      certificationInput(row, await revision(row.orgId, row.ticketId)),
+    );
+    const survivorId = String((await db.execute<{ id: string }>(sql`
+      insert into projects (org_id, subsidiary_id, name, custom)
+      values (${row.orgId}, (select subsidiary_id from projects where org_id = ${row.orgId} and id = ${row.projectId}),
+              'Survivor', '{}'::jsonb)
+      returning id
+    `)).rows[0]!.id);
+
+    await assert.rejects(
+      mergeProjects(row.orgId, { survivorId, duplicateId: row.projectId, actorId: row.actorId }),
+      /append-only history .*field_ticket_source_certifications\.native_project_id.*keep the duplicate as the historical owner/,
+    );
+    const certification = (await db.execute<{ native_project_id: string }>(sql`
+      select native_project_id from field_ticket_source_certifications
+       where org_id = ${row.orgId} and native_document_id = ${row.ticketId}
+    `)).rows[0];
+    assert.equal(certification?.native_project_id, row.projectId);
+    const ticket = (await db.execute<{ project_id: string }>(sql`
+      select project_id from documents where org_id = ${row.orgId} and id = ${row.ticketId}
+    `)).rows[0];
+    assert.equal(ticket?.project_id, row.projectId);
+  } finally {
+    await dropScratchOrg(row.orgId);
+  }
+});
 
 test("a human-reviewed crosswalk certifies a used ticket as metadata only", enabled, async () => {
   const row = await fixture("draft");

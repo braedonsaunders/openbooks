@@ -31,7 +31,7 @@ import {
   type CarryoverRule,
   type TargetedPolicyWindow,
 } from "./leave-math.ts";
-import { LeaveError } from "./leave-errors.ts";
+import { LeaveError, postgresErrorCode } from "./leave-errors.ts";
 import { setupRemedyFor } from "./self-service/actor.ts";
 import { isUniqueViolation } from "./field-time/errors.ts";
 import {
@@ -439,11 +439,7 @@ export async function createLeavePolicy(query: CreateLeavePolicyQuery): Promise<
       // exclusion code. db.execute wraps the PG error in a
       // DrizzleQueryError, so the code rides on cause — checking only the
       // outer code would drop this refusal.
-      const pgCode =
-        typeof error === "object" && error !== null
-          ? ((error as { code?: string }).code ?? (error as { cause?: { code?: string } }).cause?.code)
-          : undefined;
-      if (pgCode === "23P01") {
+      if (postgresErrorCode(error) === "23P01") {
         throw new LeaveError(
           "REFUSED",
           `another policy now covers this leave type and scope over ${effectiveFrom} to ${effectiveTo ?? "open"} — reload the policy list and close the overlapping window (set its effective_to) before opening this one`,
@@ -1214,11 +1210,7 @@ export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Prom
       // the overlap instead of leaking a PG exclusion code. db.execute
       // wraps the PG error in a DrizzleQueryError, so the code rides on
       // cause — checking only the outer code would drop this refusal.
-      const pgCode =
-        typeof error === "object" && error !== null
-          ? ((error as { code?: string }).code ?? (error as { cause?: { code?: string } }).cause?.code)
-          : undefined;
-      if (pgCode === "23P01") {
+      if (postgresErrorCode(error) === "23P01") {
         throw new LeaveError(
           "REFUSED",
           "another approved request now overlaps this range — reload the calendar and file the non-overlapping days",
@@ -1288,9 +1280,9 @@ async function writeApprovalEffects(
     }
     if (type.value_crossing === "payout" || type.value_crossing === "bank_in") {
       const input = (await exec.execute<{ id: string }>(sql`
-        insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, kind,
+        insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, leave_type_id, kind,
           absence_date, hours, source_leave_request_id, status, created_by, updated_by)
-        values (${orgId}, ${workerPartyId}, ${request.employment_id}, ${type.value_crossing},
+        values (${orgId}, ${workerPartyId}, ${request.employment_id}, ${type.id}, ${type.value_crossing},
           ${days[index]}, ${perDay[index]}, ${request.id}, 'pending', ${actorId}, ${actorId})
         returning id
       `)).rows[0];

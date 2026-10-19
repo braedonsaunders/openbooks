@@ -2890,6 +2890,10 @@
         "singularTitle": "Politique de présence",
         "description": "Fenêtres de pointage et minutes de tolérance datées pour observer la présence sur un planning de quarts."
       },
+      "leave-payroll-entitlement-mappings": {
+        "title": "Mappages des droits aux congés",
+        "description": "Associez les types de congé capitalisés à des régimes d'heures actifs à partir d'une date d'effet."
+      },
       "equity-account-policies": {
         "title": "Comptes de capitaux propres",
         "singular": "Politique de comptes de capitaux propres",

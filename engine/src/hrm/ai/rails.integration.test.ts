@@ -239,8 +239,8 @@ async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promis
     values (${requestId}, ${orgId}, ${employmentId}, ${leaveType}, '2026-09-10', '2026-09-10', 8, 'approved',
        ${decidedBy}, now(), 'seeded for the anomaly probe')`);
   await db.execute(sql`
-    insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, kind, absence_date, hours, source_leave_request_id, status)
-    values (${orgId}, ${workerPartyId}, ${employmentId}, 'payout', '2026-09-10', 8, ${requestId}, 'pending')`);
+    insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, leave_type_id, kind, absence_date, hours, source_leave_request_id, status)
+    values (${orgId}, ${workerPartyId}, ${employmentId}, ${leaveType}, 'payout', '2026-09-10', 8, ${requestId}, 'pending')`);
   const seeded = (await db.execute<{ n: string }>(sql`
     select count(*)::text as n from hrm_payroll_inputs
      where org_id = ${orgId} and employment_id = ${employmentId} and status = 'pending'`)).rows[0]?.n;
@@ -758,6 +758,14 @@ test("flag reads and transitions see only the flag employment's employer", { ski
       select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`)).rows[0]?.count;
     await assert.rejects(runAnomalyScan({
       orgId: org.orgId, actorId: scopedPayrollA, periodFrom: "2026-09-01", periodTo: "2026-09-30",
+    }), /unrestricted subsidiary access/);
+    await assert.rejects(
+      computeAnomalyBaselines({ orgId: org.orgId, actorId: scopedPayrollA, windowPeriods: 2 }),
+      /unrestricted subsidiary access/,
+    );
+    await assert.rejects(runAnomalyScan({
+      orgId: org.orgId, actorId: scopedTime, periodFrom: "2026-09-01", periodTo: "2026-09-30",
+      options: { timeOnly: true },
     }), /unrestricted subsidiary access/);
     const flagsAfterScan = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`)).rows[0]?.count;

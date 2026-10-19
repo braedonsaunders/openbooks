@@ -345,6 +345,52 @@ describe("run-entitlement-hours-payout", () => {
 
     await dropScratchOrg(org.orgId);
   });
+
+  test("a final pay converts the hours-bank wage into the run currency", { skip: !DB }, async () => {
+    const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle("Foreign Banked", { terminatedOn: "2026-07-18" });
+    try {
+      await db.execute(sql`update labor_cost_rates set rate='60',currency='USD'
+        where org_id=${org.orgId} and employee_party_id=${employeeId}`);
+      await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+        values (${org.orgId}, 'USD', 'CAD', '2026-01-01', 'spot', '1.5')`);
+      const payoutComponentId = randomUUID();
+      await seedPayrollComponent(org.orgId, payoutComponentId, {
+        code: 'FOREIGN-SICK-PAY', name: 'Foreign sick bank payout', kind: 'earning', systemKey: null,
+        basis: 'fixed_amount', isActive: true, createdBy: actorId, updatedBy: actorId,
+      });
+      await db.execute(sql`insert into pay_component_statutory_treatments
+        (org_id, pay_component_id, effective_from, program_exclusions, vacationable)
+        values (${org.orgId}, ${payoutComponentId}, '2026-01-01', '{}', true)`);
+      const planId = randomUUID();
+      await db.execute(sql`
+        insert into entitlement_plans (id, org_id, code, name, system_key, unit, direction,
+                                       accrual_method, payout_component_id, created_by, updated_by)
+        values (${planId}, ${org.orgId}, 'FOREIGN-SICK-HRS', 'Foreign sick bank', null, 'hours', 'accrue',
+                'manual', ${payoutComponentId}, ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into entitlement_ledger (org_id, plan_id, employee_party_id, movement_date, amount,
+                                        hours, kind, pay_run_document_id, note, created_by, updated_by)
+        values (${org.orgId}, ${planId}, ${employeeId}, '2026-07-01', '40.0000',
+                null, 'accrual', null, 'banked time', ${actorId}, ${actorId})`);
+
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        runType: "termination", employeePartyIds: [employeeId],
+      });
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(result.errors, []);
+      const line = (await db.execute<{ amount: string }>(sql`
+        select l.amount::text as amount from pay_stub_lines l
+          join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
+         where s.org_id=${org.orgId} and s.pay_run_document_id=${run.documentId}
+           and l.component_id=${payoutComponentId}
+      `)).rows[0];
+      assert.equal(line?.amount, "3600.0000", "40 hours at USD 60 convert to CAD 90 per hour before payment");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  });
 });
 
 describe("calculation-rollback", () => {

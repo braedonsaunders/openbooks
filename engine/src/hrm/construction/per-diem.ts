@@ -10,6 +10,7 @@ import { add, cmp, fromUnits, mul, neg } from "../../money/money.ts";
 import { addCalendarDays } from "../../platform/business-date.ts";
 import {
   applyWeeklyRule,
+  allocateDailyPerDiem,
   perDiemAmountForDay,
   type DistanceBracket,
   type PerDiemBasis,
@@ -443,12 +444,23 @@ export async function computeForWeek(
       home = { lat: rules.home_lat, lng: rules.home_lng };
     }
     const written: PerDiemEntry[] = [];
-    const dailyAmounts: string[] = [];
-    // Several project rows may describe one employment work date. They
-    // still produce their own configured allowance entries below, but a
-    // weekly threshold counts the civil date once, never once per project.
-    const dailyAmountByDate = new Map<string, string>();
+    type ApprovedDay = (typeof days)[number];
+    const byDate = new Map<string, ApprovedDay[]>();
     for (const day of days) {
+      const group = byDate.get(day.workedOn) ?? [];
+      group.push(day);
+      byDate.set(day.workedOn, group);
+    }
+    const dailyGroups: Array<{
+      workedOn: string;
+      rows: ApprovedDay[];
+      totalHours: string;
+      amount: string;
+      distanceKm: number | null;
+    }> = [];
+    for (const [workedOn, rows] of byDate) {
+      let totalHours = "0";
+      for (const row of rows) totalHours = add(totalHours, row.hours);
       let distanceKm: number | null = null;
       if (policy.basis === "distance_brackets") {
         if (!home) {
@@ -456,24 +468,29 @@ export async function computeForWeek(
             `Per-diem policy ${policy.name} is distance-based but declares no home base — set rules.home_location_id or home coordinates before computing.`,
           );
         }
-        if (!day.projectId) {
+        if (rows.some((row) => !row.projectId)) {
           throw new HrmConstructionError(
-            `Approved time on ${day.workedOn} names no project — distance per-diem prices project days only.`,
+            `Approved time on ${workedOn} names no project — distance per-diem prices project days only.`,
           );
         }
-        const locationId = await projectLocationId(exec, orgId, day.projectId);
-        if (!locationId) {
-          throw new HrmConstructionError(
-            `Project ${day.projectId} declares no location — set custom.location_id on the project before computing distance per-diem.`,
-          );
+        // One daily per-diem uses the farthest project location worked that
+        // date; project attribution below splits that single amount by hours.
+        for (const row of rows) {
+          const locationId = await projectLocationId(exec, orgId, row.projectId!);
+          if (!locationId) {
+            throw new HrmConstructionError(
+              `Project ${row.projectId} declares no location — set custom.location_id on the project before computing distance per-diem.`,
+            );
+          }
+          const coords = await coordinatesForLocation(exec, orgId, locationId);
+          if (!coords) {
+            throw new HrmConstructionError(
+              `Location ${locationId} carries no coordinates — set latitude/longitude on the location before computing distance per-diem.`,
+            );
+          }
+          const projectDistance = haversineKm(home, coords);
+          distanceKm = distanceKm === null ? projectDistance : Math.max(distanceKm, projectDistance);
         }
-        const coords = await coordinatesForLocation(exec, orgId, locationId);
-        if (!coords) {
-          throw new HrmConstructionError(
-            `Location ${locationId} carries no coordinates — set latitude/longitude on the location before computing distance per-diem.`,
-          );
-        }
-        distanceKm = haversineKm(home, coords);
       }
       let amount = perDiemAmountForDay(
         policy.basis,
@@ -483,46 +500,47 @@ export async function computeForWeek(
           min_hours: rules.min_hours,
           amount_for_hours: rules.amount_for_hours,
         },
-        { distanceKm, hours: day.hours },
+        { distanceKm, hours: totalHours },
       );
       if (policy.lodgingOffset && cmp(policy.lodgingOffset, "0") > 0 && cmp(amount, "0") > 0) {
         const reduced = add(amount, neg(policy.lodgingOffset));
         amount = cmp(reduced, "0") > 0 ? reduced : "0.0000";
       }
-      dailyAmounts.push(amount);
-      dailyAmountByDate.set(day.workedOn, amount);
-      written.push(
-        await upsertEntry(exec, orgId, actorId, "hrm_per_diem_entries", {
-          employmentId,
-          projectId: day.projectId,
-          workedOn: day.workedOn,
-          policyId: policy.id,
-          amount,
-          currency: policy.currency,
-          basisInputs: { distance_km: distanceKm == null ? null : quantizeDistanceKm(distanceKm), hours: day.hours },
-        }),
-      );
+      dailyGroups.push({ workedOn, rows, totalHours, amount, distanceKm });
     }
-    // Weekly top-up: 5 worked days paid as 7 writes the two missing days of
-    // the same week at the last daily amount — same table, same policy, the
-    // basis_inputs say what produced them. The threshold counts distinct
-    // dates with a positive row amount: day rows arrive per (project, day),
-    // so counting rows would treat one multi-project day as several worked
-    // days — and the per-date map above keeps only the last-listed row,
-    // which would make the count depend on row order.
-    const workedDayCount = new Set(
-      days
-        .filter((_, index) => cmp(dailyAmounts[index] ?? "0", "0") > 0)
-        .map((day) => day.workedOn),
-    ).size;
-    const workedDateAmounts = [...dailyAmountByDate.values()];
-    const topped = applyWeeklyRule(workedDateAmounts, policy.weeklyRule, workedDayCount);
-    if (topped.length > workedDateAmounts.length) {
-      const existingDays = new Set(days.map((day) => day.workedOn));
+    // Price the weekly rule against one amount per worked calendar date.
+    const workedDayCount = dailyGroups.filter((group) => cmp(group.amount, "0") > 0).length;
+    const topped = applyWeeklyRule(dailyGroups.map((group) => group.amount), policy.weeklyRule, workedDayCount);
+    for (let index = 0; index < dailyGroups.length; index += 1) {
+      const group = dailyGroups[index]!;
+      const allocations = allocateDailyPerDiem(
+        topped[index]!, group.rows.map((row) => ({ projectId: row.projectId, hours: row.hours })),
+      );
+      for (let allocationIndex = 0; allocationIndex < allocations.length; allocationIndex += 1) {
+        const allocation = allocations[allocationIndex]!;
+        const row = group.rows[allocationIndex]!;
+        written.push(await upsertEntry(exec, orgId, actorId, "hrm_per_diem_entries", {
+          employmentId,
+          projectId: allocation.projectId,
+          workedOn: group.workedOn,
+          policyId: policy.id,
+          amount: allocation.amount,
+          currency: policy.currency,
+          basisInputs: {
+            distance_km: group.distanceKm == null ? null : quantizeDistanceKm(group.distanceKm),
+            hours: row.hours,
+            total_day_hours: group.totalHours,
+            daily_amount: topped[index],
+          },
+        }));
+      }
+    }
+    if (topped.length > dailyGroups.length) {
+      const existingDays = new Set(dailyGroups.map((group) => group.workedOn));
       const missing = weekDates(weekStart).filter((date) => !existingDays.has(date));
       const lastProject = days[days.length - 1]!.projectId;
-      for (let i = workedDateAmounts.length; i < topped.length; i += 1) {
-        const date = missing[i - workedDateAmounts.length];
+      for (let i = dailyGroups.length; i < topped.length; i += 1) {
+        const date = missing[i - dailyGroups.length];
         if (!date) break;
         written.push(
           await upsertEntry(exec, orgId, actorId, "hrm_per_diem_entries", {

@@ -32,6 +32,8 @@ interface EmployeeAvailabilityScope {
   labourJurisdiction: string | null;
 }
 
+export const MAX_AVAILABILITY_PERSON_WEEKS = 520;
+
 interface AbsenceRow extends AvailabilityAbsence {
   employeePartyId: string;
 }
@@ -96,11 +98,11 @@ export async function readAvailability(
   const weekCount = assertSundayWindow(firstSunday, lastSunday);
   const employeeIds = [...new Set(partyIds)];
   const personWeeks = employeeIds.length * weekCount;
-  if (personWeeks > 520) {
+  if (personWeeks > MAX_AVAILABILITY_PERSON_WEEKS) {
     throw new ResourcingRefusal(
       422,
       "availability_query_too_large",
-      `availability request covers ${personWeeks} person-weeks; the limit is 520 per call`,
+      `availability request covers ${personWeeks} person-weeks; the limit is ${MAX_AVAILABILITY_PERSON_WEEKS} per call`,
       "request fewer people or a shorter date range",
     );
   }

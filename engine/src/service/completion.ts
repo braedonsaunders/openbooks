@@ -158,7 +158,7 @@ async function recordLabor(actor: ServiceActor, visit: StoredVisit, job: { labor
     const entry = requireOne((await db.execute<{ id: string }>(sql`insert into time_entries
         (org_id, employee_party_id, worked_on, hours, started_at, item_id, is_billable, status, service_visit_id, memo, created_by, updated_by)
       values (${actor.orgId}, ${worker}, ${workedOn}::date, ${hours}, ${startedAt}::timestamptz, ${billable ? job!.laborItemId : null}, ${billable},
-        'submitted', ${visit.id}, ${"Service visit labor"}, ${actor.actorId}, ${actor.actorId})
+        'draft', ${visit.id}, ${"Service visit labor"}, ${actor.actorId}, ${actor.actorId})
       returning id`)).rows, "A labor entry");
     entries.push(entry.id);
   }
@@ -295,7 +295,7 @@ export async function releaseCompletionReview(input: { orgId: string; actorId: s
   if (input.outcome === "rejected") {
     const rejectedLabor = (await db.execute<{ id: string }>(sql`update time_entries
       set status = 'rejected', rejection_reason = ${reason}, updated_at = now(), updated_by = ${input.actorId}
-      where org_id = ${input.orgId} and service_visit_id = ${visit.id} and status = 'submitted' and billing_status = 'unbilled'
+      where org_id = ${input.orgId} and service_visit_id = ${visit.id} and status in ('draft', 'submitted') and billing_status = 'unbilled'
       returning id`)).rows;
     for (const entry of rejectedLabor) {
       await auditService({ orgId: input.orgId, table: "time_entries", rowId: entry.id, action: "update", actorId: input.actorId,

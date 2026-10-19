@@ -477,6 +477,7 @@ export const TENANT_TABLE_POLICIES = {
   "hrm_job_levels": "clone:catalog-uuid-rebase",
   "hrm_job_postings": "clone:catalog-uuid-rebase",
   "hrm_leave_policies": "clone:catalog-uuid-rebase",
+  "hrm_leave_payroll_entitlement_mappings": "clone:catalog-uuid-rebase",
   "hrm_leave_requests": "clone:catalog-uuid-rebase",
   "hrm_leave_types": "clone:catalog-uuid-rebase",
   "hrm_offer_templates": "clone:catalog-uuid-rebase",

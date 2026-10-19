@@ -175,7 +175,7 @@ export function computePlanMovement(input: PlanMovementInput): PlanMovementResul
           employeePartyId,
           movementDate,
           amount: neg(excess),
-          hours: null,
+          hours: plan.unit === "hours" ? roundMoney(excess, 2) : null,
           kind: "payout",
           componentId: plan.payoutComponentId,
           note: `Balance capped at ${max}`,

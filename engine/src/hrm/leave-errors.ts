@@ -23,3 +23,16 @@ export class LeaveError extends Error {
     this.code = code;
   }
 }
+
+/** Read a PostgreSQL SQLSTATE through any driver or transaction wrappers. */
+export function postgresErrorCode(error: unknown): string | undefined {
+  const seen = new Set<unknown>();
+  for (let current: unknown = error; current !== null && typeof current === "object";) {
+    if (seen.has(current)) return undefined;
+    seen.add(current);
+    const record = current as { code?: unknown; cause?: unknown };
+    if (typeof record.code === "string") return record.code;
+    current = record.cause;
+  }
+  return undefined;
+}

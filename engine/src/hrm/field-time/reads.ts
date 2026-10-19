@@ -127,15 +127,25 @@ export async function teamClockedIn(orgId: string, userId: string, today: string
            emp.display_name as "employeeName",
            i.occurred_at::text as since,
            prj.name as "projectName",
-           i.cost_code_ref as "costCodeRef", i.geo_check as "geoCheck"
+           case when switched.id is null then i.cost_code_ref else switched.cost_code_ref end as "costCodeRef",
+           i.geo_check as "geoCheck"
       from reporting_relationships r
       join worker_employments e
         on e.org_id = r.org_id and e.id = r.employment_id
       join time_clock_events i
         on i.org_id = r.org_id and i.employee_party_id = e.worker_party_id
        and i.kind = 'clock_in' and i.status = 'recorded'
+      left join lateral (
+        select s.id, s.project_id, s.cost_code_ref
+          from time_clock_events s
+         where s.org_id = i.org_id and s.employee_party_id = i.employee_party_id
+           and s.kind = 'switch' and s.status = 'recorded'
+           and (s.occurred_at, s.id) > (i.occurred_at, i.id)
+         order by s.occurred_at desc, s.id desc limit 1
+      ) switched on true
       left join parties emp on emp.id = e.worker_party_id and emp.org_id = r.org_id
-      left join projects prj on prj.id = i.project_id and prj.org_id = r.org_id
+      left join projects prj on prj.id = case when switched.id is null then i.project_id else switched.project_id end
+        and prj.org_id = r.org_id
      where r.org_id = ${orgId}
        and r.manager_employment_id in (${sql.join(ids, sql`, `)})
        and r.kind = 'line'
@@ -164,11 +174,21 @@ export async function crewToday(orgId: string, projectId: string, exec: SqlExecu
     select i.employee_party_id::text as "employeePartyId",
            emp.display_name as "employeeName",
            i.occurred_at::text as since,
-           i.cost_code_ref as "costCodeRef", i.geo_check as "geoCheck"
+           case when switched.id is null then i.cost_code_ref else switched.cost_code_ref end as "costCodeRef",
+           i.geo_check as "geoCheck"
       from time_clock_events i
       join parties emp on emp.id = i.employee_party_id and emp.org_id = i.org_id
+      left join lateral (
+        select s.id, s.project_id, s.cost_code_ref
+          from time_clock_events s
+         where s.org_id = i.org_id and s.employee_party_id = i.employee_party_id
+           and s.kind = 'switch' and s.status = 'recorded'
+           and (s.occurred_at, s.id) > (i.occurred_at, i.id)
+         order by s.occurred_at desc, s.id desc limit 1
+      ) switched on true
      where i.org_id = ${orgId} and i.kind = 'clock_in' and i.status = 'recorded'
-       and (i.project_id = ${projectId} or ${projectId}::uuid is null)
+       and (case when switched.id is null then i.project_id else switched.project_id end = ${projectId}
+         or ${projectId}::uuid is null)
      order by i.occurred_at`)).rows;
 }
 

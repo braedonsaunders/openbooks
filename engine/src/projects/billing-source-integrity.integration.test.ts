@@ -11,7 +11,9 @@ import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "..
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
+  assertSubcontractPaymentCleared,
   approveVendorPayApplication,
+  createSubcontractPaymentControl,
   createVendorPayApplication,
   generateVendorPayApplicationBill,
   releaseVendorRetainage,
@@ -262,6 +264,78 @@ for (const scenario of ["vendor release", "vendor application", "customer progre
     assert.equal(cmp(posted.find(l => l.account_id === openItem)!.amount, customer ? doc.total : neg(doc.total)), 0);
   }));
 }
+
+test("subcontract-wide payment holds also block retainage release bills", enabled, async () => fixture(async (f) => {
+  const vendorBillDocumentId = await vendorRelease(f);
+  await withOrgTransaction(f.org.orgId, () => createSubcontractPaymentControl({
+    orgId: f.org.orgId,
+    userId: f.actor,
+    subcontractId: f.subcontract,
+    controlType: "payment_hold",
+    reason: "Resolve the outstanding lien release",
+    effectiveOn: "2000-01-01",
+  }));
+
+  await assert.rejects(
+    assertSubcontractPaymentCleared(f.org.orgId, vendorBillDocumentId, "100"),
+    /is on hold: Resolve the outstanding lien release/,
+  );
+}));
+
+test("vendor retainage billing refuses an inactive control account before creating bills", enabled, async () => fixture(async (f) => {
+  const app = await withOrgTransaction(f.org.orgId, () => createVendorPayApplication({
+    orgId: f.org.orgId,
+    userId: f.actor,
+    subcontractId: f.subcontract,
+    periodEnd: "2026-10-01",
+  }));
+  await withOrgTransaction(f.org.orgId, () => updateVendorPayApplicationLines({
+    orgId: f.org.orgId,
+    userId: f.actor,
+    payApplicationId: app.id,
+    expectedRevision: 1,
+    lines: [{ sovLineId: f.sov, workCompletedThisPeriod: "100", materialsStoredCurrent: "0" }],
+  }));
+  await withOrgTransaction(f.org.orgId, () => submitVendorPayApplication(f.org.orgId, f.actor, app.id));
+  await withOrgTransaction(f.org.orgId, () => approveVendorPayApplication(f.org.orgId, f.approver, app.id));
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(
+        settings,
+        '{controlAccounts,retainagePayable}',
+        to_jsonb(${f.org.accounts.invAsset}::text)
+      ) where id = ${f.org.orgId}
+    `);
+    await db.execute(sql`
+      update accounts set is_active = false
+       where org_id = ${f.org.orgId} and id = ${f.org.accounts.invAsset}
+    `);
+  });
+  const before = (await withOrgContext(f.org.orgId, () => db.execute<{ count: number }>(sql`
+    select count(*)::int as count from documents
+     where org_id = ${f.org.orgId} and kind = 'vendor_bill'
+  `))).rows[0]!.count;
+
+  await assert.rejects(
+    withOrgTransaction(f.org.orgId, () => generateVendorPayApplicationBill(f.org.orgId, f.actor, app.id)),
+    /must be an active, non-summary account/,
+  );
+  await assert.rejects(
+    withOrgTransaction(f.org.orgId, () => releaseVendorRetainage({
+      orgId: f.org.orgId,
+      userId: f.actor,
+      subcontractId: f.subcontract,
+      periodEnd: f.org.date,
+      amount: "100",
+    })),
+    /must be an active, non-summary account/,
+  );
+  const after = (await withOrgContext(f.org.orgId, () => db.execute<{ count: number }>(sql`
+    select count(*)::int as count from documents
+     where org_id = ${f.org.orgId} and kind = 'vendor_bill'
+  `))).rows[0]!.count;
+  assert.equal(after, before, "refusing the invalid control account must not create a bill");
+}));
 
 for (const scenario of ["vendor release", "vendor application", "customer progress", "customer release"] as const) {
   test(`${scenario} rejects already-corrupted legacy drafts before posting writes`, enabled, async () => fixture(async f => {

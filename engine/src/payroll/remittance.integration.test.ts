@@ -249,6 +249,57 @@ test(
 );
 
 test(
+  "a remittance bill with a refundable credit posts against signed source coverage",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      const source = await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-15", amount: "100.00",
+      });
+      const stub = (await db.execute<{ id: string }>(sql`
+        select id::text as id from pay_stubs
+         where org_id = ${fixture.org.orgId} and pay_run_document_id = ${source.runDocumentId}
+      `)).rows[0]!;
+      const creditComponentId = randomUUID();
+      await seedPayrollComponent(fixture.org.orgId, creditComponentId, {
+        code: "REFUND-CREDIT", name: "Refundable payroll credit", kind: "credit",
+        systemKey: null, liabilityAccountId: fixture.liabilityAccountId, remittancePartyId: fixture.org.vendorId,
+        country: "CA", sequence: 20, isActive: true, createdBy: fixture.actorId, updatedBy: fixture.actorId,
+      });
+      await seedPayrollLine(fixture.org.orgId, stub.id, creditComponentId, {
+        id: randomUUID(), kind: "credit", description: "Refundable payroll credit", amount: "25.00",
+        sequence: 20, liabilityAccountId: fixture.liabilityAccountId, liabilityAccountSource: "commit",
+        remittancePartyId: fixture.org.vendorId,
+        createdBy: fixture.actorId, updatedBy: fixture.actorId,
+      });
+
+      const bill = await createFixtureRemittanceBill(fixture, {
+        partyId: fixture.org.vendorId, from: "2026-07-01", to: "2026-07-31",
+      });
+      const total = (await db.execute<{ total: string }>(sql`
+        select total::text as total from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}
+      `)).rows[0]!.total;
+      assert.equal(cmp(total, "75.00"), 0);
+
+      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
+      await postDocument(bill.documentId, {
+        control: {
+          ar: fixture.org.accounts.ar,
+          ap: fixture.org.accounts.ap,
+          bank: fixture.org.accounts.bank,
+        },
+      });
+      assert.equal((await db.execute<{ status: string }>(sql`
+        select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}
+      `)).rows[0]!.status, "posted");
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
   "a remittance bill whose total was hand-edited cannot post",
   { skip: !DB },
   async () => {

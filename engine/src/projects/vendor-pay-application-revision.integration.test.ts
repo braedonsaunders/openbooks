@@ -21,9 +21,13 @@ import {
   dropScratchOrgReporting,
 } from "../testing/fixtures.ts";
 import {
+  approveSubcontractChangeOrder,
+  approveVendorPayApplication,
   addSubcontractSovLine,
+  createSubcontractChangeOrder,
   createVendorPayApplication,
   SubcontractConflictError,
+  submitVendorPayApplication,
   updateVendorPayApplicationLines,
 } from "./subcontracts.ts";
 
@@ -35,6 +39,7 @@ async function setupDraft(): Promise<{
   other: string;
   appId: string;
   sov: string;
+  subcontractId: string;
 }> {
   const org = await createScratchOrg();
   const actor = await createScratchUser(org.orgId, "Revision editor", "admin");
@@ -62,7 +67,7 @@ async function setupDraft(): Promise<{
   const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({
     orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: org.date,
   }));
-  return { orgId: org.orgId, actor, other, appId: app.id, sov };
+  return { orgId: org.orgId, actor, other, appId: app.id, sov, subcontractId: subcontract };
 }
 
 async function revisionOf(orgId: string, appId: string): Promise<number> {
@@ -119,6 +124,46 @@ test("a stale revision refuses with 409 evidence and never overwrites the winner
     }));
     assert.equal(second.revision, 3);
     assert.equal(await workOf(f.orgId, f.appId, f.sov), "1200.0000");
+  } finally {
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("change orders wait for open vendor applications and approval revalidates the SOV", { skip: !DB }, async () => {
+  const f = await setupDraft();
+  try {
+    const change = await withOrgTransaction(f.orgId, () => createSubcontractChangeOrder({
+      orgId: f.orgId,
+      userId: f.actor,
+      subcontractId: f.subcontractId,
+      number: "CO-REV-1",
+      amount: "-1200",
+      targetSovLineId: f.sov,
+    }));
+    const approveChange = () => withOrgTransaction(f.orgId, () =>
+      approveSubcontractChangeOrder(f.orgId, f.other, change.id, "2026-10-19"));
+
+    await assert.rejects(approveChange(), /Complete or void the open vendor application/);
+    await withOrgTransaction(f.orgId, () => updateVendorPayApplicationLines({
+      orgId: f.orgId,
+      userId: f.actor,
+      payApplicationId: f.appId,
+      expectedRevision: 1,
+      lines: [{ sovLineId: f.sov, workCompletedThisPeriod: "900", materialsStoredCurrent: "0" }],
+    }));
+    await withOrgTransaction(f.orgId, () => submitVendorPayApplication(f.orgId, f.actor, f.appId));
+    await assert.rejects(approveChange(), /Complete or void the open vendor application/);
+
+    await db.execute(sql`update subcontract_sov_lines set scheduled_value = '800'
+      where org_id = ${f.orgId} and id = ${f.sov}`);
+    await assert.rejects(
+      withOrgTransaction(f.orgId, () => approveVendorPayApplication(f.orgId, f.other, f.appId)),
+      /exceeds the revised SOV value/,
+    );
+    const application = (await db.execute<{ status: string }>(sql`
+      select status from vendor_pay_applications where org_id = ${f.orgId} and id = ${f.appId}
+    `)).rows[0];
+    assert.equal(application?.status, "submitted", "an invalid application remains unapproved");
   } finally {
     await dropScratchOrgReporting(f.orgId);
   }

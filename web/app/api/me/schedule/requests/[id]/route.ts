@@ -19,6 +19,6 @@ export const POST = defineRoute({
     if (body.action === 'withdraw') return NextResponse.json({ request: await withdrawOwnShiftRequest(actor) })
     const result = await respondToSwap({ ...actor, accept: body.action === 'accept', reason: body.reason })
     const delivery = await deliverScheduleNotices({ orgId: authz.user.orgId, actorId: authz.user.id, boardName: result.boardName, notices: [...result.notices] })
-    return NextResponse.json({ request: result.request, delivery })
+    return NextResponse.json({ request: result.request, delivery, distributionRefusals: result.distributionRefusals })
   },
 })
