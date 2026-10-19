@@ -120,24 +120,32 @@ test("commitments and budget control preserve posting policy and derived balance
         insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         values (${otherSubsidiaryId}, ${org.orgId}, 'Other Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
       `);
-      const purchaseOrder = async (orgId: string, subsidiaryId: string, kind: string, number: string) => {
+      const sourceDocument = async (orgId: string, subsidiaryId: string, kind: string, number: string, itemId: string) => {
         const id = randomUUID();
         await db.execute(sql`
           insert into documents (id, org_id, kind, document_number, party_id, document_date, currency, status, subsidiary_id)
           values (${id}, ${orgId}, ${kind}, ${number}, ${orgId === org.orgId ? org.vendorId : foreignOrg!.vendorId},
             ${org.date}, 'CAD', 'draft', ${subsidiaryId})
         `);
-        const approved = await db.execute(sql`
-          update documents set status = 'approved' where org_id = ${orgId} and id = ${id} returning id
-        `);
-        assert.equal(approved.rows.length, 1, 'the source document is approved before it is used');
+        if (kind === 'purchase_order') {
+          await db.execute(sql`
+            insert into document_lines
+              (id, org_id, document_id, line_number, item_id, description, quantity, unit,
+               unit_price, amount, tax_amount, custom)
+            values (${randomUUID()}, ${orgId}, ${id}, 1, ${itemId}, 'Widget', 1, 'ea', 0, 0, 0, '{}'::jsonb)
+          `);
+          const approved = await db.execute(sql`
+            update documents set status = 'approved' where org_id = ${orgId} and id = ${id} returning id
+          `);
+          assert.equal(approved.rows.length, 1, 'the purchase order has a valid line before approval');
+        }
         return id;
       };
       return {
-        valid: await purchaseOrder(org.orgId, org.subsidiaryId, 'purchase_order', 'ENC-VALID-PO'),
-        otherSubsidiary: await purchaseOrder(org.orgId, otherSubsidiaryId, 'purchase_order', 'ENC-OTHER-SUB-PO'),
-        wrongKind: await purchaseOrder(org.orgId, org.subsidiaryId, 'vendor_bill', 'ENC-NOT-PO'),
-        foreign: await purchaseOrder(foreignOrg!.orgId, foreignOrg!.subsidiaryId, 'purchase_order', 'ENC-FOREIGN-PO'),
+        valid: await sourceDocument(org.orgId, org.subsidiaryId, 'purchase_order', 'ENC-VALID-PO', org.items.fifo),
+        otherSubsidiary: await sourceDocument(org.orgId, otherSubsidiaryId, 'purchase_order', 'ENC-OTHER-SUB-PO', org.items.fifo),
+        wrongKind: await sourceDocument(org.orgId, org.subsidiaryId, 'vendor_bill', 'ENC-NOT-PO', org.items.fifo),
+        foreign: await sourceDocument(foreignOrg!.orgId, foreignOrg!.subsidiaryId, 'purchase_order', 'ENC-FOREIGN-PO', foreignOrg!.items.fifo),
       };
     });
     const rejectSource = (sourceId: string) => createEncumbrance({
