@@ -1,0 +1,113 @@
+{
+  "title": "返利",
+  "description": "管理客户和供应商返利协议、已赚取的索赔以及受控结算。",
+  "classAgreement": "类别协议",
+  "searchPlaceholder": "搜索协议、索赔或交易方",
+  "actions": {
+    "newAgreement": "新建协议",
+    "agreementSettings": "协议设置",
+    "reports": "返利报告"
+  },
+  "tabs": {
+    "agreements": "协议",
+    "claims": "索赔"
+  },
+  "filters": {
+    "all": "全部",
+    "side": "类别",
+    "status": "状态"
+  },
+  "sides": {
+    "customer": "客户",
+    "vendor": "供应商"
+  },
+  "statuses": {
+    "draft": "草稿",
+    "approved": "已批准",
+    "document_pending": "等待单据",
+    "settled": "已结算",
+    "cancelled": "已取消",
+    "unknown": "未知状态"
+  },
+  "activities": {
+    "sale": "销售",
+    "purchase": "采购",
+    "downstream_sale": "后续销售"
+  },
+  "methods": {
+    "percent": "按比例返利",
+    "per_unit": "每单位金额",
+    "fixed_cost": "保证单位成本",
+    "guaranteed_margin": "保证利润率"
+  },
+  "tierBasis": {
+    "amount": "符合条件的金额",
+    "quantity": "符合条件的数量"
+  },
+  "stacking": {
+    "stack": "与符合条件的协议叠加",
+    "best": "每个明细采用最佳优惠"
+  },
+  "columns": {
+    "agreement": "协议",
+    "counterparty": "交易方",
+    "side": "类别",
+    "status": "状态",
+    "amount": "索赔金额"
+  },
+  "empty": {
+    "agreements": {
+      "title": "没有返利协议",
+      "description": "请在设置中创建协议，以定义适用条款和有效日期。"
+    },
+    "claims": {
+      "title": "没有返利索赔",
+      "description": "根据已批准协议评估符合条件的活动后，索赔会显示在这里。"
+    }
+  },
+  "drawer": {
+    "claimTitle": "返利索赔",
+    "reviewReason": "审核原因",
+    "postingOrCutoffDate": "过账日期或截止日期",
+    "claimEarnedThrough": "截至 {date} 已赚取。结算将冲销已记录的应计金额。",
+    "approveClaim": "批准索赔",
+    "settlementMethod": "结算方式",
+    "creditDocument": "系统贷项或追偿单据",
+    "paymentOrReceipt": "银行付款或收款",
+    "prepareDocument": "准备{kind}单据",
+    "credit": "贷项",
+    "recovery": "追偿",
+    "bankAccount": "银行账户",
+    "settlementFxRate": "结算汇率（{from} 至 {to}）",
+    "fxRateField": "结算汇率",
+    "recordBankSettlement": "记录银行结算",
+    "cancelClaim": "取消索赔",
+    "openSettlementDocument": "打开结算单据",
+    "reverseBankSettlement": "冲销银行结算",
+    "termsTab": "条款",
+    "generateClaimTab": "生成索赔",
+    "costEvidenceTab": "成本凭证",
+    "agreementDetails": "协议详情",
+    "eligiblePeriod": "符合条件的{activity}：{start} 至 {end}；币种 {currency}。",
+    "methodLine": "计算方式：{method}。级别依据{basis}。",
+    "stackingPolicy": "{policy}；组别 {group}。",
+    "viewAgreementSettings": "查看协议设置",
+    "approveAgreement": "批准协议",
+    "customerOrVendor": "客户或供应商",
+    "generateEarnedClaim": "生成已赚取索赔",
+    "stockCostExplanation": "库存成本使用已过账的库存凭证。其他商品请先记录有凭证支持的成本，再过账或重新评估来源交易。",
+    "sourceDocumentLine": "来源单据明细",
+    "costInCurrency": "成本（{currency}）",
+    "costField": "成本",
+    "downstreamResale": "有凭证支持的后续转售价",
+    "resaleField": "转售价",
+    "costEvidence": "成本凭证",
+    "recordCostEvidence": "记录成本凭证",
+    "postedSourceTransaction": "已过账来源交易",
+    "reassessEarnedRebates": "重新评估已赚取返利",
+    "line": "明细",
+    "errors": {
+      "actionFailed": "无法完成返利操作"
+    }
+  }
+}

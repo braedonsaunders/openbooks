@@ -71,6 +71,7 @@ import projects from './projects.json'
 import purchaseOrders from './purchaseOrders.json'
 import purchasing from './purchasing.json'
 import query from './query.json'
+import rebates from './rebates.json'
 import receipts from './receipts.json'
 import records from './records.json'
 import reports from './reports.json'
@@ -159,6 +160,7 @@ export default {
   purchaseOrders,
   purchasing,
   query,
+  rebates,
   receipts,
   records,
   reports,
