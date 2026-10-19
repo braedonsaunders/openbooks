@@ -13,7 +13,7 @@ import { PayrollError } from '../error.ts';
 import { takeOpeningSourceYearFence } from '../../organization/payroll-source-fence.ts';
 import { currentOpeningLevySourceSql, requireUnconsumedOpeningLevySource } from '../opening-levy-source-correction-authority.ts';
 import { readEmployeeOpeningLevySources } from '../opening-levy-source-reader.ts';
-import { canonicalCanadianOpeningReportingAllocations, type CanadianOpeningReportingAllocation } from './opening-reporting-source.ts';
+import { canonicalCanadianOpeningReportingAllocations, openingReportingAllocationChildren, type CanadianOpeningReportingAllocation } from './opening-reporting-source.ts';
 import { readCanadianOpeningReportingCatalogue } from './opening-reporting-catalogue.ts';
 import { readEmployeeCanadianOpeningReportingSource } from './opening-reporting-reader.ts';
 
@@ -192,7 +192,7 @@ export async function readCanadianOpeningReportingSourceContext(input: {
     await takeOpeningSourceYearFence(db,input.orgId,input.taxYear);
     const scope=await lockActorCommandAuthority(db,input.orgId,input.actorId,null,'payroll.read');
     const original=await readEmployeeOpeningLevySources(db,input);
-    if (!original.authority || !original.facts || original.facts.originalCountry!=='CA') {
+    if (!original.authority || !original.facts || !original.openingChildren || original.facts.originalCountry!=='CA') {
       throw new PayrollError('Qualify the original Canadian opening legal employer and levy source before opening its reporting allocations');
     }
     const scoped=(await db.execute(sql`select id from subsidiaries where org_id=${input.orgId} and id=${original.authority.subsidiaryId}
@@ -227,7 +227,7 @@ export async function readCanadianOpeningReportingSourceContext(input: {
       if(typeof value!=='string') throw new PayrollError('The original annual opening amounts are unavailable as exact decimals');
       annualAmounts[field.column]=value;
     }
-    return {original:{...original.authority,...original.facts,...parent[0],employeePartyId:input.employeePartyId,taxYear:input.taxYear,annualAmounts,children:original.openingChildren},
+    return {original:{...original.authority,...original.facts,...parent[0],employeePartyId:input.employeePartyId,taxYear:input.taxYear,annualAmounts,children:openingReportingAllocationChildren(original.openingChildren)},
       reporting:reporting?.authority??null,allocations:reporting?.allocations??[],
       filingAccounts:catalogue.filingAccounts.filter(row=>row.country==='CA' && row.programType==='ca_rp' && row.subsidiaryId===original.authority!.subsidiaryId),
       selectedSource};

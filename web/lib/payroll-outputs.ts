@@ -188,7 +188,7 @@ export async function mergedRunChequesPdf(
   allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'],
 ): Promise<{ pdf: Uint8Array; count: number; issued: number } | null> {
   const template = await resolvePdfTemplate(orgId, 'payroll_cheque', null)
-  if (!template) return null
+  if (!template) throw new PayrollError('Configure an active payroll cheque template in PDF templates before printing payroll cheques')
   let bankDesign
   try { bankDesign = chequeBankDesign(template.compiledHtml) }
   catch (error) { throw new PdfTemplateValidationError(error instanceof Error ? error.message : 'Cheque bank configuration is invalid.') }

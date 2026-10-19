@@ -1,3 +1,4 @@
+import { payRunCalculationSource, payRunCalculationSourceDigest } from "./run-calculation-evidence.ts";
 import { seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollProfile, seedPayrollWage,
@@ -132,10 +133,22 @@ async function seedPayRun(options: {
             2026, ${options.runStatus ?? "calculated"},
             ${options.calculated === false ? null : sql`now()`}, ${actorId}, ${actorId})`);
 
-  return {
+  const fixture = {
     orgId: org.orgId, actorId, documentId, scheduleId, employeeId, employmentId,
     subsidiaryId: org.subsidiaryId,
   };
+  if (options.calculated !== false) await retainCalculationSource(fixture);
+  return fixture;
+}
+
+/** Staleness scenarios retain the native input contract they intend to compare. */
+async function retainCalculationSource(run: PayRunFixture): Promise<void> {
+  const source = await payRunCalculationSource(run.orgId, run.documentId);
+  assert.ok(source);
+  assert.equal((await db.execute(sql`update pay_runs
+    set calculation_source_snapshot=${JSON.stringify(source)}::jsonb,
+        calculation_source_digest=${payRunCalculationSourceDigest(source)}
+    where org_id=${run.orgId} and document_id=${run.documentId} returning document_id`)).rows.length, 1);
 }
 
 /* ------------------------------------------------------------------ */
@@ -306,6 +319,7 @@ async function seedCommittedStub(run: PayRunFixture, gross: string): Promise<str
     gross: gross, netPay: gross, pensionableEarnings: gross, insurableEarnings: gross,
     factors: { C: "0", C2: "0", EI: "0" }, createdBy: run.actorId, updatedBy: run.actorId,
   });
+  await retainCalculationSource(run);
   return stubId;
 }
 

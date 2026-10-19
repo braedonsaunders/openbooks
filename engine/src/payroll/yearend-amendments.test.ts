@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, pool } from "../platform/db.ts";
 import { sealSecret, unsealSecret } from "../platform/secrets.ts";
 import { rotateDataKey } from "../../../scripts/rotate-data-key.ts";
 import { PayrollError } from "./error.ts";
@@ -1712,9 +1712,9 @@ test(
 
 /**
  * A pack filing whose artifact builds pause on demand, so two issues can be
- * held in the check-then-insert gap deterministically: the first waits inside
- * its artifact build while the second runs to completion. No pool
- * interception, no timing luck — the barrier is the filing's own async build.
+ * held at the native source fence deterministically. The first pauses in
+ * its artifact build; PostgreSQL proves that the competing request waits
+ * before it can acquire a reporting snapshot.
  */
 async function raceFilingFixture(filingKey: string) {
   const org = await createScratchOrg();
@@ -1727,7 +1727,12 @@ async function raceFilingFixture(filingKey: string) {
   let signalEntered!: () => void;
   const entered = new Promise<void>((resolve) => { signalEntered = resolve; });
   const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
-  const pauseFirst = () => { signalEntered(); return gate; };
+  let firstPid: number | undefined;
+  const pauseFirst = async () => {
+    firstPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+    signalEntered();
+    await gate;
+  };
   const marker = async (): Promise<string> => (await db.execute<{ m: string | null }>(sql`
     select settings->>'zxRaceMarker' as m from orgs where id = ${org.orgId}
   `)).rows[0]?.m ?? "";
@@ -1794,6 +1799,19 @@ async function raceFilingFixture(filingKey: string) {
       )),
     ]),
     release: () => releaseFirst(),
+    waitForContender: async () => {
+      assert.ok(firstPid);
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        const blocked = (await pool.query<{ blocked: boolean }>(
+          'select exists(select 1 from pg_stat_activity where datname=current_database() and $1=any(pg_blocking_pids(pid))) as blocked',
+          [firstPid],
+        )).rows[0]!.blocked;
+        if (blocked) return;
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      assert.fail('The competing filing request did not wait at the native source fence');
+    },
     done: async () => { unregisterPayrollFilings(country); await dropScratchOrgReporting(org.orgId); },
   };
 }
@@ -1810,15 +1828,21 @@ test(
     try {
       await fx.setMarker("A");
       fx.arm();
-      // A double-click, a retried request: the second issue runs to
-      // completion while the first is still building its artifact. Both saw
-      // an unissued filing; only one may persist an original.
+      // Both requests share the source-year fence; the second must wait
+      // and then refuse the already issued original without persisting it.
       const first = issue();
-      await fx.entered;
-      const second = await issue();
-      assert.equal(second.submission.revisionNumber, 1);
-      fx.release();
-      await assert.rejects(first, /already been issued/);
+      let second: Promise<void> | undefined;
+      try {
+        await fx.entered;
+        second = assert.rejects(issue(), /already been issued/);
+        await fx.waitForContender();
+        fx.release();
+        assert.equal((await first).submission.revisionNumber, 1);
+        await second;
+      } finally {
+        fx.release();
+        await Promise.allSettled([first, ...(second ? [second] : [])]);
+      }
       const submissions = await filingSubmissions(fx.orgId, fx.country, fx.filingKey, 2026);
       assert.equal(
         submissions.filter((s) => s.revision === "original").length,
@@ -1847,11 +1871,18 @@ test(
       await fx.setMarker("B");
       fx.arm();
       const first = amend();
-      await fx.entered;
-      const second = await amend();
-      assert.equal(second.submission.revisionNumber, 2);
-      fx.release();
-      await assert.rejects(first, /another correction|concurrent|review the filing/i);
+      let second: Promise<void> | undefined;
+      try {
+        await fx.entered;
+        second = assert.rejects(amend(), /nothing changed/);
+        await fx.waitForContender();
+        fx.release();
+        assert.equal((await first).submission.revisionNumber, 2);
+        await second;
+      } finally {
+        fx.release();
+        await Promise.allSettled([first, ...(second ? [second] : [])]);
+      }
       const submissions = await filingSubmissions(fx.orgId, fx.country, fx.filingKey, 2026);
       assert.equal(
         submissions.filter((s) => s.revisionNumber === 2).length,

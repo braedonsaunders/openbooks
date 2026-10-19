@@ -44,6 +44,16 @@ export type CanadianOpeningReportingAllocation = {
   children: OriginalOpeningSourceChildren;
 };
 
+/** Allocation inputs carry economic identities and amounts; sealed source rows retain their storage and audit metadata. */
+export function openingReportingAllocationChildren(source: OriginalOpeningSourceChildren): OriginalOpeningSourceChildren {
+  return {
+    components: source.components.map(({ component_id, ytd_amount }) => ({ component_id, ytd_amount })),
+    programBases: source.programBases.map(({ program_key, insurable_ytd }) => ({ program_key, insurable_ytd })),
+    accountBases: source.accountBases.map(({ program_key, filing_account_id, region, insurable_ytd }) => ({ program_key, filing_account_id, region, insurable_ytd })),
+    suiStates: source.suiStates.map(({ state, insurable_ytd }) => ({ state, insurable_ytd })),
+  };
+}
+
 function refuse(message: string): never {
   throw new PayrollError(`${message}. Review the retained original report in Payroll → Opening balances → Reporting source`);
 }

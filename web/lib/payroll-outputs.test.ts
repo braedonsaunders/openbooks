@@ -334,9 +334,9 @@ test('cheque output checks for a template before consuming cheque numbers', asyn
   reset([], { enabled: true, expression: '{surname:3|upper}' })
   state.chequeTemplate = null
 
-  assert.equal(
-    await mergedRunChequesPdf('org-1', 'run-1', 'actor-1'),
-    null,
+  await assert.rejects(
+    mergedRunChequesPdf('org-1', 'run-1', 'actor-1'),
+    /Configure an active payroll cheque template in PDF templates/,
   )
   assert.equal(state.chequeIssueCalls, 0)
 })

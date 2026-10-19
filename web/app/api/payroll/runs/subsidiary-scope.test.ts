@@ -367,10 +367,10 @@ const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle")
         assert.equal(stubs.status, 404);
         assert.equal(await stubs.text(), JSON.stringify({ error: "no stubs to print" }));
         const cheques = await chequesPdf(runA.documentId);
-        assert.equal(cheques.status, 409, "cheque printing refused on lifecycle, not scope");
+        assert.equal(cheques.status, 409, "cheque printing reaches its configuration refusal after scope authorization");
         assert.equal(
           await cheques.text(),
-          JSON.stringify({ error: "commit the pay run before printing its cheques" }),
+          JSON.stringify({ error: "Configure an active payroll cheque template in PDF templates before printing payroll cheques" }),
         );
         const panel = await bankPanel(runA.documentId);
         const panelBody = (await panel.json()) as { entitlement: { refusal: { code: string } } };

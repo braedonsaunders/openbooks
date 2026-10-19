@@ -6,11 +6,13 @@ import { db, withOrgTransaction } from "../../platform/db.ts";
 import { withSimClock } from "../../platform/clock.ts";
 import { DB, seedEmployment, seedWage, setupHarness, withHarness } from "../../testing/hrm-harness.ts";
 import { employeeTotalCompensation } from "./total-compensation.ts";
+import { createBenefitProgram, activateBenefitProgram } from "../benefits/programs.ts";
+import { createBenefitAward } from "../benefits/awards.ts";
 
 const setup = () => setupHarness({
   features: ["hrm", "payroll"],
   users: [{ key: "reader", name: "Compensation reader", handle: "compensation_reader",
-    permissions: ["hrm.compensation.read", "hrm.compensation.manage", "setup.manage"] }],
+    permissions: ["hrm.compensation.read", "hrm.compensation.manage", "hrm.benefits.manage", "setup.manage"] }],
 });
 
 test("annual variable compensation includes all committed lines while history stays bounded", { skip: !DB }, async () => {
@@ -31,9 +33,9 @@ test("annual variable compensation includes all committed lines while history st
       const stubId = randomUUID();
       await db.execute(sql`
         insert into documents (id, org_id, kind, document_number, document_date, currency, status,
-          subtotal, tax_total, total, custom, extra_dims)
+          subtotal, tax_total, total, custom, extra_dims, void_reason)
         values (${documentId}, ${org.orgId}, 'pay_run', ${`PAY-${documentId}`}, ${date}::date,
-          'CAD', ${status}, 0, 0, 0, '{}'::jsonb, '{}'::jsonb)`);
+          'CAD', ${status}, 0, 0, 0, '{}'::jsonb, '{}'::jsonb, ${status === 'voided' ? 'Cancelled payroll period' : null})`);
       await db.execute(sql`
         insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
           pay_date, tax_year, run_status, run_type)
@@ -71,27 +73,23 @@ test("annual variable compensation includes all committed lines while history st
 test("HRM compensation retains benefit awards while Payroll is disabled", { skip: !DB }, async () => {
   await withHarness(setup, async ({ org, reader }) => {
     const worker = await seedEmployment(org.orgId, org.subsidiaryId);
-    const programId = randomUUID();
-    const awardId = randomUUID();
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features,payroll}', 'false'::jsonb)
        where id = ${org.orgId}`);
-    await db.execute(sql`
-      insert into hrm_benefit_programs (id, org_id, code, name, family, legal_entity_id,
-        currency, effective_from, delivery_method, fixed_amount)
-      values (${programId}, ${org.orgId}, 'RECOGNITION', 'Recognition award', 'reward',
-        ${org.subsidiaryId}, 'CAD', '2026-01-01', 'external', 250)`);
-    await db.execute(sql`
-      insert into hrm_benefit_awards (id, org_id, program_id, employment_id, period_from,
-        value, currency, program_snapshot, source_snapshot)
-      values (${awardId}, ${org.orgId}, ${programId}, ${worker.employmentId}, '2026-10-08',
-        250, 'CAD', '{"name":"Recognition award"}'::jsonb, '{}'::jsonb)`);
+    const program = await createBenefitProgram({ orgId: org.orgId, actorId: reader,
+      code: 'RECOGNITION', name: 'Recognition award', family: 'reward', legalEntityId: org.subsidiaryId,
+      currency: 'CAD', effectiveFrom: '2026-01-01', deliveryMethod: 'external', fixedAmount: '250',
+      eligibility: 'all_employees', approvalMode: 'none', reason: 'Recognize employee service' });
+    await activateBenefitProgram({ orgId: org.orgId, actorId: reader, programId: program.id,
+      reason: 'Open employee service recognition' });
+    const award = await createBenefitAward({ orgId: org.orgId, actorId: reader, programId: program.id,
+      employmentId: worker.employmentId, periodFrom: '2026-10-08', value: '250', currency: 'CAD' });
     const data = await withSimClock("2026-10-08T12:00:00Z", () => withOrgTransaction(org.orgId, () =>
       employeeTotalCompensation({ orgId: org.orgId, actorId: reader, employeePartyId: worker.workerPartyId }),
       { isolationLevel: "REPEATABLE READ", readOnly: true }));
     assert.equal(data.payroll.enabled, false);
     assert.equal(data.awards.length, 1);
-    assert.equal(data.awards[0]!.id, awardId);
+    assert.equal(data.awards[0]!.id, award.id);
     assert.equal(data.awards[0]!.program, "Recognition award");
     assert.equal(data.awards[0]!.value, "250.0000");
     assert.deepEqual(data.variable, []);

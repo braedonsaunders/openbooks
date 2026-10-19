@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { guardRefusalMessage } from "../../platform/database-refusal.ts";
 import { normalizeMoney } from "../../money/money.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { calculatePayRun } from "../run-calculation.ts";
@@ -661,7 +662,10 @@ test(
       ]);
       await assert.rejects(db.execute(sql`update payroll_opening_account_bases set insurable_ytd=0
         where org_id=${fx.orgId} and employee_party_id=${employee} and program_key='us_sui'`),
-        /Source-qualified statutory opening amounts must be preserved/);
+        (error: unknown) => {
+          assert.match(guardRefusalMessage(error) ?? '', /Source-qualified statutory opening amounts must be preserved/);
+          return true;
+        });
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
         periodStart: PERIOD_START, periodEnd: PERIOD_END,

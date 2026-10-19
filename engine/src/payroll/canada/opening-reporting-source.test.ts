@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canonicalCanadianOpeningReportingAllocations,
+  openingReportingAllocationChildren,
   type CanadianOpeningReportingAllocation,
   type CanadianOpeningReportingCatalogue,
   type CanadianOpeningReportingOriginal,
@@ -81,6 +82,24 @@ test('complete original RP/province allocations preserve all annual and child am
   assert.equal(canonical[0]!.children.components[0]!.ytd_amount, '400.0001');
   assert.deepEqual(canonicalCanadianOpeningReportingAllocations(original, [...allocations].reverse(), catalogue), canonical);
   assert.deepEqual({ original, allocations }, snapshot);
+});
+
+test('allocation input from retained source rows preserves money and identity without admitting storage metadata', () => {
+  const { original, allocations } = fixture();
+  const first = allocations[0]!;
+  const retained = {
+    components: first.children.components.map(row => ({ ...row, id: orgId, org_id: orgId, opening_balance_id: subsidiaryId })),
+    programBases: first.children.programBases.map(row => ({ ...row, org_id: orgId, employee_party_id: componentId, tax_year: 2026 })),
+    accountBases: first.children.accountBases.map(row => ({ ...row, org_id: orgId, employee_party_id: componentId, tax_year: 2026 })),
+    suiStates: first.children.suiStates,
+  };
+  const before = structuredClone(retained);
+  assert.throws(() => canonicalCanadianOpeningReportingAllocations(original,
+    [{ ...first, children: retained }, allocations[1]!], catalogue), /every original field/);
+  assert.deepEqual(canonicalCanadianOpeningReportingAllocations(original,
+    [{ ...first, children: openingReportingAllocationChildren(retained) }, allocations[1]!], catalogue),
+  canonicalCanadianOpeningReportingAllocations(original, allocations, catalogue));
+  assert.deepEqual(retained, before);
 });
 
 test('allocation arithmetic retains precision beyond binary floating-point money', () => {
