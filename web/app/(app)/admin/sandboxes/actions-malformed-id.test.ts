@@ -68,6 +68,7 @@ const actions = (await import("./actions.ts")) as typeof import("./actions.ts");
 
 function managerAuthz(): void {
   state.authz = {
+    allowedSubsidiaryIds: null,
     user: {
       id: "00000000-0000-4000-8000-00000000a001",
       orgId: "00000000-0000-4000-8000-00000000a002",
@@ -78,6 +79,11 @@ function managerAuthz(): void {
       isSuperAdmin: false,
     },
   };
+}
+
+function restrictedManagerAuthz(): void {
+  managerAuthz();
+  (state.authz as { allowedSubsidiaryIds: Set<string> | null }).allowedSubsidiaryIds = new Set(["subsidiary-one"]);
 }
 
 const OP_KEY = "00000000-0000-4000-8000-00000000b001";
@@ -93,6 +99,17 @@ test("sandbox actions fail closed on malformed ids before any database write", a
   await assert.rejects(actions.reviewChangeSetAction("not-a-uuid"), /invalid/i);
   await assert.rejects(actions.approveChangeSetAction("not-a-uuid"), /invalid/i);
   await assert.rejects(actions.applyChangeSetAction("not-a-uuid"), /invalid/i);
+});
+
+test("subsidiary-restricted managers cannot enqueue organization-wide sandbox operations", async () => {
+  restrictedManagerAuthz();
+  state.enqueues = [];
+
+  await assert.rejects(
+    actions.createSandboxAction({ name: "Restricted", tier: "full", clientOpKey: OP_KEY }),
+    /requires unrestricted subsidiary access/,
+  );
+  assert.deepEqual(state.enqueues, []);
 });
 
 test("the same operation intent enqueues the same deterministic job id", async () => {

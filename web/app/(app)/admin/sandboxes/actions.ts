@@ -13,6 +13,7 @@ import {
 } from "@openbooks/engine/sandbox/promote";
 import { getAuthz } from "../../../../lib/authz";
 import { can } from "../../../../lib/authz";
+import { assertUnrestrictedScope, UnrestrictedScopeError } from "@openbooks/engine/organization/scope";
 import { isUuid } from "../../../../lib/list-params";
 import { validateSandboxCutoff } from "@openbooks/engine/sandbox/lifecycle";
 import { validateSandboxCadence } from "@openbooks/engine/sandbox/cadence";
@@ -27,6 +28,12 @@ async function requireManager() {
   const authz = await getAuthz();
   if (!authz) throw new Error("unauthorized");
   if (!can(authz, "admin.sandboxes.manage")) throw new Error("forbidden");
+  try {
+    assertUnrestrictedScope(authz.allowedSubsidiaryIds);
+  } catch (error) {
+    if (error instanceof UnrestrictedScopeError) throw new Error(error.message);
+    throw error;
+  }
   // Sandboxes are managed from production only.
   if (authz.user.envKind !== "production") {
     throw new Error("exit the sandbox to manage environments");
@@ -201,7 +208,7 @@ export async function transitionChangeSetAction(changeSetId: string, transition:
     revalidatePath("/admin/sandboxes/change-sets");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error && error.constructor === Error
+    return { error: error instanceof Error && (error.constructor === Error || error instanceof UnrestrictedScopeError)
       ? error.message : "The change could not be completed. Refresh the change set and try again." };
   }
 }
