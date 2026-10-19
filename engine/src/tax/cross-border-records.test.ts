@@ -51,7 +51,7 @@ registerHooks({
   },
 });
 
-const { validateStoredTaxId } = await import("./cross-border-records.ts?stored-tax-id-credentials");
+const { validateStoredTaxId } = await import("./cross-border-records.ts");
 
 test("interactive stored tax ID validation loads authority credentials for its organization", async () => {
   state.credentialLoads = 0;
