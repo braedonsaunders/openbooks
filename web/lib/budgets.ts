@@ -2,6 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { canonicalPeriodLabel, type PeriodDisplayInput } from '@openbooks/engine/periods/period-policy'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { PNL_TYPES } from './account-types'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
@@ -66,10 +67,16 @@ export type BudgetScenario = {
 
 export type BudgetPeriod = {
   id: string
+  /**
+   * Locale-free canonical label (`P05 FY2026`). Presenters with a viewer
+   * locale replace it with `periodDisplayLabel(periodRef, locale)`.
+   */
   name: string
   periodNumber: number
   startsOn: string
   endsOn: string
+  /** Fiscal position and dates the period is labelled from. */
+  periodRef: PeriodDisplayInput
 }
 
 export type BudgetAccount = {
@@ -111,7 +118,7 @@ interface BudgetScenarioRow extends Record<string, unknown> {
 
 interface BudgetPeriodRow extends Record<string, unknown> {
   id: string
-  name: string
+  fiscal_year: number
   period_number: number
   starts_on: string
   ends_on: string
@@ -273,7 +280,8 @@ async function loadWorksheetSlice(
     // and the totals below all read that same set: a line on another calendar
     // can be neither written nor hidden-yet-counted.
     db.execute<BudgetPeriodRow>(sql`
-      select p.id, p.name, p.period_number, p.starts_on, p.ends_on
+      select p.id, p.fiscal_year, p.period_number,
+             p.starts_on::text as starts_on, p.ends_on::text as ends_on
         from accounting_periods p
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear} and not p.is_adjustment
@@ -295,13 +303,24 @@ async function loadWorksheetSlice(
 
   return {
     dims,
-    periods: periodRows.rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      periodNumber: Number(row.period_number),
-      startsOn: String(row.starts_on),
-      endsOn: String(row.ends_on),
-    })),
+    periods: periodRows.rows.map((row) => {
+      // Worksheet periods are non-adjustment by the query above.
+      const periodRef: PeriodDisplayInput = {
+        fiscalYear: Number(row.fiscal_year),
+        periodNumber: Number(row.period_number),
+        adjustment: false,
+        startsOn: String(row.starts_on),
+        endsOn: String(row.ends_on),
+      }
+      return {
+        id: row.id,
+        name: canonicalPeriodLabel(periodRef),
+        periodNumber: periodRef.periodNumber,
+        startsOn: periodRef.startsOn,
+        endsOn: periodRef.endsOn,
+        periodRef,
+      }
+    }),
     accounts: accountRows.rows.map((row) => ({
       id: row.id,
       number: row.number,

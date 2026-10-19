@@ -2,6 +2,7 @@ import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { addCalendarDays, businessToday } from '@openbooks/engine/platform/business-date/module'
 import { db } from '@openbooks/engine/platform/db'
+import { canonicalPeriodLabelSql, periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
 import { getAuthz } from '../authz'
 import { statementBookExpr } from '../gl-summary'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
@@ -19,6 +20,7 @@ export interface AccountingHome {
   access: AccountingHomeAccess
   close: {
     runId: string | null
+    /** The run's period, labelled as every period list labels it (see `accountingHome`). */
     periodName: string | null
     status: string | null
     tasksDone: number
@@ -35,8 +37,8 @@ export interface AccountingHome {
    */
   closeUnavailable: boolean
   /**
-   * The latest period carrying an organization-wide closed lock, by name, or
-   * null. Locks can close a period without any close run (autopilot, API), so
+   * The latest period carrying an organization-wide closed lock, labelled
+   * like `close.periodName`, or null. Locks can close a period without any close run (autopilot, API), so
    * the progress above can read "no run" while periods are closed. Null for
    * restricted callers, who see the refusal instead.
    */
@@ -146,7 +148,14 @@ export async function accountingHome(
   orgId: string,
   allowedSubsidiaryIds?: AccountingSubsidiaryScope,
   access: AccountingHomeAccess = { gl: false, close: false, findings: false, accounts: false, budgets: false, assets: false },
+  /**
+   * The viewer's locale: periods then read as every period list labels them
+   * (`P07 FY2026 · Jul 2026`). Without one they carry the locale-free
+   * canonical label (`P07 FY2026`). Never the free-text stored name.
+   */
+  locale?: string,
 ): Promise<AccountingHome> {
+  const periodLabel = locale ? periodDisplayLabelSql(locale, 'p') : canonicalPeriodLabelSql('p')
   // The accounting page historically supplied only orgId. Resolve the same
   // request authz here when that argument is omitted so direct callers cannot
   // accidentally turn a restricted page into an org-wide dashboard. Explicit
@@ -169,7 +178,7 @@ export async function accountingHome(
   const [closeRes, countsRes, workRes, lockRes] = (await Promise.all([
     // Latest close run + its task progress ('complete'/'approved' = done).
     access.close ? db.execute<{ id: string; status: string; period_name: string; tasks_total: string; tasks_done: string }>(sql`
-      select r.id, r.status, p.name as period_name,
+      select r.id, r.status, ${periodLabel} as period_name,
              coalesce(t.total, 0) as tasks_total,
              coalesce(t.done, 0) as tasks_done
         from close_runs r
@@ -208,7 +217,7 @@ export async function accountingHome(
     `) : Promise.resolve({ rows: [] }),
     // Closed organization-wide locks on the primary book, newest period first.
     access.close ? db.execute<{ period_name: string }>(sql`
-      select p.name as period_name
+      select ${periodLabel} as period_name
         from period_locks pl
         join accounting_periods p on p.id = pl.period_id and p.org_id = pl.org_id
        where pl.org_id = ${orgId} and pl.state = 'closed' and pl.subsidiary_id is null

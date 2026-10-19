@@ -1,5 +1,6 @@
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
+import { getLocale } from 'next-intl/server'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { parseReportDrillTarget } from '../../../../lib/report-drill'
 import { overlayLedgerDrillPeriod } from '../../../../lib/report-drill-period'
@@ -51,7 +52,7 @@ export const GET = defineRoute({
           && scoped.kind === 'ledger'
           ? { ...scoped, hideVoidPairs: true }
           : scoped
-        return NextResponse.json(await loadReportDrillData(hideVoids, gate, requestedPage))
+        return NextResponse.json(await loadReportDrillData(hideVoids, gate, requestedPage, await getLocale()))
       } catch (error) {
         return reportDrillErrorResponse(error)
       }

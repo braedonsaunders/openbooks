@@ -1,5 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
+import { periodDisplayLabelSql } from "@openbooks/engine/periods/period-policy";
 import { defaultFiscalCalendarPeriods } from "../fiscal";
+import { fiscalPeriodLabel } from "../fiscal-period-label";
 import type { FiscalPeriod } from "@openbooks/reports";
 
 /**
@@ -9,8 +11,9 @@ import type { FiscalPeriod } from "@openbooks/reports";
  * 13-period or custom calendars, and a bare month number collides once a
  * window spans more than twelve months. When the organization has a declared
  * default calendar with a non-monthly cadence, series bucket by its
- * accounting periods (keyed by period start, labelled with the period's own
- * name); every other organization keeps calendar months. The monthly rule
+ * accounting periods (keyed by period start, labelled as every period list
+ * labels the period in the viewer's locale); every other organization keeps
+ * calendar months. The monthly rule
  * mirrors period resolution, so dashboard windows and trend buckets agree.
  */
 
@@ -48,7 +51,8 @@ export async function fiscalBucketScope(orgId: string): Promise<FiscalBucketScop
 export function fiscalBucketJoin(orgId: string, dateExpr: SQL, useFiscal: boolean): SQL {
   if (!useFiscal) return sql``;
   return sql`left join lateral (
-      select fbp.starts_on, fbp.name from accounting_periods fbp
+      select fbp.starts_on, fbp.ends_on, fbp.fiscal_year, fbp.period_number, fbp.is_adjustment
+        from accounting_periods fbp
         join fiscal_calendars fcb on fcb.id = fbp.fiscal_calendar_id and fcb.org_id = fbp.org_id
        where fbp.org_id = ${orgId} and fcb.is_default and fcb.is_active and not fbp.is_adjustment
          and ${dateExpr}::date between fbp.starts_on and fbp.ends_on
@@ -125,12 +129,13 @@ export function fiscalMonthlyBoxes(
   zero: string,
   labels: ReadonlyMap<string, string>,
   monthLabel: (ym: string) => string,
+  locale: string,
 ): FiscalMonthBox[] {
   const declared = periods.filter((p) => p.to >= startIso && p.from <= endIso);
   const declaredKeys = new Set(declared.map((p) => p.from));
   const boxes = declared.map((p) => ({
     month: p.from,
-    label: labels.get(p.from) ?? p.name,
+    label: labels.get(p.from) ?? fiscalPeriodLabel(p, locale),
     spend: spendByBucket.get(p.from) ?? zero,
   }));
   for (const key of spendByBucket.keys()) {
@@ -141,8 +146,14 @@ export function fiscalMonthlyBoxes(
   return boxes.sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
 }
 
-/** Display label: the period's own name, or null when the view should render the calendar month. */
-export function fiscalBucketLabel(dateExpr: SQL, useFiscal: boolean): SQL {
+/**
+ * Display label of a fiscal bucket in the viewer's locale
+ * (`P05 FY2026 · May 2026`), derived from the period's fiscal position and
+ * dates so every fiscal year reads alike; null when the view should render
+ * the calendar month (no fiscal bucketing, or a date outside declared
+ * coverage).
+ */
+export function fiscalBucketLabel(useFiscal: boolean, locale: string): SQL {
   if (!useFiscal) return sql`null::text`;
-  return sql`fbp.name`;
+  return sql`(case when fbp.starts_on is null then null else ${periodDisplayLabelSql(locale, "fbp")} end)`;
 }

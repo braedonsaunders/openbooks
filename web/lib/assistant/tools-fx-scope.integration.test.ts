@@ -194,7 +194,7 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       const revals = await executeAssistantTool(reader, 'list_fx_revaluations', { periodId });
       assert.ok(revals.ok, JSON.stringify(revals));
       const revalData = revals.data as {
-        total: number; items: { entryNumber: string; mirrorEntryNumber: string | null }[];
+        total: number; items: { entryNumber: string; mirrorEntryNumber: string | null; period: string | null }[];
       };
       // The period filter keeps the adjustment; its next-period mirror lives
       // in 2026-08 and resolves through the mirror link.
@@ -202,6 +202,8 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       const adjustment = revalData.items.find((i) => !i.entryNumber.endsWith('-R'));
       assert.ok(adjustment, 'adjustment entry present');
       assert.ok(adjustment.mirrorEntryNumber?.endsWith('-R'), 'adjustment links its mirror');
+      // Periods are named by their canonical label, not the stored name '2026-07'.
+      assert.equal(adjustment.period, 'P07 FY2026');
       const originalStatus = await db.execute<{ status: string }>(sql`
         select status from journal_entries where org_id = ${org.orgId} and id = ${entryId}`)
       assert.equal(originalStatus.rows[0]?.status, 'reversed')
@@ -212,10 +214,12 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       const view = await executeAssistantTool(reader, 'get_consolidation_view', { periodId });
       assert.ok(view.ok, JSON.stringify(view));
       const viewData = view.data as {
+        period: { name: string };
         rates: { fromCurrency: string; currentRate: string }[];
         runs: { status: string }[];
         entries: { kind: string; entryNumber: string }[];
       };
+      assert.equal(viewData.period.name, 'P07 FY2026');
       assert.deepEqual(viewData.rates.map((r) => [r.fromCurrency, r.currentRate]), [['EUR', '1.5000000000']]);
       assert.deepEqual(viewData.runs.map((r) => r.status), ['posted']);
       assert.deepEqual(viewData.entries.map((e) => [e.kind, e.entryNumber]), [['acquisition', 'JE-ELIM-1']]);

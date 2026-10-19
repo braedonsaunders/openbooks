@@ -94,3 +94,21 @@ test('accounting journal tiles read the primary book only', { skip: !env.OPENBOO
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
 })
+
+test('the cockpit names the last closed period from its fiscal position, in the viewer locale', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    // The scratch period is stored as '2026-07'; the cockpit never shows that name.
+    await withBypass(() => db.execute(sql`
+      insert into period_locks (org_id, period_id, book_id, module, state, reason)
+      values (${scratch.orgId}, ${scratch.periodId}, ${scratch.bookId}, 'gl', 'closed', 'cockpit label fixture')
+    `))
+    const access = { gl: false, close: true, findings: false, accounts: false, budgets: false, assets: false }
+    const viewer = await withBypass(() => accountingHome(scratch.orgId, null, access, 'en'))
+    assert.equal(viewer.lastLockedPeriod, 'P07 FY2026 · Jul 2026')
+    const localeFree = await withBypass(() => accountingHome(scratch.orgId, null, access))
+    assert.equal(localeFree.lastLockedPeriod, 'P07 FY2026')
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})

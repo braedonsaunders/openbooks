@@ -16,6 +16,9 @@ import { englishCatalogMessage } from "./catalog-strings";
 import { getMoneyFormatter } from '../money-server'
 import { addCalendarDays, addMonthsClamped, calendarDaysBetween, endOfMonth } from '@openbooks/engine/platform/civil-date';
 import { toChartNumber } from "../chart-number";
+import { formatCivilDate } from "../format";
+import { fiscalPeriodLabel } from "../fiscal-period-label";
+import { periodMonthSpan } from "@openbooks/engine/periods/period-policy";
 
 /**
  * Spend Velocity — an implementation of the SpendVelocity dashboard
@@ -497,13 +500,19 @@ export async function spendVelocityData(
   const { priorFrom, priorTo, twoBackFrom, twoBackTo } = getSpendVelocityComparisonWindows(from, to, buckets.periods);
   // Per-period figures annualise by the calendar's own periods per year.
   const periodsPerYear = buckets.useFiscal ? fiscalPeriodsPerYear(buckets.periods, to) : 12;
-  // Window captions name declared periods (or calendar months); a window
-  // with no declared coverage behind it keeps its honest ISO range.
+  // Window captions name declared periods in the viewer's locale, as every
+  // period list labels them (or calendar months); a window with no declared
+  // coverage behind it keeps its exact date range.
   const windowName = (wFrom: string, wTo: string): string => {
-    const names = buckets.periods.filter((p) => p.from <= wTo && p.to >= wFrom).map((p) => p.name);
-    if (names.length > 1) return `${names[0]} – ${names[names.length - 1]}`;
-    if (names.length === 1) return names[0]!;
-    return `${wFrom} → ${wTo}`;
+    const covered = buckets.periods.filter((p) => p.from <= wTo && p.to >= wFrom);
+    const first = covered[0];
+    const last = covered[covered.length - 1];
+    if (first && last && first !== last) {
+      const span = periodMonthSpan({ startsOn: first.from, endsOn: last.to }, strings.locale);
+      return `${first.name} – ${last.name} · ${span}`;
+    }
+    if (first) return fiscalPeriodLabel(first, strings.locale);
+    return `${formatCivilDate(wFrom, strings.locale)} – ${formatCivilDate(wTo, strings.locale)}`;
   };
   const monthName = (day: string): string => strings.monthLabel(day.slice(0, 7));
   const monthRange = (wFrom: string, wTo: string): string => {
@@ -556,7 +565,7 @@ export async function spendVelocityData(
       with spend as materialized (
         select l.account_id, a.name as account_name, a.number as account_number, a.type as account_type,
           ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
-          ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
+          ${fiscalBucketLabel(buckets.useFiscal, strings.locale)} as bucket_label,
           extract(month from e.posting_date)::int as month_num,
           d.id as doc_id, d.kind, l.amount, sub.base_currency as func, l.posting_date
         ${spendBaseWithSubs(from, to)}
@@ -584,7 +593,7 @@ export async function spendVelocityData(
       with spend as materialized (
         select d.party_id as vendor_id,
           ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
-          ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
+          ${fiscalBucketLabel(buckets.useFiscal, strings.locale)} as bucket_label,
           d.id as doc_id, l.amount, sub.base_currency as func, l.posting_date
         ${spendBaseWithSubs(from, to, sql`e.posting_date`)} and d.party_id is not null
           ${expenseDocumentScope(expenseAccess, sql`d.kind`, sql`d.party_id`)}

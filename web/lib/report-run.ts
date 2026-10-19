@@ -408,7 +408,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     let periodPhrase = ''
     const selectedBook = kind === 'budget' ? undefined : (await reportBookSelection(orgId, p.get('book'))).selectedBook
     const accountLabels = kind === 'budget' ? null : await exportAccountLabels(orgId, p, period.to, q.subsidiaryId)
-    const matrixOpts = { orgId, bookId: selectedBook?.id, breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero, accountLabels }
+    const matrixOpts = { orgId, bookId: selectedBook?.id, breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero, accountLabels, locale }
     if (kind === 'pnl') {
       title = t('pnl.title')
       periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
@@ -523,7 +523,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       return { render: 'data', data: await trueCostExportData(orgId, period) }
     case 'statistical-journal':
     case 'gl-audit-numbers':
-      return { render: 'data', data: await journalMeasurementExportData(kind, { orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, from: period.from, to: period.to, label: reportPeriodLabel(period, locale), bookId: detailBookId }), requiredPermissions: ['gl.read'] }
+      return { render: 'data', data: await journalMeasurementExportData(kind, { orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, from: period.from, to: period.to, label: reportPeriodLabel(period, locale), bookId: detailBookId, locale }), requiredPermissions: ['gl.read'] }
     case 'intercompany-reconciliation':
       // Balances as of the window end, within the reader's legal entities.
       return {

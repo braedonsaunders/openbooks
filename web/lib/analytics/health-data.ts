@@ -22,6 +22,7 @@ import { OPERATING_EXPENSE_TYPES } from "./operating-expenses";
 import { decimalRatio } from "../reports/decimals";
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 import { getMoneyFormatter } from '../money-server'
+import { fiscalPeriodLabel } from "../fiscal-period-label";
 
 /** The canonical operating-expense type list as a SQL `IN` fragment (one definition). */
 const OPEX_TYPES_SQL = sql.join(
@@ -194,8 +195,8 @@ export interface HealthForecastParams {
   adjustments: ForecastAdjustmentOption[];
   defaultAdjustment: string;
   /**
-   * Declared future period names after the period end on non-monthly
-   * calendars, capped at the longest offered horizon. Null on monthly cadence, where
+   * Declared future period labels (viewer locale) after the period end on
+   * non-monthly calendars, capped at the longest offered horizon. Null on monthly cadence, where
    * the client labels calendar months in the viewer's locale. Empty when a
    * non-monthly calendar declares no future periods: the tab refuses by
    * name instead of labelling buckets it cannot reconcile.
@@ -339,9 +340,9 @@ function insightNumber(value: string): number {
 /**
  * Trailing P&L series ending at the period end (fills gaps with zero).
  * Monthly-cadence organizations keep calendar months; any other declared
- * calendar prices its own trailing fiscal periods and labels them with the
- * period names, so a 4-4-5 or quarterly calendar never sees month-sliced
- * figures it cannot reconcile to its periods.
+ * calendar prices its own trailing fiscal periods and labels them as every
+ * period list does in the viewer's locale, so a 4-4-5 or quarterly calendar
+ * never sees month-sliced figures it cannot reconcile to its periods.
  */
 async function monthlySeries(
   orgId: string,
@@ -352,7 +353,7 @@ async function monthlySeries(
 ): Promise<MonthPoint[]> {
   const declared = await defaultFiscalCalendarPeriods(orgId);
   if (declared && declared.cadence !== "monthly") {
-    return fiscalPeriodSeries(orgId, to, allowed, months, declared.periods);
+    return fiscalPeriodSeries(orgId, to, allowed, months, declared.periods, strings.locale);
   }
   const end = new Date(to + "T00:00:00Z");
   // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
@@ -465,7 +466,8 @@ async function monthlySeries(
  * The same trailing series over declared fiscal periods instead of calendar
  * months. Period boundaries come from the organization's own calendar, so a
  * weekly or quarterly calendar prices whole periods it can reconcile. Each
- * point keys on the period's start date and labels with the period name.
+ * point keys on the period's start date and labels with the period's
+ * display label in the viewer's locale (`P05 FY2026 · May 2026`).
  * Periods do not align with months, so the series reads the journal lines
  * directly — the monthly gl_month_activity rollup cannot bucket them.
  */
@@ -475,6 +477,7 @@ async function fiscalPeriodSeries(
   allowed: ReadonlySet<string> | null,
   months: number,
   periods: FiscalPeriod[],
+  locale: string,
 ): Promise<MonthPoint[]> {
   // The trailing periods at or before the period end, the last possibly
   // partial. Older activity stays outside the window, as with months.
@@ -543,7 +546,7 @@ async function fiscalPeriodSeries(
     const revPositive = cmp(revenue, "0") > 0;
     return {
       month: p.from,
-      label: p.name,
+      label: fiscalPeriodLabel(p, locale),
       revenue,
       cogs,
       grossProfit,
@@ -1046,7 +1049,7 @@ export async function healthData(
   const [base, monthly, forecast, dept, cls, loc, drv, items, budget, policy] = await Promise.all([
     financialHealth(period, orgId, allowedSubsidiaryIds, strings),
     monthlySeries(orgId, to, allowedSubsidiaryIds, 12, strings),
-    forecastParams(orgId, to),
+    forecastParams(orgId, to, strings.locale),
     analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
     analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
     analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "location_id", "locations", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
@@ -1134,24 +1137,24 @@ export function forecastAdjustmentValue(code: string): number {
 }
 
 /**
- * Declared future period names after `asOf` on the organization's own
- * calendar, capped at `need`. Null when the calendar is monthly or
+ * Declared future period labels after `asOf` on the organization's own
+ * calendar in the viewer's locale, capped at `need`. Null when the calendar is monthly or
  * undeclared (the client labels calendar months); an empty array when a
  * non-monthly calendar declares no future periods, which the tab refuses
  * by name instead of labelling buckets it cannot reconcile.
  */
-async function upcomingFiscalPeriodNames(orgId: string, asOf: string, need: number): Promise<string[] | null> {
+async function upcomingFiscalPeriodNames(orgId: string, asOf: string, need: number, locale: string): Promise<string[] | null> {
   const declared = await defaultFiscalCalendarPeriods(orgId);
   if (!declared || declared.cadence === "monthly" || declared.periods.length === 0) return null;
   return declared.periods
     .filter((p) => p.from > asOf)
     .sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))
     .slice(0, need)
-    .map((p) => p.name);
+    .map((p) => fiscalPeriodLabel(p, locale));
 }
 
 /** The forecast model as configured, with offered choices from the threshold spec. */
-async function forecastParams(orgId: string, asOf: string): Promise<HealthForecastParams> {
+async function forecastParams(orgId: string, asOf: string, locale: string): Promise<HealthForecastParams> {
   const [c, periodsPerYear] = await Promise.all([
     analyticsConfig(orgId, "financialHealth"),
     fiscalPeriodsPerYear(orgId, asOf),
@@ -1171,7 +1174,7 @@ async function forecastParams(orgId: string, asOf: string): Promise<HealthForeca
     confidences: codes("forecastConfidence").map(Number),
     adjustments: codes("forecastAdjustment").map((code) => ({ code, value: forecastAdjustmentValue(code) })),
     defaultAdjustment: String(c.forecastAdjustment),
-    futurePeriodNames: await upcomingFiscalPeriodNames(orgId, asOf, Math.max(...horizons)),
+    futurePeriodNames: await upcomingFiscalPeriodNames(orgId, asOf, Math.max(...horizons), locale),
     model: {
       alpha: c.forecastEtsAlpha,
       beta: c.forecastEtsBeta,

@@ -2,7 +2,7 @@ import 'server-only'
 
 import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { isUuid } from '../../../../lib/list-params'
 import {
   badge,
@@ -32,6 +32,7 @@ import {
 } from '@openbooks/engine/hrm/positions-read'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
@@ -479,17 +480,23 @@ export async function loadPositionsPage(
         const periods = (
           await db.execute<{
             id: string
-            name: string
+            fiscalYear: number
+            periodNumber: number
+            adjustment: boolean
             startsOn: string
             endsOn: string
           }>(sql`
-          select id::text as id, name, starts_on::text as "startsOn", ends_on::text as "endsOn"
+          select id::text as id, fiscal_year as "fiscalYear", period_number as "periodNumber",
+                 is_adjustment as adjustment,
+                 starts_on::text as "startsOn", ends_on::text as "endsOn"
             from accounting_periods
            where org_id = ${authz.user.orgId}::uuid
            order by starts_on desc, period_number desc
            limit 200
         `)
         ).rows
+        // Funding periods read as every period list labels them, in the viewer's locale.
+        const locale = await getLocale()
         const fundedByPeriod = new Map(
           resolved.funding.map((plan) => [plan.periodId, plan.fundedFte]),
         )
@@ -501,7 +508,7 @@ export async function loadPositionsPage(
           status: resolved.version.status,
           periods: periods.map((period) => ({
             value: period.id,
-            label: `${period.name} · ${period.startsOn} – ${period.endsOn}`,
+            label: periodDisplayLabel({ ...period, fiscalYear: Number(period.fiscalYear), periodNumber: Number(period.periodNumber) }, locale),
             fundedFte: fundedByPeriod.get(period.id) ?? '0.0000',
           })),
           labels: {

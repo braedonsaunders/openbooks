@@ -19,22 +19,27 @@ test('the analytics picker lists named fiscal periods newest first, skipping adj
   const { orgId } = await createScratchOrg()
   const calendarId = (await pool.query(`select id from fiscal_calendars where org_id = $1 limit 1`, [orgId])).rows[0].id as string
   // createScratchOrg seeds 2026-07; add older, newer, and adjustment periods.
-  await insertPeriod(orgId, calendarId, { fiscalYear: 2026, periodNumber: 6, name: '2026-06', from: '2026-06-01', to: '2026-06-30' })
+  await insertPeriod(orgId, calendarId, { fiscalYear: 2026, periodNumber: 6, name: 'June 2026 (legacy)', from: '2026-06-01', to: '2026-06-30' })
   await insertPeriod(orgId, calendarId, { fiscalYear: 2026, periodNumber: 8, name: '2026-08', from: '2026-08-01', to: '2026-08-31' })
   await insertPeriod(orgId, calendarId, { fiscalYear: 2026, periodNumber: 13, name: '2026-ADJ', from: '2026-08-01', to: '2026-08-31', adjustment: true })
 
-  const options = await analyticsFiscalPeriodOptions(orgId)
+  const options = await analyticsFiscalPeriodOptions(orgId, 'en')
   assert.deepEqual(options.map((o) => [o.from, o.to]), [
     ['2026-08-01', '2026-08-31'],
     ['2026-07-01', '2026-07-31'],
     ['2026-06-01', '2026-06-30'],
   ])
-  assert.ok(options.every((o) => o.id && o.label.includes('2026-')))
-  assert.ok(!options.some((o) => o.label.includes('ADJ')))
+  // Labels derive from the fiscal position and dates, not the stored name.
+  assert.deepEqual(options.map((o) => o.label), [
+    'P08 FY2026 · Aug 2026',
+    'P07 FY2026 · Jul 2026',
+    'P06 FY2026 · Jun 2026',
+  ])
+  assert.ok(options.every((o) => o.id))
 })
 
 test('the analytics picker is empty when the org has no periods', async () => {
   const { orgId } = await createScratchOrg()
   await pool.query(`delete from accounting_periods where org_id = $1`, [orgId])
-  assert.deepEqual(await analyticsFiscalPeriodOptions(orgId), [])
+  assert.deepEqual(await analyticsFiscalPeriodOptions(orgId, 'en'), [])
 })

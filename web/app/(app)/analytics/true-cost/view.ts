@@ -9,6 +9,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { trueCostData } from '../../../../lib/analytics/true-cost-data'
 import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
+import { reportPeriodLabel } from '../../../../lib/format'
 import { trueCostStrings } from '../../../../lib/analytics/true-cost-strings'
 import { presentationCurrency } from '../../../../lib/fx-presentation'
 import type { TrueCostView } from './TrueCostView'
@@ -59,7 +60,11 @@ export async function loadTrueCost(sp: Record<string, string | undefined>): Prom
 
   // Insight sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use.
-  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
+  const locale = await getLocale()
+  const [tc, picker] = await Promise.all([getTranslations('analytics'), analyticsFiscalPeriodPicker(authz.user.orgId, locale)])
+  // An accounting-period window reads as every period list labels it, in
+  // the viewer's locale; custom windows read as their localized dates.
+  const periodLabel = reportPeriodLabel(period, locale)
   const strings = trueCostStrings(
     (key, values) => tc(key, values),
     locale,
@@ -68,7 +73,7 @@ export async function loadTrueCost(sp: Record<string, string | undefined>): Prom
   let refusal: string | null = null;
   const data = await trueCostData(
     authz.user.orgId,
-    { from: period.from, to: period.to, label: period.label },
+    { from: period.from, to: period.to, label: periodLabel },
     authz.allowedSubsidiaryIds,
     strings,
   ).catch((error: unknown) => {
@@ -84,7 +89,7 @@ export async function loadTrueCost(sp: Record<string, string | undefined>): Prom
   return {
     title: t('title'),
     backLabel: t('backToHub'),
-    periodLabel: period.label,
+    periodLabel,
     extraPeriods: picker.extraPeriods,
     extraPeriodsLabel: picker.extraPeriodsLabel,
     reportHref: `/reports/true-cost${qs ? `?${qs}` : ''}`,

@@ -1,19 +1,27 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { canonicalPeriodLabelSql, periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { getTranslations } from 'next-intl/server'
 import { statementBookIdsExpr } from './gl-summary'
 import type { ExportData } from './report-pdf'
 
-/** Retained measurements and physical audit assignments share native report rendering and exports. */
+/**
+ * Retained measurements and physical audit assignments share native report
+ * rendering and exports. The audit register's period column reads as every
+ * period list labels it in the viewer's `locale` (`P07 FY2026 · Jul 2026`);
+ * without a viewer locale it carries the locale-free canonical label.
+ */
 export async function journalMeasurementExportData(kind: 'statistical-journal' | 'gl-audit-numbers', input: {
   orgId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; from: string; to: string; label: string; bookId?: string | null;
+  locale?: string;
 }): Promise<ExportData> {
   const t = await getTranslations('reports.journalMeasurements')
   const audit = kind === 'gl-audit-numbers'
+  const periodLabel = input.locale ? periodDisplayLabelSql(input.locale, 'p') : canonicalPeriodLabelSql('p')
   const rows = audit ? (await db.execute<{ number: string; entry: string; date: string; entity: string; period: string; book: string }>(sql`
-    select n.audit_number as number,e.entry_number as entry,e.posting_date::text as date,s.name as entity,p.name as period,b.name as book
+    select n.audit_number as number,e.entry_number as entry,e.posting_date::text as date,s.name as entity,${periodLabel} as period,b.name as book
       from gl_audit_number_assignments n join journal_entries e on e.org_id=n.org_id and e.id=n.entry_id
       join subsidiaries s on s.org_id=n.org_id and s.id=n.subsidiary_id
       join accounting_periods p on p.org_id=n.org_id and p.id=n.period_id

@@ -10,6 +10,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { sentinelData } from '../../../../lib/analytics/sentinel-data'
 import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
+import { reportPeriodLabel } from '../../../../lib/format'
 import { sentinelStrings } from '../../../../lib/analytics/sentinel-strings'
 import type { SentinelView } from './SentinelView'
 
@@ -65,14 +66,18 @@ export async function loadSentinel(sp: Record<string, string | undefined>): Prom
   // Forensic sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use. Conformity travels as a
   // stable code in every language; the client maps codes to words.
-  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
+  const locale = await getLocale()
+  const [tc, picker] = await Promise.all([getTranslations('analytics'), analyticsFiscalPeriodPicker(authz.user.orgId, locale)])
+  // An accounting-period window reads as every period list labels it, in
+  // the viewer's locale; custom windows read as their localized dates.
+  const periodLabel = reportPeriodLabel(period, locale)
   const strings = sentinelStrings((key, values) => tc(key, values), locale)
-  const data = await sentinelData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz, strings)
+  const data = await sentinelData(authz.user.orgId, { from: period.from, to: period.to, label: periodLabel }, authz, strings)
 
   return {
     title: t('title'),
     backLabel: t('backToHub'),
-    periodLabel: period.label,
+    periodLabel,
     extraPeriods: picker.extraPeriods,
     extraPeriodsLabel: picker.extraPeriodsLabel,
     data,

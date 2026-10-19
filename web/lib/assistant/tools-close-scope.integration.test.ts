@@ -72,11 +72,13 @@ test('close assistant reads return the cockpit state for an org-wide close.read 
       assert.equal(status.ok, true, JSON.stringify(status));
       assert.ok(status.ok);
       const data = status.data as {
-        status: string; tasksByStatus: Record<string, number>;
+        status: string; period: { name: string }; tasksByStatus: Record<string, number>;
         openExceptions: { severity: string }[]; signoffs: { decision: string }[];
         locks: { module: string; state: string; subsidiary: null; reopenExpiresAt: null; reason: string }[]; href: string;
       };
       assert.equal(data.status, 'in_progress');
+      // Periods are named by their canonical label, not the stored name '2026-07'.
+      assert.equal(data.period.name, 'P07 FY2026');
       assert.deepEqual(data.tasksByStatus, { done: 1, open: 1 });
       assert.equal(data.openExceptions.length, 1);
       assert.equal(data.openExceptions[0]!.severity, 'critical');
@@ -94,12 +96,14 @@ test('close assistant reads return the cockpit state for an org-wide close.read 
       assert.equal(locks.ok, true, JSON.stringify(locks));
       assert.ok(locks.ok);
       assert.equal((locks.data as { total: number }).total, 1);
+      assert.equal((locks.data as { locks: { period: string }[] }).locks[0]!.period, 'P07 FY2026');
 
       const reopens = await executeAssistantTool(authz, 'list_period_reopen_requests', {});
       assert.equal(reopens.ok, true, JSON.stringify(reopens));
       assert.ok(reopens.ok);
-      const reopenData = reopens.data as { total: number; requests: { modules: string[]; status: string }[] };
+      const reopenData = reopens.data as { total: number; requests: { period: string; modules: string[]; status: string }[] };
       assert.equal(reopenData.total, 1);
+      assert.equal(reopenData.requests[0]!.period, 'P07 FY2026');
       assert.deepEqual(reopenData.requests[0]!.modules, ['gl']);
       assert.equal(reopenData.requests[0]!.status, 'requested');
     });

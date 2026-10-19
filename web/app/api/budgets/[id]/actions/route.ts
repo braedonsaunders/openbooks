@@ -3,6 +3,8 @@ import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
+import { getLocale } from 'next-intl/server'
+import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import { sql } from 'drizzle-orm'
 import { effectiveExtraDimsSql } from '@openbooks/engine/budgets/dimensions'
 import { db } from '@openbooks/engine/platform/db'
@@ -29,6 +31,32 @@ const POSTBodySchema1 = z.discriminatedUnion('action', [
 export const runtime = 'nodejs'
 
 type Action = 'archive' | 'copy' | 'copy_prior_actuals' | 'apply_source' | 'submit' | 'approve' | 'reject'
+
+/** A source period with no destination in the target year. */
+type UnmappedPeriodRow = {
+  id: string
+  fiscal_year: number
+  period_number: number
+  is_adjustment: boolean
+  starts_on: string
+  ends_on: string
+}
+
+/**
+ * The unmapped periods a refusal names, labelled as every period list labels
+ * them in the operator's locale (`P07 FY2026 · Jul 2026`), whatever
+ * free-text name each period was stored with.
+ */
+async function unmappedPeriodNames(rows: UnmappedPeriodRow[]): Promise<string> {
+  const locale = await getLocale()
+  return rows.map((row) => periodDisplayLabel({
+    fiscalYear: Number(row.fiscal_year),
+    periodNumber: Number(row.period_number),
+    adjustment: row.is_adjustment,
+    startsOn: row.starts_on,
+    endsOn: row.ends_on,
+  }, locale)).join(', ')
+}
 
 /** Approve/reject are checker decisions: the approve grant, not the manage grant. */
 const DECISION_ACTIONS: Action[] = ['approve', 'reject']
@@ -180,8 +208,10 @@ export const POST = defineRoute({
             sourceScenarioId: string | null,
             targetYear: number,
           ) => {
-            const unmapped = (await tx.execute<{ period_name: string }>(sql`
-              select distinct source_period.name as period_name
+            const unmapped = (await tx.execute<UnmappedPeriodRow>(sql`
+              select distinct source_period.id, source_period.fiscal_year, source_period.period_number,
+                     source_period.is_adjustment,
+                     source_period.starts_on::text as starts_on, source_period.ends_on::text as ends_on
                 from budget_lines bl
                 join accounting_periods source_period
                   on source_period.id = bl.period_id and source_period.org_id = bl.org_id
@@ -196,10 +226,10 @@ export const POST = defineRoute({
                  ${sourceYear === null ? sql`` : sql`and source_period.fiscal_year = ${sourceYear}`}
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
                  and destination.id is null
-               order by 1
+               order by starts_on, source_period.id
             `))
             if (unmapped.rows.length > 0) {
-              const names = unmapped.rows.map((row) => row.period_name).join(', ')
+              const names = await unmappedPeriodNames(unmapped.rows)
               throw new BudgetMutationError(`unmapped_periods: no ${targetYear} period matches source period(s) ${names}`)
             }
           }
@@ -304,8 +334,10 @@ export const POST = defineRoute({
             // the copy query exactly — a period netting to zero copies nothing,
             // so only nonzero periods can block.
             const priorYear = Number(scenario.fiscal_year) - 1
-            const unmappedActuals = (await tx.execute<{ period_name: string }>(sql`
-              select source_period.name as period_name
+            const unmappedActuals = (await tx.execute<UnmappedPeriodRow>(sql`
+              select source_period.id, source_period.fiscal_year, source_period.period_number,
+                     source_period.is_adjustment,
+                     source_period.starts_on::text as starts_on, source_period.ends_on::text as ends_on
                 from journal_lines l
                 join journal_entries e on e.id = l.entry_id and e.org_id = ${user.orgId} and e.status in ('posted', 'reversed')
                 join accounts a on a.id = l.account_id and a.org_id = ${user.orgId}
@@ -321,11 +353,13 @@ export const POST = defineRoute({
                  ${sourceDimFilters.length > 0 ? sql`and ${sql.join(sourceDimFilters, sql` and `)}` : sql``}
                  ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}
                  and destination.id is null
-               group by source_period.name
+               group by source_period.id, source_period.fiscal_year, source_period.period_number,
+                        source_period.is_adjustment, source_period.starts_on, source_period.ends_on
               having sum(l.amount) <> 0
+               order by source_period.starts_on, source_period.id
             `))
             if (unmappedActuals.rows.length > 0) {
-              const names = unmappedActuals.rows.map((row) => row.period_name).join(', ')
+              const names = await unmappedPeriodNames(unmappedActuals.rows)
               throw new BudgetMutationError(`unmapped_periods: no ${scenario.fiscal_year} period matches prior-year actuals period(s) ${names}`)
             }
             await tx.execute(sql`

@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
+import { canonicalPeriodLabelSql } from "@openbooks/engine/periods/period-policy";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
@@ -130,7 +131,7 @@ const listFxRevaluations: AssistantToolDef = {
     if (a.periodId) where = sql`${where} and e.period_id = ${a.periodId}`;
     const rows = (await db.execute<Record<string, unknown>>(sql`
       select e.id, e.entry_number, e.posting_date, e.memo,
-             p.name as period_name, b.name as book_name, b.code as book_code,
+             ${canonicalPeriodLabelSql("p")} as period_name, b.name as book_name, b.code as book_code,
              s.name as subsidiary_name,
              m.entry_number as mirror_number,
              count(l.id) as line_count,
@@ -144,7 +145,7 @@ const listFxRevaluations: AssistantToolDef = {
         -- reverses_entry_id, so the mirror resolves from the adjustment side.
         left join journal_entries m on m.reverses_entry_id = e.id and m.org_id = e.org_id
        where ${where}
-       group by e.id, p.name, b.name, b.code, s.name, m.entry_number
+       group by e.id, p.id, b.name, b.code, s.name, m.entry_number
        order by e.posting_date desc, e.entry_number desc
        limit ${limit}
     `));
@@ -197,9 +198,9 @@ const getConsolidationView: AssistantToolDef = {
     if (denied) return denied;
     const a = raw as { periodId: string };
     const period = (await db.execute<Record<string, unknown>>(sql`
-      select id, name, starts_on, ends_on, fiscal_year
-        from accounting_periods
-       where id = ${a.periodId} and org_id = ${authz.user.orgId}
+      select p.id, ${canonicalPeriodLabelSql("p")} as name, p.starts_on, p.ends_on, p.fiscal_year
+        from accounting_periods p
+       where p.id = ${a.periodId} and p.org_id = ${authz.user.orgId}
     `)).rows[0];
     if (!period) return { ok: false, error: "period_not_found" };
     const [rates, runs, entries] = await Promise.all([

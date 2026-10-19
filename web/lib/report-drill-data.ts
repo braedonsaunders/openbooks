@@ -6,6 +6,7 @@ import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/platform/db'
 import { orderedNetOfCancelledSql } from '@openbooks/engine/records/order-line-remainders'
 import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
+import { periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
 import { defaultColumnsFor, validateCustomQuery, type ReportCustomQuery, type ReportRuleGroup } from '@openbooks/reports'
 import { can, type Authz } from './authz'
 import { canRunReportEntity } from './report-authz'
@@ -483,7 +484,7 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
   }
 }
 
-async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>, authz: Authz, page: number): Promise<ReportDrillResponse> {
+async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>, authz: Authz, page: number, locale: string): Promise<ReportDrillResponse> {
   const { money } = await getMoneyFormatter(authz.user.orgId)
   const scenario = (await db.execute(sql`
     select bs.book_id, min(ap.starts_on)::text as from_date, max(ap.ends_on)::text as to_date
@@ -542,7 +543,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
            ${actualAccount} ${actualDims} ${actualSubsidiaryFilter}
         union all
         select 'budget'::text as source, bl.id::text as key, ap.starts_on as sort_date,
-               ap.name as period, null::text as entry_number,
+               ${periodDisplayLabelSql(locale, 'ap')} as period, null::text as entry_number,
                a.number, a.name as account, bl.note as detail,
                case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end as amount,
                null::uuid as entry_id, null::text as doc_kind, null::uuid as doc_id,
@@ -643,7 +644,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
   const [count, rows] = await Promise.all([
     db.execute(sql`select count(*)::int as n from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${listWindow} ${account} ${dims} ${subsidiaryFilter}`),
     db.execute(sql`
-      select bl.id, ap.name as period, a.number, a.name as account, bl.note,
+      select bl.id, ${periodDisplayLabelSql(locale, 'ap')} as period, a.number, a.name as account, bl.note,
              case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end as amount
         from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
         join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id
@@ -664,11 +665,15 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
   }
 }
 
-export async function loadReportDrillData(target: ReportDrillTarget, authz: Authz, page: number): Promise<ReportDrillResponse> {
+/**
+ * The rows behind one report figure. `locale` is the viewer's: budget periods
+ * read as every period list labels them (`P07 FY2026 · Jul 2026`).
+ */
+export async function loadReportDrillData(target: ReportDrillTarget, authz: Authz, page: number, locale: string): Promise<ReportDrillResponse> {
   if (target.kind === 'ledger') return ledgerData(target, authz, page)
   if (target.kind === 'aging') return agingData(target, authz, page)
   if (target.kind === 'orders') return orderData(target, authz, page)
   if (target.kind === 'time') return timeData(target, authz, page)
-  if (target.kind === 'budget') return budgetData(target, authz, page)
+  if (target.kind === 'budget') return budgetData(target, authz, page, locale)
   return customData(target, authz, page)
 }

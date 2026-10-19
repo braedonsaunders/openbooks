@@ -256,8 +256,8 @@ function creatableWorkspace() {
     ...base,
     scenario: { ...base.scenario, id: "", name: "", revision: 0 },
     periods: [
-      { id: randomUUID(), name: "Jan 2026", periodNumber: 1, startsOn: "2026-01-01", endsOn: "2026-01-31" },
-      { id: randomUUID(), name: "Feb 2026", periodNumber: 2, startsOn: "2026-02-01", endsOn: "2026-02-28" },
+      { id: randomUUID(), name: "P01 FY2026 · Jan 2026", periodNumber: 1, startsOn: "2026-01-01", endsOn: "2026-01-31", periodRef: { fiscalYear: 2026, periodNumber: 1, adjustment: false, startsOn: "2026-01-01", endsOn: "2026-01-31" } },
+      { id: randomUUID(), name: "P02 FY2026 · Feb 2026", periodNumber: 2, startsOn: "2026-02-01", endsOn: "2026-02-28", periodRef: { fiscalYear: 2026, periodNumber: 2, adjustment: false, startsOn: "2026-02-01", endsOn: "2026-02-28" } },
     ],
     accounts: [{ id: randomUUID(), number: "4000", name: "Services revenue", type: "income" }],
     effectiveSubsidiaryId: CREATE_SUB,
@@ -410,7 +410,7 @@ test("Save opens the created draft when saving its lines is refused", async (t) 
   await act(async () => {
     typeInto(nameInput, "FY26 services");
   });
-  const month = document.querySelector('[aria-label="Services revenue Jan 2026"]') as HTMLInputElement;
+  const month = document.querySelector('[aria-label="Services revenue P01 FY2026 · Jan 2026"]') as HTMLInputElement;
   assert.ok(month, "monthly cell must render");
   await act(async () => {
     typeInto(month, "100.00");

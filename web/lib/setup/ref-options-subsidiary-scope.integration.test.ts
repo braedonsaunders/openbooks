@@ -73,3 +73,16 @@ test('subsidiary-scoped reference pickers hide accounts and records owned by oth
     assert.ok(!einvoiceSettings.some((option) => option.value === settingB), 'generic setup references use their declared subsidiary owner')
   } finally { await withBypass(() => dropScratchOrg(org.orgId)) }
 })
+
+test('accounting-period references keep the id and label the period from its fiscal position', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    // The scratch period is stored as '2026-07'; the picker never shows that name.
+    const fxRates = SETUP_ENTITY_BY_KEY.get('consolidated-fx-rates')
+    assert.ok(fxRates)
+    const viewer = await withBypass(() => loadRefOptions(fxRates, org.orgId, null, 'en'))
+    assert.deepEqual(viewer['accounting-periods'], [{ value: org.periodId, label: 'P07 FY2026 · Jul 2026' }])
+    const localeFree = await withBypass(() => loadEntityOptions('accounting-periods', org.orgId, null))
+    assert.deepEqual(localeFree, [{ value: org.periodId, label: 'P07 FY2026' }])
+  } finally { await withBypass(() => dropScratchOrg(org.orgId)) }
+})

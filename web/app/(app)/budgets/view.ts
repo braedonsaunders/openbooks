@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import {
   page,
   pageHeader,
@@ -128,9 +129,15 @@ export async function loadBudgets(
   // reset the drawer's client state, and a widget at a fixed position would
   // otherwise be reused.
   const openWorkspace = workspace ?? unsaved
+  // Worksheet columns read as every period list labels them, in the
+  // viewer's locale.
+  const locale = await getLocale()
   const drawerPayload: BudgetDrawerProps | null = openWorkspace
     ? {
-        initial: openWorkspace as BudgetWorkspace,
+        initial: {
+          ...(openWorkspace as BudgetWorkspace),
+          periods: openWorkspace.periods.map((period) => ({ ...period, name: periodDisplayLabel(period.periodRef, locale) })),
+        },
         currentParams: sp,
         dims,
         closeHref,

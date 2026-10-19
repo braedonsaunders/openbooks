@@ -115,7 +115,7 @@ test('a consolidated drill ties to its cell across the whole subtree', { skip: !
     // codec so the tie-out holds across serialization, not just in memory.
     const parsed = parseReportDrillTarget(encodeReportDrillTarget(target))
     assert.ok(parsed, 'the drill target survives its URL codec')
-    const drill = await withBypass(() => loadReportDrillData(parsed, { ...authz, allowedSubsidiaryIds: null }, 1))
+    const drill = await withBypass(() => loadReportDrillData(parsed, { ...authz, allowedSubsidiaryIds: null }, 1, 'en'))
     assert.equal(drill.total, 2, 'the drill supports the whole cell, not just the picker node')
     const drilled = new Set(drill.rows.map((row) => row.transaction?.entryId))
     assert.ok(drilled.has(rootEntry) && drilled.has(branchEntry), 'both entities land in the drawer')
@@ -161,7 +161,7 @@ test('a drill never widens a restricted caller past its allowlist', { skip: !env
       permissions: new Set<string>(['reports.read']),
       allowedSubsidiaryIds: new Set([root]),
     } as const
-    const drill = await withBypass(() => loadReportDrillData(parsed, { ...restricted, allowedSubsidiaryIds: new Set([root]) }, 1))
+    const drill = await withBypass(() => loadReportDrillData(parsed, { ...restricted, allowedSubsidiaryIds: new Set([root]) }, 1, 'en'))
     assert.equal(drill.total, 1, 'the drill stays inside the caller allowlist')
     assert.ok(
       !drill.rows.some((row) => row.transaction?.entryId === branchEntry),
@@ -248,8 +248,11 @@ const consolidatedRows = [
               { kind: 'budget', label: 'COGS budget', scenarioId, scope: 'budget' },
               authz,
               1,
+              'en',
             ));
             const amounts = drill.rows.map((row) => row.cells[3]);
+            // Budget periods read as every period list labels them, not as the stored name '2026-07'.
+            assert.deepEqual(drill.rows.map((row) => row.cells[0]), ['P07 FY2026 · Jul 2026']);
             assert.ok(!amounts.includes('999.0000'), 'another entity line must not leak through a shared dimension');
             assert.ok(amounts.includes('100.0000'), 'own undimensioned line must be visible in the drill');
             assert.equal(drill.total, 1);
@@ -362,11 +365,11 @@ const consolidatedRows = [
               assert.ok(row, 'report must render the COGS account row');
               const variance = await loadReportDrillData(
                 { kind: 'budget', label: 'COGS', scenarioId, scope: 'variance', accountIds: [org.accounts.cogs], from: JULY.from, to: JULY.to },
-                authz, 1,
+                authz, 1, 'en',
               );
               const list = await loadReportDrillData(
                 { kind: 'budget', label: 'COGS', scenarioId, scope: 'budget', accountIds: [org.accounts.cogs], from: JULY.from, to: JULY.to },
-                authz, 1,
+                authz, 1, 'en',
               );
               return {
                 reportActual: Number(row.values[0]), reportBudget: Number(row.values[1]),
@@ -483,6 +486,7 @@ const consolidatedRows = [
               allowedSubsidiaryIds: null,
             },
             1,
+            'en',
           )
           assert.equal(response.total, response.rows.length)
           return response.rows.map((row) => String(row.cells[1])).sort()

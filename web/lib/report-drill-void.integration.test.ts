@@ -238,7 +238,7 @@ test('a voided journal drill foots exactly to the P&L cell with void markers', {
     // status marker, reached through the real URL codec like a clicked cell.
     const parsed = parseReportDrillTarget(encodeReportDrillTarget(expenseTarget(scratch)))
     assert.ok(parsed, 'the drill target survives its URL codec')
-    const drill = await withBypass(() => loadReportDrillData(parsed, { ...drillAuthz(scratch, actorId), allowedSubsidiaryIds: null }, 1))
+    const drill = await withBypass(() => loadReportDrillData(parsed, { ...drillAuthz(scratch, actorId), allowedSubsidiaryIds: null }, 1, 'en'))
     assert.deepEqual(drill.columns.map((column) => column.align), [undefined, undefined, undefined, undefined, 'right', undefined])
     const amountIdx = 4
     const statusIdx = 5
@@ -265,7 +265,7 @@ test('hiding void pairs drops the pair and keeps the net', { skip: !env.OPENBOOK
 
     const parsed = parseReportDrillTarget(encodeReportDrillTarget(expenseTarget(scratch, { hideVoidPairs: true })))
     assert.ok(parsed && parsed.kind === 'ledger' && parsed.hideVoidPairs === true, 'the hide flag survives its URL codec')
-    const drill = await withBypass(() => loadReportDrillData(parsed, { ...drillAuthz(scratch, actorId), allowedSubsidiaryIds: null }, 1))
+    const drill = await withBypass(() => loadReportDrillData(parsed, { ...drillAuthz(scratch, actorId), allowedSubsidiaryIds: null }, 1, 'en'))
     assert.equal(drill.total, 1, 'only the clean journal remains')
     assert.deepEqual(drill.rows.map((row) => String(row.cells[1])), ['VOID-OK'])
     let displayed = '0'

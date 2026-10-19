@@ -3,8 +3,8 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 
 // The trailing trend series follows the organization's own fiscal calendar:
-// a quarterly calendar prices whole declared quarters labelled with the
-// period names, while a monthly calendar keeps calendar months. Only the
+// a quarterly calendar prices whole declared quarters labelled from their
+// fiscal position and dates in the viewer's locale, while a monthly calendar keeps calendar months. Only the
 // database (and the boundaries around it) is doubled — bucketing,
 // translation-free merging and labelling run for real.
 
@@ -59,16 +59,16 @@ registerHooks({ resolve(specifier, context, next) {
 const { healthData } = await import("./health-data");
 const period = { from: "2026-04-01", to: "2026-06-30", label: "Q2" };
 
-test("a quarterly calendar prices declared quarters labelled with period names", async () => {
+test("a quarterly calendar prices declared quarters labelled as fiscal periods", async () => {
   state.cadence = "quarterly";
   const result = await healthData(period, "00000000-0000-4000-8000-000000000001", null);
   assert.equal(result.monthly.length, 2);
   assert.equal(result.monthly[0]?.month, "2026-01-01");
-  assert.equal(result.monthly[0]?.label, "Q1 FY2026");
+  assert.equal(result.monthly[0]?.label, "P01 FY2026 · Jan 2026 – Mar 2026");
   assert.equal(result.monthly[0]?.revenue, "100.0000");
   assert.equal(result.monthly[0]?.grossProfit, "60.0000");
   assert.equal(result.monthly[1]?.month, "2026-04-01");
-  assert.equal(result.monthly[1]?.label, "Q2 FY2026");
+  assert.equal(result.monthly[1]?.label, "P02 FY2026 · Apr 2026 – Jun 2026");
   assert.equal(result.monthly[1]?.revenue, "200.0000");
   assert.equal(result.monthly[1]?.operatingIncome, "100.0000");
 });
@@ -81,13 +81,13 @@ test("a monthly calendar keeps calendar months", async () => {
   assert.ok((result.monthly[11]?.label ?? "").includes("26"));
 });
 
-test("declared future period names start after the selected end", async () => {
+test("declared future period labels start after the selected end", async () => {
   // Mid-Q1 sees only Q2 ahead; at the end of the declared calendar nothing
   // is ahead; a monthly calendar leaves naming to the client (null).
   const org = "00000000-0000-4000-8000-000000000001";
   state.cadence = "quarterly";
   const mid = await healthData({ from: "2026-01-01", to: "2026-03-15", label: "Q1" }, org, null);
-  assert.deepEqual(mid.forecast.futurePeriodNames, ["Q2 FY2026"]);
+  assert.deepEqual(mid.forecast.futurePeriodNames, ["P02 FY2026 · Apr 2026 – Jun 2026"]);
   const end = await healthData({ from: "2026-04-01", to: "2026-06-30", label: "Q2" }, org, null);
   assert.deepEqual(end.forecast.futurePeriodNames, []);
   state.cadence = "monthly";

@@ -8,6 +8,7 @@ import { parseReportQuery } from '../../../../lib/report-filters'
 import { spendVelocityData } from '../../../../lib/analytics/spend-velocity-data'
 import { reportExpenseAccess } from '../../../../lib/expense-access'
 import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
+import { reportPeriodLabel } from '../../../../lib/format'
 import { spendVelocityStrings } from '../../../../lib/analytics/spend-velocity-strings'
 import type { SpendVelocityView } from './SpendVelocityView'
 
@@ -52,15 +53,19 @@ export async function loadSpendVelocity(sp: Record<string, string | undefined>):
   // Insight sentences resolve through the analytics catalog in the request
   // locale (users.locale ?? org defaultLocale ?? en) — the same locale the
   // statements use. Direct loader callers keep the English default.
-  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
+  const locale = await getLocale()
+  const [tc, picker] = await Promise.all([getTranslations('analytics'), analyticsFiscalPeriodPicker(authz.user.orgId, locale)])
+  // An accounting-period window reads as every period list labels it, in
+  // the viewer's locale; custom windows read as their localized dates.
+  const periodLabel = reportPeriodLabel(period, locale)
   const strings = spendVelocityStrings((key, values) => tc(key, values), locale)
-  const data = await spendVelocityData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz.allowedSubsidiaryIds, strings,
+  const data = await spendVelocityData(authz.user.orgId, { from: period.from, to: period.to, label: periodLabel }, authz.allowedSubsidiaryIds, strings,
     { expenseAccess: await reportExpenseAccess(authz) })
 
   return {
     title: t('title'),
     backLabel: t('backToHub'),
-    periodLabel: period.label,
+    periodLabel,
     extraPeriods: picker.extraPeriods,
     extraPeriodsLabel: picker.extraPeriodsLabel,
     data,

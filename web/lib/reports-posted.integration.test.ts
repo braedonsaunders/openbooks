@@ -151,6 +151,7 @@ test("financial statements exclude draft and other unposted journals", () => {
     // the period end across every ledger period ending on or before it.
     const scratch = await withBypass(() => createScratchOrg());
     const taxBookId = randomUUID();
+    const adjustmentPeriodId = randomUUID();
     try {
       await withBypass(async () => {
       const calendar = await db.execute(sql\`
@@ -164,7 +165,6 @@ test("financial statements exclude draft and other unposted journals", () => {
                starts_on = '2025-06-01', ends_on = '2025-06-30'
          where id = \${scratch.periodId}
       \`);
-      const adjustmentPeriodId = randomUUID();
       await db.execute(sql\`
         insert into accounting_periods
           (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
@@ -235,7 +235,8 @@ test("financial statements exclude draft and other unposted journals", () => {
         const trends = await financialTrends(scratch.orgId, 15);
         const regularPeriod = trends.find((row) => row.id === scratch.periodId);
         assert.ok(regularPeriod, "regular completed period appears in trends");
-        assert.equal(trends.some((row) => row.name === "FY25 Adjustment"), false, "adjustment periods are not trend rows");
+        assert.equal(regularPeriod.name, "P06 FY2025", "trend rows carry the canonical period label, not the stored name");
+        assert.equal(trends.some((row) => row.id === adjustmentPeriodId), false, "adjustment periods are not trend rows");
         // The regular row carries the entries the ledger assigned to it: the
         // adjustment period's revenue and accrual are that period's, and the
         // parallel book is excluded.

@@ -7,6 +7,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { vendorData } from '../../../../lib/analytics/vendor-data'
 import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
+import { reportPeriodLabel } from '../../../../lib/format'
 import { projectVendorDashboard } from '../../../../lib/analytics/overview-projection'
 import { vendorStrings } from '../../../../lib/analytics/vendor-strings'
 import type { VendorView } from './VendorView'
@@ -51,14 +52,18 @@ export async function loadVendorPerformance(sp: Record<string, string | undefine
 
   // Insight sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use.
-  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
+  const locale = await getLocale()
+  const [tc, picker] = await Promise.all([getTranslations('analytics'), analyticsFiscalPeriodPicker(authz.user.orgId, locale)])
+  // An accounting-period window reads as every period list labels it, in
+  // the viewer's locale; custom windows read as their localized dates.
+  const periodLabel = reportPeriodLabel(period, locale)
   const strings = vendorStrings((key, values) => tc(key, values), locale)
-  const data = await vendorData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings)
+  const data = await vendorData({ from: period.from, to: period.to, label: periodLabel }, authz.user.orgId, authz.allowedSubsidiaryIds, strings)
 
   return {
     title: t('title'),
     backLabel: t('backToHub'),
-    periodLabel: period.label,
+    periodLabel,
     extraPeriods: picker.extraPeriods,
     extraPeriodsLabel: picker.extraPeriodsLabel,
     data: projectVendorDashboard(data),

@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
+import { canonicalPeriodLabelSql } from "@openbooks/engine/periods/period-policy";
 import type { Authz } from "../authz";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { assistantListPage, capList, uuidInput } from "./tools-shared";
@@ -12,7 +13,9 @@ import { assistantListPage, capList, uuidInput } from "./tools-shared";
  * run/task/exception/signoff/lock query shapes, the same org-wide scope rule
  * (`guardCloseScope` in `web/lib/close-scope.ts` — close diagnostics span the
  * organization, so a restricted-subsidiary caller sees nothing, exactly as
- * the page and the runs API 404 them), and the same hrefs.
+ * the page and the runs API 404 them), and the same hrefs. Periods are named
+ * by their locale-free canonical label (`P05 FY2026`), so every fiscal year
+ * reads alike whatever free-text name a period was stored with.
  */
 
 // Close diagnostics span the organization: a selected subsidiary must never
@@ -37,7 +40,7 @@ const getCloseRunStatus: AssistantToolDef = {
       db.execute<Record<string, unknown>>(sql`
         select r.id, r.status, r.current_stage, r.readiness_score, r.target_close_date,
                r.started_at, r.last_validated_at,
-               p.id as period_id, p.name as period_name, p.starts_on, p.ends_on, p.fiscal_year,
+               p.id as period_id, ${canonicalPeriodLabelSql("p")} as period_name, p.starts_on, p.ends_on, p.fiscal_year,
                b.id as book_id, b.name as book_name, b.code as book_code,
                starter.name as started_by_name
           from close_runs r
@@ -158,7 +161,7 @@ const listPeriodLocks: AssistantToolDef = {
     const [rows, count] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`
         select l.id, l.module, l.state, l.locked_at, l.reason, l.reopen_expires_at,
-               p.name as period_name, p.starts_on, p.ends_on,
+               ${canonicalPeriodLabelSql("p")} as period_name, p.starts_on, p.ends_on,
                b.name as book_name, b.code as book_code,
                s.name as subsidiary_name,
                u.name as locked_by_name
@@ -227,7 +230,7 @@ const listPeriodReopenRequests: AssistantToolDef = {
     const [rows, count] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`
         select r.id, r.modules, r.reason, r.status, r.expires_at, r.reclosed_at, r.created_at,
-               p.name as period_name, b.name as book_name, b.code as book_code,
+               ${canonicalPeriodLabelSql("p")} as period_name, b.name as book_name, b.code as book_code,
                s.name as subsidiary_name,
                req.name as requested_by_name, app.name as approved_by_name, r.approved_at
           from close_reopen_requests r

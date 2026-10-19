@@ -350,6 +350,11 @@ const budgetCalendarCases = [
               [org.periodId],
               'the worksheet lists default-calendar periods only',
             )
+            // Columns are labelled from the fiscal position, not the stored name '2026-07'.
+            assert.equal(workspace.periods[0]!.name, 'P07 FY2026')
+            assert.deepEqual(workspace.periods[0]!.periodRef, {
+              fiscalYear: 2026, periodNumber: 7, adjustment: false, startsOn: '2026-07-01', endsOn: '2026-07-31',
+            })
             assert.equal(workspace.lines.length, 1, 'only the default-calendar line is returned')
             assert.equal(workspace.lines[0]!.amount, '100.0000')
             assert.equal(workspace.sliceTotal, '100.0000', 'the total counts the same set the worksheet shows')

@@ -8,7 +8,7 @@ import test from 'node:test'
 // year missing any source period silently dropped those lines (possibly all)
 // while the revision incremented and the API reported success. Every action
 // now verifies the FULL mapping before any write and refuses naming the
-// unmapped periods.
+// unmapped periods, labelled from their fiscal position and dates.
 
 const state: { orgId: string; actorId: string; allowed: Set<string> | null } = {
   orgId: '', actorId: '', allowed: null,
@@ -17,6 +17,7 @@ Object.assign(globalThis, { __budgetActionsState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
+    if (specifier === 'next-intl/server') return virtual(`export async function getLocale() { return 'en' }`)
     if (specifier === '../../../../../lib/feature-gates' || (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetActionsState;
@@ -131,7 +132,7 @@ test('copy refuses when the target year misses a source period, writing nothing'
     const response = await post(sourceId, { action: 'copy', fiscalYear: 2027, expectedRevision: 1 })
     const body = (await response.json()) as { error?: string }
     assert.match(body.error ?? '', /unmapped_periods/, `copy must refuse naming periods: ${JSON.stringify(body)}`)
-    assert.match(body.error ?? '', /2026-07/, 'the refusal names the unmapped source period')
+    assert.match(body.error ?? '', /source period\(s\) P07 FY2026 · Jul 2026/, 'the refusal names the unmapped source period')
 
     const after = await scenarioState(sourceId, org.orgId)
     assert.deepEqual(after, before, 'the refused copy changes neither revision nor lines')
@@ -180,7 +181,7 @@ test('copy_prior_actuals refuses before its delete when prior actuals lack a des
     const response = await post(targetId, { action: 'copy_prior_actuals', expectedRevision: 1 })
     const body = (await response.json()) as { error?: string }
     assert.match(body.error ?? '', /unmapped_periods/, `actuals copy must refuse: ${JSON.stringify(body)}`)
-    assert.match(body.error ?? '', /2026-07/)
+    assert.match(body.error ?? '', /period\(s\) P07 FY2026 · Jul 2026/, 'the refusal names the unmapped actuals period')
 
     const after = await scenarioState(targetId, org.orgId)
     assert.deepEqual(after, before, 'the refused actuals copy keeps the lines it would have deleted first')

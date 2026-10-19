@@ -127,7 +127,7 @@ export async function loadAccounting(): Promise<AccountingData> {
     assets: can(authz, 'assets.read'),
   }
   const [data, healthResult, navGroups] = await Promise.all([
-    accountingHome(authz.user.orgId, authz.allowedSubsidiaryIds, access),
+    accountingHome(authz.user.orgId, authz.allowedSubsidiaryIds, access, locale),
     financialsVisible
       ? financialHealth({ from: yearWindow.from, to: yearWindow.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, healthStrings(tAnalytics, locale))
       : Promise.resolve(null),

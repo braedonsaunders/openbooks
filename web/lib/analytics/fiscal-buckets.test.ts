@@ -8,7 +8,7 @@ const periods = [
   { fiscalYear: 2026, periodNumber: 2, name: "P2", from: "2026-03-02", to: "2026-03-29" },
 ];
 
-test("declared periods keep names and labels, fallback boxes never drop", () => {
+test("declared periods read as period labels in the viewer locale, fallback boxes never drop", () => {
   const boxes = fiscalMonthlyBoxes(
     periods,
     "2026-01-01",
@@ -20,13 +20,14 @@ test("declared periods keep names and labels, fallback boxes never drop", () => 
     "0",
     new Map([["2026-03-02", "P2 special"]]),
     (ym) => `M(${ym})`,
+    "en",
   );
   // Declared and fallback boxes interleave in chronological order: the
   // January fallback sorts ahead of the February period, never after the
-  // run — and a resolved label wins over the period name.
+  // run — and a resolved label wins over the derived period label.
   assert.deepEqual(boxes, [
     { month: "2026-01", label: "M(2026-01)", spend: "25.0000" },
-    { month: "2026-02-01", label: "P1", spend: "100.0000" },
+    { month: "2026-02-01", label: "P01 FY2026 · Feb 2026 – Mar 2026", spend: "100.0000" },
     { month: "2026-03-02", label: "P2 special", spend: "0" },
   ]);
 });

@@ -236,7 +236,7 @@ export async function vendorData(
            and ${excludePeriodEndJournals(sql`origin`)}
       )
       select ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
-        ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
+        ${fiscalBucketLabel(buckets.useFiscal, strings.locale)} as bucket_label,
         sub.base_currency as func,
         sum(l.amount) as spend, max(e.posting_date)::text as late
       from ew e
@@ -442,7 +442,7 @@ export async function vendorData(
   });
 
   const monthly: MonthSpend[] = !includeMonthly ? [] : buckets.useFiscal
-    ? fiscalMonthlyBoxes(buckets.periods, startIso, to, spendByBucket, zero, bucketLabels, (ym) => strings.monthLabel(ym))
+    ? fiscalMonthlyBoxes(buckets.periods, startIso, to, spendByBucket, zero, bucketLabels, (ym) => strings.monthLabel(ym), strings.locale)
     : Array.from({ length: 12 }, (_, i) => {
         const dt = utcDateFromParts(start.getUTCFullYear(), start.getUTCMonth() + i, 1);
         const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;

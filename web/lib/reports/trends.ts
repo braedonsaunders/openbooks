@@ -2,11 +2,13 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { db } from "@openbooks/engine/platform/db";
+import { canonicalPeriodLabelSql } from "@openbooks/engine/periods/period-policy";
 import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { statementBookIdsExpr } from "../gl-summary";
 
 export type FinancialTrendRow = {
   id: string;
+  /** Locale-free canonical period label (`P05 FY2026`), never the free-text stored name. */
   name: string;
   starts_on: string;
   ends_on: string;
@@ -51,7 +53,7 @@ export async function financialTrends(
   const book = statementBookIdsExpr(orgId, bookId);
   const rows = (await db.execute<FinancialTrendRow>(sql`
     with recent as (
-      select p.id, p.name, p.starts_on, p.ends_on
+      select p.id, p.fiscal_year, p.period_number, p.is_adjustment, p.starts_on, p.ends_on
         from accounting_periods p
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        where p.org_id = ${orgId} and fc.is_default and fc.is_active
@@ -71,7 +73,7 @@ export async function financialTrends(
         left join accounts a on a.id = l.account_id and a.org_id = l.org_id
        group by p.id
     )
-    select p.id, p.name, p.starts_on::text, p.ends_on::text,
+    select p.id, ${canonicalPeriodLabelSql("p")} as name, p.starts_on::text, p.ends_on::text,
            a.revenue::text, a.cogs::text, a.expenses::text,
            (a.revenue - a.cogs)::text as gross_profit,
            (a.revenue - a.cogs - a.expenses)::text as net_income,

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { setupReadSource } from './read-shape'
 import { db } from '@openbooks/engine/platform/db'
+import { canonicalPeriodLabelSql, periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
 import { loadSubsidiaryContext, recordOwnerSubsidiary, restrictionAdmits } from '@openbooks/engine/organization/subsidiaries'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
@@ -63,6 +64,7 @@ export async function loadEntityOptions(
   source: string,
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+  locale?: string,
 ): Promise<RefOption[]> {
   if (source === 'payroll-lineage-employers') {
     return (await db.execute<RefOption>(sql`select id::text as value,name as label from subsidiaries
@@ -172,9 +174,14 @@ export async function loadEntityOptions(
     return options.rows as RefOption[]
   }
   if (source === 'accounting-periods') {
+    // Periods read as every period list labels them, from the fiscal position
+    // and dates (`P07 FY2026 · Jul 2026` in the viewer's locale), so every
+    // fiscal year reads alike; without a viewer locale the label is the
+    // locale-free canonical form. The value stays the period id.
+    const label = locale ? periodDisplayLabelSql(locale, 'p') : canonicalPeriodLabelSql('p')
     const periods = await db.execute(sql`
-      select id as value, name as label from accounting_periods
-       where org_id = ${orgId} order by starts_on desc, period_number desc`);
+      select p.id as value, ${label} as label from accounting_periods p
+       where p.org_id = ${orgId} order by p.starts_on desc, p.period_number desc`);
     return periods.rows as RefOption[]
   }
   if (source === 'items') {
@@ -367,12 +374,14 @@ export async function loadRefOptions(
   entity: SetupEntity,
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+  /** Viewer locale for option labels that render dates (accounting periods). */
+  locale?: string,
 ): Promise<Record<string, RefOption[]>> {
   const out: Record<string, RefOption[]> = {}
   for (const source of refSources(entity)) {
     out[source] = source === 'accounts'
       ? await loadAccounts(orgId, allowedSubsidiaryIds)
-      : await loadEntityOptions(source, orgId, allowedSubsidiaryIds)
+      : await loadEntityOptions(source, orgId, allowedSubsidiaryIds, locale)
   }
   return out
 }

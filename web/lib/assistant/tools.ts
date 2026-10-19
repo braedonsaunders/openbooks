@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { abs as absMoney, add as addMoney, cmp as compareMoney } from "@openbooks/engine/money/money";
 import { db } from "@openbooks/engine/platform/db";
+import { canonicalPeriodLabel } from "@openbooks/engine/periods/period-policy";
 import { can, subsidiaryScopeAllows, type Authz } from "../authz";
 import { accountsWithBalances, entryDetail } from "../data";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -921,7 +922,14 @@ const financialPeriods: AssistantToolDef = {
         href: "/close",
         periods: rows.rows.map((row) => ({
           id: row.id,
+          // The stored name is the period's own data; the label reads alike
+          // across every fiscal year (`P05 FY2026`, `FY2026 adjustment`).
           name: row.name,
+          label: canonicalPeriodLabel({
+            fiscalYear: Number(row.fiscal_year),
+            periodNumber: Number(row.period_number),
+            adjustment: row.is_adjustment === true,
+          }),
           fiscalYear: row.fiscal_year,
           periodNumber: row.period_number,
           fromDate: row.starts_on,

@@ -8,6 +8,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { healthData, healthSummaryData } from '../../../../lib/analytics/health-data'
 import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
+import { reportPeriodLabel } from '../../../../lib/format'
 import { healthStrings, localizedRatioDefs } from '../../../../lib/analytics/health-strings'
 import type { FinancialHealthView } from './FinancialHealthView'
 
@@ -55,28 +56,32 @@ async function financialHealthContext(sp: Record<string, string | undefined>) {
   // Finding sentences and ratio definitions resolve through the analytics
   // catalog in the request locale — the same locale the statements use.
   // Direct loader callers keep the English defaults.
-  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
+  const locale = await getLocale()
+  const [tc, picker] = await Promise.all([getTranslations('analytics'), analyticsFiscalPeriodPicker(authz.user.orgId, locale)])
+  // An accounting-period window reads as every period list labels it, in
+  // the viewer's locale; custom windows read as their localized dates.
+  const periodLabel = reportPeriodLabel(period, locale)
   const boundT = (key: string, values?: Record<string, string | number>) => tc(key, values)
   const strings = healthStrings(boundT, locale)
-  return { t, authz, period, strings, boundT, picker }
+  return { t, authz, period, periodLabel, strings, boundT, picker }
 }
 
 export async function loadFinancialHealthPreview(sp: Record<string, string | undefined>) {
-  const { authz, period, strings } = await financialHealthContext(sp)
-  return { data: await healthSummaryData(period, authz.user.orgId, authz.allowedSubsidiaryIds, strings), periodLabel: period.label }
+  const { authz, period, periodLabel, strings } = await financialHealthContext(sp)
+  return { data: await healthSummaryData({ ...period, label: periodLabel }, authz.user.orgId, authz.allowedSubsidiaryIds, strings), periodLabel }
 }
 
 export async function loadFinancialHealth(sp: Record<string, string | undefined>): Promise<FinancialHealthData> {
-  const { t, authz, period, strings, boundT, picker } = await financialHealthContext(sp)
+  const { t, authz, period, periodLabel, strings, boundT, picker } = await financialHealthContext(sp)
   const [data, budgetsEnabled] = await Promise.all([
-    healthData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
+    healthData({ from: period.from, to: period.to, label: periodLabel }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
     isFeatureEnabled(authz.user.orgId, 'budgets'),
   ])
 
   return {
     title: t('title'),
     backLabel: t('backToHub'),
-    periodLabel: period.label,
+    periodLabel,
     extraPeriods: picker.extraPeriods,
     extraPeriodsLabel: picker.extraPeriodsLabel,
     defs: localizedRatioDefs(boundT),
