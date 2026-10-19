@@ -23,6 +23,8 @@ import { getServiceVisit, listMyVisits } from "./reads.ts";
 import { createPortalServiceRequest, createServiceRequest, listPortalServiceRequests } from "./requests.ts";
 import { cancelVisit, setVisitFieldStatus } from "./visits.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
+import { decideGate } from "../flows/gates.ts";
+import { seedApprovalFlow } from "../testing/fixtures.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 installEngineSeams();
@@ -263,6 +265,43 @@ test("voiding a per-job invoice releases its billing link before reopening the j
      where org_id = ${f.org.orgId} and job_id = ${job.id} and invoice_document_id = ${invoice.invoiceId}`))).rows[0]!;
   assert.ok(released.releasedAt);
   assert.equal(released.reason, "The invoice was voided");
+}));
+
+test("rejecting a completion removes submitted labor from a later invoice", enabled, async () => fixture(async (f) => {
+  const { job, visitId } = await newJob(f);
+  assert.ok(visitId);
+  await withBypassContext(() => seedApprovalFlow(f.org.orgId, {
+    subjectKind: "service_visit_completion", assignees: [{ type: "user", userId: f.dispatcher }], mode: "any",
+  }));
+  const assigned = await assignVisit({ ...as(f, f.dispatcher), boardId: f.dispatchBoard, visitId, expectedRevision: 1, workerPartyId: f.techA, startsAt: at(f.today, "14:00") });
+  const dispatched = await dispatchVisit({ ...as(f, f.dispatcher), boardId: f.dispatchBoard, visitId, expectedRevision: assigned.visitRevision });
+  const enRoute = await setVisitFieldStatus({ ...as(f, f.techAUser), visitId, expectedRevision: dispatched.visitRevision, to: "en_route" });
+  const onSite = await setVisitFieldStatus({ ...as(f, f.techAUser), visitId, expectedRevision: enRoute.revision, to: "on_site" });
+  const first = await completeVisit({ ...as(f, f.techAUser), visitId, expectedRevision: onSite.revision, workNotes: "First completion attempt.",
+    labor: [{ startedAt: at(f.today, "08:00"), hours: "4" }] });
+  assert.equal(first.reviewStatus, "pending");
+  const firstGate = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    select id from flow_gates where org_id = ${f.org.orgId} and subject_kind = 'service_visit_completion' and subject_id = ${visitId} and status = 'pending'`))).rows[0]!;
+  await withBypassContext(() => decideGate({ gateId: firstGate.id, decision: "rejected", userId: f.dispatcher, comment: "Correct the work record" }));
+  const rejectedLabor = (await withBypassContext(() => db.execute<{ status: string; rejectionReason: string | null }>(sql`
+    select status, rejection_reason as "rejectionReason" from time_entries where org_id = ${f.org.orgId} and id = ${first.laborEntryIds[0]}`))).rows[0]!;
+  assert.deepEqual(rejectedLabor, { status: "rejected", rejectionReason: "Correct the work record" });
+
+  const reopenedRevision = (await withBypassContext(() => db.execute<{ revision: number }>(sql`
+    select revision from service_visits where org_id = ${f.org.orgId} and id = ${visitId}`))).rows[0]!.revision;
+  const second = await completeVisit({ ...as(f, f.techAUser), visitId, expectedRevision: reopenedRevision, workNotes: "Corrected completion.",
+    labor: [{ startedAt: at(f.today, "08:00"), hours: "3" }] });
+  assert.equal(second.reviewStatus, "pending");
+  const secondGate = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    select id from flow_gates where org_id = ${f.org.orgId} and subject_kind = 'service_visit_completion' and subject_id = ${visitId} and status = 'pending'`))).rows[0]!;
+  await withBypassContext(() => decideGate({ gateId: secondGate.id, decision: "approved", userId: f.dispatcher }));
+  await withBypassContext(() => db.execute(sql`update time_entries set status = 'approved', approved_by = ${f.dispatcher}, approved_at = now()
+    where org_id = ${f.org.orgId} and id = ${second.laborEntryIds[0]}`));
+
+  const invoice = await invoiceServiceWork({ ...as(f, f.dispatcher), jobId: job.id, visitId });
+  const laborLine = (await withBypassContext(() => db.execute<{ quantity: string; amount: string }>(sql`
+    select quantity::text, amount::text from document_lines where org_id = ${f.org.orgId} and document_id = ${invoice.invoiceId} and item_id = ${f.laborItem}`))).rows[0]!;
+  assert.deepEqual(laborLine, { quantity: "3.0000", amount: "240.0000" });
 }));
 
 test("two dispatchers assigning the same visit: exactly one booking wins and the other is refused as stale", enabled, async () => fixture(async (f) => {

@@ -293,6 +293,14 @@ export async function releaseCompletionReview(input: { orgId: string; actorId: s
   await auditService({ orgId: input.orgId, table: "service_visits", rowId: visit.id, action: "update", actorId: input.actorId,
     before: { reviewStatus: "pending" }, after: { reviewStatus: input.outcome }, reason });
   if (input.outcome === "rejected") {
+    const rejectedLabor = (await db.execute<{ id: string }>(sql`update time_entries
+      set status = 'rejected', rejection_reason = ${reason}, updated_at = now(), updated_by = ${input.actorId}
+      where org_id = ${input.orgId} and service_visit_id = ${visit.id} and status = 'submitted' and billing_status = 'unbilled'
+      returning id`)).rows;
+    for (const entry of rejectedLabor) {
+      await auditService({ orgId: input.orgId, table: "time_entries", rowId: entry.id, action: "update", actorId: input.actorId,
+        after: { status: "rejected", rejectionReason: reason }, reason });
+    }
     const reopened = { ...visit, revision, reviewStatus: "rejected" as const };
     await moveVisitStatus(actor, reopened, {
       to: "on_site", reason,
