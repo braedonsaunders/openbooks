@@ -500,9 +500,9 @@ export async function listSessions(
       left join users ou on ou.org_id = s.org_id and ou.id = s.opened_by
       left join users cu on cu.org_id = s.org_id and cu.id = s.closed_by
       left join lateral (
-        select count(*) filter (where kind = 'sale') as sale_count,
-               sum(total_minor) filter (where kind = 'sale') as sales_total,
-               sum(total_minor) filter (where kind = 'refund') as refunds_total
+        select count(*) filter (where pt.kind = 'sale') as sale_count,
+               sum(pt.total_minor) filter (where pt.kind = 'sale') as sales_total,
+               sum(pt.total_minor) filter (where pt.kind = 'refund') as refunds_total
           from pos_transactions pt
           join documents d on d.org_id = pt.org_id and d.id = pt.document_id and d.status = 'posted' -- Live entries only: voided transactions do not contribute to current session totals
          where pt.org_id = s.org_id and pt.session_id = s.id
