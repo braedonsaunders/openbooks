@@ -295,6 +295,7 @@ export async function assertPeriodModulesOpen(
     reversesEntryId?: string | null;
   },
 ): Promise<void> {
+  await assertPeriodNotSealed(executor, args);
   const modules = [...new Set<CloseModule>([...args.modules, "gl"])];
   const subsidiaryIds: (string | null)[] = args.subsidiaryIds.length
     ? [...new Set(args.subsidiaryIds)]
@@ -321,7 +322,6 @@ export async function assertPeriodModulesOpen(
         );
     }
   }
-  await assertPeriodNotSealed(executor, args);
 }
 
 /**
