@@ -8,12 +8,12 @@ import { add, cmp, div, fromUnits, mul, mulDecimal, mulRate, neg, normalizeMoney
 import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from './fx-presentation'
 import { openItems } from './cash/open-items'
 import { paymentStats } from './cash/core'
-import { isFeatureEnabled } from './features'
 import { resolveProjectFinancials } from './project-financials'
 import { loadProjectType } from './project-type'
 import { crmOpportunityScope, crmSharedScope } from './crm-scope'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { customerOrderCommitmentsSource } from './customer-credit'
+import { enabledCustomerPulseSections } from './customer-pulse-access'
 import { loadCustomerPulseTimeline } from './customer-pulse-timeline'
 import type { CustomerPulseTimelineItem, CustomerPulseTimelinePage } from './customer-pulse-timeline-params'
 import type { CustomerPulseSections } from './customer-pulse-sections'
@@ -144,7 +144,8 @@ export async function loadCustomerPulse(
   // No sections means no access: callers must resolve permissions through
   // pulseSectionsFor first. Defaulting to everything here would reintroduce
   // the leak the parameter exists to close.
-  if (!sections || (!sections.ar && !sections.crm && !sections.projects)) return null
+  const effectiveSections = await enabledCustomerPulseSections(orgId, sections)
+  if (!effectiveSections) return null
 
   const asOf = await businessToday(orgId)
   const allowedSubArray = allowedSubsidiaryIds ? Array.from(allowedSubsidiaryIds) : undefined
@@ -196,12 +197,11 @@ export async function loadCustomerPulse(
   // Translate the limit from its denominated currency into the presentation
   // base at the closing spot. A missing rate refuses by name (fail closed),
   // never by silently mixing currencies.
-  const limitRates = hasCreditLimit
-    ? await presentationRates(orgId, base, [creditLimitCurrency], asOf)
-    : null
-  const creditLimit = hasCreditLimit
-    ? mulRate(normalizeMoney(creditLimitRaw!), limitRates!.get(lineFunctional(creditLimitCurrency, base))!)
-    : null
+  let creditLimit: PulseMoney | null = null
+  if (effectiveSections.ar && hasCreditLimit) {
+    const limitRates = await presentationRates(orgId, base, [creditLimitCurrency], asOf)
+    creditLimit = mulRate(normalizeMoney(creditLimitRaw!), limitRates.get(lineFunctional(creditLimitCurrency, base))!)
+  }
 
   const party: CustomerPulseData['party'] = {
     id: partyRow.id,
@@ -215,7 +215,7 @@ export async function loadCustomerPulse(
   // Credit controls are AR-domain facts (same rows the directory's `crm`
   // bundle withholds from crm.accounts.read holders). A caller without
   // ar.read gets identity only — the keys are absent, not nulled.
-  if (sections.ar) {
+  if (effectiveSections.ar) {
     party.paymentTermsName = partyRow.terms_name
     party.isOnHold = Boolean(partyRow.is_on_hold)
     party.holdReason = partyRow.hold_reason
@@ -229,7 +229,7 @@ export async function loadCustomerPulse(
   let aging: CustomerPulseData['aging']
   let credit: CustomerPulseData['credit']
   let paymentMetrics: CustomerPulseData['paymentMetrics']
-  if (sections.ar) {
+  if (effectiveSections.ar) {
     // 2. Open AR items and aging buckets
     const [allOpenItems, stats] = await Promise.all([
       openItems(orgId, 'ar', asOf, allowedSubArray, partyId),
@@ -334,7 +334,7 @@ export async function loadCustomerPulse(
   // a missing close date reads the current spot). One shared rate context
   // covers every row; a missing rate refuses by name instead of mixing.
   let pipeline: CustomerPulseData['pipeline']
-  if (sections.crm) {
+  if (effectiveSections.crm) {
     const oppRows = (await db.execute<{
       projected: string
       weighted: string
@@ -397,7 +397,7 @@ export async function loadCustomerPulse(
   // source. Profit here is realized billing margin (invoiced minus cost),
   // so the figures always tie: profit + cost = billed.
   let projects: CustomerPulseData['projects']
-  if (sections.projects && await isFeatureEnabled(orgId, 'projects')) {
+  if (effectiveSections.projects) {
     const listRes = await db.execute<{ id: string; status: string }>(sql`
       select prj.id, prj.status
         from projects prj
@@ -429,13 +429,13 @@ export async function loadCustomerPulse(
     }
   }
 
-  const timelinePage = await loadCustomerPulseTimeline(partyId, orgId, allowedSubsidiaryIds, sections, timelineSearch)
+  const timelinePage = await loadCustomerPulseTimeline(partyId, orgId, allowedSubsidiaryIds, effectiveSections, timelineSearch)
   if (!timelinePage) return null
   const { rows: timeline, ...timelinePagination } = timelinePage
 
   return {
     party,
-    sections: { ...sections },
+    sections: { ...effectiveSections },
     ...(aging !== undefined ? { aging } : null),
     ...(credit !== undefined ? { credit } : null),
     ...(paymentMetrics !== undefined ? { paymentMetrics } : null),

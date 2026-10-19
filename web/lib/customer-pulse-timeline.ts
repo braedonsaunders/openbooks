@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/platform/database'
 import { normalizeMoney } from '@openbooks/engine/money'
 import { crmActivityScope, crmSharedScope } from './crm-scope'
 import { subsidiaryVisibleFilter } from './subsidiaries'
+import { enabledCustomerPulseSections } from './customer-pulse-access'
 import type { CustomerPulseSections } from './customer-pulse-sections'
 import { customerPulseTimelineParams, type CustomerPulseTimelineItem, type CustomerPulseTimelinePage } from './customer-pulse-timeline-params'
 
@@ -17,17 +18,18 @@ export async function loadCustomerPulseTimeline(
   sections: CustomerPulseSections | undefined,
   search: Record<string, string | string[] | undefined> = {},
 ): Promise<CustomerPulseTimelinePage | null> {
-  if (!sections || (!sections.ar && !sections.crm && !sections.projects)) return null
+  const effectiveSections = await enabledCustomerPulseSections(orgId, sections)
+  if (!effectiveSections) return null
   const params = customerPulseTimelineParams(search)
   const party = await db.execute<{ id: string }>(sql`
     select p.id from parties p where p.org_id = ${orgId} and p.id = ${partyId}
     ${crmSharedScope(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
   `)
   if (!party.rows.length) return null
-  if (!sections.ar && !sections.crm) return { ...params, rows: [], total: 0 }
+  if (!effectiveSections.ar && !effectiveSections.crm) return { ...params, rows: [], total: 0 }
 
   const sources: SQL[] = []
-  if (sections.crm) sources.push(sql`
+  if (effectiveSections.crm) sources.push(sql`
     select a.id, 'activity'::text as type, a.subject as title, a.body as description,
            null::text as amount, null::text as currency,
            coalesce(a.starts_at, a.due_at, a.created_at) as timestamp,
@@ -39,7 +41,7 @@ export async function loadCustomerPulseTimeline(
            and l.subject_kind = 'account' and l.subject_id = ${partyId})
        ${crmActivityScope(allowedSubsidiaryIds)}
   `)
-  if (sections.ar) sources.push(sql`
+  if (effectiveSections.ar) sources.push(sql`
     select d.id,
            case d.kind when 'quote' then 'estimate' when 'sales_order' then 'sales_order'
              when 'customer_payment' then 'payment' else 'invoice' end as type,

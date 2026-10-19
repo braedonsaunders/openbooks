@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-const { pulseSectionsFor } = await import('./customer-pulse.ts')
+const { pulseSectionsFor, pulseSectionsForEnabledFeatures } = await import('./customer-pulse-sections.ts')
 
 /**
  * The pulse is a combined payload: no single read permission unlocks all of
@@ -33,4 +33,19 @@ test('pulseSectionsFor refuses callers with none of the reads', () => {
 test('pulseSectionsFor honors wildcard grants', () => {
   const admin = pulseSectionsFor(() => true)
   assert.deepEqual(admin, { ar: true, crm: true, projects: true })
+})
+
+test('pulse sections require both permission and the matching organization feature', () => {
+  const crmOnly = pulseSectionsFor((p) => p === 'crm.accounts.read')!
+  assert.equal(pulseSectionsForEnabledFeatures(crmOnly, { crm: false, projects: true }), null)
+
+  const projectsOnly = pulseSectionsFor((p) => p === 'projects.read')!
+  assert.equal(pulseSectionsForEnabledFeatures(projectsOnly, { crm: true, projects: false }), null)
+
+  const mixed = pulseSectionsFor((p) => p === 'ar.read' || p === 'crm.accounts.read' || p === 'projects.read')!
+  assert.deepEqual(pulseSectionsForEnabledFeatures(mixed, { crm: false, projects: true }), {
+    ar: true,
+    crm: false,
+    projects: true,
+  })
 })
