@@ -294,11 +294,25 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
   }
 
   const loadHistory = async () => {
-    const response = await fetch(
-      `/api/page-specs?route=${encodeURIComponent(drawer.route)}&history=1`,
-    )
-    const body = (await response.json().catch(() => ({}))) as { versions?: PageSpecVersion[] }
-    setVersions(body.versions ?? [])
+    setVersions(null)
+    setErrors([])
+    try {
+      const response = await fetch(
+        `/api/page-specs?route=${encodeURIComponent(drawer.route)}&history=1`,
+      )
+      const body = (await response.json().catch(() => ({}))) as {
+        versions?: PageSpecVersion[]
+        errors?: string[]
+        error?: string
+      }
+      if (!response.ok) {
+        setErrors(body.errors ?? [refusalMessageFromBody(body, { fallback: tCommon('feedback.somethingWentWrong') }) ?? tCommon('feedback.somethingWentWrong')])
+        return
+      }
+      setVersions(body.versions ?? [])
+    } catch {
+      setErrors([tCommon('feedback.somethingWentWrong')])
+    }
   }
 
   const restore = async (versionId: string) => {
@@ -332,19 +346,23 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
 
   const remove = async () => {
     setBusy(true)
+    setErrors([])
     try {
       const response = await fetch(
         `/api/page-specs?route=${encodeURIComponent(drawer.route)}` +
-          (drawer.overrideScope === 'user' ? '&scope=user' : ''),
+          (scope === 'user' ? '&scope=user' : ''),
         { method: 'DELETE' },
       )
+      const body = (await response.json().catch(() => ({}))) as { errors?: string[]; error?: string }
       if (!response.ok) {
-        setErrors([tCommon('feedback.somethingWentWrong')])
+        setErrors(body.errors ?? [refusalMessageFromBody(body, { fallback: tCommon('feedback.somethingWentWrong') }) ?? tCommon('feedback.somethingWentWrong')])
         return
       }
       toast.success(t('actions.removed'))
       router.replace('/admin/page-layouts')
       router.refresh()
+    } catch {
+      setErrors([tCommon('feedback.somethingWentWrong')])
     } finally {
       setBusy(false)
     }
@@ -484,7 +502,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
               <div className="space-y-2">
                 <p className={`text-xs ${TONE.chrome}`}>{t('history.help')}</p>
                 {versions === null ? (
-                  <p className={`text-xs ${TONE.chrome}`}>{t('history.loading')}</p>
+                  errors.length === 0 ? <p className={`text-xs ${TONE.chrome}`}>{t('history.loading')}</p> : null
                 ) : versions.length === 0 ? (
                   <p className={`text-sm ${TONE.chrome}`}>{t('history.empty')}</p>
                 ) : (

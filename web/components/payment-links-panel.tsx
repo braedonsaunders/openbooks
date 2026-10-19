@@ -28,6 +28,7 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive" | "
 /** Online payment links on a posted customer invoice — create, copy, void. */
 export function PaymentLinksPanel({ documentId, canManage }: { documentId: string; canManage: boolean }) {
   const t = useTranslations("ar.paymentLinks");
+  const tCommon = useTranslations("common");
   const [links, setLinks] = useState<Link[]>([]);
   const [providers, setProviders] = useState<string[]>([]);
   const [provider, setProvider] = useState("");
@@ -38,51 +39,72 @@ export function PaymentLinksPanel({ documentId, canManage }: { documentId: strin
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
-  const load = useCallback(() => {
-    return fetch(`/api/payments/links?documentId=${documentId}`)
-      .then((res) => {
-        if (res.status === 404) {
-          setAvailable(false);
-          return;
-        }
-        if (!res.ok) return;
-        return (res.json() as Promise<{ links: Link[]; providers: string[] }>).then((json) => {
-          setLinks(json.links);
-          setProviders(json.providers);
-          setProvider((p) => p || json.providers[0] || "");
-        });
-      });
-  }, [documentId]);
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/payments/links?documentId=${documentId}`);
+      if (res.status === 404) {
+        setAvailable(false);
+        setError(null);
+        return;
+      }
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, tCommon("feedback.somethingWentWrong")));
+        return;
+      }
+      const json = (await res.json()) as { links: Link[]; providers: string[] };
+      setAvailable(true);
+      setError(null);
+      setLinks(json.links);
+      setProviders(json.providers);
+      setProvider((p) => p || json.providers[0] || "");
+    } catch {
+      setError(tCommon("feedback.somethingWentWrong"));
+    }
+  }, [documentId, tCommon]);
   useEffect(() => {
-    void load();
+    void Promise.resolve().then(load);
   }, [load]);
 
-  if (!available || providers.length === 0) return null;
+  if (!available || (providers.length === 0 && !error)) return null;
 
   async function create() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/payments/links", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ documentId, provider }),
-    });
-    // The refusal reads through the shared helper so message, remedy and
-    // code render instead of the bare status text.
-    setBusy(false);
-    if (!res.ok) {
-      setError(await readApiErrorMessage(res, res.statusText));
-      return;
+    try {
+      const res = await fetch("/api/payments/links", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentId, provider }),
+      });
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare status text.
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, tCommon("feedback.somethingWentWrong")));
+        return;
+      }
+      await load();
+    } catch {
+      setError(tCommon("feedback.somethingWentWrong"));
+    } finally {
+      setBusy(false);
     }
-    await load();
   }
 
   async function voidLink(id: string) {
     setBusy(true);
     setError(null);
-    await fetch(`/api/payments/links/${id}`, { method: "DELETE" });
-    setBusy(false);
-    await load();
+    try {
+      const res = await fetch(`/api/payments/links/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, tCommon("feedback.somethingWentWrong")));
+        return;
+      }
+      await load();
+    } catch {
+      setError(tCommon("feedback.somethingWentWrong"));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function copy(token: string) {
@@ -121,9 +143,9 @@ export function PaymentLinksPanel({ documentId, canManage }: { documentId: strin
           {error}
         </p>
       ) : null}
-      {links.length === 0 ? (
+      {links.length === 0 && !error ? (
         <p className="text-xs text-slate-400 dark:text-slate-500">{t("empty")}</p>
-      ) : (
+      ) : links.length > 0 ? (
         <ul className="space-y-1.5">
           {links.map((link) => (
             <li key={link.id} className="flex items-center gap-2 text-sm">
@@ -161,7 +183,7 @@ export function PaymentLinksPanel({ documentId, canManage }: { documentId: strin
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
     </section>
   );
 }
