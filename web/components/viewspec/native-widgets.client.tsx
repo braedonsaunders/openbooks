@@ -67,6 +67,7 @@ export const ComplianceActions = dynamic(() => import("../../app/(app)/hrm/compl
 export const ContractCostDrawer = dynamic(() => import("../../app/(app)/revenue/contract-costs/ContractCostDrawer").then(module => module.ContractCostDrawer))
 export const ContractCostWorkspace = dynamic(() => import("../../app/(app)/revenue/contract-costs/ContractCostWorkspace").then(module => module.ContractCostWorkspace))
 export const ContractDrawer = dynamic(() => import("../../app/(app)/revenue/ContractDrawer").then(module => module.ContractDrawer))
+export const ContractorWithholdingWorkspace = dynamic(() => import("../../app/(app)/contractor-withholding/WithholdingWorkspace").then(module => module.WithholdingWorkspace))
 export const ConversationCreate = dynamic(() => import("../../app/(app)/hrm/performance/conversations/ConversationCreate").then(module => module.ConversationCreate))
 export const CrewWorkspace = dynamic(() => import("../field-time/CrewWorkspace").then(module => module.CrewWorkspace))
 export const CrmNewButton = dynamic(() => import("../../app/(app)/crm/CrmNewButton").then(module => module.CrmNewButton))

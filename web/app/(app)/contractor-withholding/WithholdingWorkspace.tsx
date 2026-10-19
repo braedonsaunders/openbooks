@@ -3,20 +3,19 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, PageHeader, Select } from '@openbooks/ui'
-import { ListPageLayout } from '@/components/page-layout'
+import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
 import { PagedTable } from '@/components/paged-table'
 import { AsyncUrlDrawer } from '@/components/async-url-drawer'
+import { DrawerTabStrip } from '@/components/drawer-tab-strip'
 import { useMoney } from '@/components/money-provider'
 import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
 import { DocTypeBadge } from '@/components/doc-type-badge'
 import { readApiErrorMessage } from '@/lib/api-error'
-import type { WithholdingPeriodSummary, WithholdingReturnView, WithholdingStatement } from '@openbooks/engine/contractor-withholding'
+import type { WithholdingDepositView, WithholdingPeriodSummary, WithholdingReturnView, WithholdingStatement } from '@openbooks/engine/contractor-withholding'
 import type { WithholdingEnrollmentOption } from '@/lib/contractor-withholding'
 import { DateField } from '@/components/date-field'
 
-type DepositRow = { documentId: string; documentNumber: string; kind: string; status: string; throughDate: string; dueDate: string | null; currency: string; total: string; sourceChanged: boolean }
 type StandingRow = { id: string; entityName: string | null; partyName: string; schemeCode: string; bandCode: string; status: string; validFrom: string; validTo: string | null }
 type ReturnPayload = { return: WithholdingReturnView; statements: WithholdingStatement[] }
 async function read<T>(url: string, options?: RequestInit): Promise<T> {
@@ -24,21 +23,27 @@ async function read<T>(url: string, options?: RequestInit): Promise<T> {
   if (!response.ok) throw new Error(await readApiErrorMessage(response, 'Request failed'))
   return await response.json() as T
 }
-export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, canSetup, canStandings, standings }: { enrollments: WithholdingEnrollmentOption[]; canManage: boolean; canReadJournal: boolean; canSetup: boolean; canStandings: boolean; standings: StandingRow[] }) {
+export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, standings, selected: selectedEnrollment, activeTab, periods, deposits, loadFailure, returnId }: {
+  enrollments: WithholdingEnrollmentOption[]
+  canManage: boolean
+  canReadJournal: boolean
+  standings: StandingRow[]
+  selected: string
+  activeTab: 'periods' | 'deposits' | 'standings'
+  periods: WithholdingPeriodSummary[]
+  deposits: WithholdingDepositView[]
+  loadFailure: string | null
+  returnId: string | null
+}) {
   const t = useTranslations('ap.withholding')
   const tc = useTranslations('common')
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
   const { money } = useMoney()
-  const selected = params.get('enrollment') || enrollments[0]?.id || ''
+  const selected = selectedEnrollment
   const enrollment = enrollments.find(row => row.id === selected)
-  const returnId = params.get('return')
-  const tab = params.get('tab') === 'standings' && canStandings ? 'standings' : params.get('tab') === 'deposits' && enrollment?.canDeposit ? 'deposits' : 'periods'
-  const [deposits, setDeposits] = useState<DepositRow[]>([])
-  const [depositsLoadedFor, setDepositsLoadedFor] = useState('')
-  const [periods, setPeriods] = useState<WithholdingPeriodSummary[]>([])
-  const [loadedFor, setLoadedFor] = useState('')
+  const tab = activeTab
   const [payload, setPayload] = useState<ReturnPayload | null>(null)
   const [failures, setFailures] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState<string | null>(null)
@@ -58,22 +63,6 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, c
     router.push(authorityHref(String(data.documentId), data.kind))
   }
   function navigate(values: Record<string, string | null>) { router.push(href(values), { scroll: false }) }
-  useEffect(() => {
-    if (!selected || tab !== 'periods') return
-    const abort = new AbortController()
-    read<{ periods: WithholdingPeriodSummary[] }>(`/api/contractor-withholding/periods?enrollmentId=${encodeURIComponent(selected)}`, { signal: abort.signal })
-      .then(data => { if (abort.signal.aborted) return; setPeriods(data.periods); setLoadedFor(selected); setFailures(previous => { const next = { ...previous }; delete next[selected]; return next }) })
-      .catch(error => { if (!abort.signal.aborted) setFailures(previous => ({ ...previous, [selected]: String(error.message) })) })
-    return () => abort.abort()
-  }, [selected, tab, retry])
-  useEffect(() => {
-    if (!selected || tab !== 'deposits') return
-    const abort = new AbortController()
-    read<{ deposits: DepositRow[] }>(`/api/contractor-withholding/deposits?enrollmentId=${encodeURIComponent(selected)}`, { signal: abort.signal })
-      .then(data => { if (abort.signal.aborted) return; setDeposits(data.deposits); setDepositsLoadedFor(selected); setFailures(previous => { const next = { ...previous }; delete next['deposits:' + selected]; return next }) })
-      .catch(error => { if (!abort.signal.aborted) setFailures(previous => ({ ...previous, ['deposits:' + selected]: String(error.message) })) })
-    return () => abort.abort()
-  }, [selected, tab, retry])
   useEffect(() => {
     if (!returnId) return
     const abort = new AbortController()
@@ -97,19 +86,19 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, c
     if (workpaper && !await confirmDialog({ message: t('reviewConfirmation'), confirmLabel: t('review'), tone: 'default' })) return
     await action(`/api/contractor-withholding/returns/${ret!.id}`, { action: 'file', filingReference, ...(workpaper || ret?.sourceOnlyRevision ? { confirmed: true } : {}) })
   }
-  return <ListPageLayout header={<>
-    <PageHeader title={t('title')} description={t('description')} actions={canSetup ? <Button asChild variant="outline"><Link href="/admin/setup/withholding-enrollments">{t('enrollments')}</Link></Button> : undefined} />
-    <div className="flex gap-2"><Button variant={tab === 'periods' ? 'secondary' : 'ghost'} onClick={() => navigate({ tab: null, return: null })}>{t('periods')}</Button>{enrollment?.canDeposit && <Button variant={tab === 'deposits' ? 'secondary' : 'ghost'} onClick={() => navigate({ tab: 'deposits', return: null })}>{t('deposits')}</Button>}{canStandings && <Button variant={tab === 'standings' ? 'secondary' : 'ghost'} onClick={() => navigate({ tab: 'standings', return: null })}>{t('standings')}</Button>}</div>
-    {tab !== 'standings' && <div className="flex flex-wrap items-end gap-3">
-      <div className="min-w-64"><Label>{t('enrollment')}</Label><Select value={selected} onChange={event => navigate({ enrollment: event.target.value, return: null })}><option value="">{t('selectEnrollment')}</option>{enrollments.map(row => <option value={row.id} key={row.id}>{row.entityName} · {row.schemeName} · {row.contractorReference}</option>)}</Select></div>
-      {canManage && tab === 'deposits' && enrollment?.canDeposit && <><div><Label>{t('depositThrough')}</Label><DateField value={depositThrough} onChange={value => setDepositThrough(value)} /></div><Button variant="outline" disabled={busy || !depositThrough} onClick={() => action('/api/contractor-withholding/deposits', { enrollmentId: selected, throughDate: depositThrough }, openAuthority)}>{t('deposit')}</Button></>}
-      {canManage && tab === 'periods' && selected && <><div><Label>{t('periodStart')}</Label><DateField value={periodStart} onChange={value => setPeriodStart(value)} /></div><Button disabled={busy || !periodStart} onClick={() => prepare(periodStart)}>{t('prepare')}</Button></>}
+  return <div className="space-y-4">
+    {tab !== 'standings' && <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="min-w-64 grow"><Label>{t('enrollment')}</Label><Select value={selected} onChange={event => navigate({ enrollment: event.target.value, return: null })}><option value="">{t('selectEnrollment')}</option>{enrollments.map(row => <option value={row.id} key={row.id}>{row.entityName} · {row.schemeName} · {row.contractorReference}</option>)}</Select></div>
+      <div className="flex flex-wrap items-end gap-3">
+        {canManage && tab === 'deposits' && enrollment?.canDeposit && <><div><Label>{t('depositThrough')}</Label><DateField value={depositThrough} onChange={value => setDepositThrough(value)} /></div><Button variant="outline" disabled={busy || !depositThrough} onClick={() => action('/api/contractor-withholding/deposits', { enrollmentId: selected, throughDate: depositThrough }, openAuthority)}>{t('deposit')}</Button></>}
+        {canManage && tab === 'periods' && selected && <><div><Label>{t('periodStart')}</Label><DateField value={periodStart} onChange={value => setPeriodStart(value)} /></div><Button disabled={busy || !periodStart} onClick={() => prepare(periodStart)}>{t('prepare')}</Button></>}
+      </div>
     </div>}
     {enrollment?.filingNotice && tab === 'periods' && <p className="text-sm text-muted-foreground">{enrollment.filingNotice}</p>}
+    {loadFailure && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300 p-4 text-sm text-red-700 dark:border-red-800 dark:text-red-300"><p>{loadFailure}</p><Button variant="outline" onClick={() => router.refresh()}>{tc('actions.retry')}</Button></div>}
     {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
     {refusal && <p role="alert" className="text-sm text-red-600">{refusal}</p>}
-  </>}>
-    {tab === 'standings' ? <PagedTable source="contractor_withholding_standings" rows={standings} rowKey={row => row.id} searchable empty={t('emptyStandings')} toolbarAfter={<Button asChild><Link href="/admin/setup/withholding-standings?row=new">{tc('actions.create')}</Link></Button>} columns={[
+    {loadFailure ? null : tab === 'standings' ? <PagedTable source="contractor_withholding_standings" rows={standings} rowKey={row => row.id} searchable empty={t('emptyStandings')} toolbarAfter={<Button asChild><Link href="/admin/setup/withholding-standings?row=new">{tc('actions.create')}</Link></Button>} columns={[
       { key: 'entity', header: t('legalEntity'), cell: row => row.entityName ?? t('unassignedEntity'), search: row => row.entityName ?? '' },
       { key: 'vendor', header: t('payee'), cell: row => <Link href={`/admin/setup/withholding-standings?row=${row.id}`}>{row.partyName}</Link>, search: row => row.partyName },
       { key: 'scheme', header: t('scheme'), cell: row => row.schemeCode },
@@ -117,7 +106,7 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, c
       { key: 'date', header: t('validFrom'), cell: row => row.validFrom },
       { key: 'status', header: t('status'), cell: row => <Badge>{row.status}</Badge> },
       { key: 'actions', header: '', cell: row => row.status === 'active' ? <Button variant="ghost" size="sm" disabled={busy} onClick={async () => { const reason = await promptDialog({ title: t('revoke'), label: t('reason') }); if (reason) await action(`/api/contractor-withholding/standings/${row.id}`, { reason }) }}>{t('revoke')}</Button> : null },
-    ]} /> : tab === 'deposits' ? !selected ? <p className="text-sm text-muted-foreground">{t('emptyEnrollments')}</p> : failures['deposits:' + selected] ? <div role="alert"><p>{failures['deposits:' + selected]}</p><Button onClick={() => setRetry(value => value + 1)}>{tc('actions.retry')}</Button></div> : depositsLoadedFor !== selected ? <p aria-busy="true">{tc('actions.loading')}</p> : <PagedTable source="contractor_withholding_deposits" rows={deposits} rowKey={row => row.documentId} empty={t('emptyDeposits')} columns={[
+    ]} /> : tab === 'deposits' ? !selected ? <p className="text-sm text-muted-foreground">{t('emptyEnrollments')}</p> : <PagedTable source="contractor_withholding_deposits" rows={deposits} rowKey={row => row.documentId} empty={t('emptyDeposits')} columns={[
       { key: 'document', header: t('depositDocument'), cell: row => row.kind === 'journal' && !canReadJournal ? <span title={t('journalReviewAccess')}>{row.documentNumber}</span> : <Link href={authorityHref(row.documentId, row.kind)}>{row.documentNumber}</Link> },
       { key: 'kind', header: tc('labels.type'), cell: row => <DocTypeBadge kind={row.kind} /> },
       { key: 'through', header: t('depositThrough'), cell: row => row.throughDate },
@@ -125,7 +114,7 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, c
       { key: 'total', header: t('deducted'), align: 'right', cell: row => money(row.total, { currency: row.currency }) },
       { key: 'status', header: t('status'), cell: row => <Badge>{row.sourceChanged ? t('changed') : tc(`status.${row.status}`)}</Badge> },
       { key: 'action', header: '', cell: row => canManage && row.status === 'posted' && row.sourceChanged ? <Button variant="outline" size="sm" disabled={busy} onClick={() => action('/api/contractor-withholding/deposits', { enrollmentId: selected, throughDate: row.throughDate, amendsDocumentId: row.documentId }, openAuthority)}>{t('correctDeposit')}</Button> : null },
-    ]} /> : !selected ? <p className="text-sm text-muted-foreground">{t('emptyEnrollments')}</p> : failures[selected] ? <div role="alert"><p>{failures[selected]}</p><Button onClick={() => setRetry(value => value + 1)}>{tc('actions.retry')}</Button></div> : loadedFor !== selected ? <p aria-busy="true">{tc('actions.loading')}</p> : <PagedTable source="contractor_withholding_periods" rows={periods} rowKey={row => row.periodStart} empty={t('emptyPeriods')} columns={[
+    ]} /> : !selected ? <p className="text-sm text-muted-foreground">{t('emptyEnrollments')}</p> : <PagedTable source="contractor_withholding_periods" rows={periods} rowKey={row => row.periodStart} empty={t('emptyPeriods')} columns={[
       { key: 'period', header: t('period'), cell: row => <span>{row.periodStart} – {row.periodEnd}</span> },
       { key: 'deducted', header: t('deducted'), align: 'right', cell: row => money(row.deducted, { currency }) },
       { key: 'due', header: t('returnDue'), cell: row => row.returnDue ?? '—' },
@@ -145,8 +134,16 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, c
         </div>
         {ret.sourceOnlyRevision && <p className="text-sm text-muted-foreground">{t('sourceOnlyCorrectionHelp')}</p>}
         {refusal && <p role="alert" className="text-sm text-red-600">{refusal}</p>}
-        <div><Button variant="outline" asChild><a href={`/api/contractor-withholding/returns/${ret.id}?format=pdf${statementIndex >= 0 ? `&payee=${encodeURIComponent(ret.lines[statementIndex]?.partyId ?? '')}` : ''}`}>{t('downloadPdf')}</a></Button><Label>{t('statement')}</Label><Select value={String(statementIndex)} onChange={event => setStatementIndex(Number(event.target.value))}><option value="-1">{t('return')}</option>{(currentReturn?.statements ?? []).map((row, index) => <option key={index} value={index}>{row.payeeName}</option>)}</Select></div>
-        {!!ret.sourcePayments?.length && <div className="flex gap-2"><Button variant={returnBody === 'payees' ? 'secondary' : 'ghost'} onClick={() => setReturnBody('payees')}>{t('payees')}</Button><Button variant={returnBody === 'payments' ? 'secondary' : 'ghost'} onClick={() => setReturnBody('payments')}>{t('paymentEvidence')}</Button></div>}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <Button variant="outline" asChild><a href={`/api/contractor-withholding/returns/${ret.id}?format=pdf${statementIndex >= 0 ? `&payee=${encodeURIComponent(ret.lines[statementIndex]?.partyId ?? '')}` : ''}`}>{t('downloadPdf')}</a></Button>
+          <div className="min-w-56"><Label>{t('statement')}</Label><Select value={String(statementIndex)} onChange={event => setStatementIndex(Number(event.target.value))}><option value="-1">{t('return')}</option>{(currentReturn?.statements ?? []).map((row, index) => <option key={index} value={index}>{row.payeeName}</option>)}</Select></div>
+        </div>
+        {!!ret.sourcePayments?.length && <DrawerTabStrip
+          tabs={[{ key: 'payees', label: t('payees') }, { key: 'payments', label: t('paymentEvidence') }]}
+          activeKey={returnBody}
+          onSelect={setReturnBody}
+          ariaLabel={t('return')}
+        />}
         {returnBody === 'payments' ? <PagedTable source="contractor_withholding_return_payments" rows={ret.sourcePayments ?? []} rowKey={row => row.documentId} empty={t('emptySourcePayments')} columns={[
           { key: 'payment', header: t('paymentDocument'), cell: row => <Link href={`/payments?doc=${row.documentId}`}>{row.documentNumber}</Link> },
           { key: 'date', header: tc('labels.date'), cell: row => row.paymentDate },
@@ -163,5 +160,5 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, c
         ]} />}
       </div>}
     </AsyncUrlDrawer>}
-  </ListPageLayout>
+  </div>
 }
