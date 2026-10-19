@@ -402,7 +402,7 @@ async function voided(runner: SqlExecutor, request: CrossSubsidiaryVoidRequest):
       from intercompany_fulfillment_charges returned
       join journal_entries entry on entry.org_id = returned.org_id and entry.id = returned.entry_id
      where returned.org_id = ${request.orgId} and returned.kind = 'return'
-       and returned.reverses_charge_id = ${charge.id} and entry.status = 'posted'
+       and returned.reverses_charge_id = ${charge.id} and entry.status = 'posted' -- Live entries only: a reversed return charge no longer authorizes blocking shipment void.
      limit 1`)).rows[0];
   if (liveReturnCharge) {
     refuse("this cross-subsidiary shipment has a live customer-credit charge return; reverse that credit before voiding the shipment");
