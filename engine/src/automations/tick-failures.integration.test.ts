@@ -158,6 +158,46 @@ test("a date_relative scan visits every match past row 200", { skip: !DB }, asyn
   }, { bypass: true });
 });
 
+test("the automation tick leaves sandbox recipes and queued events untouched", { skip: !DB }, async () => {
+  await withHarness(setupTickHarness, async (h) => withBypassContext(async () => {
+    const schedule = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "sandbox schedule",
+      trigger: { kind: "schedule", cron: "* * * * *", timezone: "UTC" },
+      rules: {}, conditions: {},
+      actions: [{ kind: "send_notification", to: "initiator", body: "sandbox schedule fired" }],
+    });
+    const event = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "sandbox event",
+      trigger: { kind: "event", subjectKind: "vendor_bill", eventKind: "approved" },
+      rules: {}, conditions: {},
+      actions: [{ kind: "send_notification", to: "initiator", body: "sandbox event fired" }],
+    });
+    await db.execute(sql`update automations set status = 'enabled', created_at = now() - interval '2 minutes' where org_id = ${h.org.orgId} and id in (${schedule.id}, ${event.id})`);
+    await stageAutomationEvent({
+      orgId: h.org.orgId,
+      eventKind: "flow_event",
+      subjectKind: "vendor_bill",
+      subjectId: randomUUID(),
+      triggerFingerprint: `sandbox-${randomUUID()}`,
+      payload: { subjectKind: "vendor_bill", eventKind: "approved" },
+    });
+    await db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${h.org.orgId}`);
+    try {
+      const summary = await runAutomationTick(new Date());
+      assert.equal(summary.schedulesFired, 0);
+      assert.equal(summary.eventsDrained, 0);
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from automation_runs where org_id = ${h.org.orgId} and automation_id = any(${[schedule.id, event.id]}::uuid[])`)).rows[0]!.n, 0);
+      assert.equal((await db.execute<{ status: string }>(sql`select status from automation_event_queue where org_id = ${h.org.orgId}`)).rows[0]?.status, "pending");
+    } finally {
+      await db.execute(sql`update orgs set env_kind = 'production' where id = ${h.org.orgId}`);
+    }
+  }), { bypass: true });
+});
+
 test("the tick fires as the publisher when the oldest user holds no permission", { skip: !DB }, async () => {
   const h = await setupUnpermittedElderHarness();
   try {

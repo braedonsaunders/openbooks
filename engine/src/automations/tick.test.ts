@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { orgCivilDate } from "./tick.ts";
+import { dateRelativeTriggerIsDue, orgCivilDate, orgCivilTime } from "./tick.ts";
 
 /**
  * HR-16 date math: the date_relative scan compares civil dates in the
@@ -32,3 +32,11 @@ test("fall back: the repeated hour does not duplicate the civil date", () => {
 test("invalid timezones fall back to UTC rather than throwing the scan", () => {
   assert.equal(orgCivilDate(new Date("2026-03-08T00:30:00Z"), "UTC"), "2026-03-08");
 });
+
+test("date_relative triggers wait until their configured organization-local time", () => {
+  const timezone = "America/Toronto"
+  assert.equal(orgCivilTime(new Date("2026-10-19T12:59:00Z"), timezone), "08:59")
+  assert.equal(dateRelativeTriggerIsDue(new Date("2026-10-19T12:59:00Z"), timezone, "09:00"), false)
+  assert.equal(orgCivilTime(new Date("2026-10-19T13:00:00Z"), timezone), "09:00")
+  assert.equal(dateRelativeTriggerIsDue(new Date("2026-10-19T13:00:00Z"), timezone, "09:00"), true)
+})
