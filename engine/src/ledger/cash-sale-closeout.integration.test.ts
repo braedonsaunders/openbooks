@@ -7,8 +7,10 @@ import { toUnits } from "../money/money.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { postDocument } from "./posting-document.ts";
 import { readTipsPayableExposure } from "../sales/cash-closeout.ts";
+import { requestDocumentVoid } from "./document-void.ts";
 import {
   createScratchOrg,
+  createScratchUser,
   dropScratchOrg,
   seedPostingAccount,
   type ScratchOrg,
@@ -211,12 +213,33 @@ test("server-tagged tips carry the party for payroll pay-out", { skip: !DB }, as
        where e.org_id = ${org.orgId} and e.source_document_id = ${id} and a.number = '2160'`)).rows[0]?.party;
     assert.equal(tipParty, org.customerId);
     const exposure = await withBypassContext(() =>
-      readTipsPayableExposure(db, org.orgId, {}),
+      readTipsPayableExposure(db, org.orgId, { allowedSubsidiaryIds: null }),
     );
     assert.equal(exposure.length, 1);
     assert.equal(exposure[0]!.partyId, org.customerId);
     assert.equal(exposure[0]!.amountMinor, "-30000");
     assert.equal(exposure[0]!.day, org.date);
+
+    const outOfScope = await withBypassContext(() => readTipsPayableExposure(db, org.orgId, {
+      allowedSubsidiaryIds: new Set([randomUUID()]),
+    }));
+    assert.deepEqual(outOfScope, []);
+
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Cash Sale Reviewer", "admin"));
+    const voidResult = await withOrg(org.orgId, () => requestDocumentVoid({
+      documentId: id,
+      orgId: org.orgId,
+      actorId,
+      reason: "Duplicate cash sale",
+      reversalDate: org.date,
+      source: "api",
+      allowedSubsidiaryIds: null,
+    }));
+    assert.equal(voidResult.status, "voided");
+    const afterVoid = await withBypassContext(() => readTipsPayableExposure(db, org.orgId, {
+      allowedSubsidiaryIds: null,
+    }));
+    assert.deepEqual(afterVoid, []);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

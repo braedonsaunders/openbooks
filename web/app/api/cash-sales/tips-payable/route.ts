@@ -46,6 +46,7 @@ export const GET = defineRoute({
       readTipsPayableExposure(db, user.orgId, {
         from: parsed.data.from ?? undefined,
         to: parsed.data.to ?? undefined,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       }),
     )
     return NextResponse.json({ rows })

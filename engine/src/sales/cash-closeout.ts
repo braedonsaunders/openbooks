@@ -4,6 +4,7 @@ import type { Money } from "../money/brands.ts";
 import { isUuid } from "../platform/uuid.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import type { CashSaleCloseout } from "../journal/posting-contracts.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 
 /**
  * Daily close-out for a cash sale: card tips, processor fees and the cash
@@ -392,7 +393,11 @@ export type TipsPayableExposureRow = {
 export async function readTipsPayableExposure(
   runner: SqlExecutor,
   orgId: string,
-  options: { from?: string; to?: string } = {},
+  options: {
+    from?: string;
+    to?: string;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+  },
 ): Promise<TipsPayableExposureRow[]> {
   const mapping = (await runner.execute<{ account_id: string | null }>(sql`
     select settings->'controlAccounts'->>'tipsPayable' as account_id
@@ -410,9 +415,11 @@ export async function readTipsPayableExposure(
        -- A voided sale's reversal posts against its original, so both statuses
        -- are read and the pair nets to nothing.
        and e.status in ('posted', 'reversed') and d.kind = 'cash_sale'
+       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, options.allowedSubsidiaryIds)}
        and (${options.from ?? null}::date is null or d.document_date >= (${options.from ?? null})::date)
        and (${options.to ?? null}::date is null or d.document_date <= (${options.to ?? null})::date)
      group by l.party_id, p.display_name, d.document_date, d.document_number
+    having sum(round(l.amount * 10000)) <> 0
      order by d.document_date, d.document_number`)).rows;
   return rows;
 }
