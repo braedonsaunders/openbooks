@@ -365,7 +365,6 @@ export async function reverseSecurityDepositTransaction(input: {
       })),
     });
     const entryId = postedDepReversal.entryId;
-    await markEntryReversed(tx, { orgId: input.orgId, entryId: row.journal_entry_id, actorId: input.actorId });
     const reversalLineByNumber = new Map(postedDepReversal.lines.map((line) => [line.lineNumber, line.id]));
 
     await tx.execute(sql`
@@ -386,6 +385,7 @@ export async function reverseSecurityDepositTransaction(input: {
           ${transactionAmount},${line.currency},1,'same_currency','Security deposit reversal',${occurredOn},${input.actorId},${input.actorId})
       `);
     }
+    await markEntryReversed(tx, { orgId: input.orgId, entryId: row.journal_entry_id, actorId: input.actorId });
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,journal_entry_id,reversal_of_id,memo,created_by,updated_by)
       values(${input.orgId},${row.lease_id},${kind},${occurredOn},${row.amount},${["received", "refunded"].includes(kind) ? row.bank_account_id : null},
