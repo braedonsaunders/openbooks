@@ -468,7 +468,13 @@ scopeMatrix([
       const framework = await createFramework({ orgId, actorId: w.hrFull, name: "Engineering", appliesTo: entity(w.subB) });
       const competency = await createCompetency({ orgId, actorId: w.hrFull, frameworkId: framework.id, code: "IMPACT", name: "Customer impact" });
       await addCompetencyLevel({ orgId, actorId: w.hrFull, competencyId: competency.id, levelRank: 1, label: "Meets", expectation: "Ships working software" });
-      await setSectionCompetency({ orgId, actorId: w.hrFull, sectionId, competencyId: competency.id });
+      // Seed a legacy scoped link so the historical cycle snapshot still proves profile applicability.
+      const linkedLegacySection = await db.execute(sql`
+        update hrm_review_template_sections
+           set competency_id = ${competency.id}, updated_by = ${w.hrFull}, updated_at = now()
+         where org_id = ${orgId} and id = ${sectionId}
+        returning id`);
+      assert.equal(linkedLegacySection.rows.length, 1, "the historical template section exists for the profile snapshot");
       // An org-wide cycle, so both sides hold a calibrated, shared manager review.
       const cycleId = await openedCycle(w, templateId, "FY26 profile scope");
       for (const subject of [people.a, people.b]) {
@@ -518,12 +524,13 @@ scopeMatrix([
         select id from hrm_review_template_sections where org_id = ${orgId} and template_id = ${templateId}`)).rows[0]!.id;
       return {
         frameworkA: frameworkA.id, frameworkB: frameworkB.id, departmentOnlyB: departmentOnlyB.id,
-        competencyA: competencyA.id, competencyB: competencyB.id, competencyWide: competencyWide.id,
+        frameworkWide: frameworkWide.id, competencyA: competencyA.id, competencyB: competencyB.id, competencyWide: competencyWide.id,
         positionB: positionB.id, jobLevel, sectionId,
       };
     },
-    read: async (w, { frameworkA, frameworkB, departmentOnlyB }) => {
-      assert.deepEqual((await listFrameworks({ orgId: w.orgId, actorId: w.hrA })).map((framework) => framework.id), [frameworkA]);
+    read: async (w, { frameworkA, frameworkB, departmentOnlyB, frameworkWide }) => {
+      const visibleFrameworks = (await listFrameworks({ orgId: w.orgId, actorId: w.hrA })).map((framework) => framework.id);
+      assert.deepEqual(visibleFrameworks, [frameworkA, frameworkWide]);
       for (const id of [frameworkB, departmentOnlyB]) assert.equal(await getFramework({ orgId: w.orgId, actorId: w.hrA, id }), null);
     },
     write: async (w, { frameworkB, competencyA, competencyB, competencyWide, positionB, jobLevel, sectionId }) => {
