@@ -183,7 +183,7 @@ test("a replayed till drop keeps the same transfer and reconciled amount", { ski
 });
 
 test("till drops use the selected subsidiary functional currency", { skip: !DB }, async () => {
-  const { org, actorId, tillId } = await setup();
+  const { org, actorId } = await setup();
   const subsidiaryId = randomUUID();
   try {
     await withBypassContext(async () => {
@@ -194,12 +194,24 @@ test("till drops use the selected subsidiary functional currency", { skip: !DB }
         coalesce(settings->'features','{}'::jsonb)||'{"multiSubsidiary":true,"multiCurrency":true}'::jsonb)
         where id=${org.orgId}`);
     });
-    await draftSale(org, tillId, "2026-07-12", "40.0000", subsidiaryId, "USD");
+    const branchTillId = await withBypassContext(() =>
+      seedPostingAccount(org.orgId, "1017", "US Till Cash", "asset_current_other", subsidiaryId),
+    );
+    const branchBankId = await withBypassContext(() =>
+      seedPostingAccount(org.orgId, "1018", "US Deposit Bank", "asset_bank", subsidiaryId),
+    );
+    await withBypassContext(() => db.execute(sql`
+      update orgs set settings = settings || jsonb_build_object('cashSales',
+        coalesce(settings->'cashSales', '{}'::jsonb) ||
+        jsonb_build_object('depositAccountIds', jsonb_build_array(${branchBankId}),
+                           'defaultCashAccountId', ${branchTillId}))
+       where id = ${org.orgId}`));
+    await draftSale(org, branchTillId, "2026-07-12", "40.0000", subsidiaryId, "USD");
     const drop = await recordTillDrop(org.orgId, actorId, {
-      tillAccountId: tillId,
+      tillAccountId: branchTillId,
       amount: "40.0000",
       date: "2026-07-12",
-      bankAccountId: org.accounts.bank,
+      bankAccountId: branchBankId,
       slipNumber: "SLIP-USD",
       subsidiaryId,
     }, { key: randomUUID(), allowedSubsidiaryIds: new Set([subsidiaryId]) });
