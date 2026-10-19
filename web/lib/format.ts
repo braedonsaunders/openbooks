@@ -1,4 +1,8 @@
+import type { FiscalPeriodRef } from '@openbooks/reports'
+import { fiscalPeriodLabel } from './fiscal-period-label'
 import { createMoneyFormatter } from './money-format'
+
+export { fiscalPeriodLabel }
 
 export function dateTime(v: string | Date | null | undefined, locale = "en-CA"): string {
   if (!v) return "";
@@ -213,18 +217,28 @@ export function civilDateParams<T extends Record<string, unknown>>(values: T, lo
 
 /**
  * The display name of a resolved report window. A custom window reads as its
- * localized civil bounds (one day for a point-in-time date); presets keep
- * their names. Period resolution stays locale-free; headers, column titles
- * and export labels present the window through this one rule.
+ * localized civil bounds (one day for a point-in-time date); a window that is
+ * one accounting period reads as that period's label in the viewer's locale
+ * (`P05 FY2026 · May 2026`), so every fiscal year reads alike; other presets
+ * keep their names. Period resolution stays locale-free; headers, column
+ * titles and export labels present the window through this one rule.
  */
 export function reportPeriodLabel(
-  period: { presetId?: string; from: string; to: string; label: string },
+  period: { presetId?: string; from: string; to: string; label: string; fiscalPeriod?: FiscalPeriodRef },
   locale: string,
 ): string {
-  if (period.presetId !== 'custom') return period.label
-  const from = formatCivilDate(period.from, locale)
-  return period.from === period.to ? from : `${from} – ${formatCivilDate(period.to, locale)}`
+  if (period.presetId === 'custom') {
+    const from = formatCivilDate(period.from, locale)
+    return period.from === period.to ? from : `${from} – ${formatCivilDate(period.to, locale)}`
+  }
+  if (period.fiscalPeriod) {
+    const window = fiscalPeriodLabel(period.fiscalPeriod, locale)
+    // A window that stops before its period ends is that period to date.
+    return period.to < period.fiscalPeriod.to ? `${window} to date` : window
+  }
+  return period.label
 }
+
 
 /**
  * A report translator whose civil-date message values read as localized

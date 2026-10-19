@@ -21,11 +21,19 @@ const TODAY = '2026-04-15' // inside the 5-week P03 FY2026
 describe('resolvePreset with declared fiscal periods', () => {
   it('resolves period/month presets to the holding fiscal period', () => {
     const input = { startMonth: 2, today: TODAY, periods: P445 }
-    assert.deepEqual(resolvePreset('this_period', input), { from: '2026-03-30', to: '2026-05-03', label: 'P03 FY2026' })
-    assert.deepEqual(resolvePreset('this_month', input), { from: '2026-03-30', to: '2026-05-03', label: 'P03 FY2026' })
-    assert.deepEqual(resolvePreset('last_period', input), { from: '2026-03-02', to: '2026-03-29', label: 'P02 FY2026' })
-    assert.deepEqual(resolvePreset('period_before_last', input), { from: '2026-02-02', to: '2026-03-01', label: 'P01 FY2026' })
-    assert.deepEqual(resolvePreset('this_period_to_date', input), { from: '2026-03-30', to: TODAY, label: 'P03 FY2026 to date' })
+    const p03 = { fiscalYear: 2026, periodNumber: 3, from: '2026-03-30', to: '2026-05-03' }
+    assert.deepEqual(resolvePreset('this_period', input), { from: '2026-03-30', to: '2026-05-03', label: 'P03 FY2026', fiscalPeriod: p03 })
+    assert.deepEqual(resolvePreset('this_month', input), { from: '2026-03-30', to: '2026-05-03', label: 'P03 FY2026', fiscalPeriod: p03 })
+    assert.deepEqual(resolvePreset('last_period', input), {
+      from: '2026-03-02', to: '2026-03-29', label: 'P02 FY2026',
+      fiscalPeriod: { fiscalYear: 2026, periodNumber: 2, from: '2026-03-02', to: '2026-03-29' },
+    })
+    assert.deepEqual(resolvePreset('period_before_last', input), {
+      from: '2026-02-02', to: '2026-03-01', label: 'P01 FY2026',
+      fiscalPeriod: { fiscalYear: 2026, periodNumber: 1, from: '2026-02-02', to: '2026-03-01' },
+    })
+    // The to-date window keeps the period's full bounds so presenters can label the period it cuts short.
+    assert.deepEqual(resolvePreset('this_period_to_date', input), { from: '2026-03-30', to: TODAY, label: 'P03 FY2026 to date', fiscalPeriod: p03 })
   })
 
   it('resolves quarter presets by grouping declared periods', () => {

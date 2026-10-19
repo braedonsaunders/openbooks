@@ -127,6 +127,7 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
       subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
       if (!contextBlocked) view = await profitAndLossView({ from: period.from, to: period.to }, reportPeriodLabel(period, locale), labels, {
         accountLabels: accountingContext?.labels ?? null,
+        locale,
         breakout: q.breakout,
         compare: q.compare,
         basis: q.basis,

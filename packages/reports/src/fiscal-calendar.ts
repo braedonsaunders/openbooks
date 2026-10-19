@@ -10,8 +10,27 @@
 // year; otherwise months at/after the start month belong to the year that ends
 // next calendar year.
 
-/** A resolved date window: inclusive ISO `from`/`to` plus a display label. */
-export type DateRange = { from: string; to: string; label: string }
+/**
+ * A resolved date window: inclusive ISO `from`/`to` plus a locale-free label.
+ * A window drawn from one declared accounting period also names that period
+ * (`fiscalPeriod`, with the period's full bounds), so presenters label it in
+ * the viewer's locale from the period's fiscal position and its own dates; a
+ * window ending before the period does is that period to date.
+ */
+export type DateRange = {
+  from: string
+  to: string
+  label: string
+  fiscalPeriod?: FiscalPeriodRef
+}
+
+/** The declared accounting period a window covers: its fiscal position and full bounds. */
+export type FiscalPeriodRef = {
+  fiscalYear: number
+  periodNumber: number
+  from: string
+  to: string
+}
 
 const pad = (n: number) => String(n).padStart(2, '0')
 // Year zero-padded so the YYYY-MM-DD contract holds below year 1000 too.
@@ -204,7 +223,10 @@ export function fiscalQuartersBetween(from: string, to: string, startMonth: numb
 
 /**
  * One declared fiscal period (an `accounting_periods` row minus its ids):
- * inclusive ISO bounds plus the stored fiscal year / period number / name.
+ * inclusive ISO bounds plus its fiscal year and period number. `name` is the
+ * locale-free canonical label (`P05 FY2026`), derived from the fiscal
+ * position rather than the free-text stored name, so every fiscal year
+ * reads alike wherever no viewer locale is available.
  */
 export type FiscalPeriod = {
   fiscalYear: number
@@ -212,6 +234,11 @@ export type FiscalPeriod = {
   name: string
   from: string
   to: string
+}
+
+/** The window reference for one declared period. */
+export function fiscalPeriodRef(p: FiscalPeriod): FiscalPeriodRef {
+  return { fiscalYear: p.fiscalYear, periodNumber: p.periodNumber, from: p.from, to: p.to }
 }
 
 /** Quarter (1-4) a declared period belongs to within its fiscal year: three
@@ -235,8 +262,8 @@ export function declaredPeriodContaining(periods: FiscalPeriod[], date: string):
 
 /**
  * Month-breakout columns from declared periods: every declared period
- * overlapping `[from, to]` is ONE column at its full bounds labelled with the
- * fiscal period name — so a 5-week period never splits across two calendar
+ * overlapping `[from, to]` is ONE column at its full bounds labelled as that
+ * fiscal period — so a 5-week period never splits across two calendar
  * columns. Capped defensively at 60 like `fiscalMonthsBetween`.
  */
 export function declaredPeriodColumns(periods: FiscalPeriod[], from: string, to: string): DateRange[] {
@@ -244,7 +271,7 @@ export function declaredPeriodColumns(periods: FiscalPeriod[], from: string, to:
   return sorted
     .filter((p) => declaredOverlaps(p, from, to))
     .slice(0, 60)
-    .map((p) => ({ from: p.from, to: p.to, label: p.name }))
+    .map((p) => ({ from: p.from, to: p.to, label: p.name, fiscalPeriod: fiscalPeriodRef(p) }))
 }
 
 /**

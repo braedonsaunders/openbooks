@@ -34,12 +34,12 @@ describe('declaredPeriodQuarter', () => {
 })
 
 describe('declaredPeriodColumns', () => {
-  it('emits one column per overlapping fiscal period with the period name', () => {
+  it('emits one column per overlapping fiscal period naming its fiscal period', () => {
     assert.deepEqual(declaredPeriodColumns(P445, '2026-03-01', '2026-05-04'), [
-      { from: '2026-02-02', to: '2026-03-01', label: 'P01 FY2026' },
-      { from: '2026-03-02', to: '2026-03-29', label: 'P02 FY2026' },
-      { from: '2026-03-30', to: '2026-05-03', label: 'P03 FY2026' },
-      { from: '2026-05-04', to: '2026-05-31', label: 'P04 FY2026' },
+      { from: '2026-02-02', to: '2026-03-01', label: 'P01 FY2026', fiscalPeriod: { fiscalYear: 2026, periodNumber: 1, from: '2026-02-02', to: '2026-03-01' } },
+      { from: '2026-03-02', to: '2026-03-29', label: 'P02 FY2026', fiscalPeriod: { fiscalYear: 2026, periodNumber: 2, from: '2026-03-02', to: '2026-03-29' } },
+      { from: '2026-03-30', to: '2026-05-03', label: 'P03 FY2026', fiscalPeriod: { fiscalYear: 2026, periodNumber: 3, from: '2026-03-30', to: '2026-05-03' } },
+      { from: '2026-05-04', to: '2026-05-31', label: 'P04 FY2026', fiscalPeriod: { fiscalYear: 2026, periodNumber: 4, from: '2026-05-04', to: '2026-05-31' } },
     ])
   })
 
@@ -48,7 +48,7 @@ describe('declaredPeriodColumns', () => {
     // split the month's activity across two "2026-04"-style columns.
     const cols = declaredPeriodColumns(P445, '2026-04-01', '2026-04-30')
     assert.equal(cols.length, 1)
-    assert.deepEqual(cols[0], { from: '2026-03-30', to: '2026-05-03', label: 'P03 FY2026' })
+    assert.deepEqual(cols[0], { from: '2026-03-30', to: '2026-05-03', label: 'P03 FY2026', fiscalPeriod: { fiscalYear: 2026, periodNumber: 3, from: '2026-03-30', to: '2026-05-03' } })
   })
 
   it('returns no columns when nothing overlaps', () => {

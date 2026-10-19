@@ -146,3 +146,24 @@ test('a custom report window reads as its localized bounds while presets keep th
   assert.equal(reportPeriodLabel({ presetId: 'custom', from: '2026-10-18', to: '2026-10-18', label: '2026-10-18 – 2026-10-18' }, 'en'), 'Oct 18, 2026')
   assert.equal(reportPeriodLabel({ presetId: 'this_fiscal_year', from: '2026-01-01', to: '2026-12-31', label: 'FY 2026' }, 'en'), 'FY 2026')
 })
+
+test("an accounting-period window reads as its period label in every fiscal year and locale", () => {
+  const december = (fiscalYear: number) => ({ fiscalYear, periodNumber: 12, from: `${fiscalYear}-12-01`, to: `${fiscalYear}-12-31` })
+  for (const fiscalYear of [2025, 2026]) {
+    const fiscalPeriod = december(fiscalYear)
+    assert.equal(
+      reportPeriodLabel({ presetId: 'last_period', from: fiscalPeriod.from, to: fiscalPeriod.to, label: `P12 FY${fiscalYear}`, fiscalPeriod }, 'en'),
+      `P12 FY${fiscalYear} · Dec ${fiscalYear}`,
+    )
+  }
+  const fiscalPeriod = december(2026)
+  assert.equal(
+    reportPeriodLabel({ presetId: 'this_period', from: fiscalPeriod.from, to: fiscalPeriod.to, label: 'P12 FY2026', fiscalPeriod }, 'ja'),
+    'P12 FY2026 · 2026年12月',
+  )
+  // Cut short at the business day, the window is that period to date.
+  assert.equal(
+    reportPeriodLabel({ presetId: 'this_period_to_date', from: fiscalPeriod.from, to: '2026-12-15', label: 'P12 FY2026 to date', fiscalPeriod }, 'en'),
+    'P12 FY2026 · Dec 2026 to date',
+  )
+})

@@ -12,6 +12,7 @@ import { MissingRatesError } from './consolidation'
 import { ASSET_TYPES, EQUITY_TYPES, LIABILITY_TYPES, PNL_TYPES } from './account-types'
 import { localizeAccountRows, type AccountLabels } from './reports/accounting-context'
 import { fiscalStartMonth, defaultFiscalCalendarPeriods, fiscalYearStartOnDate, priorFiscalYearEndOnDate } from './fiscal'
+import { fiscalPeriodLabel } from './fiscal-period-label'
 import {
   decimalAdd,
   decimalIsMaterial,
@@ -478,6 +479,8 @@ async function buildAmountColumns(opts: {
   periodLabel: string
   /** Which accounting book the columns answer for (primary when omitted). */
   bookId?: string | null
+  /** Viewer locale for declared-period column titles; locale-free labels when absent. */
+  locale?: string
 }): Promise<{ cols: AmountColumn[]; truncated: boolean }> {
   const { orgId, mode, period, breakout, compare, dims, subsidiary, periodLabel } = opts
   const bookProbe = sql`and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}`
@@ -485,8 +488,9 @@ async function buildAmountColumns(opts: {
   if (breakout === 'month' || breakout === 'quarter') {
     // Retail/custom calendars declare week-based periods whose boundaries
     // never align to month ends: columns come from the default calendar's
-    // declared periods (a 5-week period is one column labelled with its
-    // fiscal name; quarters group the declared periods). Monthly-cadence
+    // declared periods (a 5-week period is one column titled with its period
+    // label in the viewer's locale and keyed by its locale-free label;
+    // quarters group the declared periods). Monthly-cadence
     // orgs — and any window the declared periods do not fully cover, so no
     // activity outside generated periods can silently drop out of the
     // matrix — keep the calendar math below byte-identical.
@@ -508,7 +512,12 @@ async function buildAmountColumns(opts: {
         : fiscalQuartersBetween(period.from, period.to, await fiscalStartMonth(orgId)))
     const capped = ranges.slice(0, MAX_MATRIX_COLUMNS)
     return {
-      cols: capped.map((r) => ({ key: r.label, label: r.label, from: r.from, to: r.to })),
+      cols: capped.map((r) => ({
+        key: r.label,
+        label: r.fiscalPeriod && opts.locale ? fiscalPeriodLabel(r.fiscalPeriod, opts.locale) : r.label,
+        from: r.from,
+        to: r.to,
+      })),
       truncated: ranges.length > capped.length,
     }
   }
@@ -794,6 +803,8 @@ export async function statementMatrix(opts: {
   asOfKind?: "column_end" | "prior_fiscal_year_end";
   /** Accounting-context labels: rows show and sort by localized numbers and names. */
   accountLabels?: AccountLabels | null;
+  /** Viewer locale for declared-period column titles. */
+  locale?: string;
 }): Promise<StatementMatrix> {
   const orgId = await resolveOrgId(opts.orgId);
   const breakout = opts.breakout ?? "none";
@@ -811,6 +822,7 @@ export async function statementMatrix(opts: {
     subsidiary: opts.subsidiary,
     periodLabel: opts.periodLabel,
     bookId: opts.bookId,
+    locale: opts.locale,
   });
   let { cols } = built;
   const { truncated } = built;
@@ -1211,6 +1223,8 @@ type MatrixOpts = {
   bookId?: string | null
   /** Accounting-context labels for the account rows. */
   accountLabels?: AccountLabels | null
+  /** Viewer locale for declared-period column titles. */
+  locale?: string
 }
 
 function accountLines(matrix: StatementMatrix, types: string[]): StatementViewLine[] {

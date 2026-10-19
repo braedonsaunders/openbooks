@@ -130,6 +130,7 @@ export async function loadBalanceSheet(
       subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
       if (!contextBlocked) view = await balanceSheetView({ from: period.from, to: period.to }, reportPeriodLabel(period, locale), labels, {
         accountLabels: accountingContext?.labels ?? null,
+        locale,
         breakout: q.breakout,
         compare: q.compare,
         basis: q.basis,

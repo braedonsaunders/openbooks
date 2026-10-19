@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday } from '@openbooks/engine/platform/business-date/module'
 import { db } from '@openbooks/engine/platform/db'
+import { canonicalPeriodLabel } from '@openbooks/engine/periods/period-policy'
 import { fiscalContextFor, fiscalYearOf, fiscalYearStartOn, type FiscalContext, type FiscalPeriod } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 
@@ -58,11 +59,10 @@ export async function defaultFiscalCalendarPeriods(
   const r = (await db.execute<{
     fiscal_year: number
     period_number: number
-    name: string
     starts_on: string
     ends_on: string
   }>(sql`
-    select p.fiscal_year, p.period_number, p.name,
+    select p.fiscal_year, p.period_number,
            p.starts_on::text as starts_on, p.ends_on::text as ends_on
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
@@ -73,7 +73,9 @@ export async function defaultFiscalCalendarPeriods(
     periods: r.rows.map((p) => ({
       fiscalYear: p.fiscal_year,
       periodNumber: p.period_number,
-      name: p.name,
+      // Labelled from the fiscal position, not the free-text stored name, so
+      // every fiscal year's windows and columns read in one format.
+      name: canonicalPeriodLabel({ fiscalYear: p.fiscal_year, periodNumber: p.period_number, adjustment: false }),
       from: p.starts_on,
       to: p.ends_on,
     })),

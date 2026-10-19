@@ -542,6 +542,26 @@ const consolidatedRows = [
                 ],
               )
               assert.deepEqual(await revenueValues(matrix, 4), ['400.0000', '0.0000', '300.0000', '500.0000'])
+              // With the viewer's locale each column is titled like every period
+              // list, while its key stays the locale-free label.
+              const titled = await statementMatrix({
+                orgId: org.orgId,
+                types: [...PNL_TYPES],
+                mode: 'flow',
+                period: { from: '2026-02-02', to: '2026-05-31' },
+                periodLabel: 'Q1 4-4-5',
+                breakout: 'month',
+                locale: 'en',
+              })
+              assert.deepEqual(
+                titled.columns.map((c) => [c.key, c.label]),
+                [
+                  ['P01 FY2026', 'P01 FY2026 · Feb 2026 – Mar 2026'],
+                  ['P02 FY2026', 'P02 FY2026 · Mar 2026'],
+                  ['P03 FY2026', 'P03 FY2026 · Mar 2026 – May 2026'],
+                  ['P04 FY2026', 'P04 FY2026 · May 2026'],
+                ],
+              )
             })
           } finally {
             await release445Org(org, calendarId, baselineCalendarId)
@@ -690,24 +710,34 @@ const consolidatedRows = [
           try {
             await withOrgContext(org.orgId, async () => {
               const today = '2026-04-15' // inside the 5-week P03
+              const p03 = { fiscalYear: 2026, periodNumber: 3, from: '2026-03-30', to: '2026-05-03' }
               assert.deepEqual(await resolvePeriod('this_period', { today, orgId: org.orgId }), {
                 presetId: 'this_period',
                 from: '2026-03-30',
                 to: '2026-05-03',
                 label: 'P03 FY2026',
+                fiscalPeriod: p03,
               })
               assert.deepEqual(await resolvePeriod('this_month', { today, orgId: org.orgId }), {
                 presetId: 'this_month',
                 from: '2026-03-30',
                 to: '2026-05-03',
                 label: 'P03 FY2026',
+                fiscalPeriod: p03,
               })
               assert.deepEqual(await resolvePeriod('last_period', { today, orgId: org.orgId }), {
                 presetId: 'last_period',
                 from: '2026-03-02',
                 to: '2026-03-29',
                 label: 'P02 FY2026',
+                fiscalPeriod: { fiscalYear: 2026, periodNumber: 2, from: '2026-03-02', to: '2026-03-29' },
               })
+              // Presenters label the window from the period itself, in the viewer's locale.
+              const { reportPeriodLabel } = (await import(root + 'web/lib/format.ts')) as typeof import('./format')
+              assert.equal(
+                reportPeriodLabel(await resolvePeriod('this_period', { today, orgId: org.orgId }), 'en'),
+                'P03 FY2026 · Mar 2026 – May 2026',
+              )
               assert.deepEqual(await resolvePeriod('this_fiscal_quarter', { today, orgId: org.orgId }), {
                 presetId: 'this_fiscal_quarter',
                 from: '2026-02-02',

@@ -157,7 +157,12 @@ test("assign-posting-period offers the open adjustment period when the regular p
     const blockedRow = new Map(blocked.rows.map((row) => [row.documentId, row])).get(journal)!;
     assert.equal(blockedRow.blocked, true);
     assert.equal(blockedRow.adjustmentPeriod?.id, adjustmentId);
-    assert.match(blockedRow.blockReason ?? "", /adjustment period "ADJ" can take it instead/);
+    // Periods are named by their fiscal position, never the free-text stored name.
+    const adjustmentLabel = `FY${regular.fiscal_year} adjustment`;
+    assert.equal(blockedRow.adjustmentPeriod?.name, adjustmentLabel);
+    assert.equal(blockedRow.adjustmentPeriod?.periodRef.adjustment, true);
+    assert.match(blockedRow.periodName ?? "", /^P\d{2} FY\d{4}$/);
+    assert.ok(blockedRow.blockReason?.includes(`adjustment period "${adjustmentLabel}" can take it instead`));
 
     // The opt-in assigns into the adjustment period with an audited reason.
     const committed = await commitPostingPeriodAssignment(org.orgId, {
@@ -168,7 +173,7 @@ test("assign-posting-period offers the open adjustment period when the regular p
       select changes->>'reason' as reason from audit_log
        where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${journal}
        order by at desc, id desc limit 1`)).rows[0];
-    assert.match(audit?.reason ?? "", /adjustment period ADJ/);
+    assert.equal(audit?.reason, `bulk posting-period assignment to adjustment period ${adjustmentLabel}`);
 
     // A bogus adjustment id refuses instead of silently assigning nothing.
     await assert.rejects(
@@ -181,7 +186,7 @@ test("assign-posting-period offers the open adjustment period when the regular p
       assertPeriodModulesOpen(db, {
         orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, subsidiaryIds: [], modules: ["gl"],
       }),
-      /controlled reopen, or post this entry into the open adjustment period "ADJ"/,
+      (error: Error) => error.message.includes(`controlled reopen, or post this entry into the open adjustment period "${adjustmentLabel}"`),
     );
   } finally {
     await dropScratchOrg(org.orgId);

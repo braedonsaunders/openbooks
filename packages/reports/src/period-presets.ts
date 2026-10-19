@@ -17,6 +17,7 @@ import {
   fiscalHalfRange,
   fiscalMonthOffset,
   fiscalPeriodRange,
+  fiscalPeriodRef,
   fiscalQuarterRange,
   fiscalYearOf,
   fiscalYearRangeFor,
@@ -182,8 +183,8 @@ export type ResolvePresetInput = {
    * Declared fiscal periods (default active calendar, non-adjustment) for
    * orgs on a retail/custom calendar. When present, the period/month,
    * quarter, half and fiscal-year families resolve against these instead of
-   * calendar math — a 5-week period is one window, labelled with its fiscal
-   * name. Any miss falls back to calendar math, and omitting `periods`
+   * calendar math — a 5-week period is one window that names its fiscal
+   * period. Any miss falls back to calendar math, and omitting `periods`
    * keeps every preset byte-identical (monthly-cadence orgs take this path).
    */
   periods?: FiscalPeriod[]
@@ -259,19 +260,20 @@ function resolveDeclaredPreset(id: string, input: ResolvePresetInput): DateRange
   const periods = [...(input.periods ?? [])].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to))
   if (!periods.length) return null
   const { today } = input
-  const toDate = (r: DateRange): DateRange => ({ from: r.from, to: today, label: `${r.label} to date` })
+  const toDate = (r: DateRange): DateRange => ({ ...r, to: today, label: `${r.label} to date` })
   const holding = declaredPeriodContaining(periods, today)
+  const periodWindow = (p: FiscalPeriod): DateRange => ({ from: p.from, to: p.to, label: p.name, fiscalPeriod: fiscalPeriodRef(p) })
 
   const shiftPeriod = (n: number): DateRange | null => {
     if (!holding) return null
     const idx = periods.findIndex((p) => p === holding)
     const target = periods[idx + n]
-    return target ? { from: target.from, to: target.to, label: target.name } : null
+    return target ? periodWindow(target) : null
   }
   const samePeriodLastYear = (): DateRange | null => {
     if (!holding) return null
     const target = periods.find((p) => p.fiscalYear === holding.fiscalYear - 1 && p.periodNumber === holding.periodNumber)
-    return target ? { from: target.from, to: target.to, label: target.name } : null
+    return target ? periodWindow(target) : null
   }
 
   // (fiscalYear, quarter) groups ordered by start, with the index holding today.
@@ -406,10 +408,10 @@ function resolveDeclaredPreset(id: string, input: ResolvePresetInput): DateRange
     // Period / Month (a fiscal period IS the month for a retail calendar)
     case 'this_period':
     case 'this_month':
-      return holding ? { from: holding.from, to: holding.to, label: holding.name } : null
+      return holding ? periodWindow(holding) : null
     case 'this_period_to_date':
     case 'this_month_to_date':
-      return holding ? toDate({ from: holding.from, to: holding.to, label: holding.name }) : null
+      return holding ? toDate(periodWindow(holding)) : null
     case 'last_period':
     case 'last_month':
       return shiftPeriod(-1)

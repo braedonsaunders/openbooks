@@ -7,7 +7,7 @@ import { assertSavedReportPeriod, parseReportQuery } from './report-filters.ts'
 // catalog) must refuse by name — never silently become This Fiscal Year and
 // widen (or move) the report window.
 const stateKey = Symbol.for('openbooks.period-preset-refusal-test')
-const hookState: { dbCalls: number; periodRows: { name: string; starts_on: string; ends_on: string }[] } = { dbCalls: 0, periodRows: [] }
+const hookState: { dbCalls: number; periodRows: { name: string; fiscal_year: number; period_number: number; starts_on: string; ends_on: string }[] } = { dbCalls: 0, periodRows: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = hookState
 
 const TODAY = '2026-09-24'
@@ -86,11 +86,12 @@ test('a current preset still resolves', async () => {
 
 test('a business day before every configured accounting period refuses by name', async () => {
   hookState.periodRows = [
-    { name: 'FY 2027 period 1', starts_on: '2026-04-01', ends_on: '2026-04-30' },
+    { name: 'FY 2027 period 1', fiscal_year: 2027, period_number: 1, starts_on: '2026-04-01', ends_on: '2026-04-30' },
   ]
+  // The refusal names the first period by its fiscal position, not its stored name.
   await assert.rejects(
     resolvePeriod('this_period', { orgId: ORG, today: '2026-01-15' }),
-    /2026-01-15.*precedes.*FY 2027 period 1/,
+    /2026-01-15.*precedes.*'P01 FY2027'/,
   )
   hookState.periodRows = []
 })

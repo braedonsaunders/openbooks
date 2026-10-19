@@ -6,8 +6,10 @@ import {
   isPeriodPreset,
   resolvePreset,
   type DateRange,
+  type FiscalPeriodRef,
 } from '@openbooks/reports'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { canonicalPeriodLabel } from '@openbooks/engine/periods/period-policy'
 import { defaultFiscalCalendarPeriods, fiscalStartMonth } from './fiscal'
 import { resolveOrgId } from './org-scope'
 import { assertCustomPeriodBounds } from './report-filters'
@@ -25,8 +27,18 @@ export type ResolvedPeriod = {
   presetId: string
   from: string
   to: string
-  /** Descriptive label for headers/PDF (e.g. "FY 2026", "2026-07"). */
+  /**
+   * Locale-free descriptive label (e.g. "FY 2026", "2026-07", "P05 FY2026").
+   * Presenters label windows through `reportPeriodLabel`, which renders an
+   * accounting-period window in the viewer's locale.
+   */
   label: string
+  /**
+   * The accounting period the window covers, when it is one period, so
+   * presenters label it from its fiscal position and dates in the viewer's
+   * locale (`P05 FY2026 · May 2026`).
+   */
+  fiscalPeriod?: FiscalPeriodRef
   /**
    * Structured form of `label` for presets that qualify a window ("2026-07
    * to date"): the bare window name plus whether it runs to the business
@@ -40,20 +52,24 @@ export type ResolvedPeriod = {
 /**
  * No configured accounting period covers the business day: today precedes
  * the first period, so no period-to-date window exists. Carries the date
- * and the first period's name so presenters refuse through the catalog
- * instead of matching the message text.
+ * and the first period so presenters refuse through the catalog, labelling
+ * the period in the viewer's locale, instead of matching the message text.
  */
 export class MissingAccountingPeriodError extends Error {
   readonly code = 'missing-accounting-period'
   readonly businessDate: string
-  readonly firstPeriodName: string
-  constructor(businessDate: string, firstPeriodName: string) {
+  readonly firstPeriod: FiscalPeriodRef
+  /** Locale-free label of the first period (`P01 FY2026`). */
+  readonly firstPeriodLabel: string
+  constructor(businessDate: string, firstPeriod: FiscalPeriodRef) {
+    const firstPeriodLabel = canonicalPeriodLabel({ ...firstPeriod, adjustment: false })
     super(
-      `business date '${businessDate}' precedes the first configured accounting period '${firstPeriodName}' — configure an accounting period covering this date in Close Setup`,
+      `business date '${businessDate}' precedes the first configured accounting period '${firstPeriodLabel}' — configure an accounting period covering this date in Close Setup`,
     )
     this.name = 'MissingAccountingPeriodError'
     this.businessDate = businessDate
-    this.firstPeriodName = firstPeriodName
+    this.firstPeriod = firstPeriod
+    this.firstPeriodLabel = firstPeriodLabel
   }
 }
 
@@ -70,8 +86,8 @@ async function accountingPeriodWindow(
   today: string,
   orgId: string,
 ): Promise<DateRange | null> {
-  const r = (await db.execute<{ name: string; starts_on: string; ends_on: string }>(sql`
-    select name, starts_on::text as starts_on, ends_on::text as ends_on
+  const r = (await db.execute<{ fiscal_year: number; period_number: number; starts_on: string; ends_on: string }>(sql`
+    select fiscal_year, period_number, starts_on::text as starts_on, ends_on::text as ends_on
       from accounting_periods
      where org_id = ${orgId} and is_adjustment = false
      order by starts_on
@@ -88,13 +104,24 @@ async function accountingPeriodWindow(
       }
     }
   }
+  const ref = (p: (typeof rows)[number]): FiscalPeriodRef => ({
+    fiscalYear: Number(p.fiscal_year),
+    periodNumber: Number(p.period_number),
+    from: p.starts_on,
+    to: p.ends_on,
+  })
   if (idx < 0) {
-    throw new MissingAccountingPeriodError(today, rows[0]!.name)
+    throw new MissingAccountingPeriodError(today, ref(rows[0]!))
   }
   const target = idx + offset
   if (target < 0 || target >= rows.length) return null
-  const p = rows[target]!
-  return { from: p.starts_on, to: p.ends_on, label: p.name }
+  const period = ref(rows[target]!)
+  return {
+    from: period.from,
+    to: period.to,
+    label: canonicalPeriodLabel({ ...period, adjustment: false }),
+    fiscalPeriod: period,
+  }
 }
 
 /**
@@ -125,7 +152,7 @@ export async function resolvePeriod(
   // Retail/custom calendars: resolve the period/month, quarter, half and
   // fiscal-year preset families against the default calendar's declared
   // periods so the filter-bar window agrees with fiscal-period statement
-  // columns (a 5-week period is one window, labelled with its fiscal name).
+  // columns (a 5-week period is one window, labelled as that fiscal period).
   // A miss falls through to the legacy paths below. Monthly-cadence orgs —
   // or calendars without generated periods — skip this entirely and keep
   // the existing behavior byte-identical.
@@ -151,7 +178,7 @@ export async function resolvePeriod(
   if (id === 'this_period_to_date') {
     const win = await accountingPeriodWindow(0, today, orgId)
     if (win) {
-      return { presetId: id, from: win.from, to: today, label: `${win.label} to date`, windowName: win.label, toDate: true }
+      return { presetId: id, ...win, to: today, label: `${win.label} to date`, windowName: win.label, toDate: true }
     }
   }
 

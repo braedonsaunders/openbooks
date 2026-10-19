@@ -53,18 +53,31 @@ export function periodDisplayLabel(input: PeriodDisplayInput, locale: string): s
 }
 
 /**
- * SQL form of periodDisplayLabel over an `accounting_periods` row aliased
- * `p`, rendered from the same locale templates, so a label search matches
- * the text the list shows in the viewer's locale.
+ * SQL form of canonicalPeriodLabel over an `accounting_periods` row (aliased
+ * `p` unless another alias is named), for locale-free text composed in a
+ * query: refusals, remedies and notifications that name a period. Null when
+ * an outer join found no period.
  */
-export function periodDisplayLabelSql(locale: string): SQL {
-  const first = civilDateLabelSql(sql`p.starts_on`, locale, "monthYear");
-  const last = civilDateLabelSql(sql`p.ends_on`, locale, "monthYear");
-  const canonical = sql`(case when p.is_adjustment
-    then concat('FY', p.fiscal_year, ' adjustment')
-    else concat('P', lpad(p.period_number::text, 2, '0'), ' FY', p.fiscal_year::text) end)`;
-  return sql`concat(${canonical}, ${LABEL_SEPARATOR}::text, case
-    when date_trunc('month', p.starts_on) = date_trunc('month', p.ends_on) then ${first}
+export function canonicalPeriodLabelSql(alias = "p"): SQL {
+  const p = sql.identifier(alias);
+  return sql`(case when ${p}.fiscal_year is null then null
+    when ${p}.is_adjustment
+    then concat('FY', ${p}.fiscal_year, ' adjustment')
+    else concat('P', lpad(${p}.period_number::text, 2, '0'), ' FY', ${p}.fiscal_year::text) end)`;
+}
+
+/**
+ * SQL form of periodDisplayLabel over an `accounting_periods` row (aliased
+ * `p` unless another alias is named), rendered from the same locale
+ * templates, so a label search matches the text the list shows in the
+ * viewer's locale.
+ */
+export function periodDisplayLabelSql(locale: string, alias = "p"): SQL {
+  const p = sql.identifier(alias);
+  const first = civilDateLabelSql(sql`${p}.starts_on`, locale, "monthYear");
+  const last = civilDateLabelSql(sql`${p}.ends_on`, locale, "monthYear");
+  return sql`concat(${canonicalPeriodLabelSql(alias)}, ${LABEL_SEPARATOR}::text, case
+    when date_trunc('month', ${p}.starts_on) = date_trunc('month', ${p}.ends_on) then ${first}
     else concat(${first}, ${SPAN_SEPARATOR}::text, ${last}) end)`;
 }
 
@@ -330,10 +343,10 @@ async function assertPeriodNotSealed(
   const seal = (await executor.execute<{
     fiscal_year: number;
     closing_period_id: string;
-    closing_period_name: string;
+    closing_period_label: string;
     subsidiary_id: string;
   }>(sql`
-    select s.fiscal_year, s.closing_period_id, p.name as closing_period_name, s.subsidiary_id
+    select s.fiscal_year, s.closing_period_id, ${canonicalPeriodLabelSql()} as closing_period_label, s.subsidiary_id
       from period_end_journal_seal(
              ${args.orgId}, ${args.bookId}, ${args.periodId},
              ${subsidiaryIds.length ? `{${subsidiaryIds.join(",")}}` : null}::uuid[],
@@ -341,7 +354,7 @@ async function assertPeriodNotSealed(
       join accounting_periods p on p.org_id = ${args.orgId} and p.id = s.closing_period_id`)).rows[0];
   if (!seal) return;
   throw new PeriodClosedError(
-    `GL is closed for this period and accounting book by the period-end journals of fiscal year ${seal.fiscal_year} — request a controlled reopen of ${seal.closing_period_name}, whose approval reverses them, to post here`,
+    `GL is closed for this period and accounting book by the period-end journals of fiscal year ${seal.fiscal_year} — request a controlled reopen of ${seal.closing_period_label}, whose approval reverses them, to post here`,
     {
       kind: "period-closed",
       periodId: seal.closing_period_id,
@@ -367,8 +380,8 @@ async function closedPeriodRoute(
   module: CloseModule,
   subsidiaryId: string | null,
 ): Promise<string> {
-  const adjustment = (await executor.execute<{ id: string; name: string; fiscal_year: number }>(sql`
-    select p2.id, p2.name, p2.fiscal_year
+  const adjustment = (await executor.execute<{ id: string; label: string; fiscal_year: number }>(sql`
+    select p2.id, ${canonicalPeriodLabelSql("p2")} as label, p2.fiscal_year
       from accounting_periods p2
       join accounting_periods p1
         on p1.id = ${args.periodId} and p1.org_id = ${args.orgId}
@@ -396,7 +409,7 @@ async function closedPeriodRoute(
       }
     }
     if (!blocked) {
-      return ` — request a controlled reopen, or post this entry into the open adjustment period "${adjustment.name}" for fiscal year ${adjustment.fiscal_year}`;
+      return ` — request a controlled reopen, or post this entry into the open adjustment period "${adjustment.label}"`;
     }
   }
   return " — request a controlled reopen to post here";
