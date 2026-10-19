@@ -157,6 +157,7 @@
     "estimateKeyRequired": "创建估算需要在 Idempotency-Key 标头中为每个操作提供新的 ID。",
     "estimateKeyConflict": "此估算操作已使用不同明细记录——请使用新的 Idempotency-Key 重试。",
     "estimateNeedsAccount": "创建估算前请先设置客户",
+    "estimateNeedsLines": "请先为商机至少添加一条明细，再创建报价单。",
     "saveFirstForEstimate": "请先保存此商机——报价单将转换已保存的客户和明细。",
     "statuses": {
       "qualification": "资格确认",

@@ -157,6 +157,7 @@
     "estimateKeyRequired": "Crear un presupuesto requiere una cabecera Idempotency-Key con un id nuevo por cada acción.",
     "estimateKeyConflict": "Esta acción de presupuesto ya se registró con otros detalles — reinténtela con un Idempotency-Key nuevo.",
     "estimateNeedsAccount": "Seleccione una cuenta antes de crear una estimación",
+    "estimateNeedsLines": "Añada al menos una línea a la oportunidad antes de crear una estimación.",
     "saveFirstForEstimate": "Guarde primero esta oportunidad — los presupuestos convierten el cliente y las líneas guardados.",
     "statuses": {
       "qualification": "Calificación",

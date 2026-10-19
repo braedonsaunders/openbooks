@@ -126,7 +126,7 @@ export async function transitionCrmAccountStage(
     sourceKind: string;
     sourceId?: string | null;
     reason?: string | null;
-    /** Target status for a demotion (undefined keeps the current status). */
+    /** Optional active status for the target stage; omitted statuses use its default. */
     statusId?: string | null;
   },
 ): Promise<CrmStageTransition> {
@@ -171,6 +171,24 @@ export async function transitionCrmAccountStage(
     // Backward: demotion. Lifecycle is CRM-gated, so with CRM off the stage
     // is frozen and there is nothing to move.
     if (!crmOn) return idle;
+    const status = input.statusId
+      ? await executor.execute<{ id: string }>(sql`
+          select id from crm_account_statuses
+           where id = ${input.statusId} and org_id = ${input.orgId}
+             and lifecycle_stage = ${input.toStage} and is_active
+           for share`)
+      : await executor.execute<{ id: string }>(sql`
+          select id from crm_account_statuses
+           where org_id = ${input.orgId} and lifecycle_stage = ${input.toStage}
+             and is_default and is_active
+           order by sequence limit 1 for share`);
+    if (!status.rows[0]) {
+      throw new CrmLifecycleRefusalError(
+        input.statusId
+          ? `choose an active status for ${input.toStage} before changing this account's stage`
+          : `configure an active default status for ${input.toStage} before changing this account's stage`,
+      );
+    }
     if (fromStage === "customer") {
       // The ex-customer must not keep an ACTIVE role: holds, limits and
       // customer pickers all key off it. Refuse first when open AR makes
@@ -202,7 +220,7 @@ export async function transitionCrmAccountStage(
     }
     await executor.execute(sql`
       update crm_account_profiles set lifecycle_stage = ${input.toStage},
-             status_id = ${input.statusId !== undefined ? input.statusId : sql`status_id`},
+             status_id = ${status.rows[0].id},
              updated_at = now(), updated_by = ${input.actorId}
        where id = ${profileId} and org_id = ${input.orgId}`);
     await executor.execute(sql`

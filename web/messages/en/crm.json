@@ -157,6 +157,7 @@
     "estimateKeyRequired": "Creating an estimate needs an Idempotency-Key header with a fresh id for each action.",
     "estimateKeyConflict": "This estimate action was already recorded with different details — retry with a fresh Idempotency-Key.",
     "estimateNeedsAccount": "Set an account before creating an estimate",
+    "estimateNeedsLines": "Add at least one line to the opportunity before creating an estimate.",
     "saveFirstForEstimate": "Save this opportunity first — estimates convert the saved customer and lines.",
     "statuses": {
       "qualification": "Qualification",

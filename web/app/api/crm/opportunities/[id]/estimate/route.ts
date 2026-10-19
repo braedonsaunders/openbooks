@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { db } from '@openbooks/engine/platform/db'
 import { normalizeMoney } from '@openbooks/engine/money/money'
+import { allocateDocumentNumber } from '@openbooks/engine/records/numbering'
 import { isDocKindEnabled } from "../../../../../../lib/documents.ts";
 import { guardPermission } from '../../../../../../lib/authz'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
@@ -23,47 +24,51 @@ export const runtime = 'nodejs'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
+class EstimateInputRefusalError extends Error {
+  readonly name = 'EstimateInputRefusalError'
+}
+
 /** Persist leftover estimate projected amount through exact decimal then ledger money. Fail closed. */
 function persistEstimateProjectedAmount(value: unknown): string {
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) throw new Error(moneyRefusal('Projected amount', value))
+  if (exact === null) throw new EstimateInputRefusalError(moneyRefusal('Projected amount', value))
   try {
     return normalizeMoney(exact)
   } catch {
-    throw new Error(moneyRefusal('Projected amount', value))
+    throw new EstimateInputRefusalError(moneyRefusal('Projected amount', value))
   }
 }
 
 /** Persist leftover estimate line amount through exact decimal then ledger money. Fail closed. */
 function persistEstimateLineAmount(value: unknown): string {
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) throw new Error(moneyRefusal('Line amount', value))
+  if (exact === null) throw new EstimateInputRefusalError(moneyRefusal('Line amount', value))
   try {
     return normalizeMoney(exact)
   } catch {
-    throw new Error(moneyRefusal('Line amount', value))
+    throw new EstimateInputRefusalError(moneyRefusal('Line amount', value))
   }
 }
 
 /** Persist leftover estimate line quantity through exact decimal then ledger money. Fail closed. */
 function persistEstimateLineQuantity(value: unknown): string {
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) throw new Error(decimalNullRefusal('Line quantity', 'a quantity', value, 4))
+  if (exact === null) throw new EstimateInputRefusalError(decimalNullRefusal('Line quantity', 'a quantity', value, 4))
   try {
     return normalizeMoney(exact)
   } catch {
-    throw new Error('Line quantity is out of range for the ledger')
+    throw new EstimateInputRefusalError('Line quantity is out of range for the ledger')
   }
 }
 
 /** Persist leftover estimate line unit price through exact decimal then ledger money. Fail closed. */
 function persistEstimateLineUnitPrice(value: unknown): string {
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) throw new Error(moneyRefusal('Line unit price', value))
+  if (exact === null) throw new EstimateInputRefusalError(moneyRefusal('Line unit price', value))
   try {
     return normalizeMoney(exact)
   } catch {
-    throw new Error(moneyRefusal('Line unit price', value))
+    throw new EstimateInputRefusalError(moneyRefusal('Line unit price', value))
   }
 }
 
@@ -113,7 +118,9 @@ export const POST = defineRoute({
         select o.* from crm_opportunities o where o.id = ${id} and o.org_id = ${user.orgId} and o.is_active${crmOpportunityScope(gate.allowedSubsidiaryIds)} for update of o`))
       const op = opportunity.rows[0]
       if (!op) return notFound("record")
-      if (!op?.party_id) throw new Error('The opportunity needs an account before an estimate can be created')
+      if (!op?.party_id) {
+        return NextResponse.json({ error: t('opportunities.estimateNeedsAccount') }, { status: 422 })
+      }
       // The revision pins the conversion inputs: an identical retry replays
       // the first quote, while a reused key over an edited opportunity
       // conflicts instead of returning a stale quote as though it matched.
@@ -131,22 +138,19 @@ export const POST = defineRoute({
       // name, listing the lines, before the number is consumed or anything is
       // written. (A non-null item_id always joins: the line FK is composite on
       // (org_id, item_id), so the item exists in this org by construction.)
-      const itemless = (await tx.execute<{ line_number: number }>(sql`
-        select line_number from crm_opportunity_lines
-         where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is null
+      const lines = (await tx.execute(sql`
+        select * from crm_opportunity_lines
+         where org_id = ${user.orgId} and opportunity_id = ${id}
          order by line_number`)).rows
+      if (!lines.length) {
+        return NextResponse.json({ error: t('opportunities.estimateNeedsLines') }, { status: 422 })
+      }
+      const itemless = lines.filter((line) => line.item_id === null)
       if (itemless.length) {
         return NextResponse.json({ error: t('opportunities.estimateItemlessLines',
           { lines: itemless.map((row) => String(row.line_number)).join(', ') }) }, { status: 422 })
       }
-      const sequence = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
-        insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-        values (${user.orgId}, 'quote', null, 'EST-')
-        on conflict on constraint sequences_org_kind_sub do update set next_number = number_sequences.next_number + 1
-        where number_sequences.org_id = ${user.orgId}
-        returning prefix, next_number, padding`))
-      const seq = sequence.rows[0]!
-      const number = `${seq.prefix}${String(seq.next_number).padStart(seq.padding, '0')}`
+      const number = await allocateDocumentNumber(tx, user.orgId, 'quote', 'EST-')
       const projected = persistEstimateProjectedAmount(op.projected_amount ?? '0')
       const document = (await tx.execute<{ id: string }>(sql`
         insert into documents
@@ -158,8 +162,7 @@ export const POST = defineRoute({
                 ${op.class_id}, ${JSON.stringify(op.extra_dims ?? {})}::jsonb, ${op.title}, ${projected},
                 0, ${projected}, ${user.id}, ${user.id}) returning id`))
       const docId = document.rows[0]!.id
-      const lines = (await tx.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId} order by line_number`))
-      for (const line of lines.rows) await tx.execute(sql`
+      for (const line of lines) await tx.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, item_id, account_id, description, quantity, unit, unit_price,
            amount, tax_amount, created_by, updated_by)
@@ -180,10 +183,14 @@ export const POST = defineRoute({
       if (error instanceof SetupCreateConflict) {
         return NextResponse.json({ error: t('opportunities.estimateKeyConflict') }, { status: error.status })
       }
-      return { error: error instanceof Error ? error.message : 'Could not create estimate' }
+      if (error instanceof EstimateInputRefusalError) {
+        return { refusal: error.message }
+      }
+      return { error: t('opportunities.estimateFailed') }
     })
     if (result instanceof NextResponse) return result
-    if ('error' in result) return NextResponse.json({ error: result.error }, { status: 422 })
+    if ('refusal' in result) return NextResponse.json({ error: result.refusal }, { status: 422 })
+    if ('error' in result) return NextResponse.json({ error: result.error }, { status: 500 })
     return NextResponse.json({ id: result.id, documentNumber: result.documentNumber }, { status: result.replay ? 200 : 201 })
 
   },

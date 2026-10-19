@@ -157,6 +157,7 @@
     "estimateKeyRequired": "Zum Erstellen eines Angebots ist ein Idempotency-Key-Header mit einer neuen ID pro Aktion erforderlich.",
     "estimateKeyConflict": "Diese Angebotsaktion wurde bereits mit anderen Details gespeichert — wiederholen Sie sie mit einem neuen Idempotency-Key.",
     "estimateNeedsAccount": "Legen Sie vor der Angebotserstellung einen Kunden fest",
+    "estimateNeedsLines": "Fügen Sie dem Verkaufsvorgang mindestens eine Position hinzu, bevor Sie ein Angebot erstellen.",
     "saveFirstForEstimate": "Speichern Sie diese Opportunität zuerst — Angebote übernehmen den gespeicherten Kunden und die gespeicherten Positionen.",
     "statuses": {
       "qualification": "Qualifizierung",

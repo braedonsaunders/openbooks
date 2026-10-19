@@ -265,26 +265,23 @@ export const PATCH = defineRoute({
       return NextResponse.json({ error: 'qualification must be an object' }, { status: 422 })
     }
 
-    const rank = { lead: 0, prospect: 1, customer: 2 }
-    const promoting = !!stage && rank[stage] > rank[row.lifecycle_stage as Stage]
     let statusStage: string | null = null
     if (statusId && typeof statusId === 'string') {
       const owner = (await db.execute<{ lifecycle_stage: string }>(sql`
         select lifecycle_stage from crm_account_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`))
       statusStage = owner.rows[0]?.lifecycle_stage ?? null
-      // Unknown or inactive statuses always fail closed. A known status from
-      // another stage is only a conflict when nothing explains it: a forward
-      // stage change re-defaults the status (the drawer sends the whole form,
-      // stale status included), so the stage write must not die with it.
+      // Unknown or inactive statuses always fail closed. A stage change can
+      // explain a known status from the old stage because the drawer submits
+      // its whole form, including that now-stale value.
       if (statusStage === null) return NextResponse.json({ error: 'status does not belong to this stage' }, { status: 422 })
-      if (statusStage !== (stage ?? row.lifecycle_stage) && !promoting) {
+      if (statusStage !== (stage ?? row.lifecycle_stage) && !stage) {
         return NextResponse.json({ error: 'status does not belong to this stage' }, { status: 422 })
       }
     }
-    // On promotion an explicit status only wins when it names the target stage;
-    // a stale (or cleared) status leaves the default promoteCrmAccount assigned
-    // in place instead of rejecting the save or nulling the fresh default.
-    const statusWrite = promoting && statusStage !== stage ? undefined : statusId
+    // A whole-form drawer save can carry a status from the old stage. Ignore
+    // it so the stage transition can use the target stage's active default;
+    // an explicit status for the new stage is preserved.
+    const statusWrite = stage && statusStage !== stage ? undefined : statusId
     const referenceChecks = await Promise.all([
       ownerUserId && ownerUserId !== 'invalid' ? db.execute(sql`select 1 from users where id = ${ownerUserId} and org_id = ${user.orgId}`) : null,
       territoryId && territoryId !== 'invalid' ? db.execute(sql`select 1 from crm_sales_territories where id = ${territoryId} and org_id = ${user.orgId}`) : null,
@@ -360,7 +357,7 @@ export const PATCH = defineRoute({
               toStage: stage,
               sourceKind: 'manual',
               reason: stageReason ?? null,
-              statusId: statusId !== undefined ? statusId : undefined,
+              statusId: statusWrite,
             })
             if (!demotion.lifecycleApplied) {
               throw new Error('CRM lifecycle transition was not applied')

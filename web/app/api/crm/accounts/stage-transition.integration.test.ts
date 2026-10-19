@@ -35,7 +35,7 @@ const { ensureCrmDefaults } = await import('@openbooks/engine/crm/crm')
 const { PATCH } = await import('./[id]/route.ts')
 const { POST: postDraft } = await import('./draft/route.ts')
 
-type Fixture = { orgId: string; partyId: string; leadStatusId: string; prospectDefaultId: string; prospectOtherId: string }
+type Fixture = { orgId: string; partyId: string; leadStatusId: string; prospectDefaultId: string; prospectOtherId: string; customerDefaultId: string }
 
 async function fixture(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg())
@@ -50,6 +50,7 @@ async function fixture(): Promise<Fixture> {
   const leadStatusId = statuses.find((s) => s.lifecycle_stage === 'lead' && s.is_default)!.id
   const prospectDefaultId = statuses.find((s) => s.lifecycle_stage === 'prospect' && s.is_default)!.id
   const prospectOtherId = statuses.find((s) => s.lifecycle_stage === 'prospect' && !s.is_default)!.id
+  const customerDefaultId = statuses.find((s) => s.lifecycle_stage === 'customer' && s.is_default)!.id
   const partyId = await withBypassContext(async () => {
     const pid = (await db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name, is_active)
@@ -59,7 +60,7 @@ async function fixture(): Promise<Fixture> {
       values (${org.orgId}, ${pid}, 'lead', ${leadStatusId}, true)`)
     return pid
   })
-  return { orgId: org.orgId, partyId, leadStatusId, prospectDefaultId, prospectOtherId }
+  return { orgId: org.orgId, partyId, leadStatusId, prospectDefaultId, prospectOtherId, customerDefaultId }
 }
 
 async function patch(id: string, body: unknown): Promise<{ status: number; json: { error?: string } | null }> {
@@ -241,6 +242,28 @@ test('PATCH demotion back to prospect deactivates the customer role in the same 
       { from_stage: 'lead', to_stage: 'customer', source_kind: 'manual' },
       { from_stage: 'customer', to_stage: 'prospect', source_kind: 'manual' },
     ])
+  } finally {
+    await dropScratchOrg(f.orgId)
+  }
+})
+
+test('PATCH demotion replaces a stale customer status with the active prospect default', async () => {
+  const f = await fixture()
+  try {
+    const promoted = await patch(f.partyId, {
+      lifecycleStage: 'customer', statusId: f.customerDefaultId,
+      expectedUpdatedAt: await revisionFor(f.partyId),
+    })
+    assert.equal(promoted.status, 200, JSON.stringify(promoted.json))
+
+    const demoted = await patch(f.partyId, {
+      lifecycleStage: 'prospect', statusId: f.customerDefaultId,
+      stageReason: 'account returned to prospect', expectedUpdatedAt: await revisionFor(f.partyId),
+    })
+    assert.equal(demoted.status, 200, JSON.stringify(demoted.json))
+    assert.deepEqual(await profile(f.partyId), {
+      lifecycle_stage: 'prospect', status_id: f.prospectDefaultId, status_key: 'open',
+    })
   } finally {
     await dropScratchOrg(f.orgId)
   }

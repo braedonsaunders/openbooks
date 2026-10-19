@@ -157,6 +157,7 @@
     "estimateKeyRequired": "La création d'un devis nécessite un en-tête Idempotency-Key avec un identifiant nouveau pour chaque action.",
     "estimateKeyConflict": "Cette action de devis a déjà été enregistrée avec des détails différents — réessayez avec un nouvel Idempotency-Key.",
     "estimateNeedsAccount": "Sélectionnez un compte avant de créer un devis",
+    "estimateNeedsLines": "Ajoutez au moins une ligne à l’opportunité avant de créer un devis.",
     "saveFirstForEstimate": "Enregistrez d'abord cette opportunité — les devis reprennent le client et les lignes enregistrés.",
     "statuses": {
       "qualification": "Qualification",

@@ -157,6 +157,7 @@
     "estimateKeyRequired": "見積の作成には、アクションごとに新しいIDを含むIdempotency-Keyヘッダーが必要です。",
     "estimateKeyConflict": "この見積アクションは既に異なる内容で記録されています。新しいIdempotency-Keyで再試行してください。",
     "estimateNeedsAccount": "見積を作成する前に取引先を設定してください",
+    "estimateNeedsLines": "見積を作成する前に、商談に明細を1行以上追加してください。",
     "saveFirstForEstimate": "先にこの商談を保存してください — 見積は保存済みの顧客と明細から作成されます。",
     "statuses": {
       "qualification": "適格化",

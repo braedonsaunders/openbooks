@@ -39,7 +39,7 @@ const post = () => new NextRequest('http://audit.local', {
 });
 const paramsOf = (id: string) => ({ params: Promise.resolve({ id }) });
 
-async function fixture(itemless: boolean) {
+async function fixture(itemless: boolean, empty = false) {
   const org = await withBypassContext(() => createScratchOrg());
   const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Seller', 'owner'));
   await withBypassContext(async () => {
@@ -56,10 +56,10 @@ async function fixture(itemless: boolean) {
     values (${org.orgId}, 'OPP-C4', 'Big deal', ${org.customerId}, ${actor}, ${statusId}, 80, 'upside', 'CAD', '300.0000', '240.0000', true, ${actor}, ${actor})
     returning id`))).rows[0]!.id;
   await withBypassContext(async () => {
-    for (const [n, item, description, amount] of [
+    for (const [n, item, description, amount] of (empty ? [] : [
       [1, org.items.service, 'Service', '100.0000'],
       [2, itemless ? null : org.items.service, itemless ? 'Travel expenses' : 'Support', '200.0000'],
-    ] as const) {
+    ] as const)) {
       await db.execute(sql`
         insert into crm_opportunity_lines (org_id, opportunity_id, line_number, item_id, description, quantity, unit, unit_price, amount, probability, expected_amount, created_by, updated_by)
         values (${org.orgId}, ${opp}, ${n}, ${item}, ${description}, '1.0000', 'each', ${amount}, ${amount}, 80, ${amount}, ${actor}, ${actor})`);
@@ -97,6 +97,34 @@ test('an itemless line refuses by name with nothing written', async () => {
     assert.equal(response.status, 422);
     assert.match(await response.json().then((b) => b.error as string), /opportunities\.estimateItemlessLines:2/);
     assert.equal(await quoteCount(org.orgId), 0);
+  } finally {
+    session.user = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test('an opportunity without lines cannot create a nonzero estimate', async () => {
+  const { org, opp } = await fixture(false, true);
+  try {
+    const response = await POST(post(), paramsOf(opp));
+    assert.equal(response.status, 422);
+    assert.match(await response.json().then((b) => b.error as string), /opportunities\.estimateNeedsLines/);
+    assert.equal(await quoteCount(org.orgId), 0);
+  } finally {
+    session.user = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test('estimate numbering advances beyond previously issued quote numbers', async () => {
+  const { org, opp } = await fixture(false);
+  try {
+    await withBypassContext(() => db.execute(sql`
+      insert into documents (org_id, kind, document_number, document_date, currency, status, total)
+      values (${org.orgId}, 'quote', 'EST-00990', '2026-01-01', 'CAD', 'draft', '0.0000')`));
+    const response = await POST(post(), paramsOf(opp));
+    assert.equal(response.status, 201, await response.clone().text());
+    assert.equal((await response.json() as { documentNumber: string }).documentNumber, 'EST-00991');
   } finally {
     session.user = null;
     await dropScratchOrg(org.orgId);
