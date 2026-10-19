@@ -92,7 +92,11 @@ interface PostedFixture {
  * are immutable (posted_document_status_guard), so a test that needs a
  * non-posted report must never get there by rewinding one.
  */
-async function postedFixture(opts: { stopBeforePosting?: boolean; nonRootSubsidiary?: boolean } = {}): Promise<PostedFixture> {
+async function postedFixture(opts: {
+  stopBeforePosting?: boolean
+  nonRootSubsidiary?: boolean
+  postingRateType?: string
+} = {}): Promise<PostedFixture> {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   const actorId = await createScratchUser(org.orgId, 'Sammy Sloppy', 'accountant')
@@ -102,6 +106,18 @@ async function postedFixture(opts: { stopBeforePosting?: boolean; nonRootSubsidi
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${reportSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Expense report entity', 'CAD', 'CA')
+    `)
+  }
+  if (opts.postingRateType) {
+    await db.execute(sql`
+      insert into fx_rate_types (org_id, key, name)
+      values (${org.orgId}, ${opts.postingRateType}, 'Corporate')
+    `)
+    await db.execute(sql`
+      insert into subsidiary_accounting_preferences
+        (org_id, subsidiary_id, effective_from, posting_rate_type, reason, created_by)
+      values (${org.orgId}, ${reportSubsidiaryId}, ${org.date}, ${opts.postingRateType},
+              'Use the entity corporate rate series', ${actorId})
     `)
   }
   const employeePayable = randomUUID()
@@ -273,15 +289,12 @@ test('correct refuses inactive and out-of-entity employees', async () => {
 })
 
 test('correct converts foreign expense lines with the report subsidiary rate type', async () => {
-  const { actorId, cogs, documentDate, id, orgId, subsidiaryId, cleanup } = await postedFixture({ nonRootSubsidiary: true })
+  const { actorId, cogs, documentDate, id, orgId, cleanup } = await postedFixture({
+    nonRootSubsidiary: true,
+    postingRateType: 'corporate',
+  })
   try {
     as(actorId)
-    await db.execute(sql`insert into fx_rate_types (org_id, key, name) values (${orgId}, 'corporate', 'Corporate')`)
-    await db.execute(sql`
-      insert into subsidiary_accounting_preferences
-        (org_id, subsidiary_id, effective_from, posting_rate_type, reason, created_by)
-      values (${orgId}, ${subsidiaryId}, ${documentDate}, 'corporate', 'Use the subsidiary corporate rate series', ${actorId})
-    `)
     await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate, rate_type, source)
       values (${orgId}, 'EUR', 'CAD', ${documentDate}, '1.2500000000', 'corporate', 'manual')
