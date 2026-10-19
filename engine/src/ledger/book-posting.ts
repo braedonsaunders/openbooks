@@ -71,8 +71,8 @@ export async function mapBookContributionAccounts<T extends { accountId: string;
   book: { id: string; code: string },
   postingDate: string,
   lines: T[],
+  fallbackSubsidiaryId: string,
 ): Promise<T[]> {
-  const docSubsidiaryId = doc.subsidiaryId;
   try {
     const mapped = await applyBookAccountMaps(tx, {
       orgId: doc.orgId,
@@ -80,7 +80,7 @@ export async function mapBookContributionAccounts<T extends { accountId: string;
       bookLabel: book.code,
       postingDate,
       entryLabel: `document ${doc.documentNumber}`,
-      lines: lines.map((line) => ({ ...line, subsidiaryId: line.subsidiaryId ?? docSubsidiaryId ?? "" })),
+      lines: lines.map((line) => ({ ...line, subsidiaryId: line.subsidiaryId ?? doc.subsidiaryId ?? fallbackSubsidiaryId })),
     });
     return mapped.lines.map((line, index) => ({ ...lines[index]!, accountId: line.accountId }));
   } catch (error) {

@@ -514,17 +514,24 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
           tx,
           effectiveDoc,
           await mapBookContributionAccounts(tx, effectiveDoc, { id: bookId, code: book.code }, postingDate,
-            bookLines.map((l) => ({ ...l, amount: parseMoney(l.amount) }))),
+            bookLines.map((l) => ({ ...l, amount: parseMoney(l.amount) })), subApplied.docSubId),
           { bookId, regeneration: false, withholdingCarrying: false },
         );
         assertFinalKernelBalance(secApplied.lines);
         await validateRequiredDimensions(tx, doc.orgId, secApplied.lines);
+        const secSubsidiaryIds = [...new Set([subApplied.docSubId, ...secApplied.lines.map((line) => line.subsidiaryId)])];
+        await tx.execute(sql`select period_posting_fence(${doc.orgId}, ${period.id}, ${bookId})`);
+        if (!deps.migration) {
+          for (const subsidiaryId of secSubsidiaryIds) {
+            await assertEntityPostingDate(tx, doc.orgId, subsidiaryId, postingDate);
+          }
+        }
         try {
           await assertPeriodModulesOpen(tx, {
             orgId: doc.orgId,
             periodId: period.id,
             bookId,
-            subsidiaryIds: secApplied.lines.map((line) => line.subsidiaryId),
+            subsidiaryIds: secSubsidiaryIds,
             modules: [closeModuleForDocument(doc.kind)],
             allowImportedLocks: deps.migration,
           });
