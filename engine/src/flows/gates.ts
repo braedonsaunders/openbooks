@@ -1780,8 +1780,18 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
     !nodeGate ||
     nodeGate.preventSelfApproval !== false;
   const blocked = sodBlockedIds(subject);
+  const existingAssignees = new Set(
+    (await db.select({ assigneeUserId: schema.flowGates.assigneeUserId })
+      .from(schema.flowGates)
+      .where(and(
+        eq(schema.flowGates.orgId, gate.orgId),
+        eq(schema.flowGates.runId, gate.runId),
+        eq(schema.flowGates.nodeId, gate.nodeId),
+      )))
+      .flatMap(({ assigneeUserId }) => assigneeUserId ? [assigneeUserId] : []),
+  );
   const eligible = (users: ResolvedUser[]) => users.filter((user) =>
-    user.id !== gate.assigneeUserId &&
+    !existingAssignees.has(user.id) &&
     !(sodApplies && blocked.has(user.id)));
   let replacements = nodeGate?.escalateTo
     ? eligible(await resolveAssigneeUsers([nodeGate.escalateTo], targetCtx))

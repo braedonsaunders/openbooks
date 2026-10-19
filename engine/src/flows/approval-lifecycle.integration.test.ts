@@ -628,3 +628,35 @@ test("escalation skips its current assignee before falling through to admins", {
     assert.equal(await docStatus(docId),'approved');
   });
 });
+
+test("escalation skips every existing sibling assignee without losing the open approval", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    const { flowId } = await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "all",
+      assignees: [
+        { type: "user", userId: actors.approver1Id },
+        { type: "user", userId: actors.approver2Id },
+      ],
+    });
+    await setGateEscalateTo(flowId, { type: "user", userId: actors.approver2Id });
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await submitForApproval("vendor_bill", docId);
+    const initial = await gateRows({ subjectId: docId });
+    const approvedSibling = initial.find((gate) => gate.assigneeUserId === actors.approver2Id)!;
+    const overdue = initial.find((gate) => gate.assigneeUserId === actors.approver1Id)!;
+
+    await decideGate({ gateId: approvedSibling.id, decision: "approved", userId: actors.approver2Id });
+    assert.equal((await gateRows({ subjectId: docId })).find((gate) => gate.id === approvedSibling.id)?.status, "approved");
+
+    assert.equal(await escalateDueGate(overdue.id), true);
+    const afterEscalation = await gateRows({ subjectId: docId });
+    assert.equal(afterEscalation.find((gate) => gate.id === overdue.id)?.status, "escalated");
+    const replacement = afterEscalation.filter((gate) => gate.status === "pending");
+    assert.equal(replacement.length, 1);
+    assert.notEqual(replacement[0]!.assigneeUserId, actors.approver2Id, "approved sibling cannot be reused as replacement");
+
+    await decideGate({ gateId: replacement[0]!.id, decision: "approved", userId: replacement[0]!.assigneeUserId! });
+    assert.equal(await docStatus(docId), "approved");
+  });
+});
