@@ -274,7 +274,7 @@ test("concurrent runs never post a period twice", { skip: !DB }, async () => {
   }
 });
 
-test("zero plan lines are consumed without posting empty journal entries", { skip: !DB }, async () => {
+test("zero plan lines are retired without posting empty journal entries", { skip: !DB }, async () => {
   const w = await setupWorld();
   try {
     const bill = await postSourceDocument(w, { number: "B-AM-ZERO", amount: "0.01" });
@@ -283,10 +283,16 @@ test("zero plan lines are consumed without posting empty journal entries", { ski
 
     const run = await runExpenseAmortization({ orgId: w.org.orgId, actorId: w.actorId, periodId: w.org.periodId });
 
-    assert.equal(run.posted, 1, "the due zero line is consumed");
+    assert.equal(run.posted, 0, "a zero line is not counted as a posted journal");
     assert.deepEqual(run.entries, [], "a zero line has no journal entry");
     assert.deepEqual(run.problems, []);
-    assert.equal((await plan(w.org.orgId, schedule.id))[0]?.status, "posted");
+    const closed = (await db.execute<{ status: string; closed_at: Date | null }>(sql`
+      select status, closed_at from expense_amortization_schedule_lines
+       where org_id = ${w.org.orgId} and schedule_id = ${schedule.id}
+         and planned_amount = 0 and status = 'superseded'`)).rows;
+    assert.equal(closed.length, 1);
+    assert.equal(closed[0]?.status, "superseded");
+    assert.ok(closed[0]?.closed_at, "the zero line is retained in closed schedule history");
     const entries = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from journal_entries where org_id = ${w.org.orgId} and origin = 'expense_amortization'`)).rows[0]!;
     assert.equal(entries.n, "0");

@@ -22,7 +22,7 @@ import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { db, orgContext, withBypass, withOrg, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
 import { AMORTIZATION_FEATURE_KEY, AmortizationError } from "./errors.ts";
 import { assertAmortizationFeature, recordScheduleEvent, requireAmortizationAuthority, writeAmortizationAudit } from "./internal.ts";
-import { livePlanLines, loadSchedule, postScheduleEntry, scheduleBalance, updateSchedule } from "./schedule-store.ts";
+import { closePlannedLines, livePlanLines, loadSchedule, postScheduleEntry, scheduleBalance, updateSchedule } from "./schedule-store.ts";
 
 export interface AmortizationRunProblem {
   scheduleId: string;
@@ -120,7 +120,7 @@ async function postDueLine(
   orgId: string,
   actorId: string | null,
   due: DueLine,
-): Promise<{ entryId: string | null; amount: string; currency: string; completed: boolean } | AmortizationRunProblem | null> {
+): Promise<{ entryId: string; amount: string; currency: string; completed: boolean } | AmortizationRunProblem | null> {
   const schedule = await loadSchedule(runner, orgId, due.schedule_id, { lock: true });
   if (schedule.status !== "active") return null;
   const line = (await runner.execute<{ status: string }>(sql`
@@ -173,20 +173,9 @@ async function postDueLine(
      where org_id = ${orgId} and id = ${due.line_id}`)).rows[0]!.planned_amount;
   const units = toUnits(amount);
   if (units === 0n) {
-    // Currency-quantum rounding can assign zero to an early planned period.
-    const updated = (await runner.execute<{ id: string }>(sql`
-      update expense_amortization_schedule_lines
-         set status = 'posted', journal_entry_id = null, posted_at = now(), posted_by = ${actorId}
-       where org_id = ${orgId} and id = ${due.line_id} and status = 'planned'
-      returning id`)).rows;
-    if (updated.length !== 1) {
-      throw new AmortizationError(`Plan line ${due.period_start.slice(0, 7)} of ${schedule.scheduleNumber} changed while it posted.`, {
-        status: 409,
-        code: "amortization_line_conflict",
-        remedy: "Run amortization again.",
-      });
-    }
-    return { entryId: null, amount: fromUnits(units), currency: schedule.currency, completed: false };
+    // A rounded-to-zero line has no ledger entry and cannot enter posted history.
+    await closePlannedLines(runner, orgId, [due.line_id], "superseded");
+    return null;
   }
   const entryId = await postScheduleEntry(runner, {
     schedule,
@@ -272,16 +261,14 @@ async function runOnRunner(
     }
     result.posted += 1;
     totals.set(outcome.currency, (totals.get(outcome.currency) ?? 0n) + toUnits(outcome.amount));
-    if (outcome.entryId) {
-      result.entries.push({
-        scheduleId: due.schedule_id,
-        scheduleNumber: due.schedule_number,
-        periodStart: due.period_start,
-        amount: outcome.amount,
-        currency: outcome.currency,
-        entryId: outcome.entryId,
-      });
-    }
+    result.entries.push({
+      scheduleId: due.schedule_id,
+      scheduleNumber: due.schedule_number,
+      periodStart: due.period_start,
+      amount: outcome.amount,
+      currency: outcome.currency,
+      entryId: outcome.entryId,
+    });
     if (outcome.completed) result.completed.push(due.schedule_id);
   }
   for (const [currency, total] of totals) result.totals[currency] = fromUnits(total);
