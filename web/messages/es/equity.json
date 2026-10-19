@@ -1,7 +1,7 @@
 {
   "home": {
     "title": "Patrimonio y tabla de capitalización",
-    "description": "Clases de acciones, planes, valores y accionistas de cada entidad jurídica, con la tabla de capitalización a cualquier fecha, modelos de rondas y de salida, y la compensación en acciones contabilizada en el libro mayor."
+    "description": "La tabla de capitalización de cada entidad jurídica a cualquier fecha, con sus títulos, rondas, modelos de salida y remuneración en acciones."
   },
   "tabs": {
     "captable": "Tabla de capitalización",

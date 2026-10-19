@@ -1,7 +1,7 @@
 {
   "home": {
     "title": "Capitaux propres et table de capitalisation",
-    "description": "Catégories d’actions, plans, titres et actionnaires de chaque entité juridique, avec la table de capitalisation à toute date, des modèles de levée et de sortie, et la rémunération en actions comptabilisée au grand livre."
+    "description": "La table de capitalisation de chaque entité juridique à toute date, avec ses titres, levées, modèles de sortie et rémunération en actions."
   },
   "tabs": {
     "captable": "Table de capitalisation",

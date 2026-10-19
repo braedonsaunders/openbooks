@@ -1,7 +1,7 @@
 {
   "home": {
     "title": "Patrimônio e tabela de capitalização",
-    "description": "Classes de ações, planos, títulos e partes interessadas de cada entidade jurídica, com a tabela de capitalização em qualquer data, modelos de rodadas e de saída e a remuneração em ações contabilizada no razão geral."
+    "description": "A tabela de capitalização de cada entidade jurídica em qualquer data, com seus títulos, rodadas, modelos de saída e remuneração em ações."
   },
   "tabs": {
     "captable": "Tabela de capitalização",

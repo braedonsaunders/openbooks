@@ -1,7 +1,7 @@
 {
   "home": {
     "title": "Equity & cap table",
-    "description": "Share classes, plans, securities and stakeholders of each legal entity, with the cap table as of any date, round and exit models, and stock compensation posted to the general ledger."
+    "description": "Each legal entity's cap table as of any date, with its securities, rounds, exit models and stock compensation."
   },
   "tabs": {
     "captable": "Cap table",

@@ -1,7 +1,7 @@
 {
   "home": {
     "title": "Eigenkapital & Kapitaltabelle",
-    "description": "Anteilsklassen, Pläne, Wertpapiere und Anteilseigner jedes Rechtsträgers, mit der Kapitaltabelle zu jedem Stichtag, Finanzierungsrunden- und Exit-Modellen sowie im Hauptbuch gebuchter aktienbasierter Vergütung."
+    "description": "Die Kapitaltabelle jedes Rechtsträgers zu jedem Stichtag, mit Wertpapieren, Finanzierungsrunden, Exit-Modellen und aktienbasierter Vergütung."
   },
   "tabs": {
     "captable": "Kapitaltabelle",
