@@ -1,3 +1,4 @@
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -51,19 +52,13 @@ test(
       const netPayable = await account("2300", "Wages payable", "liability_current");
       const craPayable = await account("2310", "CRA remittances payable", "liability_current");
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
-      await db.execute(sql`
-        update orgs set settings = settings || ${JSON.stringify({
-          payroll: {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable,
-            wagesTo: "expense",
-          },
-        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollAccountingConfiguration(org.orgId, {
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } }
+      });
       await seedPayrollComponents(org.orgId, actorId);
 
       const scheduleId = randomUUID();

@@ -1,7 +1,7 @@
 import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
-  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -184,6 +184,7 @@ const account = async (
 async function payrollOrg(): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
+  await grantScratchPermissions(org.orgId, actorId, ["payroll.run"]);
   const accounts = {
     wageExpense: await account(org.orgId, "6000", "Wages expense", "expense"),
     burdenExpense: await account(org.orgId, "6010", "Payroll burden", "expense"),

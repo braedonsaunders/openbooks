@@ -1622,7 +1622,7 @@ export async function resolveStatutoryHolidayPay(
     .filter((holiday) => holiday.paid);
   if (input.jurisdiction === "CA-MB") {
     const rule = statutoryHolidayPayRule(input.jurisdiction, input.periodStart);
-    if (rule) assertOccupationClass(rule, input.country, input.occupationClass, input.employeeName);
+    if (rule) assertOccupationClass(rule, countryOfJurisdiction(input.jurisdiction), input.occupationClass, input.employeeName);
   }
   const mbConstruction = input.jurisdiction === "CA-MB" && input.occupationClass === "construction";
   if (!mbConstruction && periodHolidays.length === 0 && workTriggeredHolidays.length === 0) return [];
@@ -1706,8 +1706,7 @@ export async function resolveStatutoryHolidayPay(
         + "in whole or in part on commission",
       );
     }
-    const absentWithoutConsent = input.absentWithoutConsentByHoliday?.[`${holiday.key}|${holiday.date}`]
-      ?? input.absentWithoutConsent;
+    const absentWithoutConsent = input.absentWithoutConsentByHoliday?.[`${holiday.key}|${holiday.date}`];
     if (
       rule.qualifying.lastAndFirstScheduledShift
       && absentWithoutConsent === undefined

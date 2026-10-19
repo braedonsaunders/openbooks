@@ -1,15 +1,11 @@
-import { seedPayrollLine } from '../testing/fixtures.ts';
-import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import { seedAdoption } from "./filing-test-fixtures.ts";
+import { saveEntitlementOpenings, entitlementBalances, recordEntitlementMovements } from "./entitlements.ts";
 import { strict as assert } from "node:assert";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  legacyVacationBalances,
-  projectedBalances,
-} from "../../../scripts/migrate-vacation-to-entitlements.ts";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
   computePlanMovement,
   computeEmploymentServiceCredit,
@@ -599,7 +595,7 @@ test("limitScopeOf names the scope a stored row occupies", () => {
 /* The vacation case the migration has to reproduce                    */
 /* ------------------------------------------------------------------ */
 
-test("a vacation plan reproduces the legacy 4%-of-vacationable accrual", () => {
+test("a vacation plan accrues four percent of eligible earnings", () => {
   // payroll-run.ts computes mulPercent(vacationableEarnings, percent, 2) and
   // stores it on pay_stubs.vacation_accrued. The plan engine must agree to the
   // cent or the replay verification fails.
@@ -615,122 +611,32 @@ test("a vacation plan reproduces the legacy 4%-of-vacationable accrual", () => {
   }
 });
 
-test(
-  "the migration ties out for the population it exists to protect: a prior-year "
-  + "opening balance with current-year stubs",
-  { skip: !DB },
-  async () => {
-    // THE case the script's tie-out is for, and the one it could not answer
-    // deterministically: a converted tenant, where the employee's opening
-    // balance sits in the conversion year and their stubs are in the year
-    // after. The population CTE emitted TWO rows for that employee — one
-    // carrying the opening balance, one reading zero — the outer select
-    // computed a different balance for each, and `new Map(rows.map(...))` kept
-    // whichever Postgres returned last, with no ORDER BY to decide. So the
-    // penny-exact verification flipped between "with opening balance" and
-    // "without" from run to run, on exactly the tenants it was written for.
-    //
-    // (This replaces a test that computed both sides of `opening + accruals -
-    // payouts` from the same literals with the same helpers and asserted that
-    // `sum` is associative. It touched neither the migration nor the ledger and
-    // could not fail for any payroll reason.)
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    try {
-      const payoutComponentId = randomUUID();
-      await seedPayrollComponent(org.orgId, payoutComponentId, {
-        code: 'VACPAY', name: 'Vacation payout', kind: 'earning', systemKey: 'vacation_payout', isActive: true,
-        createdBy: actorId, updatedBy: actorId,
-      });
-
-      const scheduleId = randomUUID();
-      await db.execute(sql`
-        insert into pay_schedules (id, org_id, name, frequency, periods_per_year,
-                                   anchor_period_end, pay_date_offset_days, is_active,
-                                   created_by, updated_by)
-        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-                ${actorId}, ${actorId})`);
-
-      // Stubs carry the HRM employment 0374 requires: one per hire, linked below.
-      const employments = new Map<string, string>();
-      const employee = async (name: string): Promise<string> => {
-        const id = randomUUID();
-        await db.execute(sql`
-          insert into parties (id, org_id, kind, display_name, is_active, custom)
-          values (${id}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
-        employments.set(id, await seedWorkerEmployment(org.orgId, id, org.subsidiaryId));
-        return id;
-      };
-      // Converted: conversion-year opening balance, following-year stubs.
-      const carried = await employee("Carried Over");
-      // Hired after conversion: stubs only, no opening row at all.
-      const fresh = await employee("Fresh Hire");
-
-      await db.execute(sql`
-        insert into payroll_opening_balances (org_id, employee_party_id, tax_year, vacation_balance)
-        values (${org.orgId}, ${carried}, 2025, '1250.5500')`);
-
-      const committedRun = async (
-        payDate: string,
-        rows: { employeePartyId: string; accrued: string; payout: string }[],
-      ): Promise<void> => {
-        const documentId = randomUUID();
-        await seedPayrollDocument(org.orgId, documentId, {
-          kind: 'pay_run', documentNumber: `PAY-${payDate}`, subsidiaryId: org.subsidiaryId, documentDate: payDate,
-          currency: 'CAD', status: 'approved', createdBy: actorId, updatedBy: actorId,
-        });
-        await db.execute(sql`
-          insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
-                                pay_date, tax_year, run_status, created_by, updated_by)
-          values (${documentId}, ${org.orgId}, ${scheduleId}, ${payDate}, ${payDate}, ${payDate},
-                  2026, 'committed', ${actorId}, ${actorId})`);
-        for (const row of rows) {
-          const stubId = randomUUID();
-          const employmentId = employments.get(row.employeePartyId);
-          assert.ok(employmentId, "The declared employee must have a native employment");
-          await seedPayrollStub(org.orgId, documentId, row.employeePartyId, employmentId, {
-            id: stubId, province: 'ON', periodsPerYear: 26, payDate: payDate, taxYear: 2026, currency: 'CAD',
-            vacationAccrued: row.accrued, createdBy: actorId, updatedBy: actorId,
-          });
-          if (row.payout !== "0") {
-            await seedPayrollLine(org.orgId, stubId, payoutComponentId, {
-              kind: 'earning', description: 'Vacation payout', amount: row.payout, createdBy: actorId, updatedBy: actorId,
-            });
-          }
-        }
-      };
-
-      await committedRun("2026-01-16", [
-        { employeePartyId: carried, accrued: "115.3800", payout: "0" },
-        { employeePartyId: fresh, accrued: "88.0000", payout: "0" },
-      ]);
-      await committedRun("2026-01-30", [
-        { employeePartyId: carried, accrued: "115.3800", payout: "500.0000" },
-        { employeePartyId: fresh, accrued: "88.0000", payout: "0" },
-      ]);
-
-      const legacy = await legacyVacationBalances(org.orgId);
-      const projected = await projectedBalances(org.orgId);
-
-      // One row per employee, always. Under the UNION population this call
-      // threw on `carried` (two rows) instead of quietly picking one.
-      assert.equal(legacy.size, 2);
-
-      // The converted employee's carry-in is IN the balance — the branch the
-      // coin-flip used to drop. 1250.55 + 115.38 + 115.38 - 500.00
-      assert.equal(legacy.get(carried), "981.3100");
-      assert.equal(legacy.get(fresh), "176.0000");
-
-      // And the ledger the migration would write reproduces it to the penny,
-      // which is the only claim the script actually makes.
-      for (const [employeePartyId, balance] of legacy) {
-        assert.equal(projected.get(employeePartyId)?.balance, balance);
-      }
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+test("a prior-year opening and current-year bank movements retain one lifetime balance per employee", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const fresh = randomUUID();
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${fresh}, ${fx.orgId}, 'person', 'New bank participant', true, '{}'::jsonb)`);
+    const planId = (await db.execute<{id:string}>(sql`select id from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!.id;
+    await saveEntitlementOpenings({ orgId: fx.orgId, actorId: fx.actorId, movementDate: '2025-01-01',
+      rows: [{ employeePartyId: fx.employeeId, amounts: { [planId]: '1250.55' } }] });
+    await db.transaction(async tx => {
+      const movements = [
+        { employeePartyId: fx.employeeId, movementDate: '2026-01-16', amount: '115.38' },
+        { employeePartyId: fx.employeeId, movementDate: '2026-01-30', amount: '115.38' },
+        { employeePartyId: fx.employeeId, movementDate: '2026-01-30', amount: '-500' },
+        { employeePartyId: fresh, movementDate: '2026-01-16', amount: '88' },
+        { employeePartyId: fresh, movementDate: '2026-01-30', amount: '88' },
+      ].map(movement => ({ ...movement, planId, kind: 'adjustment' as const, componentId: null, hours: null, note: 'Documented bank balance adjustment' }));
+      assert.equal(await recordEntitlementMovements(tx, { orgId: fx.orgId, actorId: fx.actorId, payRunDocumentId: null, movements }), 5);
+    });
+    const carried = await entitlementBalances(fx.orgId, fx.employeeId, '2026-01-31');
+    const newlyAccrued = await entitlementBalances(fx.orgId, fresh, '2026-01-31');
+    assert.equal(carried.find(balance => balance.plan.id === planId)!.balance, '981.3100');
+    assert.equal(newlyAccrued.find(balance => balance.plan.id === planId)!.balance, '176.0000');
+    assert.equal((await entitlementBalances(fx.orgId, fx.employeeId, '2025-12-31')).find(balance => balance.plan.id === planId)!.balance, '1250.5500');
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
 
 test("an hours-denominated bank keeps whole hours, not dollars", () => {
   // A statutory time-off-in-lieu bank: 1.5 banked hours per overtime hour.

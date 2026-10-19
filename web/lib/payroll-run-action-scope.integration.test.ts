@@ -177,7 +177,8 @@ const consolidatedRows = [
         const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle");
         const { demandingHolidays, recordHolidayAssertion } = await import("@openbooks/engine/payroll/holiday-attestations");
         const { payRunStaleness } = await import("@openbooks/engine/payroll/readiness");
-        const { dropScratchOrgReporting, seedWorkerEmployment, seedPayrollProfile } = await import("@openbooks/engine/testing/fixtures");
+        const { dropScratchOrgReporting, seedPayrollProfile } = await import("@openbooks/engine/testing/fixtures");
+        const { seedEmployment } = await import("@openbooks/engine/testing/hrm-harness");
         const { POST } = await import("../app/api/payroll/runs/[id]/route");
         const assertionsRoute = await import("../app/api/payroll/runs/[id]/holiday-assertions/route");
         const profilesRoute = await import("../app/api/payroll/profiles/route");
@@ -313,9 +314,10 @@ const consolidatedRows = [
                                             is_active, created_by, updated_by)
               values (${fx.orgId}, ${id}, 'CAD', '30', 'hour', '2020-01-01', true,
                       ${fx.actorId}, ${fx.actorId})`);
-            const addedEmploymentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
+            const { employmentId: addedEmploymentId } = await seedEmployment(fx.orgId, fx.subsidiaryId, { workerPartyId: id, from: "2020-01-06" });
             await seedPayrollProfile(fx.orgId, id, addedEmploymentId, fx.scheduleId, fx.actorId,
-              { province, payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1 },
+              { province, payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
+                wcbExempt: true, wcbExemptReason: 'Declared exemption for the holiday-attestation scenario' },
               { percentFloor: '4', method: 'accrue' });
             return id;
           });
@@ -1324,7 +1326,7 @@ const payrollPopulationCases = [{ label: "payroll run population scope", registe
         const { GET } = await import("../app/api/payroll/runs/route");
         const { PAYROLL_TOOLS } = await import("./assistant/tools-payroll");
         const { payRunWhere } = await import("./customization/list-query");
-        const { default: Page } = await import("../app/(app)/payroll/runs/[id]/page");
+        const { loadPayRunWizard } = await import("../app/(app)/payroll/runs/[id]/view");
 
         for (const surface of ["collection", "record list", "assistant list", "assistant detail", "wizard"] as const) {
           test(`payroll population scope: ${surface}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -1356,7 +1358,7 @@ const payrollPopulationCases = [{ label: "payroll run population scope", registe
                   const rows = (await db.execute<{ id: string }>(sql`select d.id from documents d where ${where}`)).rows;
                   assert.equal(rows.some((row) => row.id === input.documentId), visible);
                 } else if (surface === "wizard") {
-                  const page = () => Page({ params: Promise.resolve({ id: input.documentId }), searchParams: Promise.resolve({}) });
+                  const page = () => loadPayRunWizard(input.documentId, {});
                   if (visible) assert.ok(await page());
                   else await assert.rejects(page(), /NEXT_HTTP_ERROR_FALLBACK;404/);
                 } else {

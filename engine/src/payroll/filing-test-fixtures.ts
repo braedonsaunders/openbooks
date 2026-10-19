@@ -1,3 +1,4 @@
+import { seedEmployment } from "../testing/hrm-harness.ts";
 import { seedCanadianPostingAccounts } from "../testing/payroll-posting-fixture.ts";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
@@ -345,7 +346,7 @@ async function seedEmployee(
             ${fx.actorId}, ${fx.actorId})`);
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
-  const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
+  const { employmentId } = await seedEmployment(fx.orgId, fx.subsidiaryId, { workerPartyId: employeeId, from: options.hiredOn ?? "2020-01-06" });
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                   is_active, created_by, updated_by)

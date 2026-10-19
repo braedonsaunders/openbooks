@@ -201,7 +201,7 @@ test(
       });
       const ontario = await resolveStatutoryHolidayPay(db, {
         ...holidayInput(fx), country: "CA", subsidiaryId: fx.subsidiaryId,
-        jurisdiction: "CA-ON", absentWithoutConsent: false,
+        jurisdiction: "CA-ON", absentWithoutConsentByHoliday: { "canada_day|2026-07-01": false },
       });
       // ESA s. 24(1)(a): regular wages (none here) plus vacation payable for
       // the four work weeks before the holiday week — $2,900 ÷ 20.
@@ -418,7 +418,7 @@ async function straddlingStubCase(datedSpan: boolean): Promise<void> {
         premiumComponentId,
         excludeDocumentId: currentRunId,
         hourlyRate: "25.00",
-        absentWithoutConsent: false,
+        absentWithoutConsentByHoliday: { "remembrance_day|2025-11-11": false },
       });
       const holidayPay = lines.find((line) => line.componentId === holidayComponentId);
       assert.ok(holidayPay, "Remembrance Day is paid");

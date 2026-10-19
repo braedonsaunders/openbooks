@@ -1,3 +1,4 @@
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -47,18 +48,13 @@ test(
       const wcbPayable = await account("2330", "WSIB payable", "liability_current");
       const ehtPayable = await account("2340", "EHT payable", "liability_current");
       const benefitClearing = await account("1200", "Benefit clearing", "asset_current_other");
-      await db.execute(sql`
-        update orgs set settings = settings || ${JSON.stringify({
-          payroll: {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            wagesTo: "expense",
-          },
-        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollAccountingConfiguration(org.orgId, {
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+      });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
       // No annual exemption in this fixture so the levy prices the whole

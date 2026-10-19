@@ -1,3 +1,4 @@
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -79,17 +80,14 @@ async function seedHarness(orgId: string, actorId: string): Promise<Harness> {
   const burdenExpense = await account("6010", "Payroll burden", "expense");
   const netPayable = await account("2300", "Wages payable", "liability_current");
   const itPayable = await account("2310", "Erario F24 payable", "liability_current");
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
+  await seedPayrollAccountingConfiguration(orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
-        taxPayableAccountId: itPayable,
         wagesTo: "expense",
         countries: ["IT"],
-      },
-    })}::jsonb where id = ${orgId}`);
+        slotAccounts: { IT: { irpef: itPayable } }
+      });
   await seedPayrollComponents(orgId, actorId, "IT");
   await setPackSlotAccount(orgId, actorId, "IT", "irpef", itPayable);
   await setPackSlotAccount(orgId, actorId, "IT", "addizionale_regionale", itPayable);

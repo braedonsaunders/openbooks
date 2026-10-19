@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   ChevronRight,
   Download,
-  Info,
   Lock,
   Upload,
 } from 'lucide-react'
@@ -40,13 +39,8 @@ export function EntitlementOpeningsView({
   canManage: boolean
   onDirtyChange?: (count: number) => void
 }) {
-  const t = useTranslations('payroll')
+  const text = useTranslations('payroll.openingBalances.entitlements')
   const router = useRouter()
-  const text = (key: string, fallback: string) =>
-    t.has(`openingBalances.entitlements.${key}` as never)
-      ? t(`openingBalances.entitlements.${key}` as never)
-      : fallback
-
   const [asOf, setAsOf] = useState(initial.asOf)
   const [draft, setDraft] = useState<Record<string, Record<string, string>>>({})
   const [saving, setSaving] = useState(false)
@@ -57,16 +51,6 @@ export function EntitlementOpeningsView({
   const [activeId, setActiveId] = useState<string | null>(null)
   const activeRow = initial.rows.find((row) => row.employeePartyId === activeId)
   const plans = initial.plans
-  const legacyCount = useMemo(
-    () =>
-      initial.rows.filter((row) => row.legacyVacationBalance !== null).length,
-    [initial.rows],
-  )
-  const vacationPlan = useMemo(
-    () => plans.find((plan) => plan.systemKey === 'vacation') ?? null,
-    [plans],
-  )
-
   const valueOf = (employeePartyId: string, planId: string): string => {
     const edited = draft[employeePartyId]?.[planId]
     if (edited !== undefined) return edited
@@ -101,7 +85,7 @@ export function EntitlementOpeningsView({
     setSaving(true)
     setErrors([])
     setWarnings([])
-    const fallback = text('saveFailed', 'Nothing was saved.')
+    const fallback = text('saveFailed')
     try {
       const payload = dirtyIds.map((employeePartyId) => ({
         employeePartyId,
@@ -155,7 +139,7 @@ export function EntitlementOpeningsView({
       setDraft({})
       setWarnings(body.warnings ?? [])
       toast.success(
-        text('saved', 'Bank carry-ins saved.') +
+        text('saved') +
           ` (${body.created ?? 0} new, ${body.updated ?? 0} updated, ${body.deleted ?? 0} cleared)`,
       )
       router.refresh()
@@ -179,18 +163,15 @@ export function EntitlementOpeningsView({
     return (
       <section className="space-y-3" id="entitlements">
         <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
-          {text('title', 'Bank carry-ins (vacation, banked time)')}
+          {text('title')}
         </h2>
         <p className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          {text(
-            'noPlans',
-            'No entitlement plans are set up, so there is no bank to carry a balance into.',
-          )}{' '}
+          {text('noPlans')}{' '}
           <Link
             href={'/hrm/benefits?view=programs&type=time_off' as never}
             className="underline"
           >
-            {text('configurePlans', 'Set up entitlement plans')}
+            {text('configurePlans')}
           </Link>
         </p>
       </section>
@@ -200,18 +181,15 @@ export function EntitlementOpeningsView({
   return (
     <section className="space-y-4" id="entitlements">
       <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
-        {text('title', 'Bank carry-ins (vacation, banked time)')}
+        {text('title')}
       </h2>
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <Label
             htmlFor="entitlement-openings-asof"
-            help={text(
-              'asOfHelp',
-              'The adoption date the carry-in is dated. A pay run only counts movements dated on or before its pay date, so this must fall before your first pay run here. It is not a tax year: a bank has one lifetime balance.',
-            )}
+            help={text('asOfHelp')}
           >
-            {text('asOf', 'Carried in as at')}
+            {text('asOf')}
           </Label>
           <DateField
             id="entitlement-openings-asof"
@@ -224,18 +202,18 @@ export function EntitlementOpeningsView({
         <Button variant="outline" size="sm" asChild>
           <Link href={'/data/import' as never}>
             <Upload size={14} aria-hidden />
-            {text('bulkImport', 'Bulk load from a file')}
+            {text('bulkImport')}
           </Link>
         </Button>
         <Button variant="outline" size="sm" asChild>
           <Link href={'/data/export' as never}>
             <Download size={14} aria-hidden />
-            {text('export', 'Export')}
+            {text('export')}
           </Link>
         </Button>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {text('entered', 'Carried in')}: {initial.entered} /{' '}
+            {text('entered')}: {initial.entered} /{' '}
             {initial.rows.length}
           </span>
           {canManage && (
@@ -245,56 +223,18 @@ export function EntitlementOpeningsView({
               onClick={save}
             >
               {saving
-                ? text('saving', 'Saving…')
-                : `${text('save', 'Save')}${dirtyIds.length ? ` (${dirtyIds.length})` : ''}`}
+                ? text('saving')
+                : `${text('save')}${dirtyIds.length ? ` (${dirtyIds.length})` : ''}`}
             </Button>
           )}
         </div>
       </div>
 
-      {legacyCount > 0 && vacationPlan && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900/60 dark:bg-amber-950/30">
-          <p className="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-300">
-            <Info size={15} aria-hidden />
-            {text('legacyTitle', 'Unmigrated vacation balances found')}
-          </p>
-          <p className="mt-1 text-amber-700 dark:text-amber-300">
-            {text(
-              'legacyBody',
-              'These employees carry a vacation balance on the retired opening-balances column that no bank shows. It is a liability nobody is tracking. Load it here, or run scripts/migrate-vacation-to-entitlements.ts to replay the whole history.',
-            )}{' '}
-            ({legacyCount})
-          </p>
-          {canManage && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() =>
-                setDraft((current) => {
-                  const next = { ...current }
-                  for (const row of initial.rows) {
-                    if (row.legacyVacationBalance === null) continue
-                    next[row.employeePartyId] = {
-                      ...(next[row.employeePartyId] ?? {}),
-                      [vacationPlan.id]: trimZeros(row.legacyVacationBalance),
-                    }
-                  }
-                  return next
-                })
-              }
-            >
-              {text('legacyPrefill', 'Copy them into the Vacation column')}
-            </Button>
-          )}
-        </div>
-      )}
-
       {errors.length > 0 && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm dark:border-red-900/60 dark:bg-red-950/40">
           <p className="flex items-center gap-2 font-medium text-red-800 dark:text-red-300">
             <AlertTriangle size={15} aria-hidden />
-            {text('rejected', 'Nothing was saved — fix these first.')}
+            {text('rejected')}
           </p>
           <ul className="mt-2 space-y-1 text-red-700 dark:text-red-300">
             {errors.map((error, index) => (
@@ -331,14 +271,11 @@ export function EntitlementOpeningsView({
         rowKey={(row) => row.employeePartyId}
         rowLabel={(row) => row.employeeName}
         onRowClick={(row) => setActiveId(row.employeePartyId)}
-        empty={text(
-          'empty',
-          'No employees have an active payroll profile yet.',
-        )}
+        empty={text('empty')}
         columns={[
           {
             key: 'employee',
-            header: text('employee', 'Employee'),
+            header: text('employee'),
             search: (row) => `${row.employeeName} ${row.employeeNumber ?? ''}`,
             cell: (row) => (
               <div className="font-medium">
@@ -415,7 +352,7 @@ export function EntitlementOpeningsView({
             {canManage && (
               <Button disabled={saving || dirtyIds.length === 0} onClick={save}>
                 {saving
-                  ? text('saving', 'Saving…')
+                  ? text('saving')
                   : `${workspace('saveAll')} (${dirtyIds.length})`}
               </Button>
             )}
@@ -426,11 +363,11 @@ export function EntitlementOpeningsView({
           <div className="space-y-5">
             {initial.blocked[activeRow.employeePartyId] && (
               <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                {text('blocked', 'Paid on')}{' '}
+                {text('blocked')}{' '}
                 {initial.blocked[activeRow.employeePartyId]!.payDate} (
                 {initial.blocked[activeRow.employeePartyId]!.documentNumber ??
                   '—'}
-                ) — {text('blockedHint', 'date the carry-in after it')}
+                ) — {text('blockedHint')}
               </p>
             )}
             {errors.length > 0 && (
@@ -470,16 +407,10 @@ export function EntitlementOpeningsView({
                     <Label
                       help={
                         plan.direction === 'owe'
-                          ? text(
-                              'oweHelp',
-                              'A balance the employee owes the employer: enter a negative amount.',
-                            )
+                          ? text('oweHelp')
                           : plan.unit === 'hours'
-                            ? text(
-                                'hoursHelp',
-                                'The balance carried in, in hours.',
-                              )
-                            : text('moneyHelp', 'The money balance carried in.')
+                            ? text('hoursHelp')
+                            : text('moneyHelp')
                       }
                     >
                       {plan.name}{' '}
@@ -490,7 +421,7 @@ export function EntitlementOpeningsView({
                     {lock && (
                       <p className="text-xs text-slate-500">
                         <Lock size={11} className="mr-1 inline" aria-hidden />
-                        {text('lockedBy', 'Committed pay run')}{' '}
+                        {text('lockedBy')}{' '}
                         {lock.documentNumber} · {lock.payDate}
                       </p>
                     )}
@@ -513,7 +444,7 @@ export function EntitlementOpeningsView({
                     />
                     {activeRow.dates[plan.id] && (
                       <p className="text-xs text-slate-400">
-                        {text('asOf', 'Carried in as at')}{' '}
+                        {text('asOf')}{' '}
                         {activeRow.dates[plan.id]}
                       </p>
                     )}

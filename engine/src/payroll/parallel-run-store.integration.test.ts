@@ -1,3 +1,4 @@
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -551,19 +552,13 @@ async function cleanComparisonFixture() {
   const netPayable = await account("2300", "Wages payable");
   const craPayable = await account("2310", "CRA remittances payable");
   const vacationPayable = await account("2320", "Vacation payable");
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
+  await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
-        vacationPayableAccountId: vacationPayable,
         wagesTo: "expense",
-      },
-    })}::jsonb where id = ${org.orgId}`);
+        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } }
+      });
   await seedPayrollComponents(org.orgId, actorId);
 
   const projectId = randomUUID();

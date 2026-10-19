@@ -1,3 +1,4 @@
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -63,23 +64,15 @@ test(
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
         on conflict do nothing`);
 
-      await db.execute(sql`
-        update orgs set settings = settings || ${JSON.stringify({
-          payroll: {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable,
-            wagesTo: "expense",
-            craRemittancePartyId: org.vendorId,
-            // The pack's regional declaration routes a QC stub's HSF here
-            // (TPZ-1015.R), never to the CRA vendor above.
-            rqRemittancePartyId: rqVendorId,
-          },
-        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollAccountingConfiguration(org.orgId, {
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        craRemittancePartyId: org.vendorId,
+        rqRemittancePartyId: rqVendorId,
+        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } }
+      });
       const filingAccountId = randomUUID();
       await db.execute(sql`insert into payroll_filing_accounts
         (id, org_id, country, program_type, account_number, name, remitter_type, is_default, created_by, updated_by)

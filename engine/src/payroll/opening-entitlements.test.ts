@@ -1,3 +1,4 @@
+import { commitPayRun } from "./run-commit.ts";
 import { seedEnabledPayrollConfiguration } from '../testing/fixtures.ts';
 import { seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
 import {
@@ -262,7 +263,11 @@ test(
       );
       assert.equal(paid.get("Vacation payout (accrued balance)"), "6200.0000");
 
-      // And the bank is left at exactly zero, not at the carry-in.
+      // Calculated movements remain previews; committed payroll settles the bank.
+      const preview = await entitlementBalances(fx.orgId, fx.employeeId, "2026-07-21");
+      assert.equal(preview.find(balance => balance.plan.code === 'VAC')!.balance, '6200.0000');
+      assert.equal(preview.find(balance => balance.plan.code === 'BANK')!.balance, '1450.5000');
+      await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
       const after = await entitlementBalances(fx.orgId, fx.employeeId, "2026-07-21");
       for (const balance of after) {
         if (balance.plan.direction !== "accrue") continue;
@@ -661,38 +666,16 @@ test(
   },
 );
 
-/* ------------------------------------------------------------------ */
-/* The deprecated column is surfaced, not silently dropped             */
-/* ------------------------------------------------------------------ */
-
-test(
-  "an unmigrated legacy vacation_balance is surfaced as a liability nobody is tracking",
-  { skip: !DB },
-  async () => {
-    // `payroll_opening_balances.vacation_balance` is retained (it is the input to
-    // and the left-hand side of the vacation migration's penny-exact tie-out) but
-    // no engine reads it. A non-zero value with no matching opening movement is
-    // therefore real money that no balance shows — so it is reported here rather
-    // than left to rot behind a deprecation comment.
-    const fx = await seedBanks();
-    try {
-      await db.execute(sql`
-        insert into payroll_opening_balances (org_id, employee_party_id, tax_year, vacation_balance,
-                                              created_by, updated_by)
-        values (${fx.orgId}, ${fx.employeeId}, 2025, '1250.5500', ${fx.actorId}, ${fx.actorId})`);
-      const flagged = await entitlementOpenings(fx.orgId);
-      assert.equal(flagged.rows[0]!.legacyVacationBalance, "1250.5500");
-
-      // Once it HAS been carried in against the vacation plan, it is dealt with.
-      await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-01-01",
-        rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "1250.55" } }],
-      });
-      const settled = await entitlementOpenings(fx.orgId);
-      assert.equal(settled.rows[0]!.legacyVacationBalance, null);
-      assert.equal(settled.rows[0]!.amounts[fx.vacationPlanId], "1250.5500");
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+test("entitlement openings expose only the native lifetime bank source", { skip: !DB }, async () => {
+  const fx = await seedBanks();
+  try {
+    await saveEntitlementOpenings({ orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-01-01",
+      rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "1250.55" } }] });
+    const saved = await entitlementOpenings(fx.orgId);
+    assert.equal(saved.rows[0]!.amounts[fx.vacationPlanId], "1250.5500");
+    assert.equal(saved.rows[0]!.dates[fx.vacationPlanId], "2026-01-01");
+    const persisted = await db.execute<{amount:string}>(sql`select amount::text as amount from entitlement_ledger
+      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and plan_id=${fx.vacationPlanId} and kind='opening'`);
+    assert.deepEqual(persisted.rows, [{ amount: "1250.5500" }]);
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});

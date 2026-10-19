@@ -72,9 +72,7 @@ function openingSubsidiaryScopeFilter(
  * Entitlement banks (vacation, banked time) are the third dimension and live
  * elsewhere on purpose: a bank is not year-scoped, so it is an
  * `entitlement_ledger` movement with `kind = 'opening'`, loaded through
- * engine/src/payroll/entitlements.ts. `vacation_balance` on this table is the
- * deprecated ancestor of that and is deliberately not editable here — see the
- * schema comment.
+ * engine/src/payroll/entitlements.ts.
  */
 
 /** Amount an opening balance carries, and which country packs read it. */
@@ -98,15 +96,6 @@ export interface OpeningBalanceField {
   ceilingKey?: string;
 }
 
-/**
- * The maintainable amounts, in entry order.
- *
- * `vacation_balance` is deliberately NOT here. No pay run reads it any more —
- * it survives only as the input to scripts/migrate-vacation-to-entitlements.ts,
- * because an opening vacation balance is now an entitlement_ledger row against
- * a pay bank. Offering it as an editable field would be a setting that changes
- * nothing.
- */
 /**
  * Second-order opening history, declared by the country packs — never named
  * here. Each pack's `openingYtdFields` names the bonus-attributed or

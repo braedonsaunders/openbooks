@@ -1,3 +1,4 @@
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -79,19 +80,13 @@ async function seedHarness(orgId: string, actorId: string): Promise<{ ehtPayable
   const craPayable = await account("2310", "CRA remittances payable", "liability_current");
   const vacationPayable = await account("2320", "Vacation payable", "liability_current");
   const ehtPayable = await account("2340", "EHT payable", "liability_current");
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
+  await seedPayrollAccountingConfiguration(orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
-        vacationPayableAccountId: vacationPayable,
         wagesTo: "expense",
-      },
-    })}::jsonb where id = ${orgId}`);
+        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } }
+      });
   await seedPayrollComponents(orgId, actorId, "CA");
   await seedOntarioEhtFixture(orgId, actorId);
   await setPackSlotAccount(orgId, actorId, "CA", "eht", ehtPayable);

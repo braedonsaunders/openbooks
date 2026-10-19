@@ -34,7 +34,7 @@ const rows = Array.from({ length: 61 }, (_, i) => ({
 }))
 const openingProps = {
   balances: { year: 2026, currentYear: 2026, initial: { rows, taxYear: 2026, entered: 0, years: [], components: [] }, fields: [{ key: 'grossYtd', label: 'Gross', help: 'Previous provider gross', packs: ['CA'] }], programs: [], components: [], canManage: true },
-  banks: { initial: { asOf: '2026-09-01', entered: 0, blocked: {}, plans: [{ id: 'vacation', name: 'Vacation', systemKey: 'vacation', unit: 'hours', direction: 'accrue' }], rows: rows.map((row) => ({ ...row, amounts: {}, dates: {}, locked: {}, legacyVacationBalance: null })) }, canManage: true },
+  banks: { initial: { asOf: '2026-09-01', entered: 0, blocked: {}, plans: [{ id: 'vacation', name: 'Vacation', systemKey: 'vacation', unit: 'hours', direction: 'accrue' }], rows: rows.map((row) => ({ ...row, amounts: {}, dates: {}, locked: {} })) }, canManage: true },
   employerLevies: { year: 2026, levies: [], rows: [], canManage: true },
 } as unknown as React.ComponentProps<typeof OpeningBalancesWorkspace>
 

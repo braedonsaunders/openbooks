@@ -8,7 +8,7 @@ import {dropScratchOrgReporting} from '../testing/fixtures.ts';
 import { commitPayRun } from "./run-commit.ts";
 import {createRemittanceBill,payrollRemittanceSummary} from './remittance.ts';
 
-test('unknown legacy liability accounts cannot follow setup changes or generate remittance bills',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+test('unknown posted liability accounts cannot follow setup changes or generate remittance bills',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
  const fx=await seedAdoption();
  try{
   const filingAccountId=randomUUID();
@@ -34,7 +34,6 @@ test('unknown legacy liability accounts cannot follow setup changes or generate 
   await db.execute(sql`update pay_components set liability_account_id=${replacement} where org_id=${fx.orgId} and system_key='cpp'`);
   await assert.rejects(payrollRemittanceSummary(fx.orgId,range),unresolved);
   await db.execute(sql`update pay_components set liability_account_id=null where org_id=${fx.orgId} and system_key='cpp'`);
-  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{payroll,cppPayableAccountId}',to_jsonb(${replacement}::text)) where id=${fx.orgId}`);
   await assert.rejects(payrollRemittanceSummary(fx.orgId,range),unresolved);
   const vendor=randomUUID();
   await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active,custom) values(${vendor},${fx.orgId},'organization','Payroll remittance authority',true,'{}'::jsonb)`);

@@ -1,11 +1,10 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
-import { cmp, roundMoney } from "../money/money.ts";
+import { roundMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import {
   entitlementPlans,
-  vacationPlanOf,
   type Executor,
 } from "./entitlements-db.ts";
 import { type EntitlementPlan } from "./entitlements-types.ts";
@@ -19,13 +18,9 @@ import { type EntitlementPlan } from "./entitlements-types.ts";
  * ones live in engine/src/payroll/opening-balances.ts).
  *
  * An employer adopting OpenBooks mid-year does not only carry in CPP and EI.
- * Every employee also arrives holding a vacation bank and, often, banked
- * overtime — a real liability the employer already owes. Since vacation moved
- * onto the entitlement ledger, `payroll_opening_balances.vacation_balance` is
- * dead to the engine and there was NO load path at all: every bank started at
- * zero, so the balance sheet understated the liability, and a termination in the
- * first year paid out only what accrued after adoption. For a ten-year employee
- * that is most of their entitlement, silently.
+ * Every employee's bank carry-in is recorded on the entitlement ledger, with
+ * its source, actor and adoption date. The same ledger supplies payroll and
+ * the operator's balance view.
  *
  * Shape, and why it is not a table:
  *
@@ -57,12 +52,7 @@ export interface EntitlementOpeningRow {
   dates: Record<string, string>;
   /** planId → the committed run that froze it, where one has. */
   locked: Record<string, EntitlementOpeningLock>;
-  /**
-   * Non-zero `payroll_opening_balances.vacation_balance` with no matching
-   * opening movement: a legacy carry-in nobody migrated. Surfaced rather than
-   * left to rot — it is money the employer owes that no balance shows.
-   */
-  legacyVacationBalance: string | null;
+
 }
 
 export interface EntitlementOpeningsResult {
@@ -170,12 +160,7 @@ export async function entitlementOpenings(
   const plans = await entitlementPlans(orgId);
 
   const people = (await db.execute<Record<string, unknown>>(sql`
-    select p.id as employee_party_id, p.display_name as employee_name, er.employee_number,
-           coalesce((
-             select b.vacation_balance from payroll_opening_balances b
-              where b.org_id = p.org_id and b.employee_party_id = p.id
-                and b.vacation_balance <> 0
-              order by b.tax_year desc limit 1), 0)::text as legacy_vacation
+    select p.id as employee_party_id, p.display_name as employee_name, er.employee_number
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
       left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id
@@ -195,7 +180,6 @@ export async function entitlementOpenings(
 
   const locks = await entitlementOpeningLocks(orgId);
   const blocks = await entitlementOpeningBlocks(orgId, asOf);
-  const vacationPlan = vacationPlanOf(plans);
 
   const rows: EntitlementOpeningRow[] = people.rows.map((raw) => {
     const employeePartyId = String(raw.employee_party_id);
@@ -208,11 +192,6 @@ export async function entitlementOpenings(
       const lock = locks.get(`${row.plan_id}:${employeePartyId}`);
       if (lock) locked[row.plan_id] = lock;
     }
-    // Only a legacy value with nothing carried in against the vacation plan is
-    // unmigrated. Once the opening exists the column has been dealt with.
-    const legacy = roundMoney(String(raw.legacy_vacation ?? "0"), 4);
-    const unmigrated = cmp(legacy, "0") !== 0
-      && (vacationPlan === null || amounts[vacationPlan.id] === undefined);
     return {
       employeePartyId,
       employeeName: String(raw.employee_name ?? ""),
@@ -220,7 +199,6 @@ export async function entitlementOpenings(
       amounts,
       dates,
       locked,
-      legacyVacationBalance: unmigrated ? legacy : null,
     };
   });
 

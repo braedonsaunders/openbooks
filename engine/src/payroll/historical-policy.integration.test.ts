@@ -350,7 +350,6 @@ test("regional Canadian year-end slips survive a later country change",
     try {
       await db.execute(sql`update employee_payroll_profiles set province='QC'
         where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{payroll,qcTaxPayableAccountId}',settings#>'{payroll,taxPayableAccountId}') where id=${fx.orgId}`);
       const {input}=await calculatedRun(fx);await commitPayRun(input);
       const before=await rl1Slips(fx.orgId,2026);assert.equal(before.length,1);
       await db.execute(sql`update employee_payroll_profiles set country='US',province='TX'

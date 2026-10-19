@@ -1251,8 +1251,7 @@ test(
          where org_id = ${fx.orgId} and party_id = ${fx.employeeId}`);
 
       const documentId = await seedRun(fx);
-      await db.execute(sql`
-        update pay_runs set calculated_at = now() where document_id = ${documentId}`);
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors, []);
       assert.deepEqual((await payRunStaleness(fx.orgId, documentId)).reasons, []);
 
       // The premium is rate × assessable earnings. Move the rate.
@@ -1268,8 +1267,7 @@ test(
       );
 
       // The assessable MAXIMUM moves money too, and is caught the same way.
-      await db.execute(sql`
-        update pay_runs set calculated_at = now() where document_id = ${documentId}`);
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors, []);
       assert.deepEqual((await payRunStaleness(fx.orgId, documentId)).reasons, []);
       await db.execute(sql`
         update worker_comp_groups set max_assessable = '112500.0000', updated_at = now()
@@ -1298,8 +1296,7 @@ test(
         values (${groupId}, ${fx.orgId}, 'WSIB 704', 'Electrical', '3.5000', true,
                 ${fx.actorId}, ${fx.actorId})`);
       const documentId = await seedRun(fx);
-      await db.execute(sql`
-        update pay_runs set calculated_at = now() where document_id = ${documentId}`);
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors, []);
       assert.deepEqual((await payRunStaleness(fx.orgId, documentId)).reasons, []);
 
       await db.execute(sql`
@@ -1323,8 +1320,7 @@ test(
     const other = await seedAdoption();
     try {
       const documentId = await seedRun(fx);
-      await db.execute(sql`
-        update pay_runs set calculated_at = now() where document_id = ${documentId}`);
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors, []);
       await db.execute(sql`
         insert into worker_comp_groups (org_id, code, name, rate_percent, is_active,
                                         created_by, updated_by)

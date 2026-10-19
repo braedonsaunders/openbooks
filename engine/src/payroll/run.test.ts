@@ -1,3 +1,4 @@
+import { seedCanadianFilingAccountForTest } from "./filing-test-fixtures.ts";
 import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollPerson, seedPayrollTime, seedPostingAccount, seedPayrollProfile, seedPayrollWage,
@@ -183,10 +184,15 @@ test('a retro run settles quantified back pay; a regular run never does', { skip
       currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2025-06-01',
     });
     // Hires carry an HRM employment or stub calculation refuses them.
+    const filingAccountId = await seedCanadianFilingAccountForTest(org.orgId, actorId, {
+      subsidiaryId: org.subsidiaryId, accountNumber: '123456789RP0001', name: 'CRA payroll registration',
+      effectiveFrom: '2025-01-01', eiEmployerMultiplier: '1.4',
+    });
     const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId)
     await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
       wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
       country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+      filingAccountId,
     }, { percentFloor: '4', method: 'accrue' });
 await seedPayrollTime(org.orgId, employeeId, actorId, {
   workedOn: '2026-01-06', hours: '8', status: 'approved', isBillable: false, billingStatus: 'unbilled',

@@ -386,13 +386,9 @@ export async function statutoryHolidayPayEnabled(
 /**
  * The Vacation entitlement plan, provisioned beside the components it drives.
  *
- * Vacation accrual is an ENTITLEMENT PLAN, not a component: the plan engine
- * owns the accrual, the bank, the caps and the payout
- * (engine/src/payroll/entitlements.ts). The pack seeds the vacation_accrual /
- * vacation_payout components, so without this the components existed and the
- * plan did not, and a fresh org silently accrued nothing at all until somebody
- * ran scripts/migrate-vacation-to-entitlements.ts. Provisioning belongs beside
- * the components, not in a one-off script.
+ * Vacation accrual, bank balances, limits and payouts belong to the native
+ * entitlement-plan engine. Component provisioning installs the matching plan
+ * only when its country declares that entitlement and its account is mapped.
  *
  * Seeded only where the country pack actually declares a vacation accrual —
  * the US pack has no such levy, so a US-only org gets no plan and, if one of

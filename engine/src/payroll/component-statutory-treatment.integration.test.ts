@@ -38,8 +38,8 @@ test('dated absence selects the default treatment and committed clone evidence k
       const groupTreatmentId = (await db.execute<{ id: string }>(sql`insert into pay_component_statutory_treatments
         (org_id,pay_component_id,worker_comp_group_id,effective_from,program_exclusions,vacationable)
         values(${f.orgId},${componentId},${groupId},'2026-01-01','{}',true) returning id`)).rows[0]!.id;
-      const liability = (await db.execute<{ id: string }>(sql`select settings->'payroll'->>'eiPayableAccountId' as id
-        from orgs where id=${f.orgId}`)).rows[0]!.id;
+      const liability = (await db.execute<{ id: string }>(sql`select liability_account_id::text as id from pay_components
+        where org_id=${f.orgId} and country='CA' and system_key='ei'`)).rows[0]!.id;
       await setPackSlotAccount(f.orgId, f.actorId, 'CA', 'wcb', liability);
       const run = await createPayRun({ orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
         periodStart:'2026-07-01',periodEnd:'2026-07-07',payDate:'2026-07-08' });

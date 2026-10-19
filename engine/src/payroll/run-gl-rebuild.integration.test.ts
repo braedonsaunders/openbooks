@@ -1,3 +1,4 @@
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -154,10 +155,13 @@ test("an employer-only run with no net pay rebuilds without inventing a net pay 
     const netPayable = await account("2300", "Wages payable", "liability_current");
     const craPayable = await account("2310", "CRA remittances payable", "liability_current");
     const ehtPayable = await account("2340", "EHT payable", "liability_current");
-    await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ payroll: {
-      wageExpenseAccountId: wageExpense, burdenExpenseAccountId: burdenExpense, netPayAccountId: netPayable,
-      cppPayableAccountId: craPayable, eiPayableAccountId: craPayable, taxPayableAccountId: craPayable, wagesTo: "expense",
-    } })}::jsonb where id = ${org.orgId}`);
+    await seedPayrollAccountingConfiguration(org.orgId, {
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+      });
     await seedPayrollComponents(org.orgId, actorId, "CA");
     await seedOntarioEhtFixture(org.orgId, actorId, "0");
     await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);

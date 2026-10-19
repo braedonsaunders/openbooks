@@ -1,3 +1,4 @@
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -35,25 +36,20 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
   const wageExpense = await account("6000", "Wages expense", "expense");
   const burdenExpense = await account("6010", "Payroll burden", "expense");
   const netPayable = await account("2300", "Wages payable", "liability_current");
-  const vacationPayable = await account("2320", "Vacation payable", "liability_current");
   const irsPayable = await account("2330", "Federal payroll taxes payable", "liability_current");
   const futaPayable = await account("2340", "FUTA payable", "liability_current");
   const sutaPayable = await account("2350", "SUI payable", "liability_current");
   const statePayable = await account("2360", "State income tax payable", "liability_current");
   await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      features: { payroll: true },
-      payroll: {
+    update orgs set settings = settings || ${JSON.stringify({ features: { payroll: true } })}::jsonb where id = ${org.orgId}`);
+  await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
-        vacationPayableAccountId: vacationPayable,
         wagesTo: "expense",
-        countries: ["US"],
-      },
-    })}::jsonb where id = ${org.orgId}`);
+        countries: ["US"]
+      });
 
-  await seedPayrollComponents(org.orgId, actorId, "CA");
   await seedPayrollComponents(org.orgId, actorId, "US");
   await setPackSlotAccount(org.orgId, actorId, "US", "fit", irsPayable);
   await setPackSlotAccount(org.orgId, actorId, "US", "fica", irsPayable);

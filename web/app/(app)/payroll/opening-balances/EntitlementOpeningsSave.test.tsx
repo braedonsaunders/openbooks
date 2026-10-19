@@ -72,7 +72,6 @@ const props = {
         amounts: {},
         dates: {},
         locked: {},
-        legacyVacationBalance: null,
       },
     ],
     entered: 0,

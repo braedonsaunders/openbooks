@@ -86,7 +86,8 @@ test("gift-card valuation feeds configured tax bases without adding cash; provid
     const stub = (await db.execute<{ gross: string; net_pay: string; pensionable_earnings: string; insurable_earnings: string; vacation_accrued: string; factors: Record<string, string> }>(sql`
       select gross, net_pay, pensionable_earnings, insurable_earnings, vacation_accrued, factors from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${input.documentId}`)).rows[0]!;
     const expected = calculateT4127({ payDate: "2026-07-21", province: "ON", periodsPerYear: 26,
-      income: "2500", pensionable: "2500", insurable: "2400", federalClaimCode: 1, provincialClaimCode: 1 });
+      income: "2500", pensionable: "2500", insurable: "2400", qpipInsurable: "2400",
+      pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0", federalClaimCode: 1, provincialClaimCode: 1 });
     assert.equal(stub.gross, "2500.0000");
     assert.equal(stub.pensionable_earnings, "2500.0000");
     assert.equal(stub.insurable_earnings, "2400.0000", "the configured flag stays authoritative");

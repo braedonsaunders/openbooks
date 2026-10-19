@@ -1,3 +1,5 @@
+import { seedCanadianFilingAccountForTest, qualifyCanadianOpeningForTest } from "./filing-test-fixtures.ts";
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import { assessedCanadianWages } from "../testing/payroll-canadian-wages.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -13,7 +15,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture, seedVacationTerms } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -27,11 +29,13 @@ async function seedWcbHarness(
 ): Promise<{
   scheduleId: string;
   employeeId: string;
+  filingAccountId: string;
   jobA: string;
   jobB: string;
   jobC: string;
   postHours: (workedOn: string, hours: string, projectId: string | null) => Promise<void>;
 }> {
+  await grantScratchPermissions(orgId, actorId, ["payroll.run", "payroll.read"]);
   const account = async (number: string, name: string, type: string) => {
     const id = randomUUID();
     await db.execute(sql`
@@ -46,18 +50,13 @@ async function seedWcbHarness(
   const netPayable = await account("2300", "Wages payable", "liability_current");
   const craPayable = await account("2310", "CRA remittances payable", "liability_current");
   const wcbPayable = await account("2330", "WSIB payable", "liability_current");
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
+  await seedPayrollAccountingConfiguration(orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
         wagesTo: "expense",
-      },
-    })}::jsonb where id = ${orgId}`);
+        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+      });
 
   await seedPayrollComponents(orgId, actorId, "CA");
   await seedOntarioEhtFixture(orgId, actorId, ehtExemption);
@@ -87,6 +86,10 @@ async function seedWcbHarness(
             ${actorId}, ${actorId})`);
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
+  const filingAccountId = await seedCanadianFilingAccountForTest(orgId, actorId, {
+    subsidiaryId, accountNumber: '123456789RP0001', name: 'CRA payroll registration',
+    effectiveFrom: '2026-01-01', eiEmployerMultiplier: '1.4',
+  });
   const employmentId = await seedWorkerEmployment(orgId, employeeId, subsidiaryId);
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
@@ -94,6 +97,8 @@ async function seedWcbHarness(
                                            provincial_claim_code, is_active, created_by, updated_by)
     values (${orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             true, ${actorId}, ${actorId})`);
+  await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+    where org_id=${orgId} and employee_party_id=${employeeId}`);
   await seedVacationTerms(orgId, employmentId, actorId, '0', 'accrue');
   const jobs = { jobA: randomUUID(), jobB: randomUUID(), jobC: randomUUID() };
   for (const [id, name] of [[jobs.jobA, "Job A"], [jobs.jobB, "Job B"], [jobs.jobC, "Job C"]] as const) {
@@ -108,7 +113,7 @@ async function seedWcbHarness(
       values (${orgId}, ${employeeId}, ${workedOn}, ${hours}, ${projectId}, 'approved', false,
               'unbilled', 'actual', ${actorId}, ${actorId})`);
   };
-  return { scheduleId, employeeId, ...jobs, postHours };
+  return { scheduleId, employeeId, filingAccountId, ...jobs, postHours };
 }
 
 test(
@@ -133,18 +138,13 @@ test(
       const craPayable = await account("2310", "CRA remittances payable", "liability_current");
       const wcbPayable = await account("2330", "WSIB payable", "liability_current");
       const ehtPayable = await account("2340", "EHT payable", "liability_current");
-      await db.execute(sql`
-        update orgs set settings = settings || ${JSON.stringify({
-          payroll: {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            wagesTo: "expense",
-          },
-        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollAccountingConfiguration(org.orgId, {
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+      });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
       await seedOntarioEhtFixture(org.orgId, actorId, "1000");
@@ -332,6 +332,18 @@ test(
         orgId: org.orgId, actorId, taxYear: 2026,
         rows: [{ employeePartyId: harness.employeeId, amounts: { ehtRemunerationYtd: "600" } }],
       });
+      await qualifyCanadianOpeningForTest({ orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId,
+        employeePartyId: harness.employeeId, taxYear: 2026, filingAccountId: harness.filingAccountId,
+        province: "ON", coverageStart: "2026-01-01", coverageEnd: "2026-06-30",
+        amounts: { ehtRemunerationYtd: "600" }, reportableBases: { cpp: "0", ei: "0", qpip: "0" },
+        levyAllocations: [
+          ...["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"].map(region =>
+            ({ programKey: "ca_wcb", region, federalAccountId: null, amount: "0" })),
+          ...["BC","MB","NL","ON"].map(region =>
+            ({ programKey: "ca_eht", region, federalAccountId: null, amount: region === "ON" ? "600" : "0" })),
+          { programKey: "ca_cnt", region: "QC", federalAccountId: null, amount: "0" },
+        ],
+      });
 
       await harness.postHours("2026-07-06", "20", harness.jobA);
       await harness.postHours("2026-07-08", "20", harness.jobA);
@@ -518,6 +530,18 @@ test(
         orgId: org.orgId, actorId, taxYear: 2026,
         rows: [{ employeePartyId: harness.employeeId, amounts: { pensionableYtd: "74000", insurableYtd: "0" } }],
       });
+      await qualifyCanadianOpeningForTest({ orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId,
+        employeePartyId: harness.employeeId, taxYear: 2026, filingAccountId: harness.filingAccountId,
+        province: "ON", coverageStart: "2026-01-01", coverageEnd: "2026-06-30",
+        amounts: { pensionableYtd: "74000", insurableYtd: "0" }, reportableBases: { cpp: "74000", ei: "0", qpip: "0" },
+        levyAllocations: [
+          ...["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"].map(region =>
+            ({ programKey: "ca_wcb", region, federalAccountId: null, amount: "0" })),
+          ...["BC","MB","NL","ON"].map(region =>
+            ({ programKey: "ca_eht", region, federalAccountId: null, amount: region === "ON" ? "0" : "0" })),
+          { programKey: "ca_cnt", region: "QC", federalAccountId: null, amount: "0" },
+        ],
+      });
       await harness.postHours("2026-07-06", "20", harness.jobA);
       await harness.postHours("2026-07-08", "20", harness.jobA);
       const run = await createPayRun({
@@ -603,18 +627,13 @@ test(
       const netPayable = await account("2300", "Wages payable", "liability_current");
       const craPayable = await account("2310", "CRA remittances payable", "liability_current");
       const wcbPayable = await account("2330", "WSIB payable", "liability_current");
-      await db.execute(sql`
-        update orgs set settings = settings || ${JSON.stringify({
-          payroll: {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            wagesTo: "expense",
-          },
-        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollAccountingConfiguration(org.orgId, {
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+      });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
       await seedOntarioEhtFixture(org.orgId, actorId);

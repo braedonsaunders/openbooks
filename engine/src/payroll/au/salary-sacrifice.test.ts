@@ -59,6 +59,8 @@ async function runAuStatutory(sacrificeTreatment: string): Promise<{
   }, AU_PAYROLL_PACK.deductionTreatments);
   const pushed: { systemKey: string; amount: string }[] = [];
   const factors = await computeAuStatutory({
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
     tx: { execute: async () => ({ rows: [{ qualifying: "0.0000" }] }) } as never,
     orgId: "org",
     subsidiaryId: "employer",

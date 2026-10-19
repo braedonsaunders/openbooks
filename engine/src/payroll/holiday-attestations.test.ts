@@ -8,7 +8,7 @@ test("a filed absence belongs only to its holiday occurrence", () => {
   const facts = holidayEligibilityFromStoredFacts({ commissions: new Map(),
     assertions: new Map([[employee, new Map([["christmas|2025-12-25", false]])]]), entitledDays: new Map() });
   assert.deepEqual(facts[employee], { absentWithoutConsentByHoliday: { "christmas|2025-12-25": false } });
-  assert.equal(facts[employee]?.absentWithoutConsentByHoliday?.["new_years_day|2026-01-01"], undefined);
+  assert.equal(Object.hasOwn(facts[employee]!.absentWithoutConsentByHoliday!, "new_years_day|2026-01-01"), false);
 });
 
 test("different stored absence decisions remain independent across holidays", () => {

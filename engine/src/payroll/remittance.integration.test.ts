@@ -1706,16 +1706,14 @@ test(
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
         returning party_id`);
       assert.equal(vendorRole.rows.length, 1, "historical-liability fixture must establish its payee role");
-      const setup = await db.execute<{ id: string }>(sql`
-        update orgs set settings = settings || ${JSON.stringify({
-          payroll: {
-            wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
-            netPayAccountId: netPayable, cppPayableAccountId: liabilityA,
-            eiPayableAccountId: liabilityA, taxPayableAccountId: liabilityA,
-            vacationPayableAccountId: vacationPayable, wagesTo: "expense",
-            craRemittancePartyId: org.vendorId,
-          },
-        })}::jsonb where id = ${org.orgId} returning id`);
+      const setup = await seedPayrollAccountingConfiguration(org.orgId, {
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: wageExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        craRemittancePartyId: org.vendorId,
+        slotAccounts: { CA: { cpp: liabilityA, ei: liabilityA, qpip: liabilityA, income_tax: liabilityA, vacation: vacationPayable } }
+      });
       assert.equal(setup.rows.length, 1, "historical-liability fixture must configure its CRA destination");
       // Scratch orgs open July only; the second run pays in August.
       const calendar = (await db.execute<{ id: string }>(sql`
