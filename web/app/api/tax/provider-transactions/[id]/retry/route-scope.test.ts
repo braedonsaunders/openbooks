@@ -47,7 +47,9 @@ const hooks = registerHooks({
     return source === undefined ? nextLoad(url, context) : { format: 'module', source, shortCircuit: true }
   },
 })
-const { POST } = await import('./route.ts?unrestricted-retry-test')
+const routeModuleUrl: string = './route.ts?unrestricted-retry-test'
+type RetryRouteModule = typeof import('./route.ts')
+const { POST } = (await import(routeModuleUrl)) as RetryRouteModule
 after(() => hooks.deregister())
 
 const transactionId = '00000000-0000-4000-8000-000000000001'

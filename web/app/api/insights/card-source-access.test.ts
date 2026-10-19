@@ -72,7 +72,9 @@ const hooks = registerHooks({
     return source === undefined ? nextLoad(url, context) : { format: 'module', source, shortCircuit: true }
   },
 })
-const { guardInsightCardQuery, loadCard, visibleInsightSourceKeys } = await import('./_lib.ts?source-access-test')
+const insightModuleUrl: string = './_lib.ts?source-access-test'
+type InsightModule = typeof import('./_lib.ts')
+const { guardInsightCardQuery, loadCard, visibleInsightSourceKeys } = (await import(insightModuleUrl)) as InsightModule
 hooks.deregister()
 
 function setPermissions(...permissions: string[]) {

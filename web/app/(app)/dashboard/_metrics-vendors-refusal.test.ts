@@ -53,7 +53,9 @@ const hooks = registerHooks({
     return source === undefined ? nextLoad(url, context) : { format: 'module', source, shortCircuit: true }
   },
 })
-const { loadVendorWidgetMetrics } = await import('./_metrics-vendors.ts?currency-refusal-test')
+const metricsModuleUrl: string = './_metrics-vendors.ts?currency-refusal-test'
+type VendorMetricsModule = typeof import('./_metrics-vendors.ts')
+const { loadVendorWidgetMetrics } = (await import(metricsModuleUrl)) as VendorMetricsModule
 const { MissingExchangeRateError } = await import('@/lib/fx-presentation')
 const { ReportCurrencyBasisError } = await import('@/lib/reports/currency-basis')
 hooks.deregister()
