@@ -48,6 +48,16 @@ export type SetFunctionalMappingInput = {
   reason: string;
 };
 
+export function normalizeFunctionalMappingInput(input: SetFunctionalMappingInput): SetFunctionalMappingInput {
+  return {
+    ...input,
+    departmentId: input.departmentId?.trim() || null,
+    projectId: input.projectId?.trim() || null,
+    effectiveTo: input.effectiveTo?.trim() || null,
+    programKey: input.functionKey === "program" ? input.programKey?.trim() || null : null,
+  };
+}
+
 const FUNCTIONAL_FEATURE_REMEDY = "Enable Functional Expenses in Company Settings → Features.";
 
 export function functionalFeatureOff(): NonprofitError {
@@ -167,10 +177,9 @@ async function auditMapping(
 
 /** Create an effective-dated mapping while keeping the prior schedule intact. */
 export async function setFunctionalMapping(input: SetFunctionalMappingInput): Promise<FunctionalMapping> {
-  validateMappingInput(input);
-  const departmentId = input.departmentId ?? null;
-  const projectId = input.projectId ?? null;
-  const programKey = input.functionKey === "program" ? input.programKey?.trim() || null : null;
+  const normalized = normalizeFunctionalMappingInput(input);
+  validateMappingInput(normalized);
+  const { departmentId, projectId, effectiveTo, programKey } = normalized;
   const reason = input.reason.trim();
 
   return withOrgTransaction(input.orgId, () => inDbTransaction(async (tx) => {
@@ -225,7 +234,7 @@ export async function setFunctionalMapping(input: SetFunctionalMappingInput): Pr
          and department_id is not distinct from ${departmentId}
          and project_id is not distinct from ${projectId}
          and daterange(effective_from, effective_to, '[]') &&
-             daterange(${input.effectiveFrom}::date, ${input.effectiveTo ?? null}::date, '[]')
+             daterange(${input.effectiveFrom}::date, ${effectiveTo}::date, '[]')
        for update
     `);
     if (overlaps.rows.length > 0) {
@@ -245,7 +254,7 @@ export async function setFunctionalMapping(input: SetFunctionalMappingInput): Pr
            created_by, updated_by)
         values (
           ${input.orgId}, ${departmentId}, ${projectId}, ${input.functionKey}, ${programKey},
-          ${input.effectiveFrom}::date, ${input.effectiveTo ?? null}::date, ${input.actorId}, ${input.actorId}
+          ${input.effectiveFrom}::date, ${effectiveTo}::date, ${input.actorId}, ${input.actorId}
         )
         returning id, org_id, department_id, project_id, function, program_key,
                   effective_from::text, effective_to::text, created_at::text, created_by::text

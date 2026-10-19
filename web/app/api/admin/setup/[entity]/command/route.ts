@@ -33,11 +33,13 @@ const paramsSchema = z.object({ entity: z.string() });
 
 
 const frameworkBody = z.strictObject({
+  id: z.string().uuid().nullish(),
   framework: z.enum(["us_asc958", "ew_sorp_frs102"]),
   reason: z.string(),
 });
 
 const fundPairBody = z.strictObject({
+  id: z.string().uuid().nullish(),
   fromFundId: z.string(),
   toFundId: z.string(),
   dueFromAccountId: z.string(),
@@ -48,15 +50,29 @@ const fundPairBody = z.strictObject({
   reason: z.string().trim().min(1),
 });
 
+const optionalSetupText = z.preprocess((value) =>
+  typeof value === "string" ? value.trim() || null : value,
+  z.string().nullish(),
+);
+
+const functionalCategory = z.enum(["program", "management_general", "fundraising"]);
 const functionalMappingBody = z.strictObject({
-  departmentId: z.string().nullish(),
-  projectId: z.string().nullish(),
-  functionKey: z.enum(["program", "management_general", "fundraising"]),
-  programKey: z.string().nullish(),
+  id: z.string().uuid().nullish(),
+  departmentId: optionalSetupText,
+  projectId: optionalSetupText,
+  function: functionalCategory.optional(),
+  functionKey: functionalCategory.optional(),
+  programKey: optionalSetupText,
   effectiveFrom: z.string(),
-  effectiveTo: z.string().nullish(),
+  effectiveTo: optionalSetupText,
   reason: z.string(),
-});
+}).refine((data) => {
+  const category = data.functionKey ?? data.function;
+  return category !== undefined && (!data.functionKey || !data.function || data.functionKey === data.function);
+}).transform(({ function: drawerFunction, functionKey, ...data }) => ({
+  ...data,
+  functionKey: functionKey ?? drawerFunction!,
+}));
 
 const channelAccountMapBody = z.strictObject({
   channelId: uuidString(),
@@ -162,15 +178,17 @@ async function runCommandBody(
     case "setFundPair": {
       const parsed = fundPairBody.safeParse(raw);
       if (!parsed.success) throw invalidCommandBody();
+      const { id: _id, ...data } = parsed.data;
       // The reason travels with the call so the fund-pair domain receives it;
       // the cast carries the boundary-required field the stored input type
       // gains with its reason implementation.
-      return setFundPair({ orgId, actorId, ...parsed.data } as Parameters<typeof setFundPair>[0] & { reason: string });
+      return setFundPair({ orgId, actorId, ...data } as Parameters<typeof setFundPair>[0] & { reason: string });
     }
     case "setFunctionalMapping": {
       const parsed = functionalMappingBody.safeParse(raw);
       if (!parsed.success) throw invalidCommandBody();
-      return setFunctionalMapping({ orgId, actorId, ...parsed.data });
+      const { id: _id, ...data } = parsed.data;
+      return setFunctionalMapping({ orgId, actorId, ...data });
     }
     case "upsertChannelAccountMap": {
       const parsed = channelAccountMapBody.safeParse(raw);

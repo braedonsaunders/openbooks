@@ -3,7 +3,14 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 // Refusal paths never reach the database or the commands. Pure featureEnabled is real.
 const stateKey = Symbol.for("openbooks.setup-command-route-test");
-const routeState = { manage: false, setup: false, equity: false, features: {} as Record<string, boolean>, equityCalls: [] as Record<string, unknown>[] };
+const routeState = {
+  manage: false,
+  setup: false,
+  equity: false,
+  features: {} as Record<string, boolean>,
+  calls: [] as { name: string; input: Record<string, unknown> }[],
+  equityCalls: [] as Record<string, unknown>[],
+};
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 const realAuthzUrl = import.meta.resolve("@/lib/authz");
 const realFeaturesUrl = import.meta.resolve("@/lib/features");
@@ -16,13 +23,14 @@ const dbStub = `export * from ${JSON.stringify(realPlatformDbUrl)}; const fail =
 const idempotencyStub = `export async function executeIdempotent(input) { return { value: await input.execute(), replayed: false }; }`;
 const realEquityUrl = import.meta.resolve("@openbooks/engine/equity");
 const equityStub = `export * from ${JSON.stringify(realEquityUrl)}; export async function recordEquityAccountPolicy(input) { globalThis[Symbol.for('openbooks.setup-command-route-test')].equityCalls.push(input); return { id: 'policy-version', status: 'applied', requestId: 'request-1' }; }`;
+const nonprofitCommandStub = `const s = globalThis[Symbol.for('openbooks.setup-command-route-test')]; const save = (name, input) => { s.calls.push({ name, input }); return { id: 'saved' }; }; export async function setFramework(input) { return save('setFramework', input); } export async function setFundPair(input) { return save('setFundPair', input); } export async function setFunctionalMapping(input) { return save('setFunctionalMapping', input); }`;
 registerHooks({
   resolve(s, c, n) {
-    const u = s === "@/lib/authz" || s === "../authz" || s === "../../../../../lib/authz" ? "mock:cmd-authz" : s === "@/lib/features" || s === "../features" ? "mock:cmd-features" : s === "@openbooks/engine/platform/db" ? "mock:cmd-db" : s === "@/lib/application/idempotency" ? "mock:cmd-idempotency" : s === "@openbooks/engine/equity" ? "mock:cmd-equity" : null;
+    const u = s === "@/lib/authz" || s === "../authz" || s === "../../../../../lib/authz" ? "mock:cmd-authz" : s === "@/lib/features" || s === "../features" ? "mock:cmd-features" : s === "@openbooks/engine/platform/db" ? "mock:cmd-db" : s === "@/lib/application/idempotency" ? "mock:cmd-idempotency" : s === "@openbooks/engine/equity" ? "mock:cmd-equity" : ["@openbooks/engine/nonprofit/frameworks", "@openbooks/engine/nonprofit/funds", "@openbooks/engine/nonprofit/functional"].includes(s) ? "mock:nonprofit-command" : null;
     return u ? { shortCircuit: true, format: "module", url: u } : n(s, c);
   },
   load(u, c, n) {
-    const s = u === "mock:cmd-authz" ? authzStub : u === "mock:cmd-features" ? featuresStub : u === "mock:cmd-db" ? dbStub : u === "mock:cmd-idempotency" ? idempotencyStub : u === "mock:cmd-equity" ? equityStub : null;
+    const s = u === "mock:cmd-authz" ? authzStub : u === "mock:cmd-features" ? featuresStub : u === "mock:cmd-db" ? dbStub : u === "mock:cmd-idempotency" ? idempotencyStub : u === "mock:cmd-equity" ? equityStub : u === "mock:nonprofit-command" ? nonprofitCommandStub : null;
     return s ? { format: "module", source: s, shortCircuit: true } : n(u, c);
   },
 });
@@ -62,6 +70,28 @@ test("feature-off commands 404 before body parsing", async () => {
   assert.equal((await call("fund-pairs", "{")).status, 404);
   routeState.features = { nonprofit: true, fundAccounting: true };
   assert.equal((await call("fund-pairs", "{")).status, 400);
+});
+test("nonprofit setup commands accept edit IDs and the drawer's functional mapping payload", async () => {
+  routeState.manage = true;
+  routeState.features = { nonprofit: true, fundAccounting: true, functionalExpenses: true };
+  routeState.calls.length = 0;
+  const rowId = "11111111-1111-4111-8111-111111111111";
+  const departmentId = "22222222-2222-4222-8222-222222222222";
+  const framework = await call("nonprofit-frameworks", JSON.stringify({ id: rowId, framework: "us_asc958", reason: "Change reporting basis" }));
+  const pair = await call("fund-pairs", JSON.stringify({ id: rowId, fromFundId: departmentId, toFundId: rowId,
+    dueFromAccountId: departmentId, dueToAccountId: rowId, isActive: true, reason: "Correct settlement accounts" }));
+  const mapping = await call("functional-mappings", JSON.stringify({ id: rowId, departmentId, projectId: "",
+    function: "program", programKey: "", effectiveFrom: "2026-01-01", effectiveTo: "", reason: "Classify department expenses" }));
+
+  assert.deepEqual([framework.status, pair.status, mapping.status], [200, 200, 200]);
+  assert.deepEqual(routeState.calls, [
+    { name: "setFramework", input: { orgId: "org-1", actorId: "user-1", framework: "us_asc958", reason: "Change reporting basis" } },
+    { name: "setFundPair", input: { orgId: "org-1", actorId: "user-1", fromFundId: departmentId, toFundId: rowId,
+      dueFromAccountId: departmentId, dueToAccountId: rowId, isActive: true, reason: "Correct settlement accounts" } },
+    { name: "setFunctionalMapping", input: { orgId: "org-1", actorId: "user-1", departmentId, projectId: null,
+      functionKey: "program", programKey: null, effectiveFrom: "2026-01-01", effectiveTo: null,
+      reason: "Classify department expenses" } },
+  ]);
 });
 test("every registry command maps to a ledger-valid operation name", () => {
   // The idempotency ledger admits lowercase dotted names only; a camelCase
