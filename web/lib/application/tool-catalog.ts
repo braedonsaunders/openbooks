@@ -898,7 +898,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       filename: z.string().trim().min(1).max(255).describe("File name with extension, e.g. statement-jan.pdf"),
       contentType: z.string().max(120).describe("MIME type, one of the cabinet's allowlisted types, e.g. application/pdf or text/csv"),
       contentBase64: z.string().max(1400000).describe("File bytes as base64, at most 1 MB decoded"),
-      sourceSystem: z.string().min(1).max(100).refine(value => value.trim().length > 0).optional().describe("System the file is adopted from, e.g. netsuite; supply it with sourceId and auditReason"),
+      sourceSystem: z.string().min(1).max(100).refine(value => value.trim().length > 0).optional().describe("System the file is adopted from, e.g. a prior accounting system; supply it with sourceId and auditReason"),
       sourceId: z.string().min(1).max(1000).refine(value => value.trim().length > 0).optional().describe("The file's identifier in sourceSystem, so a repeated adoption resolves to the same file"),
       auditReason: z.string().trim().min(1).max(2000).optional().describe("Why the file is adopted from its source system; required with sourceSystem"),
       idempotencyKey: IDEMPOTENCY_KEY,
