@@ -10,7 +10,9 @@ import {
 } from "./documents-customer-credits.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
+import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { issueInventory, receiveInventory } from "./movements.ts";
+import { ensureLot, ensureSerial } from "./tracking.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -224,6 +226,108 @@ test(
          where org_id = ${org.orgId} and document_line_id = ${credit.lineId} and kind = 'receipt'`)).rows[0];
       assert.equal(movement!.quantity, "4.0000");
       assert.equal(movement!.total_value, "16.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "customer credits return serial-tracked shipments through explicit reversal evidence",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      for (const [itemId, tracking] of [
+        [org.items.component, "serial"],
+        [org.items.fifo, "lot_serial"],
+      ] as const) {
+        await db.execute(sql`
+          update item_inventory_profiles set tracking = ${tracking}
+           where org_id = ${org.orgId} and item_id = ${itemId}`);
+        const lotId = tracking === "lot_serial"
+          ? await ensureLot(org.orgId, itemId, `RETURN-${tracking}-${randomUUID().slice(0, 8)}`, null, null)
+          : null;
+        const serialId = await ensureSerial(
+          org.orgId,
+          itemId,
+          `RETURN-${tracking}-${randomUUID().slice(0, 8)}`,
+          null,
+          null,
+        );
+        await receiveInventory(org.orgId, null, {
+          itemId,
+          stockLocationId: org.stockLocationId,
+          quantity: "1",
+          unitCost: "4",
+          subsidiaryId: org.subsidiaryId,
+          offsetAccountId: org.accounts.clearing,
+          date: org.date,
+          lotId,
+          serialId,
+        });
+
+        // A posted cash sale gives the issue its customer provenance while
+        // issueInventory records the serial's actual shipment movement.
+        const saleId = randomUUID();
+        const saleLineId = randomUUID();
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, document_number, party_id, subsidiary_id,
+             document_date, posting_date, currency, fx_rate, status,
+             subtotal, tax_total, total, custom)
+          values (${saleId}, ${org.orgId}, 'cash_sale', ${`CS-${saleId.slice(0, 8)}`},
+            ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+            'CAD', 1, 'posted', '4', '0', '4', '{}'::jsonb)`);
+        await db.execute(sql`
+          insert into document_lines
+            (id, org_id, document_id, line_number, item_id, account_id,
+             quantity, unit_price, amount, tax_amount, is_billable,
+             quantity_fulfilled, quantity_billed, stock_location_id, custom, tax_overridden)
+          values (${saleLineId}, ${org.orgId}, ${saleId}, 1, ${itemId},
+            ${org.accounts.revenue}, '1', '4', '4', '0', false, '1', '0',
+            ${org.stockLocationId}, '{}'::jsonb, false)`);
+        const shipment = await issueInventory(org.orgId, null, {
+          itemId,
+          stockLocationId: org.stockLocationId,
+          quantity: "1",
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+          documentLineId: saleLineId,
+          lotId,
+          serialId,
+        });
+        const credit = await createApprovedCustomerReturn(org, {
+          itemId,
+          quantity: "1",
+          unitPrice: "4",
+          amount: "4",
+          sourceIssueMovementId: shipment.movementId,
+          lotId,
+          serialId,
+        });
+        await postDocument(credit.documentId, depsFor(org));
+
+        const returned = (await db.execute<{
+          status: string;
+          current_stock_location_id: string | null;
+          reverses_movement_id: string | null;
+          created_by: string | null;
+        }>(sql`
+          select serial.status, serial.current_stock_location_id,
+                 movement.reverses_movement_id, movement.created_by
+            from serials serial
+            join inventory_movements movement
+              on movement.org_id = serial.org_id and movement.serial_id = serial.id
+             and movement.document_line_id = ${credit.lineId}
+           where serial.org_id = ${org.orgId} and serial.id = ${serialId}`)).rows[0]!;
+        assert.deepEqual(returned, {
+          status: "in_stock",
+          current_stock_location_id: org.stockLocationId,
+          reverses_movement_id: shipment.movementId,
+          created_by: SYSTEM_ACTOR_ID,
+        });
+      }
     } finally {
       await dropScratchOrg(org.orgId);
     }

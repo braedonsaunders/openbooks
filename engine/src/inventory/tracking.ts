@@ -265,7 +265,7 @@ export async function validateTrackingSelection(
   stockLocationId: string,
   profile: InventoryProfile,
   selection: { quantity: string; lotId?: string | null; serialId?: string | null },
-  operation: "receipt" | "count_receipt" | "custody_receipt" | "ownership_receipt" | "issue" | "transfer",
+  operation: "receipt" | "count_receipt" | "custody_receipt" | "ownership_receipt" | "customer_return" | "issue" | "transfer",
   actorId: string | null = null,
 ): Promise<void> {
   assertTracking(profile, selection, operation);
@@ -304,6 +304,12 @@ export async function validateTrackingSelection(
   }
   if (profile.tracking === "lot_serial" && row.lot_id && row.lot_id !== selection.lotId) {
     throw new InventoryError("serial belongs to a different lot");
+  }
+  if (operation === "customer_return") {
+    if (row.status !== "shipped" || row.current_stock_location_id !== null) {
+      throw new InventoryError("serial is not shipped and available for a customer return");
+    }
+    return;
   }
   if (["receipt","count_receipt","custody_receipt","ownership_receipt"].includes(operation)) {
     const prior = (await tx.execute(sql`
