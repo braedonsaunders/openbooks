@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
@@ -144,7 +145,9 @@ test("note interest accrues by idempotent runs on its day count and a conversion
     const accrual = (await db.execute<{ status: string }>(sql`
       select status from journal_entries where org_id = ${w.org.orgId} and id = ${converted.accrualEntryId}`)).rows[0]!;
     assert.equal(accrual.status, "reversed", "voiding a conversion reverses its settlement-date interest accrual");
-    const resumed = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-10-31" }));
+    const resumed = applied(await withSimClock("2026-12-31", () =>
+      postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-10-31" }),
+    ));
     assert.equal(resumed.total, "2016.4400", "the note resumes accruing without counting the voided settlement accrual");
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
