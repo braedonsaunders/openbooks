@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
-import { currentSession, currentUser } from "./auth";
+import { currentUser } from "./auth";
 import { requestAuthzContext } from "./authz-context";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
 import { canonicalTimeZone } from "@openbooks/engine/platform/time-zone";
@@ -46,24 +46,11 @@ function presentationFact<T>(key: string, load: () => Promise<T>): Promise<T> {
  * request — the i18n request config and the account menu both ask.
  */
 async function readLocale(): Promise<Locale> {
-  // Off-request requestUser() is null (see above), so this stays anonymous.
-  const activeUser = requestAuthzContext()?.user ?? await requestUser();
-  if (activeUser) {
-    // bypass: user-keyed-lookup — the viewer's own locale preference, read outside the request's organization scope.
-    const r = await withBypassContext(async () => (await db.execute(sql`
-        select u.locale as user_locale, o.settings ->> 'defaultLocale' as org_default
-          from users u
-          join orgs o on o.id = u.org_id
-         where u.id = ${activeUser.id} and u.org_id = ${activeUser.orgId} and o.id = ${activeUser.orgId} and u.is_active
-      `)));
-    const row = r.rows[0];
-    if (row) {
-      if (isLocale(row.user_locale)) return row.user_locale;
-      if (isLocale(row.org_default)) return row.org_default;
-      return DEFAULT_LOCALE;
-    }
+  const row = await activeLocaleSettings();
+  if (row) {
+    if (isLocale(row.user_locale)) return row.user_locale;
+    if (isLocale(row.org_default)) return row.org_default;
   }
-
   return DEFAULT_LOCALE;
 }
 const renderLocale = cache(readLocale);
@@ -72,19 +59,39 @@ export function resolveLocale(): Promise<Locale> {
 }
 
 /**
- * The user's stored locale preference (null = inherit the tenant default),
- * for preference UIs that need to distinguish "chose English" from "inherits".
+ * The active identity's stored locale and its organization's default. The
+ * active identity is the one the request acts as (a sandbox or another
+ * tenant once the viewer switches workspace), the same row the preference
+ * update writes, so the language a page renders in and the choice the
+ * account menu marks always come from one place.
  */
-export const userLocalePreference = cache(async (): Promise<Locale | null> => {
-  const uid = (await currentSession())?.userId;
-  if (!uid) return null;
-  // bypass: user-keyed-lookup — the signed-in identity's locale preference, keyed by the session's user id alone.
-  const r = await withBypassContext(async () => (await db.execute(
-      sql`select locale from users where id = ${uid} and is_active`,
-    )));
-  const v = r.rows[0]?.locale;
+async function readLocaleSettings(): Promise<{ user_locale: unknown; org_default: unknown } | null> {
+  // Off-request requestUser() is null (see above), so this stays anonymous.
+  const activeUser = requestAuthzContext()?.user ?? await requestUser();
+  if (!activeUser) return null;
+  // bypass: user-keyed-lookup — the viewer's own locale preference, read outside the request's organization scope.
+  const r = await withBypassContext(async () => (await db.execute<{ user_locale: unknown; org_default: unknown }>(sql`
+      select u.locale as user_locale, o.settings ->> 'defaultLocale' as org_default
+        from users u
+        join orgs o on o.id = u.org_id
+       where u.id = ${activeUser.id} and u.org_id = ${activeUser.orgId} and o.id = ${activeUser.orgId} and u.is_active
+    `)));
+  return r.rows[0] ?? null;
+}
+const renderLocaleSettings = cache(readLocaleSettings);
+function activeLocaleSettings() {
+  return requestAuthzContext() ? presentationFact("localeSettings", readLocaleSettings) : renderLocaleSettings();
+}
+
+/**
+ * The active identity's stored locale preference (null = inherit the tenant
+ * default), for preference UIs that need to distinguish "chose English" from
+ * "inherits".
+ */
+export async function userLocalePreference(): Promise<Locale | null> {
+  const v = (await activeLocaleSettings())?.user_locale;
   return isLocale(v) ? v : null;
-});
+}
 
 /**
  * The active organization's configured IANA zone for viewer-facing date and

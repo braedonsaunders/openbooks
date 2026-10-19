@@ -63,7 +63,7 @@ function mount(locale = "en", messages = shell) {
   const root = createRoot(host);
   return {
     host,
-    async render(isSuperAdmin = true) {
+    async render(isSuperAdmin = true, localePreference: "en" | "de" | null = null) {
       await act(async () => {
         root.render(
           <NextIntlClientProvider locale={locale} messages={{ shell: messages }} timeZone="UTC">
@@ -71,7 +71,7 @@ function mount(locale = "en", messages = shell) {
               name="Ada Admin"
               email="ada@example.test"
               roles={[{ key: "admin", name: "Admin" }]}
-              localePreference={null}
+              localePreference={localePreference}
               navModePreference={null}
               environments={{ ...environments, isSuperAdmin }}
             />
@@ -238,4 +238,24 @@ test("account menu submenu back button uses the active locale", async (t) => {
   });
 
   assert.ok(document.querySelector('button[aria-label="Retour"]'), "back control has a French accessible name");
+});
+
+test("the language menu marks the stored choice, and follows it when the server reports another", async (t) => {
+  const ui = mount();
+  t.after(() => ui.unmount());
+  await ui.render(false, "en");
+  const openLanguages = async () => {
+    const trigger = ui.host.querySelector('button[aria-label="Account menu"]') as HTMLButtonElement;
+    await act(async () => { trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); await tick(); await tick(); });
+    const language = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Language"))!;
+    await act(async () => { language.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); await tick(); });
+  };
+  const checked = () => [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((row) => row.textContent?.trim());
+  await openLanguages();
+  assert.deepEqual(checked(), ["English"]);
+  await ui.render(false, "de");
+  assert.deepEqual(checked(), ["Deutsch"], "a refresh after German was chosen marks German");
+  await ui.render(false, null);
+  assert.equal(checked().length, 1, "exactly one choice is marked when the preference is cleared");
+  assert.notEqual(checked()[0], "Deutsch");
 });

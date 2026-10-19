@@ -77,8 +77,16 @@ export function AccountMenu({
   const [view, setView] = useState<View>('home')
   const [pending, startSignOut] = useTransition()
   const [, startRefresh] = useTransition()
-  const [locale, setLocale] = useState(localePreference ?? '')
-  const [navMode, setNavMode] = useState(navModePreference ?? '')
+  const [locale, setLocale] = useState<string>(localePreference ?? '')
+  const [navMode, setNavMode] = useState<string>(navModePreference ?? '')
+  // The shell stays mounted across refreshes: a stored preference the server
+  // now reports (saved here, or anywhere else) replaces the one marked.
+  const [stored, setStored] = useState({ locale: localePreference, navMode: navModePreference })
+  if (stored.locale !== localePreference || stored.navMode !== navModePreference) {
+    setStored({ locale: localePreference, navMode: navModePreference })
+    setLocale(localePreference ?? '')
+    setNavMode(navModePreference ?? '')
+  }
   const [saving, setSaving] = useState(false)
 
   const label = name || email || t('account')

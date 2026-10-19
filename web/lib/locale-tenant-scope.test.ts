@@ -40,7 +40,7 @@ registerHooks({
   },
 })
 
-const { resolveLocale, resolveTimeZone } = await import('./locale.ts')
+const { resolveLocale, resolveTimeZone, userLocalePreference } = await import('./locale.ts')
 const { DEFAULT_LOCALE } = await import('../i18n/config')
 const { resolveOrgId } = await import('./org-scope.ts')
 const principal = (orgId: string): Authz => ({ user: { orgId, id: `viewer-${orgId}` }, permissions: new Set(['reports.read']), allowedSubsidiaryIds: new Set([orgId]) }) as Authz
@@ -58,6 +58,19 @@ test('locale and time zone follow the verified active tenant', async () => {
   assert.equal(await resolveLocale(), 'fr')
   assert.equal(await resolveTimeZone(), 'Asia/Tokyo')
   assert.deepEqual([state.orgReads, state.orgScopes], [2, ['switched-tenant']])
+})
+
+test('the account menu marks the stored choice of the identity the page renders for', async () => {
+  reset(); state.locale = 'de'; state.timeZone = 'UTC'
+  // The session's home identity differs from the active one after a
+  // workspace switch; the preference is the active identity's, as the
+  // rendered language and the preference update are.
+  const [rendered, chosen] = await withAuthzContext(principal('switched-tenant'), async () => [await resolveLocale(), await userLocalePreference()])
+  assert.deepEqual([rendered, chosen], ['de', 'de'])
+  assert.equal(queries.filter((q) => q.sql.includes('user_locale')).length, 1, 'one read answers both')
+  assert.deepEqual(queries[0]?.params, ['viewer-switched-tenant', 'switched-tenant', 'switched-tenant'])
+  reset(); state.locale = null
+  assert.equal(await withAuthzContext(principal('switched-tenant'), () => userLocalePreference()), null, 'no stored choice inherits the tenant default')
 })
 
 test('concurrent display consumers share facts only within their verified request', async () => {

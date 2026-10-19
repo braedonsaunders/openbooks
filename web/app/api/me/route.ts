@@ -62,15 +62,25 @@ export const PATCH = defineRoute({
       changes.navMode = navMode;
     }
 
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`
+    // The preference belongs to the identity the request acts as; a write
+    // that reaches no row saved nothing, so it is refused, not reported saved.
+    const saved = await db.transaction(async (tx) => {
+      const updated = await tx.execute(sql`
         update users set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
-         where id = ${user.id} and org_id = ${user.orgId}`);
+         where id = ${user.id} and org_id = ${user.orgId} and is_active`);
+      if (updated.rowCount !== 1) return false;
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'users', ${user.id}, 'update',
                 ${JSON.stringify(changes)}, ${user.id})`);
+      return true;
     });
+    if (!saved) {
+      return NextResponse.json(
+        { error: "Your account is not active in this workspace, so the preference was not saved.", remedy: "Sign in again, then choose the preference." },
+        { status: 409 },
+      );
+    }
 
     return NextResponse.json({ ok: true, ...changes });
   },

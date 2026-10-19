@@ -18,6 +18,8 @@ interface RouteState {
   pending: PendingWrite[];
   inTx: boolean;
   failOnText?: string;
+  /** Rows the preference update reaches: zero when the identity is gone. */
+  userRows: number;
   userPreference: { locale: string | null; navMode: string | null };
   requestedPreference: { locale: string | null; navMode: string | null };
 }
@@ -28,6 +30,7 @@ const state: RouteState = {
   committed: [],
   pending: [],
   inTx: false,
+  userRows: 1,
   userPreference: { locale: "en", navMode: "topbar" },
   requestedPreference: { locale: "en", navMode: "topbar" },
 };
@@ -71,13 +74,14 @@ stubModules({
           throw new Error('forced storage failure: ' + state.failOnText)
         }
         const kind = classify(text)
+        if (kind === 'user' && state.userRows === 0) return { rows: [], rowCount: 0 }
         if (kind) {
           const write = { kind }
           if (kind === 'user') write.preference = state.requestedPreference
           ;(state.inTx ? state.pending : state.committed).push(write)
           if (!state.inTx && kind === 'user') state.userPreference = write.preference
         }
-        return { rows: [] }
+        return { rows: [], rowCount: kind === 'user' ? state.userRows : 1 }
       }
       export const db = {
         execute,
@@ -129,6 +133,7 @@ function reset(): void {
   state.pending = [];
   state.inTx = false;
   state.failOnText = undefined;
+  state.userRows = 1;
   state.userPreference = { locale: "en", navMode: "topbar" };
   state.requestedPreference = { locale: "en", navMode: "topbar" };
 }
@@ -207,4 +212,18 @@ test("profile PATCH joins every requested preference fragment in the user update
   assert.match(update, /update users set/);
   assert.match(update, /locale/);
   assert.match(update, /nav_mode/);
+});
+
+test("a preference write that reaches no active identity is refused and audits nothing", async () => {
+  reset();
+  state.userRows = 0;
+
+  const response = await patch({ locale: "de" });
+
+  assert.equal(response.status, 409);
+  const body = await response.json() as { error: string; remedy: string };
+  assert.match(body.error, /not saved/);
+  assert.match(body.remedy, /Sign in again/);
+  assert.equal(state.executed.some((text) => text.includes("insert into audit_log")), false, "no audit claims a change that did not happen");
+  assert.deepEqual(state.userPreference, { locale: "en", navMode: "topbar" });
 });
