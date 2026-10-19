@@ -16,7 +16,6 @@ import {
 import { requestDocumentVoid, suggestVoidReversalDate } from './document-void.ts'
 import { loadDocumentEditCurrent } from './document-service.ts'
 import type { DocumentEditInput, DocumentEditCurrent } from './document-input.ts'
-import { resolveCoveringPeriod } from '../periods/period-resolution.ts'
 import { closeModuleForDocument } from '../periods/period-policy.ts'
 import { postEntry } from '../journal/post-entry.ts'
 import { nextFreeEntryNumber } from '../records/entry-number.ts'
@@ -616,6 +615,10 @@ export async function createPostedCorrection(
   }
 
 type ReclassPostedLeg = {
+  entryId: string;
+  entryOrigin: string;
+  postingDate: string | null;
+  periodId: string | null;
   bookId: string;
   accountId: string;
   subsidiaryId: string | null;
@@ -706,17 +709,10 @@ async function applyDimensionReclass(
   ctx: CorrectionContext,
 ): Promise<{ reclassEntryIds: string[] }> {
   const module = closeModuleForDocument(plan.source.kind);
-  const covering = await resolveCoveringPeriod(tx, ctx.orgId, plan.source.documentDate, plan.source.subsidiaryId);
-  if (!covering) {
-    throw new PostedCorrectionError(
-      422,
-      `no accounting period covers ${plan.source.documentDate} — generate the period before reclassifying the posted ${plan.source.kind}`,
-      "closed-period",
-      "generate the covering period, or post a credit note or adjusting entry in an open period instead",
-    );
-  }
   const legs = (await tx.execute<ReclassPostedLeg>(sql`
-    select entry.book_id as "bookId", line.account_id as "accountId",
+    select entry.id as "entryId", entry.origin as "entryOrigin",
+           entry.posting_date::text as "postingDate", entry.period_id as "periodId",
+           entry.book_id as "bookId", line.account_id as "accountId",
            line.subsidiary_id as "subsidiaryId",
            line.amount::text as amount, line.currency,
            line.txn_amount::text as "txnAmount", line.fx_rate::text as "fxRate",
@@ -736,7 +732,7 @@ async function applyDimensionReclass(
        -- A full book's copy follows the primary reclass through replication.
        and not exists (select 1 from book_entry_replications replica
                         where replica.org_id = entry.org_id and replica.replica_entry_id = entry.id)
-     order by entry.book_id, line.line_number, line.id
+     order by entry.book_id, entry.posting_date, entry.id, line.line_number, line.id
   `)).rows;
   if (legs.some((leg) => leg.isCurrencyAdjustment)) {
     throw new DocumentEditError(422, "Currency adjustment dimensions are retained with the cleared residual. Void the adjustment through its native workflow and create the replacement with the required dimensions.");
@@ -751,38 +747,41 @@ async function applyDimensionReclass(
   const books = [...new Set(legs.map((leg) => leg.bookId))];
   for (const bookId of books) {
     const mirrors: PostEntryLineInput[] = [];
-    for (const leg of legs.filter((row) => row.bookId === bookId)) {
-      for (const dim of plan.reclassDimensions) {
-        if (leg[dim.field] !== dim.before) continue;
-        const carried = {
-          accountId: leg.accountId,
-          subsidiaryId: leg.subsidiaryId ?? subsidiaryId,
-          currency: leg.currency,
-          fxRate: leg.fxRate,
-          unit: leg.unit,
-          eliminate: leg.eliminate,
-          partyId: leg.partyId,
-          departmentId: leg.departmentId,
-          projectId: leg.projectId,
-          locationId: leg.locationId,
-          classId: leg.classId,
-          memo: `Reclass ${dim.field} on ${plan.source.documentNumber}: ${plan.reason}`,
-          extraDims: leg.extraDims,
-          isOpenItem: false,
-          custom: leg.custom,
-        };
-        const outLeg: PostEntryLineInput = {
-          ...carried, amount: neg(leg.amount), txnAmount: neg(leg.txnAmount),
-          quantity: leg.quantity == null ? null : neg(leg.quantity),
-        };
-        outLeg[dim.field] = dim.before;
-        const inLeg: PostEntryLineInput = {
-          ...carried, amount: leg.amount, txnAmount: leg.txnAmount,
-          quantity: leg.quantity,
-        };
-        inLeg[dim.field] = dim.after;
-        mirrors.push(outLeg, inLeg);
-      }
+    const bookLegs = legs.filter((row) => row.bookId === bookId);
+    const postingContext = bookLegs.find((leg) => leg.entryOrigin !== "correction") ?? bookLegs[0];
+    if (!postingContext?.postingDate || !postingContext.periodId) {
+      throw new DocumentEditError(422, "the posted entry has no posting date or period for its dimension reclass");
+    }
+    for (const leg of bookLegs) {
+      const changedDimensions = plan.reclassDimensions.filter((dim) => leg[dim.field] === dim.before);
+      if (changedDimensions.length === 0) continue;
+      const carried = {
+        accountId: leg.accountId,
+        subsidiaryId: leg.subsidiaryId ?? subsidiaryId,
+        currency: leg.currency,
+        fxRate: leg.fxRate,
+        unit: leg.unit,
+        eliminate: leg.eliminate,
+        partyId: leg.partyId,
+        departmentId: leg.departmentId,
+        projectId: leg.projectId,
+        locationId: leg.locationId,
+        classId: leg.classId,
+        memo: `Reclass ${changedDimensions.map((dim) => dim.field).join(", ")} on ${plan.source.documentNumber}: ${plan.reason}`,
+        extraDims: leg.extraDims,
+        isOpenItem: false,
+        custom: leg.custom,
+      };
+      const outLeg: PostEntryLineInput = {
+        ...carried, amount: neg(leg.amount), txnAmount: neg(leg.txnAmount),
+        quantity: leg.quantity == null ? null : neg(leg.quantity),
+      };
+      const inLeg: PostEntryLineInput = {
+        ...carried, amount: leg.amount, txnAmount: leg.txnAmount,
+        quantity: leg.quantity,
+      };
+      for (const dim of changedDimensions) inLeg[dim.field] = dim.after;
+      mirrors.push(outLeg, inLeg);
     }
     if (mirrors.length === 0) continue;
     const posted = await postEntry(tx, {
@@ -790,8 +789,8 @@ async function applyDimensionReclass(
       bookId,
       subsidiaryId,
       entryNumber: await nextFreeEntryNumber(tx, ctx.orgId, `RECLASS-${plan.source.documentNumber}`),
-      postingDate: plan.source.documentDate,
-      periodId: covering.id,
+      postingDate: postingContext.postingDate,
+      periodId: postingContext.periodId,
       memo: `Reclass ${plan.reclassDimensions.map((dim) => dim.field).join(", ")} on ${plan.source.documentNumber}`,
       origin: "correction",
       sourceDocumentId: plan.sourceId,
