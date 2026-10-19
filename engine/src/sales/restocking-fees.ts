@@ -124,8 +124,8 @@ function scopeKey(input: { itemCategory?: string | null; itemId?: string | null 
   return "default";
 }
 
-function scopeLockKey(orgId: string, scope: string, from: string): string {
-  return `openbooks:restocking-policy:${orgId}:${scope}:${from}`;
+function scopeLockKey(orgId: string, scope: string): string {
+  return `openbooks:restocking-policy:${orgId}:${scope}`;
 }
 
 /**
@@ -138,7 +138,7 @@ export async function checkRestockingPolicyOverlap(
   orgId: string,
   input: { itemCategory?: string | null; itemId?: string | null; effectiveFrom: string; effectiveTo?: string | null; ignoreId?: string | null },
 ): Promise<void> {
-  await runner.execute(sql`select pg_advisory_xact_lock(hashtextextended(${scopeLockKey(orgId, scopeKey(input), input.effectiveFrom)}, 0))`);
+  await runner.execute(sql`select pg_advisory_xact_lock(hashtextextended(${scopeLockKey(orgId, scopeKey(input))}, 0))`);
   const clash = (await runner.execute<{ id: string; effective_from: string; effective_to: string | null }>(sql`
     select id, effective_from::text, effective_to::text
       from restocking_fee_policies
