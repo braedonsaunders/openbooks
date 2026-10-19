@@ -5,37 +5,37 @@ import { getTranslations } from 'next-intl/server'
 import { redirect } from 'next/navigation'
 import { db } from '@openbooks/engine/platform/db'
 import { readMigrationPlan } from '../../../lib/migration/plan'
-import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import {
+  badge,
+  column,
+  field,
+  link,
+  number,
+  page,
+  pageHeader,
+  ref,
+  text,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { accessDeniedHref } from '../../../lib/gate-targets'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../lib/tax-filing-permission'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
+import { registeredListTable } from '../../../lib/list/prepared-spec'
+import type { ModuleHomeTab } from '@/components/module-home/tab-types'
+import { taxWorkspaceTabs } from './workspace-tabs'
 import type { FilingAdjustmentRecord, FilingHistoryRecord } from './FilingHistoryDrawer'
 import type { ProviderActivityPayload } from './ProviderActivityDrawer'
 import type { TaxFormOption, TaxHistoryRow } from './sections'
 
 /**
- * Tax filings, split into a loader and a spec.
- *
- * Two mutually exclusive bodies behind a tab, chosen by presence flags the
- * LOADER computes — the same "presence, not branching" treatment the
- * accounts page gave its three bodies and continuous-close gave its two
- * lists. Both bodies stay shared components rather than becoming spec
- * blocks, for the two reasons the brief already names: the prepare panel is
- * a client component whose compute/export/save flows are interactive fetch
- * calls a spec cannot name, and the history table is hand-rolled markup (the
- * admin-users precedent) — the spec's table block offers only the two real
- * table variants the app has, and this plain `<table>` is neither.
- *
- * The spec is coarse by necessity rather than by taste: the native page sits
- * in `PageContainer`, whose motion wrappers a spec `grid` cannot reproduce,
- * so the spec places a single `tax-page` widget rendering the identical
- * shell components the widget registry uses. The loader-computed tab flags
- * travel as data and are applied inside `TaxTabPanels`, exactly as the
- * native `{tab === ... ? ... : ...}` does — a `when` cannot cross a widget
- * boundary. Authz stays server-side: the page 404s entity-restricted
- * callers, and the drawer carries a `canFile` flag the LOADER derives —
- * never a capability object.
+ * Tax filings use the shared list layout and registered history table. The
+ * loader owns authorization, filtering, sorting and the server page; the spec
+ * composes those rows with native interactive panels. Entity-restricted
+ * callers remain refused at the page boundary, and filing actions stay gated
+ * by the same permissions as their API routes.
  */
 
 type FormRow = {
@@ -125,6 +125,7 @@ export interface TaxData {
   onHistory: boolean
   onActivity: boolean
   tabs: { key: string; href: string; label: string; active: boolean; count: number | null }[]
+  workspaceTabs: ModuleHomeTab[]
   forms: TaxFormOption[]
   /** The organization's conversion date (ISO), null when no migration cutover is recorded. */
   conversionDate: string | null
@@ -156,6 +157,7 @@ export async function loadTax(
   }
   const { orgId } = authz.user
   const t = await getTranslations('tax')
+  const workspaceTabs = await taxWorkspaceTabs(orgId, 'filings')
   const rawTab = pickString(sp.tab)
   const tab = rawTab === 'history' ? 'history' : rawTab === 'activity' ? 'activity' : 'prepare'
   const list = parseListParams(sp, { sort: 'period', dir: 'desc', perPage: 20, allowedSorts: ['period', 'form', 'status', 'created'] as const })
@@ -263,6 +265,7 @@ export async function loadTax(
       { key: 'history', label: t('tabs.history'), href: '/tax?tab=history', active: tab === 'history', count: total },
       { key: 'activity', label: t('tabs.activity'), href: '/tax?tab=activity', active: tab === 'activity', count: failedCount },
     ],
+    workspaceTabs,
     currentParams: sp,
     activityDrawer,
     activityEmptyTitle: t('activity.emptyTitle'),
@@ -320,32 +323,70 @@ export async function loadTax(
 }
 
 const f = ref<TaxData>()
+const item = field
 
 export function taxSpec(data: TaxData): PageSpec {
   return page({
     route: '/tax',
-    // The native page owns its PageContainer shell, which no spec layout
-    // reproduces — so the spec draws no chrome of its own and places the
-    // whole page through one widget that renders the identical shared
-    // components the widget registry uses.
-    layout: 'bare',
-    header: [],
+    layout: 'list',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        actions: [
+          widget('module-home-tabs', { tabs: f('workspaceTabs') }),
+          ...(data.canManageSetup
+            ? [widget('link-button', {
+                href: f('setupHref'),
+                iconKey: 'settings',
+                label: f('setupLabel'),
+                size: 'sm',
+                variant: 'outline',
+              })]
+            : []),
+        ],
+      }),
+    ],
     body: [
       widgetBlock('tax-page', {
-        title: data.title,
-        description: data.description,
-        setupHref: data.setupHref,
-        setupLabel: data.setupLabel,
-        canManageSetup: data.canManageSetup,
-        tabKey: data.tabKey,
-        onPrepare: data.onPrepare,
-        onHistory: data.onHistory,
         tabs: data.tabs,
+        onPrepare: data.onPrepare,
         forms: data.forms,
         conversionDate: data.conversionDate,
         canSave: data.canSave,
-        history: data.history,
       }),
+      {
+        ...registeredListTable('tax_filings_history', {
+          variant: 'app',
+          rows: f('history.rows'),
+          rowKey: item('id'),
+          sorting: {
+            basePath: '/tax?tab=history',
+            sort: f('history.sort'),
+            dir: f('history.dir'),
+          },
+          columns: [
+            column(f('history.columnForm'), link(item('formName'), item('filingHref'), 'font-medium text-teal-700 hover:underline dark:text-teal-300'), { sort: 'form' }),
+            column(f('history.columnPeriod'), text(item('period')), { sort: 'period' }),
+            column(f('history.columnVersion'), number(item('version'))),
+            column(f('history.columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') }), { sort: 'status' }),
+            column(f('history.columnReference'), text(item('reference'))),
+            column(f('history.columnSaved'), text(item('saved')), { sort: 'created' }),
+          ],
+          emptyRow: { text: f('history.empty'), colSpan: 6 },
+        }, [
+          widget('list-toolbar', {
+            basePath: '/tax?tab=history',
+            currentParams: f('history.currentParams'),
+            search: { placeholder: f('history.searchPlaceholder') },
+            filters: [
+              { paramKey: 'status', label: f('history.statusLabel'), options: f('history.statusOptions') },
+              { paramKey: 'form', label: f('history.formLabel'), options: f('history.formOptions') },
+            ],
+          }),
+        ]),
+        when: f('onHistory'),
+      },
       {
         // The provider commit queue shares the page with the filings shell:
         // the shell owns the tab strip while the list reads every other key,

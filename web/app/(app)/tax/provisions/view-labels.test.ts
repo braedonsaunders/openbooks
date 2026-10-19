@@ -88,7 +88,7 @@ stubModules({
   navigation: false,
   intl: intlMock,
   authz: authzMock,
-  features: false,
+  features: { enabled: ['crossBorderTax'] },
   extra: {
     '@/lib/money-server': moneyMock,
   },

@@ -872,6 +872,18 @@ const SOURCES = {
   compliance_vendors: { route: '/compliance/vendors', mode: 'loaded' },
   documents_trash: { route: '/documents/trash', mode: 'loaded' },
   tax_provisions: { route: '/tax/provisions', mode: 'loaded' },
+  tax_filings_history: {
+    route: '/tax?tab=history',
+    rowsField: 'history.rows',
+    rowKeyField: 'id',
+    mode: 'server',
+    clientSearch: false,
+    paging: {
+      totalField: 'history.total',
+      pageField: 'history.page',
+      perPageField: 'history.perPage',
+    },
+  },
   amortization_schedules: { route: '/accounting/amortization', mode: 'loaded' },
   amortization_due: { route: '/accounting/amortization', mode: 'loaded' },
   amortization_reconciliation: { route: '/accounting/amortization', mode: 'loaded' },

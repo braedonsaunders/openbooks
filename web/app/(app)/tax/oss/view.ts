@@ -1,12 +1,17 @@
 import 'server-only'
 
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getTranslations } from 'next-intl/server'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
+import type { ModuleHomeTab } from '@/components/module-home/tab-types'
+import { taxWorkspaceTabs } from '../workspace-tabs'
 
 export interface OssData {
   setupHref: string
+  title: string
+  description: string
+  tabs: ModuleHomeTab[]
 }
 
 /**
@@ -17,15 +22,29 @@ export interface OssData {
 export async function loadOss(): Promise<OssData> {
   const authz = await requirePermission('reports.read')
   await requireFeatureEnabled(authz.user.orgId, 'crossBorderTax')
-  await getTranslations('tax')
-  return { setupHref: '/admin/setup/tax-oss-registrations' }
+  const [t, tabs] = await Promise.all([
+    getTranslations('tax.oss'),
+    taxWorkspaceTabs(authz.user.orgId, 'oss'),
+  ])
+  return {
+    setupHref: '/admin/setup/tax-oss-registrations',
+    title: t('title'),
+    description: t('description'),
+    tabs,
+  }
 }
+
+const f = ref<OssData>()
 
 export function ossSpec(data: OssData): PageSpec {
   return page({
     route: '/tax/oss',
-    layout: 'bare',
-    header: [],
+    layout: 'list',
+    header: [pageHeader({
+      title: f('title'),
+      description: f('description'),
+      actions: [widget('module-home-tabs', { tabs: f('tabs') })],
+    })],
     body: [widgetBlock('oss-console', { setupHref: data.setupHref })],
   })
 }

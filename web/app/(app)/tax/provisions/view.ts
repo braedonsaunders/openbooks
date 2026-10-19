@@ -14,6 +14,8 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import { orgInfo } from '../../../../lib/data'
 import { listProvisionRuns } from '@openbooks/engine/tax-returns/income-tax-provision'
 import type { ProvisionRunListColumns, ProvisionRunListRow } from './sections'
+import type { ModuleHomeTab } from '@/components/module-home/tab-types'
+import { taxWorkspaceTabs } from '../workspace-tabs'
 
 /**
  * The income-tax provision run list, split into a loader and a spec.
@@ -48,6 +50,7 @@ export interface TaxProvisionsData {
   emptyText: string
   columns: ProvisionRunListColumns
   rows: ProvisionRunListRow[]
+  tabs: ModuleHomeTab[]
 }
 
 export async function loadTaxProvisions(): Promise<TaxProvisionsData> {
@@ -55,6 +58,7 @@ export async function loadTaxProvisions(): Promise<TaxProvisionsData> {
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('tax.provisions')
   const org = await orgInfo()
+  const tabs = await taxWorkspaceTabs(authz.user.orgId, 'provisions')
   const runs = await listProvisionRuns(authz.user.orgId, authz.allowedSubsidiaryIds)
   const m = (v: string) => money(v, { currency: org?.base_currency })
 
@@ -66,6 +70,7 @@ export async function loadTaxProvisions(): Promise<TaxProvisionsData> {
     // The compute dialog posts an org-wide run, so restricted callers never
     // see the button — mirrors the native header gate exactly.
     canCompute,
+    tabs,
     // Without the grant the empty table must not invite a Compute the reader
     // cannot open: it names the organization-wide access instead.
     emptyText: canCompute ? t('empty') : t('emptyNoGrant'),
@@ -108,7 +113,10 @@ export function taxProvisionsSpec(data: TaxProvisionsData): PageSpec {
         // `actions={… : undefined}` when gated off, so the spec must also
         // produce *no* actions — a `when`-gated widget would still leave the
         // PageHeader actions wrapper div standing with nothing inside it.
-        actions: data.canCompute ? [widget('provision-compute-button', {})] : undefined,
+        actions: [
+          widget('module-home-tabs', { tabs: f('tabs') }),
+          ...(data.canCompute ? [widget('provision-compute-button', {})] : []),
+        ],
       }),
     ],
     body: [

@@ -74,7 +74,17 @@ const mockSources = new Map<string, string>([
     `
       export function page(spec) { return spec }
       export function ref() { return () => false }
+      export function badge() { return {} }
+      export function column() { return {} }
+      export function field(path) { return { $: path } }
+      export function link() { return {} }
+      export function number() { return {} }
+      export function pageHeader(spec) { return spec }
+      export function text() { return {} }
+      export function widget(kind, props) { return { kind, props } }
       export function widgetBlock(kind, props) { return { kind, ...props } }
+      export function table(spec) { return spec }
+      export function resolvePath(root, path) { return path.split('.').reduce((value, key) => value?.[key], root) }
     `,
   ],
   [
@@ -134,7 +144,7 @@ stubModules({
   navigation: navigationMock,
   intl: intlMock,
   authz: authzMock,
-  features: false,
+  features: { enabled: ['crossBorderTax'] },
 })
 
 const hooks = registerHooks({

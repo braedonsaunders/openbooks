@@ -1,14 +1,4 @@
 import { ModuleHomeTabs } from '@/components/module-home/tabs'
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import Link from 'next/link'
-import { Settings } from 'lucide-react'
-import { Badge, Button } from '@openbooks/ui'
-import { SortTh } from '../../../components/sortable-th'
-import { Pagination } from '../../../components/pagination'
-import { SearchInput } from '../../../components/search-input'
-import { FilterChips } from '../../../components/filter-bar'
-import { PageContainer } from '../../../components/page-layout'
-import { TabContent } from '@openbooks/ui'
 import { TaxFilingsView } from './TaxFilingsView'
 import { FilingHistoryDrawer, type FilingHistoryRecord } from './FilingHistoryDrawer'
 
@@ -38,50 +28,7 @@ export interface TaxHistoryRow {
   saved: string
 }
 
-/** Native record cells and actions compose the shared table primitives. */
-
-/** The native shell: PageContainer's centered container with its space-y-6 body. */
-export function TaxPageShell({ children }: { children: React.ReactNode }) {
-  return (
-    <PageContainer>
-      <div className="space-y-6">{children}</div>
-    </PageContainer>
-  )
-}
-
-/** Native record cells and actions compose the shared table primitives. */
-export function TaxPageHeader({
-  title,
-  description,
-  setupHref,
-  setupLabel,
-  canManageSetup,
-}: {
-  title: string
-  description: string
-  setupHref: string
-  setupLabel: string
-  canManageSetup: boolean
-}) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
-      </div>
-      {canManageSetup ? (
-        <Button variant="outline" size="sm" asChild>
-          <Link href={setupHref as never}>
-            <Settings size={14} />
-            {setupLabel}
-          </Link>
-        </Button>
-      ) : null}
-    </div>
-  )
-}
-
-/** The prepare/history tab strip with the filing-count badge on History. */
+/** Filing subviews share the same route while OSS and Provisions live beside it. */
 export function TaxTabs({
   tabs,
 }: {
@@ -90,7 +37,7 @@ export function TaxTabs({
   return <ModuleHomeTabs tabs={tabs} />
 }
 
-/** The interactive prepare panel: compute, export and save are client fetch flows. */
+/** The prepare panel: computation, export and save remain native client flows. */
 export function TaxPreparePanel({
   forms,
   canSave,
@@ -105,130 +52,7 @@ export function TaxPreparePanel({
   return <TaxFilingsView forms={forms} canSave={canSave} canManageSetup={canManageSetup} conversionDate={conversionDate ?? null} />
 }
 
-/** Native record cells and actions compose the shared table primitives. */
-export function TaxHistoryTable({
-  searchPlaceholder,
-  statusLabel,
-  statusOptions,
-  formLabel,
-  formOptions,
-  basePath,
-  currentParams,
-  total,
-  page,
-  perPage,
-  sort,
-  dir,
-  columnForm,
-  columnPeriod,
-  columnVersion,
-  columnStatus,
-  columnReference,
-  columnSaved,
-  empty,
-  rows,
-}: {
-  searchPlaceholder: string
-  statusLabel: string
-  statusOptions: { value: string; label: string }[]
-  formLabel: string
-  formOptions: { value: string; label: string }[]
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
-  total: number
-  page: number
-  perPage: number
-  sort: string
-  dir: 'asc' | 'desc'
-  columnForm: string
-  columnPeriod: string
-  columnVersion: string
-  columnStatus: string
-  columnReference: string
-  columnSaved: string
-  empty: string
-  rows: TaxHistoryRow[]
-}) {
-  const sortProps = { basePath, currentParams, sort, dir }
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput placeholder={searchPlaceholder} />
-        <FilterChips
-          basePath={basePath}
-          currentParams={currentParams}
-          paramKey="status"
-          label={statusLabel}
-          options={statusOptions}
-        />
-        <FilterChips
-          basePath={basePath}
-          currentParams={currentParams}
-          paramKey="form"
-          label={formLabel}
-          options={formOptions}
-        />
-      </div>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="overflow-x-auto">
-          <SharedTable className="w-full text-sm">
-            <SharedTableHeader className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
-              <SharedTableRow>
-                <SortTh basePath={basePath} currentParams={currentParams} column="form" sort={sortProps.sort} dir={sortProps.dir}>{columnForm}</SortTh>
-                <SortTh basePath={basePath} currentParams={currentParams} column="period" sort={sortProps.sort} dir={sortProps.dir}>{columnPeriod}</SortTh>
-                <SharedTableHead className="px-3 py-2">{columnVersion}</SharedTableHead>
-                <SortTh basePath={basePath} currentParams={currentParams} column="status" sort={sortProps.sort} dir={sortProps.dir}>{columnStatus}</SortTh>
-                <SharedTableHead className="px-3 py-2">{columnReference}</SharedTableHead>
-                <SortTh basePath={basePath} currentParams={currentParams} column="created" sort={sortProps.sort} dir={sortProps.dir}>{columnSaved}</SortTh>
-              </SharedTableRow>
-            </SharedTableHeader>
-            <SharedTableBody>
-              {rows.length === 0 ? (
-                <SharedTableRow><SharedTableCell colSpan={6} className="px-3 py-8 text-center text-slate-500 dark:text-slate-400">{empty}</SharedTableCell></SharedTableRow>
-              ) : rows.map((filing) => (
-                <SharedTableRow key={filing.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                  <SharedTableCell className="px-3 py-2"><Link href={(filing.filingHref) as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{filing.formName}</Link><div className="font-mono text-xs text-slate-400">{filing.formCode}</div></SharedTableCell>
-                  <SharedTableCell className="whitespace-nowrap px-3 py-2">{filing.period}</SharedTableCell>
-                  <SharedTableCell className="px-3 py-2 tabular-nums">{filing.version}</SharedTableCell>
-                  <SharedTableCell className="px-3 py-2"><Badge variant={filing.statusVariant}>{filing.statusLabel}</Badge></SharedTableCell>
-                  <SharedTableCell className="px-3 py-2">{filing.reference}</SharedTableCell>
-                  <SharedTableCell className="whitespace-nowrap px-3 py-2 text-slate-500 dark:text-slate-400">{filing.saved}</SharedTableCell>
-                </SharedTableRow>
-              ))}
-            </SharedTableBody>
-          </SharedTable>
-        </div>
-        <Pagination basePath={basePath} currentParams={currentParams} total={total} page={page} perPage={perPage} />
-      </div>
-    </div>
-  )
-}
-
-/** The tab panels, wrapped in the same crossfade the native page uses. */
-export function TaxTabPanels({
-  tabKey,
-  onPrepare,
-  onHistory,
-  prepare,
-  history,
-}: {
-  tabKey: string
-  onPrepare: boolean
-  onHistory: boolean
-  prepare?: React.ReactNode
-  history?: React.ReactNode
-}) {
-  return (
-    <TabContent tabKey={tabKey}>
-      {onPrepare ? prepare : null}
-      {onHistory ? history : null}
-    </TabContent>
-  )
-}
-
-/** The filing flyout. The remount key rides along as a prop: opening a different
- *  filing must reset the drawer's client state, and a widget at a fixed
- *  position would otherwise be reused (same pattern as `account-drawer`). */
+/** A filing history record opens in the URL-addressed filing drawer. */
 export function TaxFilingDrawer({
   drawer,
 }: {

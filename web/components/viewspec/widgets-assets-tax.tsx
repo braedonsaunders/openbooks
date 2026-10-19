@@ -21,7 +21,7 @@ import {
 } from './native-widgets.client'
 import { KpiStrip } from '../kpi-strip'
 import { TaxDepreciationHeader, TaxDepreciationOverviewSlot } from '../../app/(app)/admin/setup/tax-depreciation/sections'
-import { TaxFilingDrawer, TaxHistoryTable, TaxPageHeader, TaxPageShell, TaxPreparePanel, TaxTabPanels, TaxTabs } from '../../app/(app)/tax/sections'
+import { TaxFilingDrawer, TaxPreparePanel, TaxTabs } from '../../app/(app)/tax/sections'
 import { AssetsTabs, AssetsDocLink, AssetsEquipmentLink } from '../../app/(app)/assets/sections'
 import { str, type WidgetRenderer } from './widget-props'
 
@@ -183,40 +183,19 @@ export const ASSETS_TAX_WIDGETS = {
   ),
 
   /* --- tax ------------------------------------------------------------------- */
-  /**
-   * The whole tax page through one widget, and coarse by necessity: the native
-   * page sits inside `PageContainer`, whose motion wrappers carry
-   * `data-page-motion` attributes and post-animation inline styles a spec grid
-   * (a plain div) cannot reproduce. Every unit below is a shared component the
-   * page has always rendered; this only binds loader data to props. The tab
-   * flags are loader-computed and applied inside `TaxTabPanels`, because a
-   * `when` cannot cross a widget boundary.
-   */
+  /** Tax subviews keep the form workflow native while list chrome stays shared. */
   'tax-page': (props) => (
-    <TaxPageShell>
-      <TaxPageHeader
-        title={str(props, 'title') ?? ''}
-        description={str(props, 'description') ?? ''}
-        setupHref={str(props, 'setupHref') ?? '/admin/setup/tax-return-forms'}
-        setupLabel={str(props, 'setupLabel') ?? ''}
-        canManageSetup={props.canManageSetup === true}
-      />
+    <>
       <TaxTabs tabs={(props.tabs as ComponentProps<typeof TaxTabs>['tabs']) ?? []} />
-      <TaxTabPanels
-        tabKey={str(props, 'tabKey') ?? 'prepare'}
-        onPrepare={props.onPrepare === true}
-        onHistory={props.onHistory === true}
-        prepare={
-          <TaxPreparePanel
-            forms={(props.forms as ComponentProps<typeof TaxPreparePanel>['forms']) ?? []}
-            canSave={props.canSave === true}
-            canManageSetup={props.canManageSetup === true}
-            conversionDate={str(props, 'conversionDate')}
-          />
-        }
-        history={<TaxHistoryTable {...(props.history as ComponentProps<typeof TaxHistoryTable>)} />}
-      />
-    </TaxPageShell>
+      {props.onPrepare === true ? (
+        <TaxPreparePanel
+          forms={(props.forms as ComponentProps<typeof TaxPreparePanel>['forms']) ?? []}
+          canSave={props.canSave === true}
+          canManageSetup={props.canManageSetup === true}
+          conversionDate={str(props, 'conversionDate')}
+        />
+      ) : null}
+    </>
   ),
   'tax-filing-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof TaxFilingDrawer>['drawer']
