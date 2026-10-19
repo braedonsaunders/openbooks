@@ -9,6 +9,7 @@ declare global {
   var __journalRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
   var __journalGets: number | undefined;
   var __journalQuery: string | undefined;
+  var __journalPathname: string | undefined;
 }
 
 // JournalDrawer on the shared action path. Save failures toasted without
@@ -26,7 +27,7 @@ stubModules({
   navigation: {
     source:
       "export function useRouter(){return globalThis.__journalRouter}" +
-      "export function usePathname(){return '/journal'}" +
+      "export function usePathname(){return globalThis.__journalPathname ?? '/journal'}" +
       "export function useSearchParams(){return new URLSearchParams(globalThis.__journalQuery??'')}",
   },
   intl: false,
@@ -265,6 +266,8 @@ test("posted journal links use one native drawer with immutable ledger lines", a
   assert.match(document.body.textContent ?? "", /Reviewed September/);
   assert.match(document.body.textContent ?? "", /Posted evidence/);
   assert.match(document.body.textContent ?? "", /JE-4080/);
+  assert.match(document.body.textContent ?? "", /Sep 17, 2026/, "the posting date reads in the viewer locale");
+  assert.doesNotMatch(document.body.textContent ?? "", /2026-09-17/, "the raw ISO posting date is not shown");
   assert.match(document.body.textContent ?? "", /immutable ledger line/);
   assert.match(document.body.textContent ?? "", /CAD/);
   assert.doesNotMatch(document.body.textContent ?? "", /999\.00/);
@@ -277,6 +280,35 @@ test("posted journal links use one native drawer with immutable ledger lines", a
   await act(async () => { globalThis.__journalQuery = `journalEntry=${entryId}`; render(); await tick(); });
   assert.match(document.body.textContent ?? '', /Reopened review/, 'reopening a journal initializes from a fresh snapshot rather than a cached revision');
   assert.equal(entryReads, 2);
+});
+
+test("the posted entry drawer subtitle reads its posting date in the viewer locale", async (t) => {
+  freshGlobals();
+  const entryId = randomUUID();
+  globalThis.__journalPathname = "/reports/general-ledger";
+  globalThis.__journalQuery = `txn=${entryId}`;
+  t.after(() => { globalThis.__journalPathname = undefined; globalThis.__journalQuery = undefined; });
+  const restoreFetch = scriptFetch((url) => url === `/api/reports/entry/${entryId}`
+    ? Response.json({
+        entry: { id: entryId, entry_number: "JE-4081", date: "2026-01-01", status: "posted", origin: "manual", memo: "Opening balances", subsidiary_id: "sub-1" },
+        lines: BALANCED_LINES.map((line, index) => ({ ...line, line_number: index + 1, memo: "opening line", account_number: String(index + 1000), account_name: `Account ${index}`, subsidiary_id: "sub-1", subsidiary: "Main entity", functional_currency: "USD" })),
+      })
+    : null);
+  t.after(restoreFetch);
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  t.after(async () => { await act(async () => root.unmount()); host.remove(); });
+  await act(async () => {
+    root.render(<NextIntlClientProvider locale="de" messages={messages} timeZone="Pacific/Pago_Pago"><MoneyProvider currency="USD"><NavigationProvider><EntryFlyout /></NavigationProvider></MoneyProvider></NextIntlClientProvider>);
+    await tick();
+  });
+  await tick();
+  const dialog = document.querySelector('[role="dialog"]');
+  assert.ok(dialog, "the entry drawer opens on its txn link");
+  assert.match(dialog.textContent ?? "", /JE-4081/);
+  assert.match(dialog.textContent ?? "", /1\. Jan\. 2026 · /, "the civil posting date is localized and never shifted by the time zone");
+  assert.doesNotMatch(dialog.textContent ?? "", /2026-01-01/);
 });
 
 test("a refused save pins the reason instead of toasting into the void", async (t) => {

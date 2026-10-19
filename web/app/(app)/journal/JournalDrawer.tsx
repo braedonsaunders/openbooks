@@ -10,7 +10,8 @@ import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { isDocumentRevisionToken } from '@/lib/api/registry-data'
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { formatCivilDate } from '../../../lib/format'
 import { toast } from 'sonner'
 import { ActionError } from '@braedonsaunders/appkit-errors'
 import { z } from 'zod'
@@ -407,6 +408,7 @@ function JournalDrawerBody({
   const tNew = useTranslations('journal.newButton')
   const tAmortization = useTranslations('amortization.billLine')
   const tc = useTranslations('common')
+  const locale = useLocale()
   const router = useRouter()
   const propsDoc = asJournalDoc(journal.doc)
   // The header's status must not rest on the server props alone: a list
@@ -1192,7 +1194,7 @@ function JournalDrawerBody({
     }
     switch (placement.key) {
       case 'document_date':
-        return <><Label>{override || tc('labels.date')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+        return <><Label>{override || tc('labels.date')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} /> : <p className="text-sm">{doc.document_date ? formatCivilDate(doc.document_date, locale) : '—'}</p>}</>
       case 'party_id':
         return <><Label>{override || tc('labels.party')}</Label>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('noParty')} clearable emptyLabel={t('noParty')} /> : <p className="text-sm">{doc.party_name ?? '—'}</p>}</>
       case 'reference_number':
@@ -1377,7 +1379,7 @@ function JournalDrawerBody({
             {editable ? (
               <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
             ) : (
-              <p className="text-sm">{doc.document_date}</p>
+              <p className="text-sm">{doc.document_date ? formatCivilDate(doc.document_date, locale) : '—'}</p>
             )}
           </div>
           <div className={`${field} lg:col-span-2`}>

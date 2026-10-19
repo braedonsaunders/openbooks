@@ -3,7 +3,8 @@
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { formatCivilDate } from '../../../lib/format'
 import { ArrowUpRight } from 'lucide-react'
 import { Badge, Button, Drawer, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { TxnLink } from './TxnLink'
@@ -75,6 +76,7 @@ export function EntryFlyout() {
   const t = useTranslations('journal')
   const tc = useTranslations('common')
   const tr = useTranslations('reports')
+  const locale = useLocale()
   const txn = pathname === '/journal' ? null : params.get('txn')
 
   const [data, setData] = useState<EntryData | null>(null)
@@ -192,7 +194,7 @@ export function EntryFlyout() {
       }
       description={
         entry
-          ? [entry.date, origin, entry.memo, entry.reverses_number ? t('detail.reverses', { number: entry.reverses_number }) : null]
+          ? [entry.date ? formatCivilDate(entry.date, locale) : null, origin, entry.memo, entry.reverses_number ? t('detail.reverses', { number: entry.reverses_number }) : null]
               .filter(Boolean)
               .join(' · ')
           : undefined
