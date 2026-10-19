@@ -67,7 +67,7 @@ export const POST = defineRoute({
         })
       }
     }
-    const merged = await mergeLabelPdfs(orgId, boughtIds)
+    const merged = await mergeLabelPdfs(orgId, boughtIds, authz.allowedSubsidiaryIds)
     return NextResponse.json({ rows, merged })
   },
 })
@@ -75,13 +75,14 @@ export const POST = defineRoute({
 async function mergeLabelPdfs(
   orgId: string,
   labelIds: string[],
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ pages: number; pdfBase64: string } | null> {
   const merged = await PDFDocument.create()
   let pages = 0
   for (const labelId of labelIds) {
     let file
     try {
-      file = await readLabelFile(db, orgId, labelId)
+      file = await readLabelFile(db, orgId, labelId, allowedSubsidiaryIds)
     } catch {
       continue
     }

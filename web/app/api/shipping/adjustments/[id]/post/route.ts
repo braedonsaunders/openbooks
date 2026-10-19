@@ -15,7 +15,7 @@ export const POST = defineRoute({
   params: postParams,
   handler: async ({ authz, params: { id } }) => {
     const posted = await db.transaction((tx) =>
-      postBillingAdjustment(tx, authz.user.orgId, authz.user.id, id),
+      postBillingAdjustment(tx, authz.user.orgId, authz.user.id, id, authz.allowedSubsidiaryIds),
     ).catch((error: unknown) => {
       if (error instanceof Error && (error as { code?: unknown }).code === 'not_found') return null
       throw error

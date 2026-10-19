@@ -11,11 +11,17 @@ import { createPickList, createShipment, releasePickList } from "./fulfillment.t
 import { createWarehouseOperator, confirmFixturePick, packFixtureShipment } from "../testing/warehouse-execution.ts";
 import { moveHandlingUnit } from "./handling-units.ts";
 import { sealJson } from "../platform/secrets.ts";
+import { reverseProjectGlEntryWithinTransaction } from "../journal/origin-entry.ts";
 import {
   buyShipmentLabel,
   getShipmentRates,
   handleTrackerDelivery,
+  importBillingAdjustments,
+  listAdjustmentsByCarrier,
+  postBillingAdjustment,
+  readLabelFile,
   rotateShippingRelaySecret,
+  refreshLabelTracking,
   sealAccountSecrets,
   ShippingRefusal,
   voidShipmentLabel,
@@ -342,6 +348,74 @@ test("voiding a label reverses its cost journal", { skip: !DB }, async () => {
       select entry_number, status from journal_entries
        where org_id = ${org.orgId} and origin = 'shipping_label' order by created_at`));
     assert.deepEqual(entries.rows.map((row) => row.status), ["reversed", "posted"]);
+  } finally {
+    await close(server);
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("label access and carrier adjustments honor shipment subsidiary scope", { skip: !DB }, async () => {
+  const server = fakeEasyPost(Buffer.from("%PDF-1.4 test label", "utf8"));
+  const baseUrl = await listen(server);
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await enableShipping(org.orgId);
+    const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
+    await withBypassContext(() => receiveInventory(org.orgId, userId, {
+      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
+      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+    }));
+    await withBypassContext(() => db.execute(sql`
+      update items set weight = '0.5', weight_unit = 'kg' where org_id = ${org.orgId} and id = ${org.items.fifo}`));
+    const accountId = await seedAccount(org, null);
+    const shipmentId = await draftShipment(org, userId, "SO-SHIP-SCOPE", org.items.fifo);
+    await withOrg(org.orgId, () => db.transaction((tx) =>
+      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl, shipmentId) })));
+    const bought = await withOrg(org.orgId, () => db.transaction((tx) =>
+      buyShipmentLabel(tx, org.orgId, userId, {
+        shipmentId,
+        providerRateId: RATE_GROUND,
+        accountId,
+        ...callOpts(baseUrl, shipmentId),
+      })));
+    const deniedScope = new Set<string>();
+    const notFound = (error: unknown) => error instanceof ShippingRefusal && error.code === "not_found";
+
+    await assert.rejects(withOrg(org.orgId, () => readLabelFile(db, org.orgId, bought.id, deniedScope)), notFound);
+    await assert.rejects(withOrg(org.orgId, () => db.transaction((tx) => refreshLabelTracking(
+      tx,
+      org.orgId,
+      userId,
+      { labelId: bought.id, allowedSubsidiaryIds: deniedScope, baseUrl },
+    ))), notFound);
+
+    const adjustment = {
+      providerAdjustmentId: "adjustment-scope-1",
+      providerShipmentId: SHIPMENT_ID,
+      kind: "fuel",
+      amount: "2.50",
+      currency: "CAD",
+      occurredAt: org.date,
+    };
+    await assert.rejects(withOrg(org.orgId, () => db.transaction((tx) => importBillingAdjustments(
+      tx, org.orgId, userId, accountId, [adjustment], deniedScope,
+    ))), (error: unknown) => error instanceof ShippingRefusal && error.code === "adjustment_unknown");
+    const imported = await withOrg(org.orgId, () => db.transaction((tx) =>
+      importBillingAdjustments(tx, org.orgId, userId, accountId, [adjustment], null)));
+    assert.deepEqual(imported, { imported: 1, skipped: 0 });
+    const adjustmentId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+      select id from shipping_adjustments where org_id = ${org.orgId}
+       and provider_adjustment_id = ${adjustment.providerAdjustmentId}`))).rows[0]!.id;
+    await assert.rejects(withOrg(org.orgId, () => db.transaction((tx) =>
+      postBillingAdjustment(tx, org.orgId, userId, adjustmentId, deniedScope))), notFound);
+
+    const posted = await withSimClock(org.date, () => withOrg(org.orgId, () => db.transaction((tx) =>
+      postBillingAdjustment(tx, org.orgId, userId, adjustmentId, null))));
+    const reversed = await withOrg(org.orgId, () => db.transaction((tx) =>
+      reverseProjectGlEntryWithinTransaction(tx, org.orgId, userId, posted.entryId, "Correct carrier charge", org.date)));
+    assert.equal(reversed.status, "reversed");
+    const report = await withOrg(org.orgId, () => listAdjustmentsByCarrier(db, org.orgId, { from: org.date, to: org.date }));
+    assert.deepEqual(report, []);
   } finally {
     await close(server);
     await withBypassContext(() => dropScratchOrg(org.orgId));

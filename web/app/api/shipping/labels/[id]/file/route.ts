@@ -14,7 +14,7 @@ export const GET = defineRoute({
   feature: 'shippingHub',
   params: labelParams,
   handler: async ({ authz, params: { id } }) => {
-    const file = await readLabelFile(db, authz.user.orgId, id).catch((error: unknown) => {
+    const file = await readLabelFile(db, authz.user.orgId, id, authz.allowedSubsidiaryIds).catch((error: unknown) => {
       if (error instanceof Error && (error as { code?: unknown }).code === 'not_found') return null
       throw error
     })

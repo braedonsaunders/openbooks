@@ -6,6 +6,7 @@ import { assertPackedUnit } from "./handling-unit-state.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { postProjectGlEntryWithinTransaction, reverseProjectGlEntryWithinTransaction } from "../journal/origin-entry.ts";
 import {
@@ -1680,6 +1681,7 @@ export async function voidShipmentLabel(
 
 export interface RefreshTrackingInput {
   labelId: string;
+  allowedSubsidiaryIds: Scope;
   transport?: typeof fetch;
   baseUrl?: string;
 }
@@ -1697,8 +1699,13 @@ export async function refreshLabelTracking(
     carrier: string; tracking_number: string | null; tracking_status: string;
     events: { id: string | null; status: string; detail: string | null; occurredAt: string | null }[];
   }>(sql`
-    select id, account_id, provider, provider_shipment_id, carrier, tracking_number, tracking_status, events
-      from shipment_labels where org_id = ${orgId} and id = ${input.labelId} for update`)).rows[0];
+    select l.id, l.account_id, l.provider, l.provider_shipment_id, l.carrier,
+           l.tracking_number, l.tracking_status, l.events
+      from shipment_labels l
+      join documents d on d.org_id = l.org_id and d.id = l.shipment_document_id and d.kind = 'shipment'
+     where l.org_id = ${orgId} and l.id = ${input.labelId}
+       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
+     for update of l, d`)).rows[0];
   if (!label) throw new ShippingRefusal("Shipping label not found", "not_found", 404);
   const account = await loadShippingAccount(tx, orgId, label.account_id);
   const adapter = adapterFor(account.provider);
@@ -1973,6 +1980,7 @@ export async function importBillingAdjustments(
   actorId: string,
   accountId: string,
   items: BillingAdjustmentInput[],
+  allowedSubsidiaryIds: Scope,
 ): Promise<{ imported: number; skipped: number }> {
   await assertShippingFeature(tx, orgId);
   const account = await loadShippingAccount(tx, orgId, accountId);
@@ -2006,8 +2014,11 @@ export async function importBillingAdjustments(
     }
     const label = (await tx.execute<{ id: string }>(sql`
       select l.id from shipment_labels l
+      join documents d on d.org_id = l.org_id and d.id = l.shipment_document_id and d.kind = 'shipment'
        where l.org_id = ${orgId} and l.account_id = ${account.id}
-         and l.provider_shipment_id = ${item.providerShipmentId} limit 1 for share`)).rows[0];
+         and l.provider_shipment_id = ${item.providerShipmentId}
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+       limit 1 for share of l, d`)).rows[0];
     if (!label) {
       throw new ShippingRefusal(
         `Billing adjustment ${identity} references an unknown label`,
@@ -2054,6 +2065,7 @@ export async function postBillingAdjustment(
   orgId: string,
   actorId: string,
   adjustmentId: string,
+  allowedSubsidiaryIds: Scope,
 ): Promise<{ adjustmentId: string; entryId: string }> {
   await assertShippingFeature(tx, orgId);
   const adjustment = (await tx.execute<{
@@ -2065,8 +2077,10 @@ export async function postBillingAdjustment(
            l.shipment_document_id as shipment_id, l.order_document_id as order_id, d.subsidiary_id
       from shipping_adjustments a
       join shipment_labels l on l.id = a.label_id and l.org_id = a.org_id
-      join documents d on d.id = l.shipment_document_id and d.org_id = a.org_id
-     where a.org_id = ${orgId} and a.id = ${adjustmentId} for update of a`)).rows[0];
+      join documents d on d.id = l.shipment_document_id and d.org_id = a.org_id and d.kind = 'shipment'
+     where a.org_id = ${orgId} and a.id = ${adjustmentId}
+       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+     for update of a, l, d`)).rows[0];
   if (!adjustment) throw new ShippingRefusal("Billing adjustment not found", "not_found", 404);
   if (adjustment.entry_id) return { adjustmentId: adjustment.id, entryId: adjustment.entry_id };
   if (adjustment.status !== "pending") {
@@ -2179,7 +2193,7 @@ export interface CarrierAdjustmentRow {
 
 /**
  * Carrier billing adjustments by carrier and reason, over live ledger lines
- * only (posted and reversed), on the primary posting book — the first
+ * only (posted, not reversed), on the primary posting book — the first
  * version of the carrier invoice audit.
  */
 export async function listAdjustmentsByCarrier(
@@ -2203,7 +2217,9 @@ export async function listAdjustmentsByCarrier(
       join shipment_labels l on l.id = a.label_id and l.org_id = a.org_id
       join journal_entries je on je.id = a.entry_id and je.org_id = a.org_id
      where a.org_id = ${orgId} and a.status = 'posted'
-       and je.book_id = ${book.id} and je.status in ('posted', 'reversed')
+       and je.book_id = ${book.id}
+       -- Live entries only: reversed adjustment journals are excluded from this current total.
+       and je.status = 'posted'
        and je.posting_date >= ${input.from}::date and je.posting_date <= ${input.to}::date
      group by l.carrier, a.kind, a.currency
      order by l.carrier, a.kind`)).rows;
@@ -2320,6 +2336,7 @@ export async function readLabelFile(
   runner: SqlExecutor,
   orgId: string,
   labelId: string,
+  allowedSubsidiaryIds: Scope,
 ): Promise<LabelFile> {
   await assertShippingFeature(runner, orgId);
   const row = (await runner.execute<{
@@ -2330,8 +2347,9 @@ export async function readLabelFile(
       join files f on f.id = l.label_file_id and f.org_id = l.org_id
       join file_versions v on v.id = f.current_version_id
       join file_blobs b on b.version_id = v.id
-      join documents d on d.id = l.shipment_document_id and d.org_id = l.org_id
-     where l.org_id = ${orgId} and l.id = ${labelId}`)).rows[0];
+      join documents d on d.id = l.shipment_document_id and d.org_id = l.org_id and d.kind = 'shipment'
+     where l.org_id = ${orgId} and l.id = ${labelId}
+       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}`)).rows[0];
   if (!row) throw new ShippingRefusal("Shipping label file not found", "not_found", 404);
   return { filename: row.filename, contentType: row.content_type, bytes: row.bytes };
 }

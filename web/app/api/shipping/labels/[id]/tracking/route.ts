@@ -15,7 +15,10 @@ export const POST = defineRoute({
   params: labelParams,
   handler: async ({ authz, params: { id } }) => {
     const refreshed = await db.transaction((tx) =>
-      refreshLabelTracking(tx, authz.user.orgId, authz.user.id, { labelId: id }),
+      refreshLabelTracking(tx, authz.user.orgId, authz.user.id, {
+        labelId: id,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      }),
     ).catch((error: unknown) => {
       if (error instanceof Error && (error as { code?: unknown }).code === 'not_found') return null
       throw error

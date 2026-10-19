@@ -30,7 +30,7 @@ export const POST = defineRoute({
   body: importBody,
   handler: async ({ authz, body }) => {
     const result = await db.transaction((tx) =>
-      importBillingAdjustments(tx, authz.user.orgId, authz.user.id, body.accountId, body.items),
+      importBillingAdjustments(tx, authz.user.orgId, authz.user.id, body.accountId, body.items, authz.allowedSubsidiaryIds),
     )
     return NextResponse.json({ adjustments: result })
   },
