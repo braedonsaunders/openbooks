@@ -18,6 +18,58 @@ export interface GenealogyEdge {
   outputIdentity: string | null; outputQuantity: string;
 }
 
+export interface GenealogySeedChoice { value: string; label: string }
+
+/** The seed picker and the trace reader share the same visibility fence. */
+function seedVisibility(kind: "lot" | "serial", scope: ReadonlySet<string> | null) {
+  const identityColumn = kind === "lot" ? sql`identity.lot_number` : sql`identity.serial_number`;
+  const movementColumn = kind === "lot" ? sql`movement.lot_id` : sql`movement.serial_id`;
+  const ownerColumn = kind === "lot" ? sql`owner.lot_id` : sql`owner.serial_id`;
+  return sql`(${scope === null ? sql`true` : sql`exists (
+      select 1 from inventory_movements movement join stock_locations stock on stock.org_id=movement.org_id and stock.id=movement.stock_location_id
+      join locations location on location.org_id=stock.org_id and location.id=stock.location_id
+      where movement.org_id=identity.org_id and ${movementColumn}=identity.id
+      ${subsidiaryVisibleFilter(sql`movement.subsidiary_id`, scope)}
+      ${subsidiaryVisibleFilter(sql`location.subsidiary_id`, scope, { orgWideNull: true })})`})
+      and not exists(select 1 from inventory_movements movement
+        left join stock_locations stock on stock.org_id=movement.org_id and stock.id=movement.stock_location_id
+        left join locations location on location.org_id=stock.org_id and location.id=stock.location_id
+        where movement.org_id=identity.org_id and ${movementColumn}=identity.id
+          and (location.id is null or not(true ${subsidiaryVisibleFilter(sql`movement.subsidiary_id`,scope)})
+            or not(true ${subsidiaryVisibleFilter(sql`location.subsidiary_id`,scope,{orgWideNull:true})})))
+      and not exists(select 1 from consignment_stock owner where owner.org_id=identity.org_id
+        and ${ownerColumn}=identity.id
+        and not(true ${subsidiaryVisibleFilter(sql`owner.subsidiary_id`,scope)}))`;
+}
+
+/** Search only identities the caller could also open in a genealogy trace. */
+export async function searchManufacturingGenealogySeeds(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  input: { kind: "lot" | "serial"; q?: string; selected?: string },
+  requestedScope: ReadonlySet<string> | null = null,
+): Promise<GenealogySeedChoice[]> {
+  await assertManufacturingFeature(tx, orgId, "manufacturing");
+  const scope = await lockManufacturingReadAuthority(tx, orgId, actorId, requestedScope, ["manufacturing.read", "items.read"]);
+  if (!/^(lot|serial)$/.test(input.kind)
+    || (input.selected !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.selected))
+    || (input.q !== undefined && (typeof input.q !== "string" || input.q.length > 200))) {
+    throw new ManufacturingError("Choose a lot or serial and a valid search term.", { code: "genealogy_identity_required" });
+  }
+  const table = input.kind === "lot" ? sql`lots` : sql`serials`;
+  const identityColumn = input.kind === "lot" ? sql`identity.lot_number` : sql`identity.serial_number`;
+  const pattern = "%" + (input.q ?? "").trim() + "%";
+  return (await tx.execute<{ value: string; label: string }>(sql`
+    select identity.id as value, concat_ws(' · ', item.name, ${identityColumn}) as label
+    from ${table} identity
+    join items item on item.org_id=identity.org_id and item.id=identity.item_id
+    where identity.org_id=${orgId} and ${seedVisibility(input.kind, scope)}
+      and (${identityColumn} ilike ${pattern} or item.name ilike ${pattern} ${input.selected ? sql`or identity.id=${input.selected}` : sql``})
+    order by ${input.selected ? sql`(identity.id=${input.selected}) desc,` : sql``} item.name,${identityColumn},identity.id
+    limit 100`)).rows;
+}
+
 /** Receipt-batch input evidence takes precedence over legacy order associations.
  * Estimated allocations and legacy links remain explicitly distinguished from recorded inputs. */
 export async function traceManufacturingGenealogy(
@@ -34,27 +86,11 @@ export async function traceManufacturingGenealogy(
   const depthLimit = input.maxDepth ?? 8;
   if (!Number.isInteger(depthLimit) || depthLimit < 1 || depthLimit > 32)
     throw new ManufacturingError("Trace depth must be between 1 and 32.", { code: "genealogy_depth_invalid" });
-  const table = input.kind === "lot" ? sql`lots` : sql`serials`;
   const identityColumn = input.kind === "lot" ? sql`identity.lot_number` : sql`identity.serial_number`;
-  const movementColumn = input.kind === "lot" ? sql`movement.lot_id` : sql`movement.serial_id`;
   const seed = (await tx.execute<{ id: string; label: string; itemName: string }>(sql`
     select identity.id,${identityColumn} as label,item.name as "itemName"
-    from ${table} identity join items item on item.org_id=identity.org_id and item.id=identity.item_id
-    where identity.org_id=${orgId} and identity.id=${input.id} and (${scope === null ? sql`true` : sql`exists (
-      select 1 from inventory_movements movement join stock_locations stock on stock.org_id=movement.org_id and stock.id=movement.stock_location_id
-      join locations location on location.org_id=stock.org_id and location.id=stock.location_id
-      where movement.org_id=identity.org_id and ${movementColumn}=identity.id
-      ${subsidiaryVisibleFilter(sql`movement.subsidiary_id`, scope)}
-      ${subsidiaryVisibleFilter(sql`location.subsidiary_id`, scope, { orgWideNull: true })})`})
-      and not exists(select 1 from inventory_movements movement
-        left join stock_locations stock on stock.org_id=movement.org_id and stock.id=movement.stock_location_id
-        left join locations location on location.org_id=stock.org_id and location.id=stock.location_id
-        where movement.org_id=identity.org_id and ${movementColumn}=identity.id
-          and (location.id is null or not(true ${subsidiaryVisibleFilter(sql`movement.subsidiary_id`,scope)})
-            or not(true ${subsidiaryVisibleFilter(sql`location.subsidiary_id`,scope,{orgWideNull:true})})))
-      and not exists(select 1 from consignment_stock owner where owner.org_id=identity.org_id
-        and ${input.kind==='lot'?sql`owner.lot_id`:sql`owner.serial_id`}=identity.id
-        and not(true ${subsidiaryVisibleFilter(sql`owner.subsidiary_id`,scope)}))`)).rows[0];
+    from ${input.kind === "lot" ? sql`lots` : sql`serials`} identity join items item on item.org_id=identity.org_id and item.id=identity.item_id
+    where identity.org_id=${orgId} and identity.id=${input.id} and ${seedVisibility(input.kind, scope)}`)).rows[0];
   if (!seed) throw new ManufacturingNotFoundError();
   const visited = new Set<string>();
   const seenEdges = new Set<string>();

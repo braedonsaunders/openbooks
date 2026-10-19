@@ -50,7 +50,7 @@ import { completeWorkOrder, markWorkOrderDone, reverseMaterialIssue, waiveMateri
 import { previewStandardRollup,proposeStandardRollup,applyStandardRollup } from "./standard-rollup.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
 import { decideGate } from "../flows/gates.ts";
-import { traceManufacturingGenealogy } from "./genealogy.ts";
+import { searchManufacturingGenealogySeeds, traceManufacturingGenealogy } from "./genealogy.ts";
 import { readOperatingSetupJourney } from "./setup-journey.ts";
 import { ensureLot,ensureSerial } from "../inventory/tracking.ts";
 import { applyProductionTimeCorrections } from "./conversion.ts";
@@ -427,6 +427,7 @@ const cases: Case[] = [
     assert.equal(after.edges.length,2);assert.ok(after.edges.every(e=>e.orderId===first.id));
     const allowed=new Set([f.org.subsidiaryId]);
     assert.equal((await run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'},allowed))).edges.length,2);
+    assert.deepEqual((await run(tx=>searchManufacturingGenealogySeeds(tx,f.org.orgId,f.actorId,{kind:'lot',q:'RAW-TRACE'},allowed))).map(seed=>seed.value),[raw]);
     const otherEntity=randomUUID(),otherLocation=randomUUID(),otherStock=randomUUID();
     await run(async tx=>{
       assert.equal((await tx.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active) values(${otherEntity},${f.org.orgId},${f.org.subsidiaryId},'Independent trace owner','CAD','CA',true) returning id`)).rows.length,1);
@@ -435,6 +436,7 @@ const cases: Case[] = [
     });
     await withBypassContext(()=>receiveInventory(f.org.orgId,f.actorId,{itemId:f.org.items.component,stockLocationId:otherStock,quantity:'1',unitCost:'3',subsidiaryId:otherEntity,offsetAccountId:f.org.accounts.clearing,date:f.org.date,lotId:raw}));
     const ownershipState=await counts(f);
+    assert.deepEqual(await run(tx=>searchManufacturingGenealogySeeds(tx,f.org.orgId,f.actorId,{kind:'lot',q:'RAW-TRACE'},allowed)),[],'the seed picker cannot reveal an identity with a foreign owner');
     await assert.rejects(run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'},allowed)),/not[ _]found/i);
     assert.deepEqual(await counts(f),ownershipState,'a trace seed cannot reveal a shared identifier whose current native owners are outside its authorized entities');
     assert.equal((await run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'}))).edges.length,2,'organization-wide authority retains the trace without inventing edges for ordinary receipts');
@@ -442,6 +444,7 @@ const cases: Case[] = [
     await assert.rejects(run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,randomUUID(),{kind:"lot",id:raw,direction:"forward"})));
     await run(tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.read"]'::jsonb where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`));
     await assert.rejects(run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:"lot",id:raw,direction:"forward"})));
+    await assert.rejects(run(tx=>searchManufacturingGenealogySeeds(tx,f.org.orgId,f.actorId,{kind:"lot",q:"RAW-TRACE"})));
     assert.deepEqual(await counts(f),before);
   }},
   { name: "standard roll-up requires live authority and unchanged approved sources, revalues stock and preserves released standards", run: async f => {
