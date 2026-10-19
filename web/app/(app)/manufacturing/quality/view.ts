@@ -36,7 +36,7 @@ export type ManufacturingQualityData = {
 const f = ref<ManufacturingQualityData>()
 const row = ref<ManufacturingQualityRow>()
 
-export function manufacturingQualitySpec(data: ManufacturingQualityData): PageSpec {
+export function manufacturingQualitySpec(_data: ManufacturingQualityData): PageSpec {
   return page({
     route: '/manufacturing/quality',
     layout: 'list',
