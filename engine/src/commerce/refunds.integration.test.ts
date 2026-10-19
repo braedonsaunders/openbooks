@@ -22,8 +22,10 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  seedApprovalFlow,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
+import { decideGate } from "../flows/gates.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -328,6 +330,44 @@ test("replaying a posted refund is a no-op", { skip: !DB }, async () => {
       select count(*)::text as count from documents
        where org_id = ${org.orgId} and external_source = 'shopify' and external_ref = 'r-9004'`))).rows[0]!;
     assert.equal(count.count, "1");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("replaying an approved channel cash refund preserves its original lines and payout tender", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const approver = await withBypass(() => createScratchUser(org.orgId, "Refund approver", "admin"));
+    const { channelId } = await setup(org, actor, "per_order");
+    const storedOrder = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("2011")));
+    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, storedOrder.id))).status, "posted");
+    await withBypass(() => seedApprovalFlow(org.orgId, {
+      subjectKind: "cash_refund", assignees: [{ type: "user", userId: approver }], mode: "any",
+    }));
+    const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "2011", {
+      kind: "refund", externalId: "r-2011", refund: fullRefund("2011", "r-2011"), occurredAt: "2026-07-16T09:00:00Z",
+    }));
+    const held = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    assert.equal(held.status, "pending");
+    assert.ok(held.documentId);
+    const gate = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+      select id from flow_gates where org_id = ${org.orgId} and subject_id = ${held.documentId} and status = 'pending'`))).rows[0]!;
+    await withBypass(() => decideGate({ gateId: gate.id, decision: "approved", userId: approver }));
+
+    const replayed = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    assert.equal(replayed.status, "posted");
+    assert.equal(replayed.documentId, held.documentId);
+    const doc = (await withOrgContext(org.orgId, () => db.execute<{ status: string; lines: number; tenders: number; postedEntryId: string | null }>(sql`
+      select d.status, (select count(*)::int from document_lines l where l.org_id = d.org_id and l.document_id = d.id) as lines,
+             (select count(*)::int from document_tenders t where t.org_id = d.org_id and t.document_id = d.id) as tenders,
+             d.posted_entry_id as "postedEntryId"
+        from documents d where d.org_id = ${org.orgId} and d.id = ${held.documentId}`))).rows[0]!;
+    assert.equal(doc.status, "posted");
+    assert.ok(doc.lines > 0);
+    assert.equal(doc.tenders, 1);
+    assert.ok(doc.postedEntryId);
   } finally {
     await dropScratchOrg(org.orgId);
   }

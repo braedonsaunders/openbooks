@@ -1204,14 +1204,17 @@ export async function postCashRefundDraft(
   if (existing && existing.status === "posted" && existing.posted_entry_id) {
     return { documentId: existing.id, journalEntryId: existing.posted_entry_id };
   }
+  const approved = existing?.status === "approved";
   let documentId: string;
   if (existing) {
     documentId = existing.id;
-    await db.execute(sql`delete from document_line_tax_components where org_id = ${orgId} and document_line_id in (
-      select id from document_lines where org_id = ${orgId} and document_id = ${documentId})`);
-    const removed = await db.execute(sql`
-      delete from document_lines where org_id = ${orgId} and document_id = ${documentId}`);
-    void removed.rowCount;
+    if (!approved) {
+      await db.execute(sql`delete from document_line_tax_components where org_id = ${orgId} and document_line_id in (
+        select id from document_lines where org_id = ${orgId} and document_id = ${documentId})`);
+      const removed = await db.execute(sql`
+        delete from document_lines where org_id = ${orgId} and document_id = ${documentId}`);
+      void removed.rowCount;
+    }
   } else {
     const documentNumber = await allocateDocumentNumber(db, orgId, "cash_refund", "CR-");
     const inserted = await db.execute<{ id: string }>(sql`
@@ -1229,52 +1232,52 @@ export async function postCashRefundDraft(
     if (inserted.rows.length !== 1) throw new Error("Cash refund insert returned an unexpected row count");
     documentId = inserted.rows[0]!.id;
   }
-  // Payout tenders ride document_tenders (never custom): the kernel's tender
-  // assertion reads the table, and the post-commit effect tops up
-  // stored-value tenders from it. Replaced on replay beside rebuilt lines.
-  const tenderInputs: TenderInput[] = draft.tenders
-    .filter((tender) => tender.amountMinor > 0n)
-    .map((tender) => ({
-      kind: tender.giftCardAccountId ? "stored_value" : "gateway",
-      methodLabel: tender.gateway,
-      accountId: tender.giftCardAccountId ? null : tender.accountId,
-      storedValueAccountId: tender.giftCardAccountId,
-      amount: minorToLedger(tender.amountMinor, currency),
-      reference: null,
-    }));
-  // Refund automation on its own just-created draft: the refund — not an
-  // actor entity set — is the authority, named here as unrestricted. Tender
-  // accounts still scope-gate neutrally and must match the document entity.
-  await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor, allowedSubsidiaryIds: null });
-  let lineNumber = 0;
-  for (const line of draft.lines) {
-    lineNumber += 1;
-    const inserted = await db.execute<{ id: string }>(sql`
-      insert into document_lines
-        (org_id, document_id, line_number, item_id, account_id, description, quantity,
-         unit_price, amount, tax_amount, promotion_id, marketplace_facilitator, stock_location_id,
-         custom, created_by, updated_by)
-      values (${orgId}, ${documentId}, ${lineNumber}, ${line.itemId}, ${line.accountId},
-        ${line.title}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
-        ${line.taxAmount}, ${line.promotionId}, ${line.marketplaceFacilitator},
-        ${line.stockLocationId}, ${line.customJson}::jsonb, ${actor}, ${actor})
-      returning id`);
-    if (inserted.rows.length !== 1) throw new Error("Cash refund line insert returned an unexpected row count");
-    const lineId = inserted.rows[0]!.id;
-    let sequence = 0;
-    for (const tax of line.taxes) {
-      sequence += 1;
-      await db.execute(sql`
-        insert into document_line_tax_components
-          (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
-           tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
-           collected_by, facilitator_name, collected_account_id, created_by, updated_by)
-        values (${orgId}, ${lineId}, ${tax.taxCodeId}, ${sequence}, ${tax.ratePercent}, ${line.amount},
-          ${minorToLedger(tax.amountMinor, currency)}, '0', ${minorToLedger(tax.amountMinor, currency)}, 'standard',
-          ${tax.collectedBy}, ${tax.facilitatorName}, ${tax.liabilityAccountId}, ${actor}, ${actor})`);
+  if (!approved) {
+    // Payout tenders ride document_tenders (never custom): the kernel's tender
+    // assertion reads the table, and post-commit effects consume the same rows.
+    const tenderInputs: TenderInput[] = draft.tenders
+      .filter((tender) => tender.amountMinor > 0n)
+      .map((tender) => ({
+        kind: tender.giftCardAccountId ? "stored_value" : "gateway",
+        methodLabel: tender.gateway,
+        accountId: tender.giftCardAccountId ? null : tender.accountId,
+        storedValueAccountId: tender.giftCardAccountId,
+        amount: minorToLedger(tender.amountMinor, currency),
+        reference: null,
+      }));
+    await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor, allowedSubsidiaryIds: null });
+    let lineNumber = 0;
+    for (const line of draft.lines) {
+      lineNumber += 1;
+      const inserted = await db.execute<{ id: string }>(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, item_id, account_id, description, quantity,
+           unit_price, amount, tax_amount, promotion_id, marketplace_facilitator, stock_location_id,
+           custom, created_by, updated_by)
+        values (${orgId}, ${documentId}, ${lineNumber}, ${line.itemId}, ${line.accountId},
+          ${line.title}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
+          ${line.taxAmount}, ${line.promotionId}, ${line.marketplaceFacilitator},
+          ${line.stockLocationId}, ${line.customJson}::jsonb, ${actor}, ${actor})
+        returning id`);
+      if (inserted.rows.length !== 1) throw new Error("Cash refund line insert returned an unexpected row count");
+      const lineId = inserted.rows[0]!.id;
+      let sequence = 0;
+      for (const tax of line.taxes) {
+        sequence += 1;
+        await db.execute(sql`
+          insert into document_line_tax_components
+            (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+             tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+             collected_by, facilitator_name, collected_account_id, created_by, updated_by)
+          values (${orgId}, ${lineId}, ${tax.taxCodeId}, ${sequence}, ${tax.ratePercent}, ${line.amount},
+            ${minorToLedger(tax.amountMinor, currency)}, '0', ${minorToLedger(tax.amountMinor, currency)}, 'standard',
+            ${tax.collectedBy}, ${tax.facilitatorName}, ${tax.liabilityAccountId}, ${actor}, ${actor})`);
+      }
     }
   }
-  const submission = await submitAndReleaseIfUngated("cash_refund", documentId, actor);
+  const submission = approved
+    ? { gated: false, flowError: null }
+    : await submitAndReleaseIfUngated("cash_refund", documentId, actor);
   if (submission.gated) {
     // An approval policy holds the draft: the operator approves in the
     // document workflow, then replays the refund to post the approved draft.

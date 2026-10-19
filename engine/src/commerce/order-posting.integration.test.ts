@@ -20,8 +20,10 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  seedApprovalFlow,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
+import { decideGate } from "../flows/gates.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -402,6 +404,101 @@ test("gift card tender redeems stored value", { skip: !DB }, async () => {
        where account_id = ${issued.accountId} and org_id = ${org.orgId} and kind = 'redeem'`))).rows[0]!;
     assert.equal(entry.kind, "redeem");
     assert.equal(entry.document_id, outcome.documentId);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a gift-card storefront sale issues the full paid amount in ledger units", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const { channelId, accounts } = await setup(org, actor, "per_order");
+    const program = await withBypass(() => createProgram({
+      orgId: org.orgId, name: "Test gift cards", kind: "gift_card", currency: "CAD", liabilityAccountId: accounts.gift, actorId: actor,
+    }));
+    const order: ChannelOrder = {
+      ...paidOrder("1011"),
+      lines: [{ sku: "GC-100", variantExternalId: null, title: "Gift card", quantity: "1", priceMinor: 10_000n, discountMinor: 0n,
+        discountCode: null, taxLines: [], giftCard: true, promotionId: null }],
+      shippingLines: [], subtotalMinor: 10_000n, taxMinor: 0n, shippingMinor: 0n, discountMinor: 0n, totalMinor: 10_000n,
+      tenders: [{ gateway: "shopify_payments", amountMinor: 10_000n, giftCardExternalId: null, authorizationRef: "auth-gc-1011" }],
+    };
+    const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
+    const posted = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    assert.equal(posted.status, "posted");
+    const issued = (await withOrgContext(org.orgId, () => db.execute<{ issued: string; balance: string }>(sql`
+      select issued_minor as issued, balance_minor as balance from stored_value_accounts
+       where org_id = ${org.orgId} and source_document_id = ${posted.documentId}`))).rows[0]!;
+    assert.deepEqual(issued, { issued: "1000000", balance: "1000000" });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a storefront gift-card tender cannot exceed its stored ledger balance", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const { channelId } = await setup(org, actor, "per_order");
+    const program = await withBypass(() => createProgram({
+      orgId: org.orgId, name: "Test gift cards", kind: "gift_card", currency: "CAD", liabilityAccountId: org.accounts.taxOutput, actorId: actor,
+    }));
+    const issued = await withBypass(() => issueStoredValue({
+      orgId: org.orgId, allowedSubsidiaryIds: null, programId: program.id, amountMinor: units4("50"), currency: "CAD",
+      debitAccountId: org.accounts.bank, idempotencyKey: "test-gc-underfunded", postingDate: org.date, actorId: actor,
+    }));
+    await withBypass(() => linkExternal(org.orgId, actor, {
+      channelId, provider: "shopify", externalAccount: "test.myshopify.com", objectType: "gift_card", externalId: "gc-underfunded",
+      nativeTable: "stored_value_accounts", nativeId: issued.accountId,
+    }, "salesChannels"));
+    const order: ChannelOrder = {
+      ...paidOrder("1013"),
+      lines: [{ sku: "MUG-WHITE", variantExternalId: null, title: "White Mug", quantity: "1", priceMinor: 10_000n, discountMinor: 0n,
+        discountCode: null, taxLines: [], giftCard: false, promotionId: null }],
+      shippingLines: [], subtotalMinor: 10_000n, taxMinor: 0n, shippingMinor: 0n, discountMinor: 0n, totalMinor: 10_000n,
+      tenders: [{ gateway: "gift_card", amountMinor: 10_000n, giftCardExternalId: "gc-underfunded", authorizationRef: null }],
+    };
+    const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
+    const result = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    assert.deepEqual(result, { status: "pending", documentId: null });
+    const cashSales = (await withOrgContext(org.orgId, () => db.execute<{ count: number }>(sql`
+      select count(*)::int as count from documents where org_id = ${org.orgId} and kind = 'cash_sale' and external_ref = '1013'`))).rows[0]!.count;
+    assert.equal(cashSales, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("replaying an approved channel cash sale posts its original approved lines and tenders", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const approver = await withBypass(() => createScratchUser(org.orgId, "Cash sale approver", "admin"));
+    const { channelId } = await setup(org, actor, "per_order");
+    await withBypass(() => seedApprovalFlow(org.orgId, {
+      subjectKind: "cash_sale", assignees: [{ type: "user", userId: approver }], mode: "any",
+    }));
+    const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("1012")));
+    const held = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    assert.equal(held.status, "pending");
+    assert.ok(held.documentId);
+    const gate = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+      select id from flow_gates where org_id = ${org.orgId} and subject_id = ${held.documentId} and status = 'pending'`))).rows[0]!;
+    await withBypass(() => decideGate({ gateId: gate.id, decision: "approved", userId: approver }));
+
+    const replayed = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    assert.equal(replayed.status, "posted");
+    assert.equal(replayed.documentId, held.documentId);
+    const doc = (await withOrgContext(org.orgId, () => db.execute<{ status: string; lines: number; tenders: number; postedEntryId: string | null }>(sql`
+      select d.status, (select count(*)::int from document_lines l where l.org_id = d.org_id and l.document_id = d.id) as lines,
+             (select count(*)::int from document_tenders t where t.org_id = d.org_id and t.document_id = d.id) as tenders,
+             d.posted_entry_id as "postedEntryId"
+        from documents d where d.org_id = ${org.orgId} and d.id = ${held.documentId}`))).rows[0]!;
+    assert.equal(doc.status, "posted");
+    assert.equal(doc.lines, 4);
+    assert.equal(doc.tenders, 1);
+    assert.ok(doc.postedEntryId);
   } finally {
     await dropScratchOrg(org.orgId);
   }

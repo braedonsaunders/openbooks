@@ -35,6 +35,7 @@ import { allocateDocumentNumber } from "../records/numbering.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { createPromotion, setPromotionStatus } from "../sales/promotions.ts";
 import { attachDocumentIssue } from "../stored-value/accounts.ts";
+import { minorUnitsToLedgerUnits } from "./channel-money.ts";
 
 const FEATURE_REMEDY = "Enable Sales Channels in Company Settings → Features.";
 
@@ -703,7 +704,7 @@ export async function resolveOrderForPosting(
           "Tender the order in the gift card's currency, or issue a matching-currency card, then replay the order.",
         );
       }
-      if (BigInt(card.balance_minor) < amountMinor) {
+      if (BigInt(card.balance_minor) < minorUnitsToLedgerUnits(amountMinor, order.shopCurrency)) {
         // A card that cannot cover is an underpayment, not a refusal: the
         // order waits for the rest like any short tender.
         tenderMinor += 0n;
@@ -848,14 +849,17 @@ export async function postCashSaleDraft(
   if (existing && existing.status === "posted" && existing.posted_entry_id) {
     return { documentId: existing.id, documentNumber: "", journalEntryId: existing.posted_entry_id };
   }
+  const approved = existing?.status === "approved";
   let documentId: string;
   if (existing) {
     documentId = existing.id;
-    await db.execute(sql`delete from document_line_tax_components where org_id = ${orgId} and document_line_id in (
-      select id from document_lines where org_id = ${orgId} and document_id = ${documentId})`);
-    const removed = await db.execute(sql`
-      delete from document_lines where org_id = ${orgId} and document_id = ${documentId}`);
-    void removed.rowCount;
+    if (!approved) {
+      await db.execute(sql`delete from document_line_tax_components where org_id = ${orgId} and document_line_id in (
+        select id from document_lines where org_id = ${orgId} and document_id = ${documentId})`);
+      const removed = await db.execute(sql`
+        delete from document_lines where org_id = ${orgId} and document_id = ${documentId}`);
+      void removed.rowCount;
+    }
   } else {
     const documentNumber = await allocateDocumentNumber(db, orgId, "cash_sale", "CS-");
     const inserted = await db.execute<{ id: string }>(sql`
@@ -872,56 +876,74 @@ export async function postCashSaleDraft(
     if (inserted.rows.length !== 1) throw new Error("Cash sale insert returned an unexpected row count");
     documentId = inserted.rows[0]!.id;
   }
-  // Paid-at-sale tenders ride the document_tenders table (never custom):
-  // the kernel's tender assertion reads the table, so a draft without
-  // these rows cannot post. Replaced on replay beside the rebuilt lines.
-  const tenderInputs: TenderInput[] = draft.tenders
-    .filter((tender) => tender.amountMinor > 0n)
-    .map((tender) => ({
-      kind: tender.giftCardAccountId ? "stored_value" : "gateway",
-      methodLabel: tender.gateway,
-      accountId: tender.giftCardAccountId ? null : tender.accountId,
-      storedValueAccountId: tender.giftCardAccountId,
-      amount: tender.amount,
-      reference: tender.reference,
-    }));
-  // Order automation on its own just-created draft: the order — not an actor
-  // entity set — is the authority, named here as unrestricted. Tender
-  // accounts still scope-gate neutrally and must match the document entity.
-  await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor, allowedSubsidiaryIds: null });
-  let lineNumber = 0;
   const giftLineIds: string[] = [];
-  for (const line of draft.lines) {
-    lineNumber += 1;
-    const lineTaxMinor = line.taxes
-      .filter((tax) => tax.collectedBy === "merchant" || !tax.facilitatorNetMode)
-      .reduce((sum, tax) => sum + tax.amountMinor, 0n);
-    const inserted = await db.execute<{ id: string }>(sql`
-      insert into document_lines
-        (org_id, document_id, line_number, item_id, account_id, description, quantity,
-         unit_price, amount, tax_amount, promotion_id, marketplace_facilitator, stock_location_id,
-         created_by, updated_by)
-      values (${orgId}, ${documentId}, ${lineNumber}, ${line.itemId}, ${line.accountId},
-        ${line.title}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
-        ${minorToLedger(lineTaxMinor, currency)}, ${line.promotionId}, ${line.marketplaceFacilitator},
-        ${line.itemId ? draft.stockLocationId : null}, ${actor}, ${actor})
-      returning id`);
-    if (inserted.rows.length !== 1) throw new Error("Cash sale line insert returned an unexpected row count");
-    const lineId = inserted.rows[0]!.id;
-    if (line.kind === "gift_issue") giftLineIds.push(lineId);
-    let sequence = 0;
-    for (const tax of line.taxes) {
-      sequence += 1;
-      const taxable = line.amount;
-      const componentTax = minorToLedger(tax.amountMinor, currency);
-      await db.execute(sql`
-        insert into document_line_tax_components
-          (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
-           tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
-           collected_by, facilitator_name, collected_account_id, created_by, updated_by)
-        values (${orgId}, ${lineId}, ${tax.taxCodeId}, ${sequence}, ${tax.ratePercent}, ${taxable},
-          ${componentTax}, '0', ${componentTax}, 'standard',
-          ${tax.collectedBy}, ${tax.facilitatorName}, ${tax.liabilityAccountId}, ${actor}, ${actor})`);
+  if (!approved) {
+    // Paid-at-sale tenders ride document_tenders (never custom): the kernel's
+    // tender assertion reads the table, so a draft without these rows cannot post.
+    const tenderInputs: TenderInput[] = draft.tenders
+      .filter((tender) => tender.amountMinor > 0n)
+      .map((tender) => ({
+        kind: tender.giftCardAccountId ? "stored_value" : "gateway",
+        methodLabel: tender.gateway,
+        accountId: tender.giftCardAccountId ? null : tender.accountId,
+        storedValueAccountId: tender.giftCardAccountId,
+        amount: tender.amount,
+        reference: tender.reference,
+      }));
+    await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor, allowedSubsidiaryIds: null });
+    let lineNumber = 0;
+    for (const line of draft.lines) {
+      lineNumber += 1;
+      const lineTaxMinor = line.taxes
+        .filter((tax) => tax.collectedBy === "merchant" || !tax.facilitatorNetMode)
+        .reduce((sum, tax) => sum + tax.amountMinor, 0n);
+      const inserted = await db.execute<{ id: string }>(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, item_id, account_id, description, quantity,
+           unit_price, amount, tax_amount, promotion_id, marketplace_facilitator, stock_location_id,
+           created_by, updated_by)
+        values (${orgId}, ${documentId}, ${lineNumber}, ${line.itemId}, ${line.accountId},
+          ${line.title}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
+          ${minorToLedger(lineTaxMinor, currency)}, ${line.promotionId}, ${line.marketplaceFacilitator},
+          ${line.itemId ? draft.stockLocationId : null}, ${actor}, ${actor})
+        returning id`);
+      if (inserted.rows.length !== 1) throw new Error("Cash sale line insert returned an unexpected row count");
+      const lineId = inserted.rows[0]!.id;
+      if (line.kind === "gift_issue") giftLineIds.push(lineId);
+      let sequence = 0;
+      for (const tax of line.taxes) {
+        sequence += 1;
+        const taxable = line.amount;
+        const componentTax = minorToLedger(tax.amountMinor, currency);
+        await db.execute(sql`
+          insert into document_line_tax_components
+            (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+             tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+             collected_by, facilitator_name, collected_account_id, created_by, updated_by)
+          values (${orgId}, ${lineId}, ${tax.taxCodeId}, ${sequence}, ${tax.ratePercent}, ${taxable},
+            ${componentTax}, '0', ${componentTax}, 'standard',
+            ${tax.collectedBy}, ${tax.facilitatorName}, ${tax.liabilityAccountId}, ${actor}, ${actor})`);
+      }
+    }
+  } else {
+    const giftLineNumbers = draft.lines.flatMap((line, index) => line.kind === "gift_issue" ? [index + 1] : []);
+    if (giftLineNumbers.length > 0) {
+      const rows = (await db.execute<{ id: string; lineNumber: number; accountId: string | null; amount: string }>(sql`
+        select id, line_number as "lineNumber", account_id as "accountId", amount::text from document_lines
+         where org_id = ${orgId} and document_id = ${documentId} and line_number = any(${`{${giftLineNumbers.join(",")}}`}::int[])
+         order by line_number`)).rows;
+      for (const lineNumber of giftLineNumbers) {
+        const saved = rows.find((row) => row.lineNumber === lineNumber);
+        const resolved = draft.lines[lineNumber - 1]!;
+        if (!saved || saved.accountId !== resolved.accountId || saved.amount !== resolved.amount) {
+          throw new CommerceError(
+            "channel_approved_sale_mismatch",
+            "The approved cash sale does not match the storefront gift-card lines.",
+            "Correct the storefront order before approving a replacement cash sale.",
+          );
+        }
+        giftLineIds.push(saved.id);
+      }
     }
   }
   // Storefront-fulfilled sales post governed: a 'bills' edge from each
@@ -936,7 +958,9 @@ export async function postCashSaleDraft(
       -- The existing edge already governs this cash sale through the same source sales order.
       on conflict (org_id, from_document_id, to_document_id, link_type) do nothing`);
   }
-  const submission = await submitAndReleaseIfUngated("cash_sale", documentId, actor);
+  const submission = approved
+    ? { gated: false, flowError: null }
+    : await submitAndReleaseIfUngated("cash_sale", documentId, actor);
   if (submission.gated) {
     // An approval policy holds the draft: the operator approves in the
     // document workflow, then replays the order to post the approved draft.
@@ -972,7 +996,7 @@ export async function postCashSaleDraft(
     await attachDocumentIssue({
       orgId,
       programId: program!.id,
-      amountMinor: issue.amountMinor,
+      amountMinor: minorUnitsToLedgerUnits(issue.amountMinor, currency),
       currency,
       customerPartyId: draft.partyId,
       sourceDocumentId: documentId,
