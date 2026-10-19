@@ -307,6 +307,35 @@ test('untaxed lump-sum markup preserves each source revenue account and departme
   assert.deepEqual(actual, expected.sort((a,b) => a.account_id.localeCompare(b.account_id)))
 }))
 
+test('rate-card surcharges measure cost before lump-sum markup', enabled, async () => fixture(async f => {
+  await configure(f, { markupPresentation: 'lump_sum' })
+  await withBypassContext(() => (db.execute(sql`update projects set custom='{"markupPercent":"10"}'::jsonb where org_id=${f.org.orgId} and id=${f.project}`)))
+  const cost = await source(f, f.org.accounts.revenue, '100')
+  const book = randomUUID(), version = randomUUID(), adjustment = randomUUID(), surchargeItem = randomUUID()
+  await withBypassContext(() => (db.execute(sql`insert into item_rate_books(id,org_id,code,name,currency)
+    values(${book},${f.org.orgId},'LUMP_SUM_TEST','Lump-sum test card','CAD')`)))
+  await withBypassContext(() => (db.execute(sql`insert into item_rate_versions(id,org_id,rate_book_id,effective_from,status)
+    values(${version},${f.org.orgId},${book},'2026-01-01','draft')`)))
+  await withBypassContext(() => (db.execute(sql`insert into item_rate_book_assignments(org_id,rate_book_id,project_id,effective_from)
+    values(${f.org.orgId},${book},${f.project},'2026-01-01')`)))
+  await withBypassContext(() => (db.execute(sql`insert into items(id,org_id,kind,name,income_account_id,is_active)
+    values(${surchargeItem},${f.org.orgId},'service','Cost surcharge',${f.org.accounts.recognized},true)`)))
+  await withBypassContext(() => (db.execute(sql`insert into labor_rate_adjustments(id,org_id,version_id,code,name,category,calculation,value,presentation,item_id)
+    values(${adjustment},${f.org.orgId},${version},'COST','Cost surcharge','surcharge','percent',5,'separate',${surchargeItem})`)))
+  await withBypassContext(() => (db.execute(sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_text)
+    values(${f.org.orgId},${adjustment},'material','all')`)))
+  await withBypassContext(() => (db.execute(sql`update item_rate_versions set status='active' where org_id=${f.org.orgId} and id=${version}`)))
+
+  const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
+  assert.deepEqual(await totals(f, invoice.id), { subtotal: '115.0000', tax_total: '0.0000', total: '115.0000' })
+  const surcharge = (await db.execute(sql`select amount::text from document_lines
+    where org_id=${f.org.orgId} and document_id=${invoice.id} and item_id=${surchargeItem}`)).rows
+  assert.deepEqual(surcharge, [{ amount: '5.0000' }])
+  const sourceAmount = (await db.execute(sql`select amount::text from document_lines
+    where org_id=${f.org.orgId} and document_id=${invoice.id} and id = (select billed_by_line_id from document_lines where id=${cost.line})`)).rows
+  assert.deepEqual(sourceAmount, [{ amount: '100.0000' }])
+}))
+
 for (const grouping of ['per_source_line', 'per_item'] as const) {
   test(`${grouping} presentation preserves independently rounded half-cent source charges`, enabled, async () => fixture(async f => {
     await configure(f, { lineGrouping: grouping })
