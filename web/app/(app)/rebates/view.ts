@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getLocale, getTranslations } from 'next-intl/server'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import {
   badge,
@@ -112,11 +112,7 @@ function statusVariant(status: string): RebateRegisterRow['statusVariant'] {
 }
 
 export async function loadRebates(sp: SearchParams): Promise<RebatesData> {
-  const [t, common, locale] = await Promise.all([
-    getTranslations('rebates'),
-    getTranslations('common'),
-    getLocale(),
-  ])
+  const t = await getTranslations('rebates')
   const authz = await requirePermission('documents.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'rebateManagement')

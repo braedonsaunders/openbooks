@@ -93,7 +93,7 @@ export function RebateDrawer({ data }: { data: RebateDrawerData }) {
         body: JSON.stringify(body),
       })
       if (!response.ok) {
-        setError(await readApiErrorMessage(response, t('errors.actionFailed')))
+        setError(await readApiErrorMessage(response, t('drawer.errors.actionFailed')))
         return
       }
       const result = await response.json()
@@ -109,7 +109,7 @@ export function RebateDrawer({ data }: { data: RebateDrawerData }) {
       }
       router.refresh()
     } catch {
-      setError(t('errors.actionFailed'))
+      setError(t('drawer.errors.actionFailed'))
     } finally {
       setBusy(false)
     }
