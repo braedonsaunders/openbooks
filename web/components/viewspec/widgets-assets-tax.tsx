@@ -3,6 +3,7 @@ import { DepreciationSetupHeader } from '../../app/(app)/admin/setup/depreciatio
 import { TaxAuthorityConnectionsSlot, TaxSetupGuideSlot, TaxSetupHeader } from '../../app/(app)/admin/setup/tax-setup/sections'
 import { EquipmentHeaderLinks } from '../../app/(app)/assets/equipment/sections'
 import { ProvisionRunsTable } from '../../app/(app)/tax/provisions/sections'
+import { ProvisionRunDrawer } from '../../app/(app)/tax/provisions/ProvisionRunDrawer'
 import {
   ProvisionComputeButton,
   NewEquipmentButton,
@@ -40,6 +41,11 @@ export const ASSETS_TAX_WIDGETS = {
     />
   ),
   'provision-compute-button': () => <ProvisionComputeButton />,
+  'provision-run-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof ProvisionRunDrawer>['drawer']
+    if (!drawer) return null
+    return <ProvisionRunDrawer key={drawer.detail.runId} drawer={drawer} />
+  },
 
   /* --- equipment -------------------------------------------------------------------- */
   // Kept for tenant PageSpecs saved before the shared ModuleHomeTabs

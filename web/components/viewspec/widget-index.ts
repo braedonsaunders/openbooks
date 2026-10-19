@@ -520,6 +520,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'provision-differences-section': 'assets-tax',
   'provision-framework-badge': 'assets-tax',
   'provision-post-button': 'assets-tax',
+  'provision-run-drawer': 'assets-tax',
   'provision-recon-section': 'assets-tax',
   'provision-runs-table': 'assets-tax',
   'provision-status-badge': 'assets-tax',

@@ -493,6 +493,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'provision-differences-section': { props: ['columns', 'differences', 'emptyNote', 'title'] },
   'provision-framework-badge': { props: ['label'] },
   'provision-post-button': { props: ['runId'] },
+  'provision-run-drawer': { props: ['drawer'] },
   'provision-recon-section': { props: ['amountLabel', 'enactedRateText', 'percentLabel', 'pretaxAmount', 'pretaxLabel', 'steps', 'summaries', 'title'] },
   'provision-runs-table': { props: ['columns', 'emptyText', 'rows'] },
   'provision-status-badge': { props: ['label', 'variant'] },

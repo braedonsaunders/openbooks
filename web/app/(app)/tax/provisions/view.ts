@@ -16,25 +16,14 @@ import { listProvisionRuns } from '@openbooks/engine/tax-returns/income-tax-prov
 import type { ProvisionRunListColumns, ProvisionRunListRow } from './sections'
 import type { ModuleHomeTab } from '@/components/module-home/tab-types'
 import { taxWorkspaceTabs } from '../workspace-tabs'
+import { mergeHref, pickString } from '../../../../lib/list-params'
+import { loadProvisionDetail, type ProvisionDetailData } from './[id]/view'
 
 /**
- * The income-tax provision run list, split into a loader and a spec.
- *
- * The loader copies the native query, permission and formatting logic
- * verbatim: the `reports.read` gate, the entity-projected `listProvisionRuns`
- * read (restricted callers see projected aggregates; an empty scope sees no
- * rows at all), the money formatting, and the compute-button rule
- * (`reports.create` plus an unrestricted subsidiary scope — a restricted
- * caller must not reach the org-wide compute dialog).
- *
- * The table stays a widget, not a `table` block — the same call the detail
- * conversion made for its two tables. The native markup is a hand-rolled
- * `<table>` in a `rounded-xl` card with its own cell padding; the spec's
- * table block offers only the two real table variants the app has, so the
- * shared `ProvisionRunsTable` component carries the markup and the spec
- * places it. The empty state lives inside that component because the native
- * empty path keeps the card + table chrome and renders the note as a
- * `colSpan={6}` row.
+ * Income-tax provision register. The loader preserves the reports permission,
+ * entity-projected engine read, money formatting, and organization-wide
+ * compute gate. Selected runs reuse the entity-projected detail reader before
+ * their data is placed in the URL-addressed drawer.
  */
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
@@ -51,15 +40,21 @@ export interface TaxProvisionsData {
   columns: ProvisionRunListColumns
   rows: ProvisionRunListRow[]
   tabs: ModuleHomeTab[]
+  drawerOpen: boolean
+  drawer: { detail: ProvisionDetailData; closeHref: string } | null
 }
 
-export async function loadTaxProvisions(): Promise<TaxProvisionsData> {
+export async function loadTaxProvisions(
+  sp: Record<string, string | string[] | undefined> = {},
+): Promise<TaxProvisionsData> {
   const authz = await requirePermission('reports.read')
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('tax.provisions')
   const org = await orgInfo()
   const tabs = await taxWorkspaceTabs(authz.user.orgId, 'provisions')
   const runs = await listProvisionRuns(authz.user.orgId, authz.allowedSubsidiaryIds)
+  const runId = pickString(sp.run)
+  const selectedDetail = runId ? await loadProvisionDetail(sp, runId) : null
   const m = (v: string) => money(v, { currency: org?.base_currency })
 
   const canCompute = authz.allowedSubsidiaryIds === null && can(authz, 'reports.create')
@@ -84,7 +79,7 @@ export async function loadTaxProvisions(): Promise<TaxProvisionsData> {
     },
     rows: runs.map((run) => ({
       id: run.id,
-      href: `/tax/provisions/${run.id}`,
+      href: mergeHref('/tax/provisions', sp, { run: run.id }),
       fiscalYearLabel: t('fiscalYearLabel', { year: run.fiscalYear }),
       versionLabel: t('versionLabel', { version: run.version }),
       statusLabel: t(`status.${run.status}`),
@@ -96,6 +91,13 @@ export async function loadTaxProvisions(): Promise<TaxProvisionsData> {
       effectiveRateText: run.effectiveRatePercent != null ? `${run.effectiveRatePercent}%` : '—',
       created: String(run.createdAt).slice(0, 10),
     })),
+    drawerOpen: Boolean(selectedDetail),
+    drawer: selectedDetail
+      ? {
+          detail: selectedDetail,
+          closeHref: mergeHref('/tax/provisions', sp, { run: undefined }),
+        }
+      : null,
   }
 }
 
@@ -109,10 +111,8 @@ export function taxProvisionsSpec(data: TaxProvisionsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        // Builder-level omission, not `when`: the native header passes
-        // `actions={… : undefined}` when gated off, so the spec must also
-        // produce *no* actions — a `when`-gated widget would still leave the
-        // PageHeader actions wrapper div standing with nothing inside it.
+        // Omit the compute action at construction when the caller lacks its
+        // organization-wide grant; the Tax workspace tabs remain available.
         actions: [
           widget('module-home-tabs', { tabs: f('tabs') }),
           ...(data.canCompute ? [widget('provision-compute-button', {})] : []),
@@ -125,6 +125,10 @@ export function taxProvisionsSpec(data: TaxProvisionsData): PageSpec {
         emptyText: data.emptyText,
         rows: data.rows,
       }),
+      {
+        ...widgetBlock('provision-run-drawer', { drawer: f('drawer') }),
+        when: f('drawerOpen'),
+      },
     ],
   })
 }

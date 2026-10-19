@@ -200,10 +200,9 @@ test("a non-object grid element refusal renders in translated copy naming the ro
   }
 });
 
-// A 201 with an empty body used to navigate to
-// /tax/provisions/undefined. A missing runId must refuse in the dialog
-// instead of pushing a nonsense route.
-test("a success without a run id refuses instead of navigating to undefined", async () => {
+// A missing runId cannot select a provision drawer and must refuse in the
+// dialog instead of pushing a route with no selected record.
+test("a success without a run id refuses instead of opening a drawer", async () => {
   const restore = installFetch();
   globalThis.__provisionPostStatus = { status: 201, body: {} };
   const dialog = await mountDialog();
@@ -243,7 +242,7 @@ test("grid rows travel unfiltered and a valid grid with a pristine trailing row 
     assert.deepEqual(globalThis.__provisionPosts![0]!.body.additionalDifferences, [
       { category: "other", description: "", difference: "" },
     ]);
-    assert.deepEqual(globalThis.__provisionPushed, ["/tax/provisions/run-9"]);
+    assert.deepEqual(globalThis.__provisionPushed, ["/tax/provisions?run=run-9"]);
     assert.equal(document.querySelector('[role="alert"]'), null);
   } finally {
     await dialog.unmount();

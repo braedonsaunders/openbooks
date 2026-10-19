@@ -509,6 +509,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'provision-differences-section',
   'provision-framework-badge',
   'provision-post-button',
+  'provision-run-drawer',
   'provision-recon-section',
   'provision-runs-table',
   'provision-status-badge',

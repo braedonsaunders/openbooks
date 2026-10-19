@@ -1,5 +1,6 @@
 import { RegisteredListTable } from '../../../../components/registered-list-table'
 import { Badge } from '@openbooks/ui'
+import Link from 'next/link'
 
 /** Native record cells and actions compose the shared table primitives. */
 
@@ -50,12 +51,12 @@ export function ProvisionRunsTable({
           className: 'px-4 py-2.5',
           cell: (row) => (
             <>
-              <a
+              <Link
                 className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                 href={row.href}
               >
                 {row.fiscalYearLabel}
-              </a>
+              </Link>
             </>
           ),
           search: (row) =>

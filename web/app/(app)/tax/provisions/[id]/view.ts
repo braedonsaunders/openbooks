@@ -2,15 +2,6 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
-import {
-  grid,
-  page,
-  pageHeader,
-  ref,
-  widget,
-  widgetBlock,
-  type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { getMoneyFormatter } from '@/lib/money-server'
@@ -19,20 +10,10 @@ import { getProvisionRun } from '@openbooks/engine/tax-returns/income-tax-provis
 import type { ProvisionDifference, ProvisionSummary, ReconStep } from './sections'
 
 /**
- * One income-tax provision run, split into a loader and a spec.
- *
- * The loader copies the native query, permission and formatting logic
- * verbatim: the `reports.read` gate, the entity-projected `getProvisionRun`
- * read (a run with no visible entity is indistinguishable from a missing
- * one, so restricted callers 404 here exactly as on the native path), the
- * money formatting, and the `gl.post` + unrestricted + draft posting rule.
- *
- * Both sections stay widgets, not `table` blocks — the same call the
- * admin-users conversion made. The native page hand-rolls two plain
- * `<table>`s with their own header, divider and hover classes; the spec's
- * table block offers only the two real table variants the app has.
- * The conditional pairs (post button, IAS 12 vs ASC 740 copy, empty
- * differences note) resolve to loader flags and shared components.
+ * Load the authorized, formatted data shown in a provision-run drawer.
+ * Restricted callers receive the same entity-projected read as the detail
+ * API, and posting remains available only to unrestricted draft-run readers
+ * with the `gl.post` permission.
  */
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
@@ -43,8 +24,6 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
 
 export interface ProvisionDetailData {
   headerTitle: string
-  backHref: string
-  backLabel: string
   frameworkLabel: string
   statusLabel: string
   statusVariant: 'success' | 'secondary' | 'outline'
@@ -105,8 +84,6 @@ export async function loadProvisionDetail(
 
   return {
     headerTitle: t('detail.title', { year: run.fiscalYear, version: run.version }),
-    backHref: '/tax/provisions',
-    backLabel: t('title'),
     frameworkLabel: framework === 'ias12' ? 'IAS 12' : 'ASC 740',
     statusLabel: t(`status.${run.status}`),
     statusVariant: STATUS_VARIANT[run.status] ?? 'secondary',
@@ -157,48 +134,4 @@ export async function loadProvisionDetail(
       taxEffect: m(d.taxEffect),
     })),
   }
-}
-
-const f = ref<ProvisionDetailData>()
-
-export function provisionDetailSpec(data: ProvisionDetailData): PageSpec {
-  return page({
-    route: '/tax/provisions/[id]',
-    layout: 'list',
-    header: [
-      pageHeader({
-        title: f('headerTitle'),
-        back: { href: f('backHref'), label: f('backLabel') },
-        actionsClassName: 'flex items-center gap-2',
-        actions: [
-          widget('provision-framework-badge', { label: data.frameworkLabel }),
-          widget('provision-status-badge', {
-            label: data.statusLabel,
-            variant: data.statusVariant,
-          }),
-          widget('provision-post-button', { runId: data.runId }, f('canPost')),
-        ],
-      }),
-    ],
-    body: [
-      grid('grid gap-6 lg:grid-cols-2', [
-        widgetBlock('provision-recon-section', {
-          title: data.reconTitle,
-          pretaxLabel: data.pretaxLabel,
-          pretaxAmount: data.pretaxAmount,
-          enactedRateText: data.enactedRateText,
-          amountLabel: data.amountLabel,
-          percentLabel: data.percentLabel,
-          steps: data.steps,
-          summaries: data.summaries,
-        }),
-        widgetBlock('provision-differences-section', {
-          title: data.diffTitle,
-          emptyNote: data.diffEmptyNote,
-          columns: data.diffColumns,
-          differences: data.differences,
-        }),
-      ]),
-    ],
-  })
 }

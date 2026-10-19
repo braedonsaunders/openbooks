@@ -24,12 +24,13 @@ interface LabelState {
   restricted: boolean
   canCompute: boolean
   noRuns: boolean
+  selectedRunId: string | null
 }
-const labelState: LabelState = { messages: {}, restricted: false, canCompute: true, noRuns: false }
+const labelState: LabelState = { messages: {}, restricted: false, canCompute: true, noRuns: false, selectedRunId: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = labelState
 
 const RUN = {
-  id: 'run-1',
+  id: '11111111-1111-4111-8111-111111111111',
   fiscalYear: 2025,
   version: 2,
   status: 'posted',
@@ -63,7 +64,22 @@ const mockSources = new Map<string, string>([
   ['mock:data', `export async function orgInfo() { return { base_currency: 'USD' } }`],
   [
     'mock:provision',
-    `export async function listProvisionRuns() { const state = globalThis[Symbol.for('openbooks.tax-provisions-labels-test')]; return state.noRuns ? [] : [${JSON.stringify(RUN)}] }`,
+    `
+      export async function listProvisionRuns() { const state = globalThis[Symbol.for('openbooks.tax-provisions-labels-test')]; return state.noRuns ? [] : [${JSON.stringify(RUN)}] }
+      export async function getProvisionRun(_orgId, id) {
+        const state = globalThis[Symbol.for('openbooks.tax-provisions-labels-test')]
+        state.selectedRunId = id
+        return {
+          id, fiscalYear: 2025, version: 2, status: 'posted',
+          payload: {
+            framework: 'asc740', pretaxBookIncome: '1000.00', enactedRatePercent: '20',
+            taxableIncome: '1000.00', currentTax: '200.00', deferredExpense: '0.00', totalExpense: '200.00',
+            balances: { dtaGross: '0.00', dtlGross: '0.00', valuationAllowance: '0.00' }, rateReconciliation: [],
+          },
+          differences: [],
+        }
+      }
+    `,
   ],
   [
     'mock:viewspec',
@@ -80,6 +96,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['../../../../lib/data', 'mock:data'],
   ['@openbooks/engine/tax-returns/income-tax-provision', 'mock:provision'],
+  ['../../../../../lib/data', 'mock:data'],
   ['@braedonsaunders/appkit-viewspec', 'mock:viewspec'],
 ])
 
@@ -131,6 +148,7 @@ for (const locale of LOCALES) {
 
     const data = await loadTaxProvisions()
     assert.equal(data.rows.length, 1)
+    assert.equal(data.rows[0]!.href, `/tax/provisions?run=${RUN.id}`)
     assert.equal(
       data.rows[0]!.fiscalYearLabel,
       String(provisions.fiscalYearLabel)
@@ -166,4 +184,14 @@ test('a restricted reader sees the no-grant empty state without a compute action
   } finally {
     Object.assign(labelState, previous)
   }
+})
+
+test('the selected provision opens in the list URL and closes back to the same list context', async () => {
+  labelState.messages = { tax: JSON.parse(readFileSync(join(MESSAGES, 'en', 'tax.json'), 'utf8')) }
+  const data = await loadTaxProvisions({ run: RUN.id, page: '2' })
+
+  assert.equal(labelState.selectedRunId, RUN.id)
+  assert.equal(data.drawerOpen, true)
+  assert.equal(data.drawer?.closeHref, '/tax/provisions?page=2')
+  assert.equal(data.rows[0]?.href, `/tax/provisions?run=${RUN.id}&page=2`)
 })
