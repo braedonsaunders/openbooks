@@ -70,6 +70,9 @@ export async function applyBankDrawdown(
   const nets = new Map<string, { plan: EntitlementPlan; net: string; line: Line; lines: Line[] }>();
   for (const line of lines) {
     if (line.kind !== "earning" || line.componentId === null) continue;
+    // Plan-generated payouts already have their ledger movement; only
+    // operator-supplied component lines create an additional drawdown.
+    if (line.entitlementSettlementPlanId != null || line.entitlementMovementKey != null) continue;
     if (line.fundedByEntitlementBank === false) continue;
     const entry = settling.get(line.componentId);
     if (!entry) continue;

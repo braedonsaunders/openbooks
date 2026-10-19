@@ -1,4 +1,4 @@
-import { dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { dropScratchOrgReporting, seedPayrollComponent } from "../testing/fixtures.ts";
 import { seedHourlyPayrollTime as hours, seedHourlyPayrollOrg as payrollOrg, seedHourlyPayrollEmployee as employee, type HourlyPayrollFixture as Fixture } from "../testing/payroll-hourly-fixture.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -40,6 +40,63 @@ async function opening(fx: Fixture, planId: string, partyId: string, amount: str
 async function balanceOf(fx: Fixture, partyId: string, planId: string, asOf: string): Promise<string> {
   const balances = await entitlementBalances(fx.orgId, partyId, asOf, { executor: db });
   return balances.find((b) => b.plan.id === planId)!.balance;
+}
+
+for (const unit of ["money", "hours"] as const) {
+  test(`an automatic ${unit} cap payout pays and settles the excess once`, { skip: !DB }, async () => {
+    const fx = await payrollOrg();
+    try {
+      const { partyId } = await employee(fx, `Automatic ${unit} cap employee`);
+      const payout = await earningComponent(fx, `AUTO-${unit.toUpperCase()}-PAYOUT`);
+      const accrual = randomUUID();
+      await seedPayrollComponent(fx.orgId, accrual, {
+        code: `AUTO-${unit.toUpperCase()}-ACCRUAL`, name: `Automatic ${unit} cap accrual`,
+        kind: "employer_contribution", systemKey: null, liabilityAccountId: fx.accounts.vacationPayable,
+        country: "CA", sequence: 240, isActive: true, createdBy: fx.actorId, updatedBy: fx.actorId,
+      });
+      const planId = randomUUID();
+      const openingBalance = unit === "money" ? "450.0000" : "7.0000";
+      const cap = unit === "money" ? "500.0000" : "8.0000";
+      const accrualValue = unit === "money" ? "100.0000" : "2.0000";
+      await db.execute(sql`insert into entitlement_plans
+        (id,org_id,code,name,unit,direction,accrual_method,accrual_value,accrual_component_id,
+         payout_component_id,liability_account_id,cap_behavior,is_active,created_by,updated_by)
+        values(${planId},${fx.orgId},${`AUTO-${unit.toUpperCase()}`},${`Automatic ${unit} cap`},${unit},
+          'accrue','fixed_per_period',${accrualValue},${accrual},${payout},${fx.accounts.vacationPayable},
+          'auto_payout',true,${fx.actorId},${fx.actorId})`);
+      await db.execute(sql`insert into entitlement_plan_limits
+        (org_id,plan_id,employee_party_id,max_balance,effective_from,created_by,updated_by)
+        values(${fx.orgId},${planId},${partyId},${cap},'2026-01-01',${fx.actorId},${fx.actorId})`);
+      await opening(fx, planId, partyId, openingBalance, unit === "hours" ? openingBalance : null);
+      await hours(fx, partyId, ["2026-07-13"]);
+      const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-12", periodEnd: "2026-07-18" });
+      const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+      assert.deepEqual(result.errors, []);
+
+      const ledger = (await db.execute<{ kind: string; amount: string; hours: string | null }>(sql`
+        select kind, amount::text as amount, hours::text as hours from entitlement_ledger
+         where org_id=${fx.orgId} and plan_id=${planId} and employee_party_id=${partyId}
+           and pay_run_document_id=${run.documentId} order by kind`)).rows;
+      assert.deepEqual(ledger, [
+        { kind: "accrual", amount: accrualValue, hours: null },
+        { kind: "payout", amount: unit === "money" ? "-50.0000" : "-1.0000", hours: unit === "money" ? null : "1.00" },
+      ]);
+      const balance = (await db.execute<{ balance: string }>(sql`
+        select sum(amount)::text as balance from entitlement_ledger
+         where org_id=${fx.orgId} and plan_id=${planId} and employee_party_id=${partyId}`)).rows[0]!.balance;
+      assert.equal(balance, cap);
+      const payoutLine = (await db.execute<{ amount: string; hours: string | null }>(sql`
+        select line.amount::text as amount, line.hours::text as hours from pay_stub_lines line
+          join pay_stubs stub on stub.id=line.stub_id and stub.org_id=line.org_id
+         where stub.org_id=${fx.orgId} and stub.pay_run_document_id=${run.documentId}
+           and stub.employee_party_id=${partyId} and line.component_id=${payout}`)).rows;
+      assert.deepEqual(payoutLine, [{
+        amount: unit === "money" ? "50.0000" : "30.0000",
+        hours: unit === "money" ? null : "1.00",
+      }]);
+    } finally { await dropScratchOrgReporting(fx.orgId); }
+  });
 }
 
 for (const unit of ['hours', 'money'] as const) {

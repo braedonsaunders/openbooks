@@ -272,6 +272,7 @@ test("auto_payout: the bank lands exactly on the cap and the excess is paid", ()
   assert.equal(result.movements[0]!.amount, "200.0000");
   assert.equal(result.movements[1]!.kind, "payout");
   assert.equal(result.movements[1]!.amount, "-100.0000");
+  assert.equal(result.movements[1]!.hours, null);
   assert.equal(result.movements[1]!.componentId, "cmp-payout");
   assert.equal(result.closingBalance, "4000.0000");
   // The ledger is the balance: the movements must sum to the closing figure.
@@ -279,6 +280,24 @@ test("auto_payout: the bank lands exactly on the cap and the excess is paid", ()
     result.movements.reduce((acc, m) => Number(acc) + Number(m.amount), 0) + 3900,
     4000,
   );
+});
+
+test("an hours cap auto-payout retains the paid hours on its movement", () => {
+  const result = computePlanMovement(move({
+    plan: plan({
+      unit: "hours",
+      accrualMethod: "fixed_per_period",
+      accrualValue: "2.0000",
+      capBehavior: "auto_payout",
+    }),
+    openingBalance: "7.0000",
+    limit: limit({ maxBalance: "8.0000", notifyBalance: null }),
+  }));
+  assert.deepEqual(result.movements.map(({ kind, amount, hours }) => ({ kind, amount, hours })), [
+    { kind: "accrual", amount: "2.0000", hours: null },
+    { kind: "payout", amount: "-1.0000", hours: "1.0000" },
+  ]);
+  assert.equal(result.closingBalance, "8.0000");
 });
 
 test("landing exactly on the cap is not a breach", () => {

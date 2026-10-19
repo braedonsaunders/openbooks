@@ -219,7 +219,7 @@ export async function applyEntitlementPlanMovements(
         lines.push({
           componentId: movement.componentId, kind: "earning",
           description: `${plan.name} payout`, amount: negMoney(money),
-          sequence: 46, entitlementSettlementPlanId: plan.id,
+          hours: movement.hours ?? undefined, sequence: 46, entitlementSettlementPlanId: plan.id,
           entitlementMovementKey: `${plan.id}:payout`,
         });
       } else if (movement.kind === "repayment") {
