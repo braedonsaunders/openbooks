@@ -13,7 +13,7 @@ import { seedPayrollComponent, seedPayrollStatutoryTreatment } from "../../testi
 const setup = () => setupHarness({
   features: ["hrm", "payroll"],
   users: [{ key: "reader", name: "Compensation reader", handle: "compensation_reader",
-    permissions: ["hrm.compensation.read", "hrm.compensation.manage", "hrm.benefits.manage", "setup.manage"] }],
+    permissions: ["hrm.compensation.read", "hrm.compensation.manage", "hrm.benefits.read", "hrm.benefits.manage", "setup.manage"] }],
 });
 
 test("annual variable compensation includes all committed lines while history stays bounded", { skip: !DB }, async () => {
@@ -66,8 +66,8 @@ test("annual variable compensation includes all committed lines while history st
       { isolationLevel: "REPEATABLE READ", readOnly: true }));
     assert.equal(data.variableHistory.length, 200);
     assert.equal(data.variable.length, 202);
-    assert.equal(data.totals?.variable, "2.04");
-    assert.equal(data.totals?.total, "52002.04");
+    assert.equal(data.totals?.variable, "2.0400");
+    assert.equal(data.totals?.total, "52002.0400");
     assert.deepEqual(data.actualsWindow, { from: "2025-10-09", to: "2026-10-08" });
   });
 });
