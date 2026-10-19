@@ -3,6 +3,7 @@ import { allocateDocumentNumber } from "../records/numbering.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
+import { reversalJournalLines, type ReversalSourceJournalLine } from "../records/reversal-journal-lines.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { cmpMoney, negMoney, parseMoney, type Money } from "../money/brands.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
@@ -1072,28 +1073,10 @@ export async function releaseFundReleaseApproval(input: {
   );
 }
 
-interface ReversalLine extends Record<string, unknown> {
-  account_id: string;
-  amount: string;
-  subsidiary_id: string;
-  currency: string;
-  txn_amount: string;
-  fx_rate: string;
-  memo: string | null;
-  party_id: string | null;
-  department_id: string | null;
-  project_id: string | null;
-  location_id: string | null;
-  class_id: string | null;
-  equipment_unit_id: string | null;
-  payment_card_id: string | null;
-  tax_code_id: string | null;
-  extra_dims: Record<string, unknown>;
-  quantity: string | null;
-  unit: string | null;
-  due_date: string | null;
-  is_open_item: boolean | null;
-}
+type ReversalLine = ReversalSourceJournalLine & {
+  dueDate: string | null;
+  isOpenItem: boolean | null;
+};
 
 export async function voidFundRelease(input: {
   orgId: string;
@@ -1140,11 +1123,14 @@ export async function voidFundRelease(input: {
         });
       }
       const lines = (await tx.execute<ReversalLine>(sql`
-        select account_id, amount::text, subsidiary_id, currency,
-               txn_amount::text, fx_rate::text, memo, party_id, department_id,
-               project_id, location_id, class_id, equipment_unit_id,
-               payment_card_id, tax_code_id, extra_dims, quantity::text, unit,
-               due_date::text, is_open_item
+        select line_number as "lineNumber", account_id as "accountId", amount::text as amount,
+               subsidiary_id as "subsidiaryId", currency, txn_amount::text as "txnAmount",
+               fx_rate::text as "fxRate", memo, party_id as "partyId",
+               department_id as "departmentId", project_id as "projectId",
+               location_id as "locationId", class_id as "classId",
+               equipment_unit_id as "equipmentUnitId", payment_card_id as "paymentCardId",
+               tax_code_id as "taxCodeId", extra_dims as "extraDims", quantity::text as quantity,
+               unit, custom, due_date::text as "dueDate", is_open_item as "isOpenItem"
           from journal_lines
          where org_id = ${input.orgId} and entry_id = ${original.id}
          order by line_number
@@ -1191,27 +1177,29 @@ export async function voidFundRelease(input: {
             reversesEntryId: original.id,
             reason,
           },
-          lines: lines.map((line) => ({
-            accountId: line.account_id,
-            amount: negMoney(line.amount),
-            subsidiaryId: line.subsidiary_id,
+          lines: reversalJournalLines(lines, { entryId: "", orgId: input.orgId }).map((line, index) => ({
+            accountId: line.accountId!,
+            amount: String(line.amount),
+            subsidiaryId: line.subsidiaryId,
             currency: line.currency,
-            txnAmount: negMoney(line.txn_amount),
-            fxRate: line.fx_rate,
+            txnAmount: String(line.txnAmount),
+            fxRate: line.fxRate,
             memo: line.memo,
-            partyId: line.party_id,
-            departmentId: line.department_id,
-            projectId: line.project_id,
-            locationId: line.location_id,
-            classId: line.class_id,
-            equipmentUnitId: line.equipment_unit_id,
-            paymentCardId: line.payment_card_id,
-            taxCodeId: line.tax_code_id,
-            extraDims: line.extra_dims,
+            partyId: line.partyId,
+            departmentId: line.departmentId,
+            projectId: line.projectId,
+            locationId: line.locationId,
+            classId: line.classId,
+            equipmentUnitId: line.equipmentUnitId,
+            paymentCardId: line.paymentCardId,
+            taxCodeId: line.taxCodeId,
+            extraDims: line.extraDims as Record<string, unknown> | null,
             quantity: line.quantity,
             unit: line.unit,
-            dueDate: line.due_date,
-            isOpenItem: line.is_open_item ?? false,
+            dueDate: lines[index]!.dueDate,
+            isOpenItem: lines[index]!.isOpenItem ?? false,
+            custom: line.custom as Record<string, unknown> | undefined,
+            lineNumber: line.lineNumber,
           })),
         });
         reversalEntryId = reversal.entryId;

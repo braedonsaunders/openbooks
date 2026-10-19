@@ -1201,7 +1201,7 @@ export async function awardGrant(input: {
         event: "award",
         idempotencyKey: `grant-award:${grant.id}:v${grant.version}`,
         lines: [
-          { accountId: selectedReceivable(grant, input.accounts), amount: grant.award_amount, partyId: grant.sponsor_party_id, isOpenItem: true, dueDate: grant.period_to },
+          { accountId: selectedReceivable(grant, input.accounts), amount: grant.award_amount, partyId: grant.sponsor_party_id, isOpenItem: false },
           { accountId: selectedRevenue(grant, input.accounts), amount: negMoney(grant.award_amount), partyId: grant.sponsor_party_id },
         ],
       });
@@ -1344,7 +1344,7 @@ export async function recordGrantDrawdown(input: {
       idempotencyKey: `grant-drawdown:${drawdownId}`,
       lines: [
         { accountId: input.accounts.bankAccountId, amount: amount },
-        { accountId: liabilityOrReceivable, amount: negMoney(amount), partyId: grant.sponsor_party_id, isOpenItem: !conditional },
+        { accountId: liabilityOrReceivable, amount: negMoney(amount), partyId: grant.sponsor_party_id, isOpenItem: false },
       ],
     });
     const updated = await runner.execute<{ id: string }>(sql`
@@ -1572,7 +1572,7 @@ export async function amendGrant(input: {
         event: "award amendment",
         idempotencyKey: `grant-amendment:${created.id}`,
         lines: [
-          { accountId: selectedReceivable(previous, input.accounts), amount: delta, partyId: previous.sponsor_party_id, isOpenItem: true, dueDate: previous.period_to },
+          { accountId: selectedReceivable(previous, input.accounts), amount: delta, partyId: previous.sponsor_party_id, isOpenItem: false },
           { accountId: selectedRevenue(previous, input.accounts), amount: negMoney(delta), partyId: previous.sponsor_party_id },
         ],
       });

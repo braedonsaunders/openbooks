@@ -221,12 +221,13 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
     });
     const awarded = await awardGrant({ orgId: org.orgId, grantId: unconditional.id, accounts, postingDate: org.date, actorId });
     assert.ok(awarded.entryId);
-    const awardLines = await withOrgContext(org.orgId, () => db.execute<{ account_id: string; amount: string }>(sql`
-      select account_id, amount::text as amount from journal_lines where org_id = ${org.orgId} and entry_id = ${awarded.entryId} order by line_number
+    const awardLines = await withOrgContext(org.orgId, () => db.execute<{ account_id: string; amount: string; is_open_item: boolean }>(sql`
+      select account_id, amount::text as amount, is_open_item from journal_lines
+       where org_id = ${org.orgId} and entry_id = ${awarded.entryId} order by line_number
     `));
-    assert.deepEqual(awardLines.rows.map((row) => [row.account_id, row.amount]), [
-      [org.accounts.ar, "25.0000"],
-      [org.accounts.revenue, "-25.0000"],
+    assert.deepEqual(awardLines.rows.map((row) => [row.account_id, row.amount, row.is_open_item]), [
+      [org.accounts.ar, "25.0000", false],
+      [org.accounts.revenue, "-25.0000", false],
     ]);
 
     const issuedAmendment = await amendGrant({
@@ -241,6 +242,16 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
     const amendmentAwardEntry = (await withOrgContext(org.orgId, () => db.execute<{ award_entry_id: string }>(sql`
       select award_entry_id from grants where org_id = ${org.orgId} and id = ${issuedAmendment.id}
     `))).rows[0]!.award_entry_id;
+    const amendmentOpenItems = await withOrgContext(org.orgId, () => db.execute<{ is_open_item: boolean }>(sql`
+      select is_open_item from journal_lines where org_id = ${org.orgId} and entry_id = ${amendmentAwardEntry}
+    `));
+    assert.ok(amendmentOpenItems.rows.every((line) => !line.is_open_item),
+      "award amendments stay in the grant subledger instead of creating unsettled AR items");
+    const drawdownOpenItems = await withOrgContext(org.orgId, () => db.execute<{ is_open_item: boolean }>(sql`
+      select is_open_item from journal_lines where org_id = ${org.orgId} and entry_id = ${firstDrawdown.entryId}
+    `));
+    assert.ok(drawdownOpenItems.rows.every((line) => !line.is_open_item),
+      "drawdown receipts do not create AR credits without matching applications");
     const initialActivity = await listGrantActivity(org.orgId, issuedAmendment.id);
     const initialActivityIds = new Set(initialActivity.journalEntries.map((entry) => entry.id));
     assert.ok(initialActivityIds.has(awarded.entryId), "grant activity includes the original award journal entry");
@@ -252,6 +263,11 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
     const firstReversalEntry = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from journal_entries where org_id = ${org.orgId} and reverses_entry_id = ${firstDrawdown.entryId}
     `))).rows[0]!.id;
+    const reversalOpenItems = await withOrgContext(org.orgId, () => db.execute<{ is_open_item: boolean }>(sql`
+      select is_open_item from journal_lines where org_id = ${org.orgId} and entry_id = ${firstReversalEntry}
+    `));
+    assert.ok(reversalOpenItems.rows.every((line) => !line.is_open_item),
+      "drawdown reversals preserve the grant subledger's non-open-item treatment");
     const correctedActivity = await listGrantActivity(org.orgId, issuedAmendment.id);
     assert.ok(correctedActivity.journalEntries.some((entry) => entry.id === firstReversalEntry),
       "grant activity includes drawdown reversal entries");
