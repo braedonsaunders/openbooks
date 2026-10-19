@@ -11,7 +11,7 @@ import { consumePortalLink, requestPortalLink } from './tokens.ts'
 import { savePortalSettings } from './settings.ts'
 import { issueInventory } from '../inventory/movement-issue.ts'
 import { receiveInventory } from '../inventory/movement-receive.ts'
-import { portalHome } from './workspace.ts'
+import { portalHome, portalOrderTracking } from './workspace.ts'
 import {
   acceptSaveOffer,
   applySubscriptionChange,
@@ -63,6 +63,42 @@ test('portal order amounts retain registry precision and customer isolation', { 
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
 
+test('portal order tracking is scoped to the session customer', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  const channelId = randomUUID()
+  const ownOrderId = randomUUID()
+  const otherOrderId = randomUUID()
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into sales_channels (id, org_id, kind, name, subsidiary_id, currency, external_account)
+        values (${channelId}, ${org.orgId}, 'shopify', 'Customer orders', ${org.subsidiaryId}, 'CAD', ${channelId})`)
+      for (const [id, externalId, partyId] of [
+        [ownOrderId, 'OWN-ORDER', org.customerId],
+        [otherOrderId, 'OTHER-ORDER', org.vendorId],
+      ] as const) {
+        await db.execute(sql`
+          insert into channel_orders (id, org_id, channel_id, external_id, external_number, customer_party_id,
+            shop_currency, presentment_currency, subtotal_minor, tax_minor, shipping_minor, total_minor, ordered_at)
+          values (${id}, ${org.orgId}, ${channelId}, ${externalId}, ${externalId}, ${partyId},
+            'CAD', 'CAD', 1000, 0, 0, 1000, '2026-10-05T10:00:00Z')`)
+        await db.execute(sql`
+          insert into channel_order_events (org_id, channel_id, order_id, kind, external_id, payload, occurred_at)
+          values (${org.orgId}, ${channelId}, ${id}, 'fulfilment', ${`${externalId}-SHIP`},
+            '{"tracking_number":"TRACK-123"}'::jsonb, '2026-10-06T10:00:00Z')`)
+      }
+    })
+
+    const ownTracking = await withOrgTransaction(org.orgId, () =>
+      portalOrderTracking(org.orgId, org.customerId, ownOrderId, db))
+    assert.equal(ownTracking.length, 1)
+    assert.equal(ownTracking[0]!.trackingNumber, 'TRACK-123')
+    const otherTracking = await withOrgTransaction(org.orgId, () =>
+      portalOrderTracking(org.orgId, org.customerId, otherOrderId, db))
+    assert.deepEqual(otherTracking, [])
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
+})
+
 async function enableFeatures(orgId: string, features: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
@@ -91,21 +127,28 @@ test('proration preview equals the engine amendment', { skip: !DB }, async () =>
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const { subscriptionId, linkId } = await seedSubscription(org)
+    const attemptedPriceChange = {
+      subscriptionId, quantity: '2', unitPrice: '0', effectiveOn: AS_OF,
+    } as unknown as Parameters<typeof applySubscriptionChange>[3]
     const preview = await previewSubscriptionChange(org.orgId, org.customerId, {
-      subscriptionId, quantity: '2', effectiveOn: AS_OF,
+      ...attemptedPriceChange,
     })
     const expectedSlice = prorate('100.0000', PERIOD_START, PERIOD_END, AS_OF)
+    assert.equal(preview.afterTotal, '200.0000', 'the customer can change quantity but cannot replace the agreed unit price')
     assert.equal(preview.adjustment, expectedSlice)
     assert.equal(preview.documentKind, 'customer_invoice')
-    const applied = await applySubscriptionChange(org.orgId, org.customerId, linkId, {
-      subscriptionId, quantity: '2', effectiveOn: AS_OF,
-    })
+    const applied = await applySubscriptionChange(org.orgId, org.customerId, linkId, attemptedPriceChange)
     assert.equal(applied.adjustment, preview.adjustment)
     assert.ok(applied.invoiceId)
     const invoice = (await withBypassContext(() => db.execute<{ kind: string; subtotal: string }>(sql`
       select kind, subtotal::text as subtotal from documents where id = ${applied.invoiceId} and org_id = ${org.orgId}`))).rows[0]!
     assert.equal(invoice.kind, 'customer_invoice')
     assert.equal(invoice.subtotal, expectedSlice)
+    const subscription = (await withBypassContext(() => db.execute<{ quantity: string; price_override: string | null }>(sql`
+      select quantity::text as quantity, price_override::text as price_override
+        from subscriptions where org_id = ${org.orgId} and id = ${subscriptionId}`))).rows[0]!
+    assert.equal(subscription.quantity, '2.0000')
+    assert.equal(subscription.price_override, null)
     const downgrade = await applySubscriptionChange(org.orgId, org.customerId, linkId, {
       subscriptionId, quantity: '1', effectiveOn: AS_OF,
     })
@@ -140,13 +183,17 @@ test('pause, resume and cancel guard the subscription lifecycle', { skip: !DB },
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
 
-async function seedDraftInvoice(org: ScratchOrg, status = 'draft'): Promise<string> {
+async function seedDraftInvoice(
+  org: ScratchOrg,
+  status = 'draft',
+  kind: 'customer_invoice' | 'quote' = 'customer_invoice',
+): Promise<string> {
   const documentId = randomUUID()
   const lineId = randomUUID()
   await withBypassContext(() => db.execute(sql`
     insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
                            currency, status, subtotal, tax_total, total, custom)
-    values (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-${documentId.slice(0, 8)}`}, ${org.customerId},
+    values (${documentId}, ${org.orgId}, ${kind}, ${`${kind === 'quote' ? 'EST' : 'INV'}-${documentId.slice(0, 8)}`}, ${org.customerId},
             ${org.subsidiaryId}, ${org.date}, 'CAD', ${status}, '200', '0', '200', '{}'::jsonb)`))
   await withBypassContext(() => db.execute(sql`
     insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price,
@@ -156,7 +203,7 @@ async function seedDraftInvoice(org: ScratchOrg, status = 'draft'): Promise<stri
   return documentId
 }
 
-test('cancel save offer applies the promotion to the open draft', { skip: !DB }, async () => {
+test('cancel save offer applies the promotion to an open draft quote', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const { subscriptionId, linkId } = await seedSubscription(org)
@@ -172,7 +219,7 @@ test('cancel save offer applies the promotion to the open draft', { skip: !DB },
     }))
     await assert.rejects(acceptSaveOffer(org.orgId, org.customerId, linkId, { subscriptionId, offerId: 'keep-20' }),
       (error: unknown) => error instanceof PortalRefusal && error.code === 'no_draft_invoice' && error.status === 409)
-    const draftId = await seedDraftInvoice(org)
+    const draftId = await seedDraftInvoice(org, 'draft', 'quote')
     const accepted = await acceptSaveOffer(org.orgId, org.customerId, linkId, { subscriptionId, offerId: 'keep-20' })
     assert.equal(accepted.kind, 'discount')
     assert.equal(accepted.promotionCode, 'SAVE20')

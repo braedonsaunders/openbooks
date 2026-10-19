@@ -44,7 +44,14 @@ async function fixture(run: (f: {
       });
       return entry;
     };
-    await run({ org, actor, project, hold, release: amount => withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, org.date, amount, null)) });
+    try {
+      await run({ org, actor, project, hold, release: amount => withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, org.date, amount, null)) });
+    } catch (error) {
+      const detail = error instanceof Error
+        ? `${error.name}: ${error.message.replace(/\s+/g, " ")}; cause: ${error.cause instanceof Error ? error.cause.message.replace(/\s+/g, " ") : String(error.cause ?? "")}`
+        : String(error);
+      assert.fail(`Retainage scenario failed: ${detail}`);
+    }
   } finally { await dropScratchOrgReporting(org.orgId); }
 }
 
@@ -179,6 +186,13 @@ test("deleting a release invoice cancels its application with evidence and permi
   await assert.rejects(release("26"), /exceeds available retained funds/);
   const progress = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, "2026-07-31", "10", null));
   assert.equal(progress.applicationNumber, 3);
+}));
+
+test("a later retainage-release period does not block an earlier progress draw", enabled, async () => fixture(async ({ org, actor, project, hold }) => {
+  await hold();
+  await withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, "2026-08-05", "25", null));
+  const progress = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, "2026-07-31", "10", null));
+  assert.equal(progress.applicationNumber, 2);
 }));
 
 test("legacy stranded release applications get an actionable recovery error and can be voided", enabled, async () => fixture(async ({ org, actor, project }) => {

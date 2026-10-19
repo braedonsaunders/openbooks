@@ -5,10 +5,12 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   channelAttention,
+  countChannelOrdersForBusinessDay,
   createChannel,
   listChannels,
   registeredChannelKinds,
 } from "@openbooks/engine/commerce";
+import { businessToday, businessTimeZone } from "@openbooks/engine/platform/business-date/module";
 import { channelAssignmentRefusal, channelsInScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
@@ -29,13 +31,21 @@ export const GET = defineRoute({
   feature: "salesChannels",
   handler: async ({ authz: gate }) => {
     // Channels assigned to a subsidiary outside the caller's scope stay hidden.
-    const channels = channelsInScope(gate, await listChannels(gate.user.orgId));
-    const attention = await channelAttention(gate.user.orgId);
+    const orgId = gate.user.orgId;
+    const [channelRows, attention, today, timeZone] = await Promise.all([
+      listChannels(orgId),
+      channelAttention(orgId),
+      businessToday(orgId),
+      businessTimeZone(orgId),
+    ]);
+    const channels = channelsInScope(gate, channelRows);
+    const ordersToday = await countChannelOrdersForBusinessDay(orgId, today, timeZone, gate.allowedSubsidiaryIds);
     return NextResponse.json({
       channels: channels.map((channel) => ({
         ...channel,
         attention: attention[channel.id] ?? { failed: 0, dead: 0, lastReceivedAt: null },
       })),
+      ordersToday,
       // Installed storefront connectors. Empty until a connector pack lands;
       // the home renders its teaching empty state instead of a dead button.
       kinds: registeredChannelKinds(),

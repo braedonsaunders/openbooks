@@ -174,11 +174,12 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       deps = {
         ...deps,
         cashTenders: await resolveCashPostingTenders(db, doc.orgId, doc.id, {
+          kind: doc.kind,
           documentNumber: doc.documentNumber,
           kindLabel: doc.kind === "cash_sale" ? "cash sale" : "cash refund",
           partyId: doc.partyId,
           custom: doc.custom,
-        }),
+        }, { validateRefundLoads: true }),
       };
     } catch (error) {
       if (error instanceof TenderRefusal) throw new PostingError(error.message);

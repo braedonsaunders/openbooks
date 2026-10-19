@@ -354,6 +354,12 @@ export interface DocumentEditContext {
   deferFlows?: boolean
   /** Internal create-path provider preflight; never supplied by API callers. */
   precomputedTotals?: PreparedDocumentTotals | null
+  /**
+   * An RMA inspection may stage a zero-priced vendor-return draft before an
+   * operator selects the supplier receipt. This is honored only for that
+   * initial create; later line saves and posting still require a disposition.
+   */
+  deferVendorReturnDisposition?: boolean
 }
 
 /** The on_update flow event an edit would fire — returned, not fired, under ctx.deferFlows. */
@@ -1255,15 +1261,20 @@ export async function applyDocumentEdit(
     }
   }
 
-  if (body.currency !== undefined && !(await isFeatureEnabled(orgId, 'multiCurrency'))) {
-    throw new DocumentEditError(404, 'not found')
-  }
   let currency: string | undefined
   if (body.currency !== undefined) {
     const code = String(body.currency).trim().toUpperCase()
     if (!/^[A-Z]{3}$/.test(code)) throw new DocumentEditError(422, 'invalid currency')
     const found = (await runner.execute(sql`select 1 from currencies where code = ${code}`)) as { rows: unknown[] }
     if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
+    const entityCurrency = referenceSubsidiaryId
+      ? (await runner.execute<{ currency: string | null }>(sql`
+          select nullif(trim(base_currency), '') as currency from subsidiaries
+           where org_id = ${orgId} and id = ${referenceSubsidiaryId} and is_active`)).rows[0]?.currency
+      : undefined
+    if (!(await isFeatureEnabled(orgId, 'multiCurrency')) && code !== entityCurrency) {
+      throw new DocumentEditError(404, 'not found')
+    }
     currency = code
   }
   // Recording an explicit rate is a multi-currency capability; clearing one
@@ -2312,10 +2323,11 @@ export async function applyDocumentEdit(
           preparedLines,
         )
         applyInventoryAllowanceSelections(locked.kind, body.lines, preparedLines)
-        // A vendor credit cannot post a stocked line with no choice, so the
-        // save refuses it here — with the receipt-or-allowance message —
-        // instead of failing late at post.
-        if (locked.kind === 'vendor_credit') {
+        // RMA inspection creates an unfinished vendor-return draft before
+        // the operator chooses its supplier receipt. That initial create is
+        // the only save allowed to defer disposition; later line saves still
+        // require a receipt or allowance, and posting always requires one.
+        if (locked.kind === 'vendor_credit' && !ctx.deferVendorReturnDisposition) {
           await assertVendorCreditReturnDispositions(tx, orgId, preparedLines)
         }
       }
@@ -2863,6 +2875,16 @@ export interface DocumentCreateInput {
   subsidiaryId: string | null
   /** Full parsed request body for the idempotency image. */
   requestBody: unknown
+  /** Server-owned return request metadata that is not an editable custom field. */
+  nativeCustom?: {
+    portalRequest?: {
+      resolution: 'refund' | 'exchange' | 'store_credit'
+      storeCreditBonusPercent: string
+    }
+    storeCreditProgramId?: string
+    portalReturnResolution?: 'refund' | 'exchange' | 'store_credit'
+    rmaVendorReturnDraft?: { rmaId: string }
+  }
 }
 
 export interface DocumentCreateResult {
@@ -2901,6 +2923,23 @@ export interface DocumentCreateResult {
  */
 export async function createDocument(input: DocumentCreateInput): Promise<DocumentCreateResult> {
   const { orgId, userId, kind, key, body, subsidiaryId, requestBody } = input
+  if (input.nativeCustom) {
+    const keys = Object.keys(input.nativeCustom)
+    const allowed = kind === 'rma'
+      ? ['portalRequest']
+      : kind === 'customer_credit'
+        ? ['storeCreditProgramId', 'portalReturnResolution']
+        : kind === 'vendor_credit'
+          ? ['rmaVendorReturnDraft']
+        : []
+    if (keys.length === 0 || keys.some((key) => !allowed.includes(key))) {
+      throw new DocumentEditError(422, 'Native return metadata is not valid for this document.')
+    }
+    if (input.nativeCustom.rmaVendorReturnDraft &&
+        (!isUuid(input.nativeCustom.rmaVendorReturnDraft.rmaId) || kind !== 'vendor_credit')) {
+      throw new DocumentEditError(422, 'Native return metadata is not valid for this document.')
+    }
+  }
   if (body.custom && ['withholdingDeposit','withholdingRemittance'].some(key => Object.hasOwn(body.custom!, key))) throw new DocumentEditError(422, 'Authority remittance source evidence is created only through the native withholding workflow.');
   const cfg = docKindConfig(kind)
   if (!cfg) throw new DocumentEditError(422, `kind "${kind}" is not editable`)
@@ -2913,7 +2952,11 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
   // are EXCLUDED — they depend on allocator state or legitimately advance
   // after creation, so comparing them would turn a genuine retry into a
   // conflict.
-  const match = { kind, body: requestBody }
+  const match = {
+    kind,
+    body: requestBody,
+    ...(input.nativeCustom ? { nativeCustom: input.nativeCustom } : {}),
+  }
 
   // Provider-dependent totals resolve BEFORE any lock or write: external tax
   // resolution must never run while the create holds advisory/row locks, and
@@ -2988,9 +3031,10 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
     const inserted = await tx.execute<{ id: string }>(sql`
       insert into documents
         (id, org_id, kind, subsidiary_id, document_number, document_date,
-         currency, subtotal, tax_total, total, created_by)
+         currency, subtotal, tax_total, total, custom, created_by)
       values (${key}, ${orgId}, ${kind}, ${subsidiaryId}, ${documentNumber},
-              ${effectiveBody.documentDate}, ${seedCurrency}, '0', '0', '0', ${userId})
+              ${effectiveBody.documentDate}, ${seedCurrency}, '0', '0', '0',
+              ${JSON.stringify(input.nativeCustom ?? {})}::jsonb, ${userId})
       -- A conflicting document identity returns no row and raises the scoped creation refusal below.
       on conflict (id) do nothing
       returning id`)
@@ -3026,7 +3070,15 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
       key,
       current,
       { ...effectiveBody, expectedUpdatedAt: current.updatedAt },
-      { orgId, userId, source: 'ui', deferFlows: true, precomputedTotals, customerPartyId: input.onBehalfOfPartyId ?? undefined },
+      {
+        orgId,
+        userId,
+        source: 'ui',
+        deferFlows: true,
+        precomputedTotals,
+        customerPartyId: input.onBehalfOfPartyId ?? undefined,
+        deferVendorReturnDisposition: Boolean(input.nativeCustom?.rmaVendorReturnDraft),
+      },
       { tx },
     )
     return { status: 'created', id: key, documentNumber, deferredUpdate: deferredUpdate ?? null } as DocumentCreateResult

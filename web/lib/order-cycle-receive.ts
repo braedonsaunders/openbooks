@@ -2,6 +2,7 @@ import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { add } from '@openbooks/engine/money/money'
 import { nextDocumentNumber } from './bills.ts'
 import { PURCHASE_RECEIPT_KIND } from './order-kinds'
 import { lineRequiresReceipt } from '@openbooks/engine/records/stock-receipt'
@@ -412,12 +413,14 @@ export async function receivePurchaseOrderInTx(
     if (!reopened) throw new ConversionError('Purchase order changed while it was being received', 409)
 
     let lineNumber = 1
+    let subtotal = '0'
     for (const { request, line, billReceived, allowanceUnits, overReceipt } of selected) {
       // Received at the order price: the amount is the value the receipt
       // credits to received-not-billed and the bill later clears. A tolerated
       // over-receipt records its excess and the applied policy on the line,
       // so the above-ordered quantity stays inspectable evidence.
       const amount = orderLineAmount(request.quantity, String(line.unit_price))
+      subtotal = add(subtotal, amount)
       const lineCustom = {
         ...(line.custom ?? {}),
         receipt: { sourceLineId: line.id, lotId: request.lotId, serialId: request.serialId },
@@ -452,6 +455,13 @@ export async function receivePurchaseOrderInTx(
       }
       lineNumber++
     }
+
+    const totalled = await tx.execute<{ id: string }>(sql`
+      update documents set subtotal = ${subtotal}, tax_total = '0', total = ${subtotal}, updated_by = ${userId}
+       where id = ${receiptId} and org_id = ${orgId} and kind = 'purchase_receipt' and status = 'draft'
+      returning id
+    `)
+    if (totalled.rows.length !== 1) throw new ConversionError('Purchase receipt changed while its totals were saved', 409)
 
     const restored = (await tx.execute<{ id: string }>(sql`
       update documents set status = 'approved', updated_by = ${userId}

@@ -12,6 +12,7 @@ import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { StoredValueError } from '@openbooks/engine/stored-value'
 import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
+import { formatStoredValueBreakageRate } from '../../../lib/stored-value-format'
 
 /**
  * The stored-value register, split into a loader and a spec.
@@ -292,7 +293,7 @@ export async function loadStoredValuePage(
         liabilityAccountName: row.liability_account_name,
         breakageIncomeAccountName: row.breakage_income_account_name,
         breakagePolicyLabel: t(`breakagePolicy.${row.breakage_policy}`),
-        breakageRateDisplay: `${Number(row.breakage_rate) * 100}%`,
+        breakageRateDisplay: formatStoredValueBreakageRate(row.breakage_rate),
         expiryMonths: row.expiry_months,
         inactivityMonths: Number(row.inactivity_months),
       },

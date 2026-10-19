@@ -539,6 +539,11 @@ test("voids reverse card effects: a receipt returns its tender, a sale takes bac
     await voidDocument(receiptId, "Receipt keyed against the wrong invoice");
     const restored = await accountState(org.orgId, cardId);
     assert.deepEqual([restored.balance, restored.status], ["500000", "active"]);
+    const breakage = await runStoredValueBreakage();
+    assert.deepEqual(breakage.orgErrors, []);
+    assert.equal(breakage.recognizedAccounts, 0);
+    const afterBreakageScan = await accountState(org.orgId, cardId);
+    assert.deepEqual([afterBreakageScan.balance, afterBreakageScan.recognized], ["500000", "0"]);
     // Now unspent, the sale voids and takes the card back out of circulation.
     await voidDocument(saleId, "Gift card sold in error");
     const ended = await accountState(org.orgId, cardId);
@@ -550,6 +555,56 @@ test("voids reverse card effects: a receipt returns its tender, a sale takes bac
       { amount: "200000", document_id: receiptId },
       { amount: "-500000", document_id: saleId },
     ]);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("receipt drafts total stored-value tenders by account and recheck store-credit ownership after a party change", { skip: !DB }, async () => {
+  const fx = await seedStoredValueOrg();
+  const { org, actorId } = fx;
+  try {
+    const credit = await withBypass(() => issueStoredValue({
+      orgId: org.orgId,
+      allowedSubsidiaryIds: null,
+      programId: fx.creditProgram,
+      amountMinor: toUnits("50"),
+      currency: "CAD",
+      customerPartyId: org.customerId,
+      debitAccountId: org.accounts.bank,
+      postingDate: org.date,
+      idempotencyKey: `receipt-credit-${randomUUID()}`,
+      actorId,
+    }));
+    const payment = await withBypass(() => createPaymentDocument({
+      allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      kind: "customer_payment",
+      createdBy: actorId,
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
+      currency: "CAD",
+    }));
+    await assert.rejects(
+      withBypass(() => updateDraftPayment(payment.id, {
+        onAccountAmount: "100",
+        storedValueTenders: [
+          { accountId: credit.accountId, amount: "50" },
+          { accountId: credit.accountId, amount: "50" },
+        ],
+      }, actorId, org.orgId, { allowedSubsidiaryIds: null })),
+      /combined tenders must not exceed/,
+    );
+    await withBypass(() => updateDraftPayment(payment.id, {
+      onAccountAmount: "50",
+      storedValueTenders: [{ accountId: credit.accountId, amount: "50" }],
+    }, actorId, org.orgId, { allowedSubsidiaryIds: null }));
+    await assert.rejects(
+      withBypass(() => updateDraftPayment(payment.id, { partyId: null }, actorId, org.orgId, { allowedSubsidiaryIds: null })),
+      /store credit belongs to its customer/,
+    );
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

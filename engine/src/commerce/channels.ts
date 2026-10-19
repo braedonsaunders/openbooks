@@ -8,6 +8,7 @@ import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { db, withOrg, withOrgContext } from "../platform/db.ts";
 import { sealJson } from "../platform/secrets.ts";
 
@@ -436,6 +437,24 @@ export async function listChannels(orgId: string): Promise<ChannelRow[]> {
     select ${CHANNEL_COLUMNS} from sales_channels
      where org_id = ${orgId} order by name`))).rows;
   return rows.map(toRow);
+}
+
+/** Count storefront orders in the organization's business day and caller's entity scope. */
+export async function countChannelOrdersForBusinessDay(
+  orgId: string,
+  businessDay: string,
+  timeZone: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<string> {
+  const row = (await withOrgContext(orgId, () => db.execute<{ count: string }>(sql`
+    select count(*)::text as count
+      from channel_orders o
+      join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
+     where o.org_id = ${orgId}
+       and o.ordered_at >= (${businessDay}::date::timestamp at time zone ${timeZone})
+       and o.ordered_at < ((${businessDay}::date + 1)::timestamp at time zone ${timeZone})
+       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds)}`))).rows[0];
+  return row?.count ?? "0";
 }
 
 export async function getChannel(orgId: string, channelId: string): Promise<ChannelRow> {

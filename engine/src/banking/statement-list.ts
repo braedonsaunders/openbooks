@@ -66,12 +66,17 @@ export async function listAccountStatements(
     const perPage = Math.min(MAX_PER_PAGE, Math.max(1, Math.trunc(input.perPage)));
     const page = Math.max(1, Math.trunc(input.page));
     const rows = await db.execute<AccountStatementRow>(sql`
-      select s.id, s.source, s.currency, s.statement_date::text as statement_date,
+      select s.id, s.source,
+             coalesce((select line.currency from bank_statement_lines line
+                        where line.statement_id = s.id and line.org_id = s.org_id
+                        order by line.line_number limit 1), a.currency_restriction) as currency,
+             s.statement_date::text as statement_date,
              s.opening_balance::text as opening_balance, s.closing_balance::text as closing_balance,
              s.imported_at,
              coalesce(lc.n, 0)::int as line_count, coalesce(lc.unmatched, 0)::int as unmatched_count,
              coalesce(lc.matched, 0)::int as matched_count, coalesce(lc.excluded, 0)::int as excluded_count
         from bank_statements s
+        join accounts a on a.id = s.account_id and a.org_id = s.org_id
         left join lateral (
           select count(*) as n,
                  count(*) filter (where l.match_status = 'unmatched') as unmatched,

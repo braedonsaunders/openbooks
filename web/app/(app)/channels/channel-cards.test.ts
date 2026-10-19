@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { channelCards } from './channel-cards.ts'
+import { channelCards, channelMarginPercentValue } from './channel-cards.ts'
 
 const channels = [
   { id: 'a', kind: 'shopify', name: 'A', status: 'active', currency: 'USD', externalAccount: 'a.myshopify.com', lastSyncAt: null, attention: { failed: 2, dead: 1, lastReceivedAt: null } },
@@ -35,5 +35,18 @@ describe('channelCards', () => {
     const [first] = cards
     assert.ok(first)
     assert.equal(first.outstanding, 3)
+  })
+})
+
+describe('channelMarginPercentValue', () => {
+  it('calculates localized percent input with bigint precision', () => {
+    assert.equal(channelMarginPercentValue('4000', '10000'), '40.00')
+    assert.equal(channelMarginPercentValue('3000000000000000001', '9000000000000000000'), '33.33')
+    assert.equal(channelMarginPercentValue('-1250', '10000'), '-12.50')
+  })
+
+  it('does not calculate a percentage without positive revenue', () => {
+    assert.equal(channelMarginPercentValue('1', '0'), null)
+    assert.equal(channelMarginPercentValue('1', '-1'), null)
   })
 })

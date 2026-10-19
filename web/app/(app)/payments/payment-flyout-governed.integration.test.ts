@@ -51,6 +51,16 @@ async function setFlowsFeature(orgId: string, on: boolean): Promise<void> {
   );
 }
 
+async function setStoredValueFeature(orgId: string, on: boolean): Promise<void> {
+  await withBypassContext(() =>
+    db.execute(sql`
+      update orgs set settings = jsonb_set(
+        settings, '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || ${`{"storedValue":${on}}`}::jsonb, true)
+      where id = ${orgId}`),
+  );
+}
+
 async function seedFlow(orgId: string, trigger: string): Promise<void> {
   const graph = {
     schemaVersion: 1,
@@ -93,6 +103,26 @@ test("a kind with no flow resolves ungoverned", async () => {
   try {
     const userId = await receiptActor(org.orgId);
     assert.equal(await governedFlag(org.orgId, userId), false);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a stored-value receipt exposes the tender section while creating", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await setStoredValueFeature(org.orgId, true);
+    const userId = await receiptActor(org.orgId);
+    const flyout = await loadPaymentFlyout({
+      creating: true,
+      kind: "customer_payment",
+      orgId: org.orgId,
+      userId,
+      userRoles: [],
+      authz: authzFor(org.orgId, userId),
+    });
+    assert.ok(flyout);
+    assert.deepEqual(flyout.storedValue, { tenders: [], customerCredits: [] });
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

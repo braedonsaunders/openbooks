@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useViewerFormat } from "@/lib/viewer-format";
+import { formatExactPercent } from "@/lib/format";
 import { createMoneyFormatter, displayMinorAmount, minorDisplayRefusal } from "@/lib/money-format";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -26,7 +27,7 @@ import { NewMenuButton } from "../../../components/new-menu-button";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 import { promptDialog } from "@/lib/prompt";
-import { channelCards, type Channel } from "./channel-cards";
+import { channelCards, channelMarginPercentValue, type Channel, type MarginChannel } from "./channel-cards";
 import type { ChannelsHomeData } from "./view";
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive" | "warning"> = {
@@ -244,9 +245,7 @@ export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData
                         );
                       }
                       const shown = amounts;
-                      const revenue = BigInt(row.revenueMinor);
-                      const cm2 = BigInt(row.cm2Minor);
-                      const pct = revenue > 0n ? Number((cm2 * 10000n) / revenue) / 100 : null;
+                      const pct = channelMarginPercentValue(row.cm2Minor, row.revenueMinor);
                       return (
                         <div key={`${row.channelId}|${row.currency}`} className="mt-1 text-sm text-slate-500">
                           {t("home.marginMeta", {
@@ -257,8 +256,8 @@ export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData
                           <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">
                             {shown.cm2}
                           </span>
-                          {pct != null ? (
-                            <Badge variant="secondary">{t("home.marginPct", { pct: pct.toFixed(2) })}</Badge>
+                          {pct !== null ? (
+                            <Badge variant="secondary">{formatExactPercent(pct, locale, 2)}</Badge>
                           ) : null}
                           {row.estimatedOrders > 0 ? (
                             <Badge variant="warning">

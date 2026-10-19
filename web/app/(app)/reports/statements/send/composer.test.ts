@@ -63,6 +63,8 @@ function stubData(): StatementBatchComposerData {
     },
     currencyBasisBlocked: null,
     currencyBasisReady: true,
+    periodInputError: null,
+    periodInputBlocked: false,
   }
 }
 

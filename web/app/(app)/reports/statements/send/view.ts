@@ -1,8 +1,6 @@
 import 'server-only'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { civilDateParams } from '../../../../../lib/format'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import {
   column,
@@ -24,7 +22,7 @@ import { type CurrencyBasisNotice } from '../../../../../lib/consolidation'
 import { statementReportSpec } from '@/lib/reports/statement-report-spec'
 import { ReportCurrencyBasisError } from '../../../../../lib/reports/currency-basis'
 import { orgInfo } from '../../../../../lib/data'
-import { buildStatementBatchPreview } from '../../../../../lib/statement-batch'
+import { buildStatementBatchPreview, listStatementCustomerCurrencies, StatementBatchInputError } from '../../../../../lib/statement-batch'
 import { decimalCmp } from '../../../../../lib/statement-format'
 
 /**
@@ -92,6 +90,8 @@ export interface StatementBatchComposerData {
   }
   currencyBasisBlocked: CurrencyBasisNotice | null
   currencyBasisReady: boolean
+  periodInputError: string | null
+  periodInputBlocked: boolean
 }
 
 function pickString(value: string | string[] | undefined): string | undefined {
@@ -113,23 +113,29 @@ export async function loadStatementBatchComposer(
   const overdueOnly = pickString(sp.overdueOnly) === '1'
   const subsidiaryId = pickString(sp.sub) ?? null
   const currency = pickString(sp.currency)?.toUpperCase() || null
-  const asOf = to ?? (await businessToday(authz.user.orgId))
+  const asOf = await businessToday(authz.user.orgId)
   const orgPromise = orgInfo()
 
   let preview: Awaited<ReturnType<typeof buildStatementBatchPreview>> = {
-    from, to: asOf, recipients: [], excluded: [], subsidiaries: [], currency: undefined,
+    from: null, to: asOf, recipients: [], excluded: [], subsidiaries: [], currency: undefined,
   }
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  let periodInputError: string | null = null
   try {
     preview = await buildStatementBatchPreview(authz.user.orgId, authz.allowedSubsidiaryIds, can(authz, 'payroll.read'), {
       from, to, overdueOnly, subsidiaryId, currency,
     })
   } catch (e) {
-    if (!(e instanceof ReportCurrencyBasisError)) throw e
-    currencyBasisBlocked = {
-      code: 'multi-currency-basis',
-      title: tr('statement.currencyBasisBlockedTitle'),
-      description: e.message,
+    if (e instanceof ReportCurrencyBasisError) {
+      currencyBasisBlocked = {
+        code: 'multi-currency-basis',
+        title: tr('statement.currencyBasisBlockedTitle'),
+        description: e.message,
+      }
+    } else if (e instanceof StatementBatchInputError) {
+      periodInputError = tp('periodInputError')
+    } else {
+      throw e
     }
   }
   const org = await orgPromise
@@ -143,8 +149,8 @@ export async function loadStatementBatchComposer(
   }
   const statementQuery = statementParams.toString()
   const keepParams = new URLSearchParams()
-  if (preview.from) keepParams.set('from', preview.from)
-  if (pickString(sp.to)) keepParams.set('to', preview.to)
+  if (!periodInputError && preview.from) keepParams.set('from', preview.from)
+  if (!periodInputError && pickString(sp.to)) keepParams.set('to', preview.to)
   if (subsidiaryId) keepParams.set('sub', subsidiaryId)
   if (currency) keepParams.set('currency', currency)
   const kept = keepParams.toString()
@@ -156,10 +162,7 @@ export async function loadStatementBatchComposer(
     return query ? `/reports/statements/send?${query}` : '/reports/statements/send'
   }
 
-  const currencyRows = (await db.execute<{ currency: string }>(sql`
-    select distinct cr.currency from customer_roles cr
-     where cr.org_id = ${authz.user.orgId} and cr.currency is not null
-     order by cr.currency`)).rows
+  const customerCurrencies = await listStatementCustomerCurrencies(authz.user.orgId, authz.allowedSubsidiaryIds)
 
 
   return {
@@ -167,8 +170,8 @@ export async function loadStatementBatchComposer(
     backHref: '/reports/statements',
     backLabel: tr('statementsPicker.title'),
     company: org?.name ?? '',
-    periodPhrase: preview.from ? tp('periodRange', civilDateParams({ from: preview.from, to: preview.to }, locale)) : tp('periodDefault'),
-    dateRange: { from: preview.from ?? '', to: pickString(sp.to) ?? '' },
+    periodPhrase: periodInputError ? tp('periodDefault') : preview.from ? tp('periodRange', civilDateParams({ from: preview.from, to: preview.to }, locale)) : tp('periodDefault'),
+    dateRange: periodInputError ? { from: '', to: '' } : { from: preview.from ?? '', to: pickString(sp.to) ?? '' },
     columnCustomer: tp('columnCustomer'),
     columnBalance: tp('columnBalance'),
     columnOverdue: tp('columnOverdue'),
@@ -194,12 +197,12 @@ export async function loadStatementBatchComposer(
     hasRows: preview.recipients.length > 0,
     hasExclusions: preview.excluded.length > 0,
     subsidiaries: preview.subsidiaries,
-    primaryFilter: currencyRows.length > 0
+    primaryFilter: customerCurrencies.length > 0
       ? {
           paramKey: 'currency',
           label: tp('currencyLabel'),
           value: currency ?? '',
-          options: [{ value: '', label: tp('currencyAll') }, ...currencyRows.map((row) => ({ value: row.currency, label: row.currency }))],
+          options: [{ value: '', label: tp('currencyAll') }, ...customerCurrencies.map((customerCurrency) => ({ value: customerCurrency, label: customerCurrency }))],
         }
       : null,
     overdueAllHref: withOverdue(false),
@@ -212,23 +215,25 @@ export async function loadStatementBatchComposer(
     emptyHint: tp('emptyHint'),
     exclusionsTitle: tp('exclusionsTitle'),
     send: {
-      canCreate: can(authz, 'ar.create'),
-      notAllowed: tp('notAllowed'),
+      canCreate: can(authz, 'ar.create') && periodInputError === null,
+      notAllowed: periodInputError ?? tp('notAllowed'),
       buttonLabel: tp('sendButton'),
       sendingLabel: tp('sending'),
       recipientCount: preview.recipients.length,
       viewBatchesHref: '/reports/statements/sends',
       viewBatchesLabel: tp('viewBatches'),
       body: {
-        from: preview.from,
-        toDate: preview.to,
+        from: periodInputError ? null : preview.from,
+        toDate: periodInputError ? asOf : preview.to,
         overdueOnly,
         subsidiaryId,
         currency,
       },
     },
     currencyBasisBlocked,
-    currencyBasisReady: currencyBasisBlocked === null,
+    currencyBasisReady: currencyBasisBlocked === null && periodInputError === null,
+    periodInputError,
+    periodInputBlocked: periodInputError !== null,
   }
 }
 
@@ -282,7 +287,16 @@ export function statementBatchComposerSpec(data: StatementBatchComposerData): Pa
             when: f('currencyBasisBlocked'),
           }]
         : []),
-      ...(!data.hasRows && !data.currencyBasisBlocked
+      ...(data.periodInputBlocked
+        ? [{
+            ...widgetBlock('empty-state', {
+              title: f('title'),
+              description: f('periodInputError'),
+            }),
+            when: f('periodInputBlocked'),
+          }]
+        : []),
+      ...(!data.hasRows && !data.currencyBasisBlocked && !data.periodInputBlocked
         ? [{
             ...widgetBlock('empty-state', {
               title: data.emptyTitle ?? '',

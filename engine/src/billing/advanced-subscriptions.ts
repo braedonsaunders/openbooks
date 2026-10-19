@@ -127,6 +127,8 @@ export interface CreatePlanVersionInput {
 export interface ActivateLifecycleInput {
   subscriptionId: string;
   planVersionId: string;
+  /** Attach only these required components when one version backs separate contracts. */
+  componentKeys?: string[];
   termStartsOn: string;
   termEndsOn?: string | null;
   trialEndsOn?: string | null;
@@ -873,12 +875,20 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
     // Backstop for versions published before the required-component publish
     // guard: only required components are copied below, so activating a
     // version with none would leave an unbillable subscription.
-    const requiredComponents = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from subscription_plan_version_components
+    const requiredComponents = (await db.execute<{ componentKey: string }>(sql`
+      select component_key as "componentKey" from subscription_plan_version_components
        where org_id = ${orgId} and version_id = ${input.planVersionId} and not is_optional
     `));
-    if (!requiredComponents.rows[0]?.n) {
+    if (!requiredComponents.rows.length) {
       throw new AdvancedSubscriptionError("plan version has no required components — mark a component as required before activating");
+    }
+    if (input.componentKeys) {
+      const requiredKeys = new Set(requiredComponents.rows.map((row) => row.componentKey));
+      const selectedKeys = new Set(input.componentKeys);
+      if (!input.componentKeys.length || selectedKeys.size !== input.componentKeys.length ||
+          input.componentKeys.some((key) => !key.trim() || !requiredKeys.has(key))) {
+        throw new AdvancedSubscriptionError("activation component keys must be unique required components in the plan version");
+      }
     }
     // Billing posts in the pinned version's currency, so pinning a version
     // whose currency differs from already-posted invoices would split one
@@ -931,6 +941,9 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
       values (${orgId}, ${input.subscriptionId}, ${input.planVersionId}, ${termStartsOn}, ${termEndsOn}, ${trialEndsOn},
               ${version.billingTiming}, ${renewalPolicy}, ${renewalTermMonths}, ${termEndsOn}, ${actorId}, ${actorId})
     `);
+    const componentFilter = input.componentKeys
+      ? sql`and component_key in (${sql.join(input.componentKeys.map((key) => sql`${key}`), sql`, `)})`
+      : sql``;
     await db.execute(sql`
       insert into subscription_components
         (org_id, subscription_id, source_version_component_id, component_key, name, description,
@@ -938,7 +951,7 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
       select org_id, ${input.subscriptionId}, id, component_key, name, description, quantity, unit_price,
              income_account_id, item_id, tax_code_id, ${termStartsOn}, sort_order, ${actorId}, ${actorId}
         from subscription_plan_version_components
-       where org_id = ${orgId} and version_id = ${input.planVersionId} and not is_optional
+       where org_id = ${orgId} and version_id = ${input.planVersionId} and not is_optional ${componentFilter}
     `);
     await db.execute(sql`
       update subscriptions set next_bill_on = ${cursors.nextBillOn}, current_period_start = ${cursors.currentPeriodStart},

@@ -6,8 +6,9 @@ import { db, withBypassContext, withOrg } from '@openbooks/engine/platform/db'
 import { postDocument } from '@openbooks/engine/ledger/posting-document'
 import { receiveInventory } from '@openbooks/engine/inventory/movements'
 import { getOnHand } from '@openbooks/engine/testing/inventory/position'
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/testing/fixtures'
+import { createScratchOrg, dropScratchOrg, seedFlowActors, seedPostingAccount, type ScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { ReturnRefusal } from '@openbooks/engine/sales/returns'
+import { PORTAL_ACTOR_ID } from '@openbooks/engine/portal'
 import { convertOrder, fulfillSalesOrder } from './order-cycle.ts'
 import { createReturnAuthorization, inspectReturnAuthorization, previewReturnRestockingFee, receiveReturnAuthorization } from './returns.ts'
 
@@ -144,8 +145,8 @@ test('RMA inspection issues one original-cost credit, scraps quarantine stock, s
     assert.equal(receipts.length, 3)
     assert.deepEqual(receipts.map((row) => row.total_value), ['4.0000', '4.0000', '4.0000'])
     assert.equal((await getOnHand(org.orgId, org.items.fifo, quarantine)).quantity, '1.0000', 'scrap leaves one vendor-return unit in quarantine')
-    const linkedDraft = (await db.execute<{ id: string; status: string; links: number }>(sql`
-      select d.id, d.status,
+    const linkedDraft = (await db.execute<{ id: string; status: string; links: number; custom: { rmaVendorReturnDraft?: { rmaId?: string } } }>(sql`
+      select d.id, d.status, d.custom,
              (select count(*)::int from document_links l where l.org_id = d.org_id and l.from_document_id = ${rma.id}
                and l.to_document_id = d.id and l.link_type = 'created_from') as links
         from documents d join rma_lines r on r.vendor_credit_id = d.id and r.org_id = d.org_id
@@ -153,6 +154,16 @@ test('RMA inspection issues one original-cost credit, scraps quarantine stock, s
     assert.ok(linkedDraft)
     assert.equal(linkedDraft.status, 'draft')
     assert.equal(linkedDraft.links, 1)
+    assert.equal(linkedDraft.custom.rmaVendorReturnDraft?.rmaId, rma.id)
+    const stagedVendorLines = (await db.execute<{ item_id: string; quantity: string; amount: string }>(sql`
+      select item_id, quantity::text, amount::text
+        from document_lines where org_id = ${org.orgId} and document_id = ${linkedDraft.id}
+       order by line_number`)).rows
+    assert.deepEqual(stagedVendorLines, [{
+      item_id: org.items.fifo,
+      quantity: '1.00000000',
+      amount: '0.0000',
+    }], 'the staged vendor credit names the accepted item and quantity for later vendor pricing')
     const scrap = (await db.execute<{ quantity: string; total_value: string }>(sql`
       select m.quantity::text, m.total_value::text from rma_lines r
         join inventory_movements m on m.id = r.scrap_movement_id and m.org_id = r.org_id
@@ -380,6 +391,9 @@ async function runCurrencyCase(
       allowedSubsidiaryIds: null,
     })
     assert.equal(inspected.authorization.stage, 'done')
+    const creditedHeader = (await db.execute<{ currency: string }>(sql`
+      select currency from documents where org_id = ${org.orgId} and id = ${inspected.authorization.customerCreditId}`)).rows[0]
+    assert.equal(creditedHeader?.currency, currency, 'the customer credit keeps the RMA transaction currency')
     const feeLines = (await db.execute<{ amount: string }>(sql`
       select amount::text from document_lines
        where org_id = ${org.orgId} and document_id = ${inspected.authorization.customerCreditId} and amount::numeric < 0
@@ -389,6 +403,68 @@ async function runCurrencyCase(
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 }
+
+test('portal store-credit returns preserve the requested program and exact bonus', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enableReturns(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    const restockBin = await addBin(org, 'PORTAL-RETURN-RESTOCK')
+    const liability = await withBypassContext(() => seedPostingAccount(
+      org.orgId, '2600', 'Return store credit liability', 'liability_current_other', org.subsidiaryId,
+    ))
+    const programId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || '{"storedValue":true}'::jsonb) where id = ${org.orgId}`)
+      await db.execute(sql`
+        insert into stored_value_programs
+          (id, org_id, name, kind, liability_account_id, breakage_policy, breakage_rate,
+           inactivity_months, currency, is_active, created_by, updated_by)
+        values (${programId}, ${org.orgId}, 'Portal return credit', 'store_credit', ${liability},
+                'none', '0', 24, 'CAD', true, ${actorId}, ${actorId})`)
+    })
+    await withOrg(org.orgId, () => receiveInventory(org.orgId, actorId, {
+      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: '3', unitCost: '4',
+      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+    }))
+    const [issueId] = await withOrg(org.orgId, () => postSale(org))
+    const body = {
+      partyId: org.customerId, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: 'CAD',
+      custom: { portalRequest: { resolution: 'store_credit', storeCreditBonusPercent: '10' } },
+      lines: [{ accountId: org.accounts.revenue, itemId: org.items.fifo, description: 'Returned item',
+        quantity: '1', unit: 'ea', unitPrice: '0', amount: '0', taxCodeId: null, taxGroupId: null,
+        taxOverridden: false, taxAmount: '0', stockLocationId: org.stockLocationId }],
+    }
+    const rma = await createReturnAuthorization({
+      orgId: org.orgId, actorId: PORTAL_ACTOR_ID, key: randomUUID(), body, onBehalfOfPartyId: org.customerId,
+      requestBody: { portal: true }, sourceSelections: [{ lineNumber: 1, sourceIssueMovementId: issueId! }],
+      allowedSubsidiaryIds: null,
+    })
+    await receiveReturnAuthorization({
+      orgId: org.orgId, actorId, documentId: rma.id,
+      receivedLines: [{ lineId: rma.lines[0]!.lineId, received: '1' }], allowedSubsidiaryIds: null,
+    })
+    const inspected = await inspectReturnAuthorization({
+      orgId: org.orgId, actorId, documentId: rma.id,
+      inspectionLines: [{ lineId: rma.lines[0]!.lineId, accepted: '1', disposition: 'restock', dispositionLocationId: restockBin }],
+      allowedSubsidiaryIds: null,
+    })
+    const credit = (await withBypassContext(() => db.execute<{ currency: string; total: string; custom: { storeCreditProgramId?: string; portalReturnResolution?: string } }>(sql`
+      select currency, total::text, custom from documents
+       where org_id = ${org.orgId} and id = ${inspected.authorization.customerCreditId}`))).rows[0]
+    assert.equal(credit?.currency, 'CAD')
+    assert.equal(credit?.total, '11.0000', 'a ten percent bonus adds one dollar to the ten dollar return')
+    assert.equal(credit?.custom.storeCreditProgramId, programId)
+    assert.equal(credit?.custom.portalReturnResolution, 'store_credit')
+    const bonus = (await withBypassContext(() => db.execute<{ amount: string }>(sql`
+      select amount::text from document_lines where org_id = ${org.orgId}
+       and document_id = ${inspected.authorization.customerCreditId} and description = 'Store credit bonus'`))).rows[0]
+    assert.equal(bonus?.amount, '1.0000')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
 
 test('BHD return prices ISO fils through preview and inspect', { skip: !DB }, async () => {
   // 10.000 BHD lines credit cost 4.0000 as 4000 fils; a fixed 1000-fil

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { add } from "../money/money.ts";
+import { add, mulRate } from "../money/money.ts";
 import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -173,8 +173,8 @@ export async function livePurchaseOrderLineReceipts(
   `)).rows[0];
   quantity = fromQuantityUnits(toQuantityUnits(quantity) + toQuantityUnits(corrections?.quantity ?? "0"));
   value = add(value, corrections?.value ?? "0");
-  const dropShipConfirmations = (await runner.execute<{ quantity: string; value: string; unit: string | null }>(sql`
-    select rl.quantity::text as quantity, rl.amount::text as value, rl.unit as unit
+  const dropShipConfirmations = (await runner.execute<{ quantity: string; value: string; fx_rate: string; unit: string | null }>(sql`
+    select rl.quantity::text as quantity, rl.amount::text as value, rd.fx_rate::text as fx_rate, rl.unit as unit
       from document_lines rl
       join documents rd on rd.id = rl.document_id and rd.org_id = rl.org_id
      where rl.org_id = ${orgId}
@@ -184,7 +184,7 @@ export async function livePurchaseOrderLineReceipts(
        and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
   `)).rows;
   for (const confirmation of dropShipConfirmations) {
-    value = add(value, confirmation.value);
+    value = add(value, mulRate(confirmation.value, confirmation.fx_rate));
     // Receipt lines copy the order line's unit; convert to base so this
     // leg shares the movements' unit instead of mixing them.
     quantity = profile

@@ -68,6 +68,9 @@ test("dunning [id] routes return 404 for a malformed policy id", async () => {
     const missing = await patch(json("PATCH", { name: "Renamed" }), params(randomUUID()));
     assert.equal(missing.status, 404);
     assert.deepEqual(await missing.json(), { error: "not_found" });
+    const missingDelete = await remove(json("DELETE"), params(randomUUID()));
+    assert.equal(missingDelete.status, 404);
+    assert.deepEqual(await missingDelete.json(), { error: "not_found" });
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { db, type SqlExecutor } from "../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { addMonthsClamped, isIsoCalendarDate } from "../platform/civil-date.ts";
 import { cmp, fromUnits, neg, toUnits } from "../money/money.ts";
@@ -522,7 +522,7 @@ export async function priorStoredValueEntry(
  * conflict at this point is a concurrent writer under the same key, so the
  * caller's transaction rolls back instead of keeping a balance move that no
  * entry records. A retry then finds the winner's entry first. */
-function requireFreshEntry(entry: { replayed: boolean }, idempotencyKey: string): void {
+export function requireFreshEntry(entry: { replayed: boolean }, idempotencyKey: string): void {
   if (!entry.replayed) return;
   throw storedValueRefusal({
     message: `Another request recorded idempotency key ${idempotencyKey} while this one was applying it.`,
@@ -1757,6 +1757,10 @@ export interface DocumentIssueInput {
  * when the document draft was created.
  */
 export async function attachDocumentIssue(input: DocumentIssueInput): Promise<IssueResult> {
+  return withOrgTransaction(input.orgId, () => attachDocumentIssueInTransaction(input));
+}
+
+async function attachDocumentIssueInTransaction(input: DocumentIssueInput): Promise<IssueResult> {
   await requireStoredValueFeature(db, input.orgId);
   const replayed = (await db.execute<{ account_id: string; id: string }>(sql`
     select account_id, id from stored_value_entries
@@ -1851,6 +1855,7 @@ export async function attachDocumentIssue(input: DocumentIssueInput): Promise<Is
       idempotencyKey: `stored-value:issue-entry:${input.idempotencyKey}`,
       actorId: input.actorId ?? null,
     });
+    requireFreshEntry(entry, input.idempotencyKey);
     return { accountId: inserted[0].id, code, entryId: entry.entryId, journalEntryId: input.journalEntryId, replayed: entry.replayed };
   }
   throw storedValueRefusal({

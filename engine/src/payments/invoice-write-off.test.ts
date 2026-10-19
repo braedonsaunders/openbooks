@@ -36,11 +36,13 @@ test("write-off with neither control configured refuses and names the setting to
   );
 });
 
-test("write-off amount is an exact positive decimal with at most two places", () => {
+test("write-off amount is an exact positive decimal with at most four places", () => {
   assert.equal(normalizeInvoiceWriteOffAmount("125"), "125.0000");
   assert.equal(normalizeInvoiceWriteOffAmount(" 125.5 "), "125.5000");
   assert.equal(normalizeInvoiceWriteOffAmount("0.01"), "0.0100");
-  for (const refused of ["", "0", "0.00", "-1.00", "1.005", "1e3", "12,50", "abc", 125, null]) {
+  assert.equal(normalizeInvoiceWriteOffAmount("125.125"), "125.1250");
+  assert.equal(normalizeInvoiceWriteOffAmount("125.1234"), "125.1234");
+  for (const refused of ["", "0", "0.00", "-1.00", "1.12345", "1e3", "12,50", "abc", 125, null]) {
     assert.throws(() => normalizeInvoiceWriteOffAmount(refused), PaymentError, `expected refusal for ${String(refused)}`);
   }
 });

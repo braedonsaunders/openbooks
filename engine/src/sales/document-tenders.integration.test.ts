@@ -15,6 +15,7 @@ import { createProgram, issueStoredValue } from "../stored-value/accounts.ts";
 import {
   hasStoredValueTenders,
   readDocumentTenders,
+  resolveCashPostingTenders,
   replaceDocumentTenders,
   TenderRefusal,
 } from "./document-tenders.ts";
@@ -165,6 +166,16 @@ test("a sale resolves its stored-value tender and refuses an overdraw by name", 
     await assert.rejects(
       withBypass(() =>
         replaceDocumentTenders(db, org.orgId, id, [
+          { kind: "stored_value", storedValueAccountId: issued.accountId, amount: "50" },
+          { kind: "stored_value", storedValueAccountId: issued.accountId, amount: "50" },
+        ], { allowedSubsidiaryIds: null }),
+      ),
+      (error: unknown) =>
+        error instanceof TenderRefusal && /combined tendered 100\.0000/.test(error.message),
+    );
+    await assert.rejects(
+      withBypass(() =>
+        replaceDocumentTenders(db, org.orgId, id, [
           { kind: "stored_value", storedValueAccountId: issued.accountId, amount: "90" },
         ], { allowedSubsidiaryIds: null }),
       ),
@@ -177,6 +188,16 @@ test("a sale resolves its stored-value tender and refuses an overdraw by name", 
       ], { allowedSubsidiaryIds: null }),
     );
     assert.equal(rows[0]?.storedValueAccountId, issued.accountId);
+    const replacementLiability = await withBypassContext(() =>
+      seedPostingAccount(org.orgId, "2601", "Replacement stored value liability", "liability_current_other"),
+    );
+    await withBypassContext(() => db.execute(sql`
+      update stored_value_programs set liability_account_id = ${replacementLiability}
+       where org_id = ${org.orgId} and id = ${program.id}`));
+    const resolved = await withBypass(() => resolveCashPostingTenders(db, org.orgId, id, {
+      kind: "cash_sale", documentNumber: "Stored value sale", kindLabel: "cash sale", partyId: null, custom: {},
+    }));
+    assert.equal(resolved[0]?.accountId, liability, "the issued account keeps its liability home after program edits");
     assert.equal(
       await withBypass(() => hasStoredValueTenders(db, org.orgId, id)),
       true,

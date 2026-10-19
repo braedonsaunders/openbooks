@@ -18,6 +18,7 @@ import {
 import { can, guardSubsidiaryScope, type Authz } from '../../../lib/authz'
 import { listScopedPartyOptions } from '../../../lib/scoped-options'
 import { isUuid } from '../../../lib/list-params'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 
 export const runtime = 'nodejs'
 
@@ -147,6 +148,9 @@ export const GET = defineRoute({
         join parties p on p.id = r.payer_party_id and p.org_id = r.org_id
         left join consolidation_groups g on g.id = r.consolidation_group_id and g.org_id = r.org_id
        where r.org_id = ${orgId} and r.child_party_id = ${childPartyId}
+         ${subsidiaryVisibleFilter(sql`b.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         ${subsidiaryVisibleFilter(sql`g.billing_subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
        order by r.effective_from desc`)
     const children = await db.execute(sql`
       select r.child_party_id as "childPartyId", c.display_name as "childName",
@@ -155,8 +159,14 @@ export const GET = defineRoute({
              g.code as "groupCode"
         from customer_billing_relationships r
         join parties c on c.id = r.child_party_id and c.org_id = r.org_id
+        join parties b on b.id = r.bill_to_party_id and b.org_id = r.org_id
+        join parties p on p.id = r.payer_party_id and p.org_id = r.org_id
         left join consolidation_groups g on g.id = r.consolidation_group_id and g.org_id = r.org_id
        where r.org_id = ${orgId} and (r.bill_to_party_id = ${childPartyId} or r.payer_party_id = ${childPartyId})
+         ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         ${subsidiaryVisibleFilter(sql`b.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         ${subsidiaryVisibleFilter(sql`g.billing_subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
        order by c.display_name, r.effective_from desc
        limit 200`)
     const groups = await db.execute(sql`
@@ -164,22 +174,30 @@ export const GET = defineRoute({
              g.cadence, g.cutoff_day as "cutoffDay", g.grouping,
              s.name as "billingSubsidiaryName"
         from consolidation_groups g
+        join parties payer on payer.org_id = g.org_id and payer.id = g.payer_party_id
         left join subsidiaries s on s.id = g.billing_subsidiary_id and s.org_id = g.org_id
        where g.org_id = ${orgId} and g.is_active
+         ${subsidiaryVisibleFilter(sql`g.billing_subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         ${subsidiaryVisibleFilter(sql`payer.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
        order by g.code`)
     const parties = await listScopedPartyOptions(orgId, gate.allowedSubsidiaryIds, { role: 'customer', activeOnly: true })
     let summary: Record<string, unknown>
     try {
       const parties0 = await resolveEffectiveBillingParties(orgId, childPartyId, today, null)
+      const targetPartyIds = [...new Set([parties0.billToPartyId, parties0.payerPartyId])]
       const names = (await db.execute<{ id: string; name: string }>(sql`
         select p.id, p.display_name as name from parties p
-         where p.org_id = ${orgId} and p.id in (${parties0.billToPartyId}, ${parties0.payerPartyId})`)).rows
+         where p.org_id = ${orgId} and p.id in (${parties0.billToPartyId}, ${parties0.payerPartyId})
+           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}`)).rows
+      if (names.length !== targetPartyIds.length) return scopeNotFound()
       const byId = new Map(names.map((n) => [n.id, n.name]))
       const group = parties0.consolidationGroupId
         ? (await db.execute<{ code: string; name: string; cadence: string }>(sql`
             select code, name, cadence from consolidation_groups
-             where org_id = ${orgId} and id = ${parties0.consolidationGroupId}`)).rows[0]
+             where org_id = ${orgId} and id = ${parties0.consolidationGroupId}
+               ${subsidiaryVisibleFilter(sql`billing_subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0]
         : null
+      if (parties0.consolidationGroupId && !group) return scopeNotFound()
       summary = {
         billToPartyId: parties0.billToPartyId,
         billToName: byId.get(parties0.billToPartyId) ?? '',
@@ -273,6 +291,23 @@ async function normalizedInput(
   if (requested !== 'visible') {
     if (unrestricted) return { errorCode: 'references' } as const
     return { errorCode: 'notFound' } as const
+  }
+  for (const partyId of new Set([billToPartyId, payerPartyId])) {
+    const visibility = await billedCustomerVisibility(tx, orgId, gate, partyId)
+    if (visibility === 'hidden' || (!unrestricted && visibility === 'missing')) {
+      return { errorCode: 'notFound' } as const
+    }
+    if (visibility === 'missing') return { errorCode: 'references' } as const
+  }
+  if (consolidationGroupId) {
+    const group = (await tx.execute<{ billingSubsidiaryId: string | null }>(sql`
+      select billing_subsidiary_id as "billingSubsidiaryId"
+        from consolidation_groups where id = ${consolidationGroupId} and org_id = ${orgId}
+       for share`)).rows[0]
+    if (!group && !unrestricted) return { errorCode: 'notFound' } as const
+    if (group && guardSubsidiaryScope(gate, group.billingSubsidiaryId, { orgWideNull: true })) {
+      return { errorCode: 'notFound' } as const
+    }
   }
   // Record validity, unchanged for every caller alike: all three parties
   // belong to this organization, and the group — when named — is active and

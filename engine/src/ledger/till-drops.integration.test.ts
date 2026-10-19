@@ -26,7 +26,14 @@ async function configure(org: ScratchOrg, tillId: string): Promise<void> {
 }
 
 /** A draft cash sale tendering `cash` to the till on `date` — not posted. */
-async function draftSale(org: ScratchOrg, tillId: string, date: string, cash: string, subsidiaryId = org.subsidiaryId): Promise<string> {
+async function draftSale(
+  org: ScratchOrg,
+  tillId: string,
+  date: string,
+  cash: string,
+  subsidiaryId = org.subsidiaryId,
+  currency = "CAD",
+): Promise<string> {
   const saleId = randomUUID();
   await withBypassContext(async () => {
     await db.execute(sql`
@@ -34,13 +41,13 @@ async function draftSale(org: ScratchOrg, tillId: string, date: string, cash: st
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, custom)
       values (${saleId}, ${org.orgId}, 'cash_sale', 'draft', ${`CS-${saleId.slice(0, 8)}`}, ${subsidiaryId},
-              ${org.customerId}, ${date}, 'CAD', '1', ${cash}, '0', ${cash}, '{}'::jsonb)`);
+              ${org.customerId}, ${date}, ${currency}, '1', ${cash}, '0', ${cash}, '{}'::jsonb)`);
     await db.execute(sql`
       insert into document_tenders
         (org_id, document_id, position, kind, method_label, account_id,
          stored_value_account_id, amount_minor, currency, reference)
       values (${org.orgId}, ${saleId}, 1, 'cash', 'cash', ${tillId}, null,
-              ${toUnits(cash).toString()}, 'CAD', null)`);
+              ${toUnits(cash).toString()}, ${currency}, null)`);
   });
   return saleId;
 }
@@ -148,6 +155,82 @@ test("a till drop records by till and date before its sales are posted, and wind
     const custom = (await withBypassContext(() => db.execute<{ custom: { tillDrop?: { reason?: string } } }>(sql`
       select custom from documents where org_id = ${org.orgId} and id = ${second.transferId}`))).rows[0]!.custom;
     assert.equal(custom.tillDrop?.reason, "Two sales from the afternoon not yet entered", "the count reason rides the drop");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a replayed till drop keeps the same transfer and reconciled amount", { skip: !DB }, async () => {
+  const { org, actorId, tillId } = await setup();
+  try {
+    await draftSale(org, tillId, "2026-07-12", "100.0000");
+    const key = randomUUID();
+    const input = {
+      tillAccountId: tillId,
+      amount: "100.0000",
+      date: "2026-07-12",
+      bankAccountId: org.accounts.bank,
+      slipNumber: "SLIP-REPLAY",
+    };
+    const first = await recordTillDrop(org.orgId, actorId, input, { key });
+    const replay = await recordTillDrop(org.orgId, actorId, input, { key });
+    assert.equal(replay.transferId, first.transferId);
+    assert.equal(replay.posted, true);
+    assert.equal(replay.window.dropped, "100.0000");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("till drops use the selected subsidiary functional currency", { skip: !DB }, async () => {
+  const { org, actorId } = await setup();
+  const subsidiaryId = randomUUID();
+  let stage = "creating the USD subsidiary";
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into currencies(code,name,minor_units) values('USD','US Dollar',2) on conflict(code) do nothing`);
+      await db.execute(sql`insert into subsidiaries(id,org_id,name,parent_id,base_currency,country,is_active,is_elimination,custom)
+        values(${subsidiaryId},${org.orgId},'US Entity',${org.subsidiaryId},'USD','US',true,false,'{}'::jsonb)`);
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+        coalesce(settings->'features','{}'::jsonb)||'{"multiSubsidiary":true,"multiCurrency":true}'::jsonb)
+        where id=${org.orgId}`);
+    });
+    stage = "seeding subsidiary-owned accounts";
+    const branchTillId = await withBypassContext(() =>
+      seedPostingAccount(org.orgId, "1017", "US Till Cash", "asset_current_other", subsidiaryId),
+    );
+    const branchBankId = await withBypassContext(() =>
+      seedPostingAccount(org.orgId, "1018", "US Deposit Bank", "asset_bank", subsidiaryId),
+    );
+    stage = "configuring the till and deposit accounts";
+    await withBypassContext(() => db.execute(sql`
+      update orgs set settings = settings || jsonb_build_object('cashSales',
+        coalesce(settings->'cashSales', '{}'::jsonb) ||
+        jsonb_build_object('depositAccountIds', jsonb_build_array(${branchBankId}::text),
+                           'defaultCashAccountId', ${branchTillId}::text))
+       where id = ${org.orgId}`));
+    stage = "creating the USD cash sale";
+    await draftSale(org, branchTillId, "2026-07-12", "40.0000", subsidiaryId, "USD");
+    stage = "recording the USD till drop";
+    const drop = await recordTillDrop(org.orgId, actorId, {
+      tillAccountId: branchTillId,
+      amount: "40.0000",
+      date: "2026-07-12",
+      bankAccountId: branchBankId,
+      slipNumber: "SLIP-USD",
+      subsidiaryId,
+    }, { key: randomUUID(), allowedSubsidiaryIds: new Set([subsidiaryId]) });
+    assert.equal(drop.posted, true, drop.postRefusal ?? "");
+    stage = "reading the posted transfer";
+    const document = (await withBypassContext(() => db.execute<{ currency: string; subsidiary_id: string }>(sql`
+      select currency, subsidiary_id from documents where org_id=${org.orgId} and id=${drop.transferId}`))).rows[0];
+    assert.equal(document?.currency, "USD");
+    assert.equal(document?.subsidiary_id, subsidiaryId);
+  } catch (error) {
+    const detail = error instanceof Error
+      ? `${error.name}: ${error.message.replace(/\s+/g, " ")}; cause: ${error.cause instanceof Error ? error.cause.message.replace(/\s+/g, " ") : String(error.cause ?? "")}`
+      : String(error);
+    assert.fail(`Till-drop currency scenario failed while ${stage}: ${detail}`);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

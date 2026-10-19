@@ -1,7 +1,7 @@
 import { resolveAgencyPosting } from './drop-ship-agency.ts';
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { add, cmp, isZero, neg } from "../money/money.ts";
+import { add, cmp, isZero, mulRate, neg } from "../money/money.ts";
 import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
 import { orderedNetOfCancelledSql } from "../records/order-line-remainders.ts";
 import { extendCost, unitCostPerQuantity } from "./costing.ts";
@@ -128,6 +128,7 @@ export async function assertBillReceiptsPostable(
        and item_id in (${sql.join(lines.map((line) => sql`${line.itemId}`), sql`, `)})`));
   const byItem = new Map(profiles.rows.map((row) => [row.item_id, row]));
   for (const line of lines) {
+    const functionalAmount = mulRate(line.amount, line.fxRate);
     const profile = byItem.get(line.itemId);
     if (!profile) continue;
     if (line.costingMethod === "standard" && !line.clearingAccountId) {
@@ -138,9 +139,9 @@ export async function assertBillReceiptsPostable(
       const standardUnitCost = profile.standard_cost
         ?? (isZero(line.quantity)
           ? "0"
-          : unitCostPerQuantity(line.amount, line.quantity)!);
+          : unitCostPerQuantity(functionalAmount, line.quantity)!);
       const variance = add(
-        line.amount,
+        functionalAmount,
         neg(extendCost(line.quantity, standardUnitCost)),
       );
       if (!isZero(variance)) {
@@ -513,7 +514,7 @@ export async function applyBillInventoryReceipts(
       itemId: line.itemId,
       stockLocationId: line.stockLocationId,
       quantity: line.quantity,
-      totalValue: line.amount,
+      totalValue: mulRate(line.amount, line.fxRate),
       subsidiaryId,
       offsetAccountId: line.clearingAccountId ?? undefined,
       postJournal: line.clearingAccountId != null,
@@ -564,11 +565,12 @@ async function settleReceivedBillLineVariance(
           line.quantity,
           unitCostPerQuantity(received.value, received.quantity) ?? "0",
         );
-  const variance = add(line.amount, neg(expected));
+  const functionalAmount = mulRate(line.amount, line.fxRate);
+  const variance = add(functionalAmount, neg(expected));
   if (isZero(variance)) return;
   if (!line.varianceAccountId) {
     throw new InventoryError(
-      `document line ${line.lineNumber} (item ${line.itemId}) bills ${line.amount} for stock received at ${expected}; the item has no purchase price variance account to carry the ${variance} difference`,
+      `document line ${line.lineNumber} (item ${line.itemId}) bills ${functionalAmount} in functional currency for stock received at ${expected}; the item has no purchase price variance account to carry the ${variance} difference`,
     );
   }
   const entryNumber = `INV-PPV-${line.lineId}`;
@@ -676,7 +678,7 @@ export async function applyPurchaseReceiptInventory(
       itemId: line.itemId,
       stockLocationId: line.stockLocationId,
       quantity: line.quantity,
-      totalValue: line.amount,
+      totalValue: mulRate(line.amount, line.fxRate),
       subsidiaryId: movementSubsidiaryId,
       offsetAccountId: clearingByLine.get(line.lineId)!,
       postJournal: true,

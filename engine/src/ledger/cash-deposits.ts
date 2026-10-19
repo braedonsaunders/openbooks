@@ -237,8 +237,7 @@ export async function recordCashDeposit(
         from document_tenders
        where org_id = ${orgId} and document_id = ${sale.id} and kind = 'cash'
        group by account_id`)).rows;
-    const cashTendered = tenderRows.reduce((sum, row) => sum + BigInt(row.minor), 0n);
-    if (cashTendered <= 0n) {
+    if (tenderRows.length === 0) {
       throw depositError(
         `Cash sale ${sale.documentNumber} has no cash tenders — drops move till cash.`,
         422,
@@ -264,14 +263,26 @@ export async function recordCashDeposit(
         "Pick the till cash account this drop leaves.",
       );
     }
+    const cashTendered = BigInt(tenderRows.find((row) => row.accountId === sourceAccountId)!.minor);
+    if (cashTendered <= 0n) {
+      throw depositError(
+        `Cash sale ${sale.documentNumber} has no cash tender for the selected till account.`,
+        422,
+        "Pick a till cash account with a positive cash tender on this sale.",
+      );
+    }
     // Lifetime cap: every non-voided drop already recorded against this
     // sale encumbers its till cash, posted or still awaiting the bookkeeper.
+    const replayTransferId = options.key && isUuid(options.key) ? options.key : null;
     const priorRows = (await db.execute<{ minor: string }>(sql`
       select coalesce(sum(round(l.amount * 10000)), 0)::bigint::text as minor
         from documents d
         join document_lines l on l.document_id = d.id and l.org_id = d.org_id and l.line_number = 1
+        join document_lines src on src.document_id = d.id and src.org_id = d.org_id and src.line_number = 2
        where d.org_id = ${orgId} and d.kind = 'transfer' and d.status <> 'voided'
-         and d.custom->'cashSaleDeposit'->>'saleId' = ${sale.id}`)).rows;
+         and d.custom->'cashSaleDeposit'->>'saleId' = ${sale.id}
+         and src.account_id = ${sourceAccountId}::uuid
+         and (${replayTransferId}::uuid is null or d.id <> ${replayTransferId}::uuid)`)).rows;
     const priorMinor = BigInt(priorRows[0]?.minor ?? "0");
     const remaining = cashTendered - priorMinor;
     if (amountMinor > remaining) {
@@ -521,7 +532,7 @@ export interface TillDropWindow {
  * alike. `covers_through` is the last sale date a drop's cash covers — its
  * stated cutoff, else its own date.
  */
-function tillDropsSql(orgId: string, tillAccountId: string, subsidiaryId: string) {
+function tillDropsSql(orgId: string, tillAccountId: string, subsidiaryId: string, excludeDropId?: string | null) {
   return sql`
     select d.id, d.document_date, l.amount,
            coalesce((d.custom->'tillDrop'->>'coversThrough')::date, d.document_date) as covers_through
@@ -531,7 +542,8 @@ function tillDropsSql(orgId: string, tillAccountId: string, subsidiaryId: string
      where d.org_id = ${orgId} and d.kind = 'transfer' and d.status <> 'voided'
        and d.subsidiary_id = ${subsidiaryId}::uuid
        and (d.custom ? 'cashSaleDeposit' or d.custom ? 'tillDrop')
-       and src.account_id = ${tillAccountId}::uuid`;
+       and src.account_id = ${tillAccountId}::uuid
+       ${excludeDropId ? sql`and d.id <> ${excludeDropId}::uuid` : sql``}`;
 }
 
 type TillWindowScope = {
@@ -567,6 +579,7 @@ async function readTillDropWindowInTransaction(
   tillAccountId: string,
   date: string,
   scope: TillWindowScope,
+  excludeDropId?: string | null,
 ): Promise<TillDropWindow> {
   if (!isUuid(tillAccountId) || !isIsoCalendarDate(date)) {
     throw depositError("The till drop names no valid till account or date.", 422, "Pick the till and the drop date from the bank slip.");
@@ -582,7 +595,7 @@ async function readTillDropWindowInTransaction(
       "Choose an available till account for this cash sale's entity.");
     const after = (await db.execute<{ date: string | null }>(sql`
       select max(drop.covers_through)::text as date
-        from (${tillDropsSql(orgId, tillAccountId, subsidiaryId)}) drop
+        from (${tillDropsSql(orgId, tillAccountId, subsidiaryId, excludeDropId)}) drop
        where drop.covers_through < ${date}::date`)).rows[0]?.date ?? null;
     const tendered = (await db.execute<{ minor: string; sales: number }>(sql`
       select coalesce(sum(case when d.kind = 'cash_refund' then -t.amount_minor else t.amount_minor end), 0)::text as minor,
@@ -596,7 +609,7 @@ async function readTillDropWindowInTransaction(
          ${after ? sql`and d.document_date > ${after}::date` : sql``}`)).rows[0]!;
     const dropped = (await db.execute<{ minor: string }>(sql`
       select coalesce(sum(round(drop.amount * 10000)), 0)::bigint::text as minor
-        from (${tillDropsSql(orgId, tillAccountId, subsidiaryId)}) drop
+        from (${tillDropsSql(orgId, tillAccountId, subsidiaryId, excludeDropId)}) drop
        where drop.covers_through <= ${date}::date
          ${after ? sql`and drop.covers_through > ${after}::date` : sql``}`)).rows[0]!;
     const tenderedMinor = BigInt(tendered.minor);
@@ -638,8 +651,18 @@ export async function recordTillDrop(
     const subsidiaryId = await resolveTillWindowEntity(orgId, {
       subsidiaryId: input.subsidiaryId, allowedSubsidiaryIds: options.allowedSubsidiaryIds ?? null,
     });
-    const settings = (await db.execute<{ cashSales: unknown; currency: string }>(sql`
-      select settings->'cashSales' as "cashSales", base_currency as currency from orgs where id = ${orgId}`)).rows[0];
+    const settings = (await db.execute<{ cashSales: unknown; currency: string | null }>(sql`
+      select o.settings->'cashSales' as "cashSales", nullif(trim(s.base_currency), '') as currency
+        from orgs o
+        join subsidiaries s on s.org_id = o.id and s.id = ${subsidiaryId}::uuid and s.is_active and not s.is_elimination
+       where o.id = ${orgId}`)).rows[0];
+    if (!settings?.currency) {
+      throw depositError(
+        "This legal entity has no functional currency for the till drop.",
+        409,
+        "Set the legal entity's base currency in Company Settings → Organization, then record the drop again.",
+      );
+    }
     const bag = (settings?.cashSales && typeof settings.cashSales === "object" && !Array.isArray(settings.cashSales)
       ? settings.cashSales : {}) as Record<string, unknown>;
     const tillAccounts = new Set<string>([
@@ -688,7 +711,10 @@ export async function recordTillDrop(
     // undropped balance.
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${`till-drop:${orgId}:${input.tillAccountId}`}))`);
     const windowScope = { subsidiaryId, allowedSubsidiaryIds: options.allowedSubsidiaryIds ?? null };
-    const window = await readTillDropWindowInTransaction(orgId, input.tillAccountId, coversThrough, windowScope);
+    const replayTransferId = options.key && isUuid(options.key) ? options.key : null;
+    const window = await readTillDropWindowInTransaction(
+      orgId, input.tillAccountId, coversThrough, windowScope, replayTransferId,
+    );
     const undropped = toUnits(window.tendered) - toUnits(window.dropped);
     const reason = typeof input.reason === "string" ? input.reason.trim() : "";
     const reasonGiven = reason.length >= 5 && reason.length <= 500;
@@ -704,7 +730,7 @@ export async function recordTillDrop(
     // saying why it is late.
     const later = (await db.execute<{ date: string }>(sql`
       select max(drop.covers_through)::text as date
-        from (${tillDropsSql(orgId, input.tillAccountId, subsidiaryId)}) drop
+        from (${tillDropsSql(orgId, input.tillAccountId, subsidiaryId, replayTransferId)}) drop
        where drop.covers_through > ${coversThrough}::date`)).rows[0]?.date ?? null;
     if (later && !reasonGiven) {
       throw depositError(
@@ -718,7 +744,7 @@ export async function recordTillDrop(
       date: input.date,
       slip,
       memo: `Till drop — slip ${slip}`,
-      currency: settings?.currency ?? "",
+      currency: settings.currency,
       subsidiaryId,
       custom: { tillDrop: { tillAccountId: input.tillAccountId, dropDate: input.date, coversThrough, slipNumber: slip, ...(reason ? { reason } : {}) } },
       bankAccountId: input.bankAccountId,

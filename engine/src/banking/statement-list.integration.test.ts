@@ -64,6 +64,7 @@ test(
       assert.deepEqual(full.rows.map((row) => row.id), [...importedIds].reverse());
       for (const row of full.rows) {
         assert.equal(row.statement_date, org.date);
+        assert.equal(row.currency, "CAD", "the row derives currency from its imported statement lines");
         assert.equal(row.line_count, 1);
         assert.equal(row.unmatched_count, 1);
         assert.ok(row.imported_at, "each statement carries its import timestamp");

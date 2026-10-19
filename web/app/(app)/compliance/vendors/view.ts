@@ -17,7 +17,7 @@ import {
   type ComplianceMatrix,
 } from '../../../../lib/compliance'
 import { loadRequirementPolicies } from '@openbooks/engine/compliance/compliance'
-import { pickString } from '../../../../lib/list-params'
+import { isUuid, pickString } from '../../../../lib/list-params'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { complianceTabs } from '../tabs'
 
@@ -63,9 +63,11 @@ export async function loadComplianceVendors(
   await requireComplianceFeature(orgId)
   const t = await getTranslations('compliance')
   const { money } = await getMoneyFormatter()
-  const classId = pickString(sp.class) ?? null
+  const requestedClassId = pickString(sp.class)
+  const requestedVendorId = pickString(sp.vendor)
+  const classId = requestedClassId && isUuid(requestedClassId) ? requestedClassId : null
   const stateFilter = pickString(sp.state) ?? null
-  const openVendor = pickString(sp.vendor) ?? null
+  const openVendor = requestedVendorId && isUuid(requestedVendorId) ? requestedVendorId : null
 
   const [matrix, projectsEnabled, informationReturnsEnabled] = await Promise.all([
     loadComplianceMatrix({

@@ -265,6 +265,7 @@
     "exclusionsTitle": "Sin correo registrado",
     "exclusionFix": "Añadir correo",
     "notAllowed": "Enviar extractos requiere el permiso de envío de AR: pida a un administrador que lo añada a su rol.",
+    "periodInputError": "El período del extracto no es válido. Corrija las fechas: Desde debe ser anterior o igual a Hasta y ambas deben usar el formato AAAA-MM-DD.",
     "statusQueued": "En cola",
     "statusSending": "Enviando",
     "statusDone": "Listo",

@@ -44,7 +44,7 @@ export const GET = defineRoute({
   params,
   handler: async ({ authz, params }) => {
     try {
-      return NextResponse.json(await quoteCashPreview(authz.user.orgId, params.id));
+      return NextResponse.json(await quoteCashPreview(authz.user.orgId, params.id, authz.allowedSubsidiaryIds));
     } catch (e) {
       return apiErrorResponse(e);
     }
@@ -74,7 +74,7 @@ export const POST = defineRoute({
             quantity: s.quantity,
             escalatorPercent: s.escalatorPercent,
           })),
-        }),
+        }, authz.allowedSubsidiaryIds),
       );
     } catch (e) {
       return apiErrorResponse(e);
@@ -90,7 +90,7 @@ export const DELETE = defineRoute({
     try {
       const termId = new URL(request.url).searchParams.get("termId");
       if (!termId) return NextResponse.json({ error: "termId is required" }, { status: 400 });
-      return NextResponse.json(await deleteQuoteTerm(authz.user.orgId, authz.user.id, params.id, termId));
+      return NextResponse.json(await deleteQuoteTerm(authz.user.orgId, authz.user.id, params.id, termId, authz.allowedSubsidiaryIds));
     } catch (e) {
       return apiErrorResponse(e);
     }

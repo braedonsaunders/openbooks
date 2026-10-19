@@ -228,6 +228,7 @@ export async function buildPosCart(
   });
   const totals = await precomputeDocumentTotalsForCreate(orgId, "cash_sale", {
     lines: documentLines,
+    currency: register.currency,
     documentDate: input.documentDate,
     partyId: customerId,
     subsidiaryId: register.subsidiaryId,
@@ -600,6 +601,7 @@ export async function completePosSale(input: PosSaleInput, authority: PosAuthori
     const body: DocumentEditInput = {
       partyId: cart.quote.customerId,
       documentDate,
+      currency: register.currency,
       subsidiaryId: register.subsidiaryId,
       locationId: register.locationId,
       memo: `Register ${register.code} · session ${session.sessionNumber}`,
@@ -683,16 +685,27 @@ type OriginalLine = {
   location_id: string | null;
 };
 
-/** Quantity already refunded per original line number through posted register refunds. */
-async function refundedByLine(runner: SqlExecutor, orgId: string, originalDocumentId: string): Promise<Map<number, bigint>> {
-  const rows = (await runner.execute<{ line_number: number; quantity: string }>(sql`
-    select (entry->>'lineNumber')::int as line_number, sum((entry->>'quantity')::numeric)::text as quantity
+type RefundedLineTotals = { quantity: bigint; amount: bigint; taxAmount: bigint };
+
+/** Posted refund quantity and values per original receipt line. */
+async function refundedByLine(runner: SqlExecutor, orgId: string, originalDocumentId: string): Promise<Map<number, RefundedLineTotals>> {
+  const rows = (await runner.execute<{ line_number: number; quantity: string; amount: string; tax_amount: string }>(sql`
+    select (entry.value->>'lineNumber')::int as line_number,
+           sum((entry.value->>'quantity')::numeric)::text as quantity,
+           sum(refund_line.amount)::text as amount,
+           sum(refund_line.tax_amount)::text as tax_amount
       from pos_transactions t
-      join documents d on d.org_id = t.org_id and d.id = t.document_id and d.status = 'posted'
-      cross join lateral jsonb_array_elements(coalesce(t.pricing->'refundLines', '[]'::jsonb)) entry
+      join documents d on d.org_id = t.org_id and d.id = t.document_id and d.status = 'posted' -- Live entries only: voided refunds no longer reduce the refundable balance
+      cross join lateral jsonb_array_elements(coalesce(t.pricing->'refundLines', '[]'::jsonb)) with ordinality entry(value, refund_ordinality)
+      join document_lines refund_line on refund_line.org_id = t.org_id and refund_line.document_id = t.document_id
+                                    and refund_line.line_number = entry.refund_ordinality
      where t.org_id = ${orgId} and t.refund_of_document_id = ${originalDocumentId} and t.kind = 'refund'
      group by 1`)).rows;
-  return new Map(rows.map((row) => [Number(row.line_number), toUnits(row.quantity)]));
+  return new Map(rows.map((row) => [Number(row.line_number), {
+    quantity: toUnits(row.quantity),
+    amount: toUnits(row.amount),
+    taxAmount: toUnits(row.tax_amount),
+  }]));
 }
 
 /**
@@ -764,7 +777,8 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
       seen.add(source.line_number);
       const quantity = parsePosQuantity(requested.quantity, label);
       const originalQuantity = source.quantity ?? "1";
-      const remaining = toUnits(originalQuantity) - (already.get(source.line_number) ?? 0n);
+      const previouslyRefunded = already.get(source.line_number) ?? { quantity: 0n, amount: 0n, taxAmount: 0n };
+      const remaining = toUnits(originalQuantity) - previouslyRefunded.quantity;
       if (toUnits(quantity) > remaining) {
         throw posRefusal(
           `${label} returns ${quantity} of ${source.description ?? "the item"}, but only ${fromUnits(remaining > 0n ? remaining : 0n)} remain unreturned.`,
@@ -773,8 +787,9 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
           "Return at most the quantity still unreturned on the receipt.",
         );
       }
-      const amountUnits = proratedReturnUnits(toUnits(source.amount), originalQuantity, quantity, register.currencyDecimals);
-      const taxUnits = proratedReturnUnits(toUnits(source.tax_amount), originalQuantity, quantity, register.currencyDecimals);
+      const remainingQuantity = fromUnits(remaining);
+      const amountUnits = proratedReturnUnits(toUnits(source.amount) - previouslyRefunded.amount, remainingQuantity, quantity, register.currencyDecimals);
+      const taxUnits = proratedReturnUnits(toUnits(source.tax_amount) - previouslyRefunded.taxAmount, remainingQuantity, quantity, register.currencyDecimals);
       refundLines.push({ lineNumber: source.line_number, quantity });
       const taxed = Boolean(source.tax_code_id || source.tax_group_id);
       return {
@@ -796,7 +811,7 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
     });
     const documentDate = await businessToday(input.orgId);
     const totals = await precomputeDocumentTotalsForCreate(input.orgId, "cash_refund", {
-      lines: documentLines, documentDate, partyId: original.party_id, subsidiaryId: register.subsidiaryId,
+      lines: documentLines, currency: register.currency, documentDate, partyId: original.party_id, subsidiaryId: register.subsidiaryId,
     });
     if (!totals) throw new Error("refund totals did not resolve");
     const totalUnits = toUnits(totals.total);
@@ -804,6 +819,7 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
     const body: DocumentEditInput = {
       partyId: original.party_id,
       documentDate,
+      currency: register.currency,
       subsidiaryId: register.subsidiaryId,
       locationId: register.locationId,
       referenceNumber: original.document_number,
@@ -922,7 +938,7 @@ export async function readPosReceipt(
   const tenders = (await runner.execute<{ kind: string; method_label: string; amount_minor: string; reference: string | null }>(sql`
     select kind, method_label, amount_minor::text as amount_minor, reference
       from document_tenders where org_id = ${orgId} and document_id = ${doc.id} order by position`)).rows;
-  const refunded = doc.kind === "cash_sale" ? await refundedByLine(runner, orgId, doc.id) : new Map<number, bigint>();
+  const refunded = doc.kind === "cash_sale" ? await refundedByLine(runner, orgId, doc.id) : new Map<number, RefundedLineTotals>();
   const evidence = new Map<number, { listUnitPrice: string | null; lineDiscount: string; orderDiscount: string }>();
   const pricedLines = attribution?.pricing && Array.isArray((attribution.pricing as { lines?: unknown }).lines)
     ? (attribution.pricing as { lines: Array<{ lineNumber: number; listUnitPrice: string | null; lineDiscount: string; orderDiscount: string }> }).lines
@@ -947,7 +963,7 @@ export async function readPosReceipt(
     refundOf: attribution?.refund_of ? { documentId: attribution.refund_of, documentNumber: attribution.refund_of_number ?? "" } : null,
     lines: lines.map((line) => {
       const priced = evidence.get(Number(line.line_number));
-      const refundedUnits = refunded.get(Number(line.line_number)) ?? 0n;
+      const refundedUnits = refunded.get(Number(line.line_number))?.quantity ?? 0n;
       const originalUnits = toUnits(line.quantity ?? "1");
       const discountUnits = priced ? toUnits(priced.lineDiscount) + toUnits(priced.orderDiscount) : 0n;
       return {

@@ -38,3 +38,17 @@ export function pulseSectionsFor(
   return sections
 }
 
+/** Apply organization feature switches to the sections granted by permissions. */
+export function pulseSectionsForEnabledFeatures(
+  sections: CustomerPulseSections | undefined,
+  enabled: { crm: boolean; projects: boolean },
+): CustomerPulseSections | null {
+  if (!sections) return null
+  const effective: CustomerPulseSections = {
+    ar: sections.ar,
+    crm: sections.crm && enabled.crm,
+    projects: sections.projects && enabled.projects,
+  }
+  if (!effective.ar && !effective.crm && !effective.projects) return null
+  return effective
+}

@@ -501,6 +501,7 @@ interface LiveApplicationRow extends Record<string, unknown> {
   id: string;
   settlement_rate_reference: string;
   amount: string;
+  source_transaction_amount: string;
   fx_gain_loss_entry_id: string | null;
   applied_on: string;
   from_line_id: string;
@@ -535,7 +536,8 @@ export async function unapplyCreditSettlement(
 ): Promise<{ amount: string }> {
   return withOrgTransaction(orgId, async () => {
     const application = (await db.execute<LiveApplicationRow>(sql`
-      select a.id, a.amount, a.applied_on::text as applied_on, a.fx_gain_loss_entry_id,
+      select a.id, a.amount, a.source_transaction_amount::text as source_transaction_amount,
+             a.applied_on::text as applied_on, a.fx_gain_loss_entry_id,
              a.settlement_rate_reference,
              a.from_line_id, a.to_line_id,
              from_document.kind as from_document_kind,
@@ -685,7 +687,8 @@ export async function unapplyCreditSettlement(
                 before: {
                   fromLineId: application.from_line_id,
                   toLineId: application.to_line_id,
-                  amount: application.amount,
+                  amount: application.source_transaction_amount,
+                  targetCarryingAmount: application.amount,
                   appliedOn: application.applied_on,
                   creditDocument: application.from_document_number,
                   settledDocument:
@@ -695,6 +698,6 @@ export async function unapplyCreditSettlement(
               })}::jsonb,
               ${userId}, 'payments.credit-settlement')
     `);
-    return { amount: application.amount };
+    return { amount: application.source_transaction_amount };
   });
 }

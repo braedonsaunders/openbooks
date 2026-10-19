@@ -35,14 +35,18 @@ interface DropFixture {
   saleId: string;
   saleNumber: string;
   tillId: string;
+  secondTillId: string | null;
 }
 
-async function fixture(cashTendered: string): Promise<DropFixture> {
+async function fixture(cashTendered: string, secondTillTendered?: string): Promise<DropFixture> {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Till Cashier", "cashier"));
   const tillId = await withBypassContext(() =>
     seedPostingAccount(org.orgId, "1015", "Till Cash", "asset_current_other", org.subsidiaryId),
   );
+  const secondTillId = secondTillTendered
+    ? await withBypassContext(() => seedPostingAccount(org.orgId, "1016", "Second Till Cash", "asset_current_other", org.subsidiaryId))
+    : null;
   await configureDeposits(org.orgId, [org.accounts.bank]);
   const saleId = randomUUID();
   const saleNumber = `CS-DROP-${cashTendered.replace(".", "")}`;
@@ -55,14 +59,23 @@ async function fixture(cashTendered: string): Promise<DropFixture> {
               ${org.customerId}, ${org.date}, ${org.date}, 'CAD', '1',
               ${cashTendered}, '0', ${cashTendered}, '{}'::jsonb)`),
   );
-  await withBypassContext(() =>
-    db.execute(sql`
+  const firstTillMinor = toUnits(cashTendered) - (secondTillTendered ? toUnits(secondTillTendered) : 0n);
+  await withBypassContext(async () => {
+    await db.execute(sql`
       insert into document_tenders
         (org_id, document_id, position, kind, method_label, account_id,
          stored_value_account_id, amount_minor, currency, reference)
       values (${org.orgId}, ${saleId}, 1, 'cash', 'cash', ${tillId}, null,
-              ${toUnits(cashTendered).toString()}, 'CAD', null)`),
-  );
+              ${firstTillMinor.toString()}, 'CAD', null)`);
+    if (secondTillId && secondTillTendered) {
+      await db.execute(sql`
+        insert into document_tenders
+          (org_id, document_id, position, kind, method_label, account_id,
+           stored_value_account_id, amount_minor, currency, reference)
+        values (${org.orgId}, ${saleId}, 2, 'cash', 'cash', ${secondTillId}, null,
+                ${toUnits(secondTillTendered).toString()}, 'CAD', null)`);
+    }
+  });
   await withBypassContext(() =>
     db.execute(sql`
       insert into document_lines
@@ -75,7 +88,7 @@ async function fixture(cashTendered: string): Promise<DropFixture> {
     db.execute(sql`update documents set status = 'approved' where id = ${saleId} and org_id = ${org.orgId}`),
   );
   await withOrg(org.orgId, () => postDocument(saleId, control(org)));
-  return { org, actorId, saleId, saleNumber, tillId };
+  return { org, actorId, saleId, saleNumber, tillId, secondTillId };
 }
 
 test("a till drop posts a transfer from till cash to the bank", { skip: !DB }, async () => {
@@ -134,13 +147,13 @@ test("a replayed drop key returns the same posted transfer", { skip: !DB }, asyn
     const first = await recordCashDeposit(
       org.orgId,
       actorId,
-      { saleId, amount: "25.0000", date: org.date, bankAccountId: org.accounts.bank, slipNumber: "SLIP-9" },
+      { saleId, amount: "100.0000", date: org.date, bankAccountId: org.accounts.bank, slipNumber: "SLIP-9" },
       { key },
     );
     const second = await recordCashDeposit(
       org.orgId,
       actorId,
-      { saleId, amount: "25.0000", date: org.date, bankAccountId: org.accounts.bank, slipNumber: "SLIP-9" },
+      { saleId, amount: "100.0000", date: org.date, bankAccountId: org.accounts.bank, slipNumber: "SLIP-9" },
       { key },
     );
     assert.equal(first.transferId, second.transferId);
@@ -149,6 +162,31 @@ test("a replayed drop key returns the same posted transfer", { skip: !DB }, asyn
       select count(*)::text as n from documents
        where org_id = ${org.orgId} and kind = 'transfer' and status <> 'voided'`)).rows[0]?.n;
     assert.equal(count, "1");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("cash sale drops are capped and counted per tender account", { skip: !DB }, async () => {
+  const { org, actorId, saleId, tillId, secondTillId } = await fixture("100.0000", "40.0000");
+  assert.ok(secondTillId);
+  try {
+    await recordCashDeposit(org.orgId, actorId, {
+      saleId, amount: "35.0000", date: org.date, bankAccountId: org.accounts.bank,
+      slipNumber: "SLIP-B", sourceAccountId: secondTillId,
+    }, { key: randomUUID() });
+    await assert.rejects(
+      recordCashDeposit(org.orgId, actorId, {
+        saleId, amount: "10.0000", date: org.date, bankAccountId: org.accounts.bank,
+        slipNumber: "SLIP-B2", sourceAccountId: secondTillId,
+      }, { key: randomUUID() }),
+      (error: unknown) => error instanceof CashDepositError && /undropped till cash 5\.0000/.test(error.message),
+    );
+    const firstTillDrop = await recordCashDeposit(org.orgId, actorId, {
+      saleId, amount: "60.0000", date: org.date, bankAccountId: org.accounts.bank,
+      slipNumber: "SLIP-A", sourceAccountId: tillId,
+    }, { key: randomUUID() });
+    assert.equal(firstTillDrop.posted, true);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

@@ -302,18 +302,21 @@ export const DELETE = defineRoute({
     if (scopeDenied) return scopeDenied;
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
-    await db.transaction(async (tx) => {
+    const deleted = await db.transaction(async (tx) => {
         // Snapshot policy and ladder first: deletion removes the only record of
         // how this org chased overdue invoices.
         const beforePolicy = (await tx.execute<Record<string, unknown>>(sql`
-          select * from dunning_policies where id = ${id} and org_id = ${authz.user.orgId}
+          select * from dunning_policies where id = ${id} and org_id = ${authz.user.orgId} for update
         `));
-        if (!beforePolicy.rows[0]) return;
+        if (!beforePolicy.rows[0]) return false;
         const beforeStages = (await tx.execute<Record<string, unknown>>(sql`
           select * from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId} order by sequence
         `));
         await tx.execute(sql`delete from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId}`);
-        await tx.execute(sql`delete from dunning_policies where id = ${id} and org_id = ${authz.user.orgId}`);
+        const removed = (await tx.execute<{ id: string }>(sql`
+          delete from dunning_policies where id = ${id} and org_id = ${authz.user.orgId} returning id
+        `)).rows[0];
+        if (!removed) throw new Error("dunning policy disappeared before deletion");
         await tx.execute(sql`
           insert into audit_log
             (org_id, table_name, row_id, action, changes, actor_id)
@@ -322,7 +325,9 @@ export const DELETE = defineRoute({
              ${JSON.stringify({ before: { ...beforePolicy.rows[0], stages: beforeStages.rows } })}::jsonb,
              ${authz.user.id})
         `);
+        return true;
       });
+    if (!deleted) return notFound("record");
     return NextResponse.json({ ok: true });
   },
 });

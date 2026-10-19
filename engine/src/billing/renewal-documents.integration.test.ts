@@ -47,7 +47,7 @@ for (const documentKind of ['quote','sales_order'] as const) test(`${documentKin
   await withBypassContext(()=>db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${docs[0]!.documentId}`));
   if(documentKind==='quote') {
    await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,quoteToCash}','true'::jsonb,true) where id=${org.orgId}`));
-   await assert.rejects(()=>activateQuote(org.orgId,actors.adminId,docs[0]!.documentId),/accept the approved renewal in Collections/);
+   await assert.rejects(()=>activateQuote(org.orgId,actors.adminId,docs[0]!.documentId,{allowedSubsidiaryIds:null}),/accept the approved renewal in Collections/);
   }
   await acceptRenewalDocument(org.orgId,actors.adminId,docs[0]!.documentId,'Accepted approved renewal with customer');
   await acceptRenewalDocument(org.orgId,actors.adminId,docs[0]!.documentId,'Accepted approved renewal with customer');

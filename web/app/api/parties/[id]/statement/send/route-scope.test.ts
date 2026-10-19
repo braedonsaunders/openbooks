@@ -9,9 +9,12 @@ interface StatementState {
   permissions: string[]
   allowedSubsidiaryIds: Set<string> | null
   party: { id: string; display_name: string | null; email: string | null; subsidiary_id: string | null } | null
+  contacts: { role: string | null; email: string | null; isPrimary: boolean; isActive: boolean }[]
   executed: string[]
   renderCalls: number
   sendCalls: number
+  sentTo: string[]
+  reportParams: Record<string, string>
 }
 
 const stateKey = Symbol.for('openbooks.statement-send-test')
@@ -19,9 +22,12 @@ const statementState: StatementState = {
   permissions: [],
   allowedSubsidiaryIds: null,
   party: null,
+  contacts: [],
   executed: [],
   renderCalls: 0,
   sendCalls: 0,
+  sentTo: [],
+  reportParams: {},
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = statementState
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksStatementNextResponse = NextResponse
@@ -64,6 +70,7 @@ stubModules({
         async execute(query) {
           const text = sqlText(query)
           state.executed.push(text)
+          if (text.includes('from contacts')) return { rows: state.contacts }
           if (text.includes('from parties')) {
             return { rows: state.party ? [state.party] : [] }
           }
@@ -85,8 +92,9 @@ stubModules({
       export function deriveEmailDeliveryKey() { return 'key-1' }
       export function isValidEmailAddress() { return true }
       export function documentEmail() { return { subject: 'Statement', html: '<p>x</p>', text: 'x' } }
-      export async function sendVia() {
+      export async function sendVia(_transport, options) {
         state.sendCalls += 1
+        state.sentTo.push(options.to)
         return { kind: 'sent', providerMessageId: 'm-1' }
       }
     `,
@@ -133,8 +141,22 @@ stubModules({
       export function guardRootSubsidiaryScope() { return null }
       export function guardUnrestrictedScope() { return null }
     `,
-    "../../../../../../lib/report-filters": `export function parseReportQuery() { return { period: 'custom' } }`,
-    "../../../../../../lib/periods": `export async function resolvePeriod() { return { from: '2026-07-01', to: '2026-07-31' } }`,
+    "../../../../../../lib/report-filters": `
+      const state = globalThis[Symbol.for('openbooks.statement-send-test')]
+      export function parseReportQuery(params) {
+        state.reportParams = Object.fromEntries(params.entries())
+        return { period: 'custom', from: params.get('from'), to: params.get('to') }
+      }
+    `,
+    "../../../../../../lib/statement-batch": `
+      export function pickStatementEmail(contacts, partyEmail) {
+        const active = contacts.filter((contact) => contact.isActive)
+        const billing = active.filter((contact) => ['billing', 'statement'].includes((contact.role || '').trim().toLowerCase()))
+        const preferred = [...billing.filter((contact) => contact.isPrimary), ...billing.filter((contact) => !contact.isPrimary)]
+        return preferred.find((contact) => contact.email)?.email || active.find((contact) => contact.isPrimary && contact.email)?.email || partyEmail?.trim() || null
+      }
+    `,
+    "../../../../../../lib/periods": `export async function resolvePeriod(_period, bounds) { return { from: bounds.customFrom, to: bounds.customTo } }`,
     "../../../../../../lib/report-run": `
       const state = globalThis[Symbol.for('openbooks.statement-send-test')]
       export async function resolveReport() {
@@ -159,9 +181,12 @@ function reset(overrides: Partial<StatementState>): void {
   statementState.permissions = overrides.permissions ?? []
   statementState.allowedSubsidiaryIds = overrides.allowedSubsidiaryIds ?? null
   statementState.party = overrides.party ?? null
+  statementState.contacts = overrides.contacts ?? []
   statementState.executed = []
   statementState.renderCalls = 0
   statementState.sendCalls = 0
+  statementState.sentTo = []
+  statementState.reportParams = {}
 }
 
 const bParty = {
@@ -208,6 +233,18 @@ test('GET still prefills an in-scope party', async () => {
   assert.deepEqual(await response.json(), { to: 'billing@beta.test', partyName: 'Beta Corp' })
 })
 
+test('GET prefers the billing contact address over the party email', async () => {
+  reset({
+    permissions: ['ar.read'],
+    allowedSubsidiaryIds: new Set([SUB_B]),
+    party: { ...bParty, email: 'general@beta.test' },
+    contacts: [{ role: 'billing', email: 'billing@beta.test', isPrimary: false, isActive: true }],
+  })
+  const response = await get()
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { to: 'billing@beta.test', partyName: 'Beta Corp' })
+})
+
 test('POST by a create-only sender names reports.read instead of rendering', async () => {
   reset({ permissions: ['ar.create'], allowedSubsidiaryIds: null, party: bParty })
   const response = await send()
@@ -224,4 +261,18 @@ test('POST never sends an out-of-scope party its statement', async () => {
   assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.equal(statementState.renderCalls, 0)
   assert.equal(statementState.sendCalls, 0)
+})
+
+test('POST sends to a billing contact and treats toDate alone as a one-day period', async () => {
+  reset({
+    permissions: ['ar.create', 'reports.read'],
+    allowedSubsidiaryIds: new Set([SUB_B]),
+    party: { ...bParty, email: null },
+    contacts: [{ role: 'statement', email: 'statements@beta.test', isPrimary: true, isActive: true }],
+  })
+  const response = await send()
+  assert.equal(response.status, 200)
+  assert.deepEqual(statementState.sentTo, ['statements@beta.test'])
+  assert.equal(statementState.reportParams.from, '2026-07-31')
+  assert.equal(statementState.reportParams.to, '2026-07-31')
 })

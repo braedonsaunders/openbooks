@@ -103,7 +103,7 @@ export type SubscriptionPreview = {
 export async function previewSubscriptionChange(
   orgId: string,
   partyId: string,
-  input: { subscriptionId: string; quantity?: unknown; unitPrice?: unknown; componentKey?: string; effectiveOn?: string },
+  input: { subscriptionId: string; quantity?: unknown; componentKey?: string; effectiveOn?: string },
 ): Promise<SubscriptionPreview> {
   return withOrgTransaction(orgId, async () => {
     await requirePortalFeature(db, orgId);
@@ -125,16 +125,13 @@ export async function previewSubscriptionChange(
     const newQuantity = input.quantity !== undefined
       ? parsePortalDecimal(input.quantity, "Quantity", "Enter how many seats or units you need")
       : sub.quantity;
-    const newPrice = input.unitPrice !== undefined && input.unitPrice !== null && input.unitPrice !== ""
-      ? parsePortalDecimal(input.unitPrice, "Price", "Enter the agreed price per unit")
-      : oldPrice;
     const beforeTotal = mul(
       normalizeSubscriptionMoney(sub.quantity, "quantity", "positive"),
       normalizeSubscriptionMoney(oldPrice, "price", "nonnegative"),
     );
     const afterTotal = mul(
       normalizeSubscriptionMoney(newQuantity, "quantity", "positive"),
-      normalizeSubscriptionMoney(newPrice, "price", "nonnegative"),
+      normalizeSubscriptionMoney(oldPrice, "price", "nonnegative"),
     );
     const cadence = normalizeSubscriptionCadence(sub.plan_interval, sub.plan_interval_count);
     const beforeRemaining = remainingPeriodProration(beforeTotal, periodStart, periodEnd, effectiveOn, cadence.interval, cadence.intervalCount, sub.anchor_day);
@@ -155,7 +152,7 @@ export async function previewSubscriptionChange(
 async function previewAdvancedChange(
   orgId: string,
   subscriptionId: string,
-  input: { quantity?: unknown; unitPrice?: unknown; componentKey?: string },
+  input: { quantity?: unknown; componentKey?: string },
   periodStart: string,
   periodEnd: string,
   effectiveOn: string,
@@ -177,9 +174,7 @@ async function previewAdvancedChange(
   const after = components.map((component) => component.componentKey === input.componentKey
     ? {
       quantity: input.quantity !== undefined ? parsePortalDecimal(input.quantity, "Quantity", "Enter how many seats or units you need") : component.quantity,
-      unitPrice: input.unitPrice !== undefined && input.unitPrice !== null && input.unitPrice !== ""
-        ? parsePortalDecimal(input.unitPrice, "Price", "Enter the agreed price per unit")
-        : component.unitPrice,
+      unitPrice: component.unitPrice,
     }
     : { quantity: component.quantity, unitPrice: component.unitPrice });
   const beforeTotal = subscriptionComponentTotal(before).toString();
@@ -212,7 +207,7 @@ export async function applySubscriptionChange(
   orgId: string,
   partyId: string,
   linkId: string,
-  input: { subscriptionId: string; quantity?: unknown; unitPrice?: unknown; componentKey?: string; effectiveOn?: string },
+  input: { subscriptionId: string; quantity?: unknown; componentKey?: string; effectiveOn?: string },
 ): Promise<AppliedSubscriptionChange> {
   const preview = await previewSubscriptionChange(orgId, partyId, input);
   const sub = await withOrgTransaction(orgId, async () => {
@@ -225,9 +220,6 @@ export async function applySubscriptionChange(
       type: "change_component",
       componentKey: input.componentKey!.trim(),
       quantity: input.quantity !== undefined ? parsePortalDecimal(input.quantity, "Quantity", "Enter how many seats or units you need") : undefined,
-      unitPrice: input.unitPrice !== undefined && input.unitPrice !== null && input.unitPrice !== ""
-        ? parsePortalDecimal(input.unitPrice, "Price", "Enter the agreed price per unit")
-        : undefined,
       effectiveOn: preview.effectiveOn,
       idempotencyKey: randomUUID(),
       reason: "Customer portal change",
@@ -245,7 +237,6 @@ export async function applySubscriptionChange(
     input.subscriptionId,
     {
       quantity: input.quantity !== undefined ? parsePortalDecimal(input.quantity, "Quantity", "Enter how many seats or units you need") : undefined,
-      priceOverride: input.unitPrice !== undefined ? parsePortalDecimal(input.unitPrice, "Price", "Enter the agreed price per unit") : undefined,
     },
     preview.effectiveOn,
     { actorId: null },
@@ -391,7 +382,7 @@ export async function acceptSaveOffer(
       select id, document_number
         from documents
        where org_id = ${orgId} and party_id = ${partyId} and status = 'draft'
-         and kind in ('customer_invoice', 'sales_order', 'estimate')
+         and kind in ('customer_invoice', 'sales_order', 'quote')
        order by created_at desc
        limit 1
       for update

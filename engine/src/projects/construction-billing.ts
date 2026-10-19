@@ -421,7 +421,7 @@ export async function createPayApplication(
                and status in ('draft', 'submitted', 'approved')) as has_open,
         -- Keep the calendar-day comparison in ISO form; node-postgres may otherwise
         -- deserialize a PostgreSQL DATE as a JavaScript Date object.
-        (max(period_end) filter (where status in ('invoiced', 'posted')))::text as last_period
+        (max(period_end) filter (where kind = 'progress' and status in ('invoiced', 'posted')))::text as last_period
         from pay_applications where org_id = ${orgId} and project_id = ${projectId}
     `));
     if (lifecycle.rows[0]?.has_open) throw new ConstructionBillingError("Complete or void the current application before starting another");

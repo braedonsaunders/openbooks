@@ -265,6 +265,7 @@
     "exclusionsTitle": "未登记邮箱",
     "exclusionFix": "添加邮箱",
     "notAllowed": "发送对账单需要应收发送权限——请管理员将其添加到您的角色。",
+    "periodInputError": "对账单期间无效。请更正日期：“开始”必须早于或等于“结束”，且两者均须使用 YYYY-MM-DD 格式。",
     "statusQueued": "排队中",
     "statusSending": "发送中",
     "statusDone": "完成",

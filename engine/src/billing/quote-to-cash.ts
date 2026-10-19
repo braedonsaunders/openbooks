@@ -5,6 +5,7 @@ import { db, withBypass, withOrgTransaction, type SqlExecutor } from "../platfor
 import { enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import { appBaseUrl } from "../flows/email-tokens.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { add, cmp, mul, mulPercent, roundDiv, toUnits } from "../money/money.ts";
 import { addMonthsClamped, addMonthsStart } from "../platform/civil-date.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -139,25 +140,40 @@ export interface QuoteRow {
   total: string;
 }
 
-async function loadQuote(runner: SqlExecutor, orgId: string, quoteId: string): Promise<QuoteRow> {
+export type QuoteSubsidiaryScope = ReadonlySet<string> | null;
+
+function requireQuoteScope(scope: QuoteSubsidiaryScope | undefined): QuoteSubsidiaryScope {
+  if (scope === undefined) throw new QuoteToCashError("Quote not found", 404);
+  return scope;
+}
+
+async function loadQuote(
+  runner: SqlExecutor,
+  orgId: string,
+  quoteId: string,
+  requestedScope: QuoteSubsidiaryScope | undefined,
+): Promise<QuoteRow> {
+  const allowedSubsidiaryIds = requireQuoteScope(requestedScope);
   const row = (
     await runner.execute<{
       id: string;
       document_number: string;
       status: string;
       party_id: string | null;
+      subsidiary_id: string | null;
       currency: string;
       document_date: string;
       total: string;
       kind: string;
     }>(sql`
-      select id, document_number, status, party_id, currency,
+      select id, document_number, status, party_id, subsidiary_id, currency,
              document_date::text as document_date, total::text as total, kind
         from documents where id = ${quoteId} and org_id = ${orgId} for update`)
   ).rows[0];
-  // Under row-level security an unscoped read silently matches nothing, so a
-  // missing row is raised, never treated as an empty quote.
-  if (!row) throw new QuoteToCashError("Quote not found — it may belong to another organization");
+  // Row-level security and subsidiary scope both hide inaccessible quotes as missing.
+  if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)) {
+    throw new QuoteToCashError("Quote not found", 404);
+  }
   if (row.kind !== "quote") {
     throw new QuoteToCashError(
       `Document ${row.document_number} is a ${row.kind}, not a quote — quote-to-cash runs on quotes (Estimates) only`,
@@ -432,8 +448,9 @@ export async function quotePresentationHash(
   runner: SqlExecutor,
   orgId: string,
   quoteId: string,
+  allowedSubsidiaryIds: QuoteSubsidiaryScope,
 ): Promise<string> {
-  const quote = await loadQuote(runner, orgId, quoteId);
+  const quote = await loadQuote(runner, orgId, quoteId, allowedSubsidiaryIds);
   const lines = (
     await runner.execute<{ line_number: number; amount: string; quantity: string; unit_price: string }>(sql`
       select line_number, amount::text as amount, quantity::text as quantity, unit_price::text as unit_price
@@ -495,8 +512,12 @@ export async function latestSignatureRequest(
       consent_text: string | null;
     }>(sql`
       select id, status, signer_name, signer_email, expires_at, document_hash, consent_text
-        from signature_requests
-       where org_id = ${orgId} and subject_table = ${subjectTable} and subject_id = ${subjectId}
+        from signature_requests r
+       where r.org_id = ${orgId} and r.subject_table = ${subjectTable} and r.subject_id = ${subjectId}
+         and not exists (
+           select 1 from service_quotes sq
+            where sq.org_id = r.org_id and sq.signature_request_id = r.id
+         )
        order by sent_at desc, id desc limit 1`)
   ).rows[0];
   if (!row) return null;
@@ -577,6 +598,7 @@ export interface RequestSignatureInput {
   orgId: string;
   actorId: string;
   quoteId: string;
+  allowedSubsidiaryIds: QuoteSubsidiaryScope;
   signerName: string;
   signerEmail: string;
   expiresInDays?: number | null;
@@ -608,7 +630,7 @@ export async function requestQuoteSignature(
   }
   return withOrgTransaction(input.orgId, async () => {
     await assertQuoteToCashEnabled(db, input.orgId);
-    const quote = await loadQuote(db, input.orgId, input.quoteId);
+    const quote = await loadQuote(db, input.orgId, input.quoteId, input.allowedSubsidiaryIds);
     if (quote.status !== "draft" && quote.status !== "approved" && quote.status !== "pending_approval") {
       throw new QuoteToCashError(
         `This quote is ${quote.status} — only draft or approved quotes go for signature`,
@@ -629,7 +651,7 @@ export async function requestQuoteSignature(
       throw new QuoteToCashError("Signature expiry must be between 1 and 90 days");
     }
     const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
-    const documentHash = await quotePresentationHash(db, input.orgId, input.quoteId);
+    const documentHash = await quotePresentationHash(db, input.orgId, input.quoteId, input.allowedSubsidiaryIds);
     const requestId = randomUUID();
     const token = mintPossessionToken(QUOTE_SIGN_DOMAIN, input.orgId, requestId, expiresAt);
     try {
@@ -840,7 +862,7 @@ export async function signQuoteSignature(input: SignQuoteInput): Promise<SignQuo
     if (request.status !== "sent" && request.status !== "viewed") {
       throw new QuoteToCashError("This signing link is no longer open — ask the sender to re-send it");
     }
-    const currentHash = await quotePresentationHash(runner, request.orgId, request.subjectId);
+    const currentHash = await quotePresentationHash(runner, request.orgId, request.subjectId, null);
     if (currentHash !== request.documentHash) {
       throw new QuoteToCashError(
         "The quote changed after this request was sent — the signature was refused so nobody signs stale terms. Void this request and send it again",
@@ -872,7 +894,7 @@ export async function signQuoteSignature(input: SignQuoteInput): Promise<SignQuo
     const settings = await getQuoteToCashSettings(request.orgId, runner);
     let subscriptionIds: string[] = [];
     if (settings.autoActivateOnSign) {
-      ({ subscriptionIds } = await activateQuoteLocked(runner, request.orgId, null, request.subjectId, {}));
+      ({ subscriptionIds } = await activateQuoteLocked(runner, request.orgId, null, request.subjectId, { allowedSubsidiaryIds: null }));
     }
     return { requestId: request.id, quoteId: request.subjectId, signedAt, subscriptionIds };
   });
@@ -928,7 +950,11 @@ export async function voidSignatureRequestsForSubject(
   orgId: string,
   subjectTable: string,
   subjectId: string,
+  allowedSubsidiaryIds: QuoteSubsidiaryScope,
 ): Promise<{ voided: number }> {
+  if (subjectTable === QUOTE_SUBJECT_TABLE) {
+    await loadQuote(runner, orgId, subjectId, allowedSubsidiaryIds);
+  }
   const updated = await runner.execute<{ id: string }>(sql`
     update signature_requests set status = 'voided', voided_at = now(), updated_at = now()
      where org_id = ${orgId} and subject_table = ${subjectTable} and subject_id = ${subjectId}
@@ -1007,6 +1033,7 @@ export async function saveQuoteTerm(
   actorId: string,
   quoteId: string,
   input: SaveQuoteTermInput,
+  allowedSubsidiaryIds: QuoteSubsidiaryScope,
 ): Promise<SaveQuoteTermResult> {
   if (!Number.isSafeInteger(input.termMonths) || input.termMonths < 1 || input.termMonths > 120) {
     throw new QuoteToCashError("Term length must be between 1 and 120 months");
@@ -1031,7 +1058,7 @@ export async function saveQuoteTerm(
   return withOrgTransaction(orgId, async () => {
     await assertQuoteToCashEnabled(db, orgId);
     const settings = await getQuoteToCashSettings(orgId, db);
-    const quote = await loadQuote(db, orgId, quoteId);
+    const quote = await loadQuote(db, orgId, quoteId, allowedSubsidiaryIds);
     if (quote.status !== "draft") {
       throw new QuoteToCashError(
         `This quote is ${quote.status} — only draft quotes re-price their subscription terms; void and re-draft to change them`,
@@ -1121,7 +1148,7 @@ export async function saveQuoteTerm(
       values (${orgId}, 'quote_subscription_terms', ${termId}, ${input.termId ? "update" : "insert"},
               ${JSON.stringify({ after: { quote: quoteId, plan: input.planId, months: input.termMonths } })}::jsonb,
               ${actorId})`);
-    const { voided } = await voidSignatureRequestsForSubject(db, orgId, QUOTE_SUBJECT_TABLE, quoteId);
+    const { voided } = await voidSignatureRequestsForSubject(db, orgId, QUOTE_SUBJECT_TABLE, quoteId, allowedSubsidiaryIds);
     if (voided > 0) {
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -1142,10 +1169,11 @@ export async function deleteQuoteTerm(
   actorId: string,
   quoteId: string,
   termId: string,
+  allowedSubsidiaryIds: QuoteSubsidiaryScope,
 ): Promise<{ voided: number }> {
   return withOrgTransaction(orgId, async () => {
     await assertQuoteToCashEnabled(db, orgId);
-    const quote = await loadQuote(db, orgId, quoteId);
+    const quote = await loadQuote(db, orgId, quoteId, allowedSubsidiaryIds);
     if (quote.status !== "draft") {
       throw new QuoteToCashError(`This quote is ${quote.status} — only draft quotes shed subscription terms`);
     }
@@ -1163,7 +1191,7 @@ export async function deleteQuoteTerm(
       values (${orgId}, 'quote_subscription_terms', ${termId}, 'delete',
               ${JSON.stringify({ before: { quote: quoteId } })}::jsonb,
               ${actorId})`);
-    const { voided } = await voidSignatureRequestsForSubject(db, orgId, QUOTE_SUBJECT_TABLE, quoteId);
+    const { voided } = await voidSignatureRequestsForSubject(db, orgId, QUOTE_SUBJECT_TABLE, quoteId, allowedSubsidiaryIds);
     return { voided };
   });
 }
@@ -1372,7 +1400,7 @@ export async function publicQuoteSignView(token: string): Promise<PublicQuoteSig
     claims.orgId,
     async () => {
       const view = await viewQuoteSignature(token);
-      const preview = await quoteCashPreview(claims.orgId, view.quoteId);
+      const preview = await quoteCashPreview(claims.orgId, view.quoteId, null);
       if (!view.consentText) {
         throw new QuoteToCashError("This request predates the recorded consent — ask the sender to re-send it");
       }
@@ -1413,9 +1441,13 @@ export async function publicQuoteSignView(token: string): Promise<PublicQuoteSig
  * every term valued, the open or latest signature request, and the policy
  * and capability flags the preview branches on. Read-only.
  */
-export async function quoteCashPreview(orgId: string, quoteId: string): Promise<QuoteCashPreview> {
+export async function quoteCashPreview(
+  orgId: string,
+  quoteId: string,
+  allowedSubsidiaryIds: QuoteSubsidiaryScope,
+): Promise<QuoteCashPreview> {
   return withOrgTransaction(orgId, async () => {
-    const quote = await loadQuote(db, orgId, quoteId);
+    const quote = await loadQuote(db, orgId, quoteId, allowedSubsidiaryIds);
     const terms = await loadQuoteTerms(db, orgId, quoteId);
     const valuation = valueQuoteTerms(terms);
     const signature = await latestSignatureRequest(db, orgId, QUOTE_SUBJECT_TABLE, quoteId);
@@ -1439,7 +1471,7 @@ export interface ActivateQuoteOptions {
   /** Explicit term start for custom start rules (YYYY-MM-DD). */
   startOn?: string | null;
   /** Subsidiary scope the caller was granted; null is unrestricted. */
-  allowedSubsidiaryIds?: ReadonlySet<string> | null;
+  allowedSubsidiaryIds: QuoteSubsidiaryScope;
 }
 
 export interface ActivateQuoteResult {
@@ -1517,7 +1549,7 @@ export async function activateQuote(
   orgId: string,
   actorId: string | null,
   quoteId: string,
-  opts: ActivateQuoteOptions = {},
+  opts: ActivateQuoteOptions,
 ): Promise<ActivateQuoteResult> {
   return withOrgTransaction(orgId, async () => {
     return activateQuoteLocked(db, orgId, actorId, quoteId, opts);
@@ -1531,12 +1563,13 @@ async function activateQuoteLocked(
   quoteId: string,
   opts: ActivateQuoteOptions,
 ): Promise<ActivateQuoteResult> {
+  const allowedSubsidiaryIds = requireQuoteScope(opts.allowedSubsidiaryIds);
   // The gate lives on the locked path, not the wrappers: signing a quote
   // with auto-activation reaches this same function, and a disable racing
   // the signature must refuse the activation rather than post subscriptions
   // for a switched-off surface.
   await assertQuoteToCashEnabled(runner, orgId);
-  const quote = await loadQuote(runner, orgId, quoteId);
+  const quote = await loadQuote(runner, orgId, quoteId, allowedSubsidiaryIds);
   if ((await runner.execute(sql`select id from subscription_renewal_occurrences
     where org_id=${orgId} and document_id=${quoteId} and occurrence='document' limit 1`)).rows[0]) {
     throw new QuoteToCashError("This quote renews an existing subscription; accept the approved renewal in Collections to retain its billing history instead of creating another subscription");
@@ -1572,7 +1605,7 @@ async function activateQuoteLocked(
       "This quote has no signed signature — send it for signature and collect the customer's signature before activating it",
     );
   }
-  const currentHash = await quotePresentationHash(runner, orgId, quoteId);
+  const currentHash = await quotePresentationHash(runner, orgId, quoteId, allowedSubsidiaryIds);
   if (currentHash !== signature.documentHash) {
     throw new QuoteToCashError(
       "The quote changed after it was signed — void the signature request, re-send it, and activate once it is signed again",
@@ -1608,10 +1641,9 @@ async function activateQuoteLocked(
   const systemSource = actorId ? undefined : { origin: "quote-to-cash", detail: { quoteId } };
 
   // Freeze the agreed prices into one version per (plan, timing) group, then
-  // activate each term onto its group's version. The quote is the commercial
-  // agreement; the version is its effective-dated record. Each term's
-  // component key is recorded here so the ramp amends the exact component
-  // the version minted for it.
+  // activate each term onto only its own component in that version. The quote
+  // is the commercial agreement; the version is its effective-dated record.
+  // Each term's component key is also used by its ramp amendments.
   const versionByGroup = new Map<string, { versionId: string; componentKey: string }>();
   if (advanced) {
     const groups = new Map<string, QuoteTerm[]>();
@@ -1652,8 +1684,8 @@ async function activateQuoteLocked(
             taxCodeId: term.planTaxCodeId,
           };
         }),
-      }, opts.allowedSubsidiaryIds ?? null);
-      await publishPlanVersion(orgId, actor, versionId, opts.allowedSubsidiaryIds ?? null);
+      }, allowedSubsidiaryIds);
+      await publishPlanVersion(orgId, actor, versionId, allowedSubsidiaryIds);
       for (const term of groupTerms) versionByGroup.get(term.id)!.versionId = versionId;
     }
   }
@@ -1703,9 +1735,10 @@ async function activateQuoteLocked(
       await activateLifecycle(orgId, actor, {
         subscriptionId,
         planVersionId: frozen.versionId,
+        componentKeys: [frozen.componentKey],
         termStartsOn: termStart,
         termEndsOn: termEnd,
-      }, opts.allowedSubsidiaryIds ?? null);
+      }, allowedSubsidiaryIds);
       for (const period of schedule.periods.slice(1)) {
         const effectiveOn = addMonthsClamped(termStart, period.startsAfterMonths);
         await applyAmendment(orgId, systemSource ? SYSTEM_ACTOR_ID_VALUE : actor, {
@@ -1717,7 +1750,7 @@ async function activateQuoteLocked(
           quantity: period.quantity,
           unitPrice: period.unitPrice,
           reason: `Ramp period ${period.periodIndex} of quote ${quote.documentNumber}`,
-        }, systemSource ? { system: systemSource, allowedSubsidiaryIds: opts.allowedSubsidiaryIds ?? null } : { allowedSubsidiaryIds: opts.allowedSubsidiaryIds ?? null });
+        }, systemSource ? { system: systemSource, allowedSubsidiaryIds } : { allowedSubsidiaryIds });
       }
       if (term.cotermSubscriptionId) {
         await applyAmendment(orgId, systemSource ? SYSTEM_ACTOR_ID_VALUE : actor, {
@@ -1727,7 +1760,7 @@ async function activateQuoteLocked(
           idempotencyKey: `quote-activation:${quoteId}:${term.id}:coterm`,
           anchorSubscriptionId: term.cotermSubscriptionId,
           reason: `Co-term with subscription to quote ${quote.documentNumber}`,
-        }, systemSource ? { system: systemSource, allowedSubsidiaryIds: opts.allowedSubsidiaryIds ?? null } : { allowedSubsidiaryIds: opts.allowedSubsidiaryIds ?? null });
+        }, systemSource ? { system: systemSource, allowedSubsidiaryIds } : { allowedSubsidiaryIds });
       }
     }
     ({ contractId } = await maybeCreateActivationRevenueContract(
@@ -1798,8 +1831,12 @@ async function runOneOrgSignatureReminders(
     if (!(await lockAndCheckOrgFeature(db, orgId, "quoteToCash"))) return { scanned: 0, expired: 0, reminded: 0 };
     const expired = (
       await db.execute<{ id: string }>(sql`
-        update signature_requests set status = 'expired', updated_at = now()
-         where org_id = ${orgId} and status in ('sent', 'viewed') and expires_at < now()
+        update signature_requests r set status = 'expired', updated_at = now()
+         where r.org_id = ${orgId} and r.status in ('sent', 'viewed') and r.expires_at < now()
+           and not exists (
+             select 1 from service_quotes sq
+              where sq.org_id = r.org_id and sq.signature_request_id = r.id
+           )
         returning id`)
     ).rows.length;
     const due = (
@@ -1816,6 +1853,10 @@ async function runOneOrgSignatureReminders(
          where r.org_id = ${orgId} and r.status in ('sent', 'viewed')
            and r.expires_at >= now()
            and r.expires_at < now() + (${REMINDER_WINDOW_HOURS} || ' hours')::interval
+           and not exists (
+             select 1 from service_quotes sq
+              where sq.org_id = r.org_id and sq.signature_request_id = r.id
+           )
            and not exists (
              select 1 from scheduler_outbox o
               where o.kind = 'flow_email'
@@ -1863,6 +1904,10 @@ async function remindOneSignatureRequest(
          set token_hash = ${hashPossessionToken(fresh)}, updated_at = now()
        where id = ${request.id} and org_id = ${orgId} and token_hash = ${request.token_hash}
          and status in ('sent', 'viewed')
+         and not exists (
+           select 1 from service_quotes sq
+            where sq.org_id = signature_requests.org_id and sq.signature_request_id = signature_requests.id
+         )
       returning id`)
   ).rows;
   // A twin tick rotated first: its email carries the live link, so this

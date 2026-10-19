@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { registerChannelAdapter } from "./adapters.ts";
-import { createChannel, markChannelActive, retryChannel } from "./channels.ts";
+import { countChannelOrdersForBusinessDay, createChannel, markChannelActive, retryChannel } from "./channels.ts";
 import type { ChannelInboundDelivery } from "./contracts.ts";
 import { CommerceError } from "./errors.ts";
 import { channelAttention, processPendingEvents, receiveInboundEvent } from "./inbound.ts";
@@ -132,5 +132,49 @@ test("attention is scoped to the organization", DB, async () => {
     } finally {
       await dropScratchOrgReporting(other.orgId);
     }
+  });
+});
+
+test("today's channel order count uses the business-day window and subsidiary scope", DB, async () => {
+  await setup(async (org, actor) => {
+    const { channel } = await withOrgContext(org.orgId, () => createChannel(org.orgId, actor, {
+      kind: "shopify",
+      name: "Business-day orders",
+      subsidiaryId: org.subsidiaryId,
+      currency: "CAD",
+      externalAccount: "business-day.myshopify.com",
+      settings: {},
+    }));
+    await withOrgContext(org.orgId, async () => {
+      const orders: Array<[string, string]> = [
+        ["before-day", "2026-04-07T03:59:59Z"],
+        ["start-of-day", "2026-04-07T04:00:00Z"],
+        ["end-of-day", "2026-04-08T03:59:59Z"],
+        ["next-day", "2026-04-08T04:00:00Z"],
+      ];
+      for (const [externalId, orderedAt] of orders) {
+        await db.execute(sql`
+          insert into channel_orders
+            (org_id, channel_id, external_id, external_number, shop_currency, presentment_currency,
+             subtotal_minor, tax_minor, shipping_minor, total_minor, ordered_at)
+          values (${org.orgId}, ${channel.id}, ${externalId}, ${externalId}, 'CAD', 'CAD', 0, 0, 0, 0,
+            ${orderedAt}::timestamptz)`);
+      }
+    });
+
+    const visible = await countChannelOrdersForBusinessDay(
+      org.orgId,
+      "2026-04-07",
+      "America/Toronto",
+      new Set([org.subsidiaryId]),
+    );
+    const hidden = await countChannelOrdersForBusinessDay(
+      org.orgId,
+      "2026-04-07",
+      "America/Toronto",
+      new Set(),
+    );
+    assert.equal(visible, "2");
+    assert.equal(hidden, "0");
   });
 });

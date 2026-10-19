@@ -290,6 +290,7 @@
     "exclusionsTitle": "No email on file",
     "exclusionFix": "Add email",
     "notAllowed": "Sending statements needs AR send access — ask an administrator to add it to your role.",
+    "periodInputError": "The statement period is invalid. Correct the dates; From must be on or before To, and both dates must use YYYY-MM-DD.",
     "statusQueued": "Queued",
     "statusSending": "Sending",
     "statusDone": "Done",

@@ -11,7 +11,7 @@ import { promptDialog } from '../../../lib/prompt'
 import { useAppAction } from '../../../lib/use-app-action'
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
-import { minorToMajorText } from '@/lib/money-format'
+import { minorToMajorTextUnits } from '@/lib/money-format'
 import { fulfillmentRequest } from '../_fulfillment/fulfillment-client'
 import type { ReturnAuthorization } from '@openbooks/engine/sales/returns'
 
@@ -39,6 +39,7 @@ type FeePreview = {
   lines: FeePreviewLine[]
   totalMinor: string
   currency: string
+  minorUnits: number
 }
 
 export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canWaiveFee, currency, stockLocations, vendors }: Props) {
@@ -58,7 +59,9 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canW
   const activeLines = useMemo(() => authorization.lines, [authorization.lines])
   const base = `/api/returns/${authorization.id}`
   const { money } = useMoney(currency)
-  const feeTotal = feePreview ? money(minorToMajorText(feePreview.totalMinor), { currency: feePreview.currency }) : ''
+  const feeTotal = feePreview && feePreview.lines.length > 0
+    ? money(minorToMajorTextUnits(feePreview.totalMinor, feePreview.minorUnits, feePreview.currency), { currency: feePreview.currency })
+    : ''
 
   async function receive() {
     await execute(() => fulfillmentRequest(`${base}/receive`, { method: 'POST', body: { lines: activeLines.map((line) => ({ lineId: line.lineId, received: received[line.lineId] ?? '0' })) } }, t('workflow.receiveFailed')), {
@@ -73,7 +76,7 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canW
       .map((line) => ({ lineId: line.lineId, accepted: accepted[line.lineId] ?? '0' }))
       .filter((line) => line.accepted !== '' && line.accepted !== '0')
     if (lines.length === 0) {
-      setFeePreview({ lines: [], totalMinor: '0', currency: currency ?? '' })
+      setFeePreview(null)
       return
     }
     setPreviewBusy(true)
@@ -185,7 +188,7 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canW
               {feePreview.lines.map((line) => (
                 <li key={line.key} className="flex items-center justify-between gap-2">
                   <span>{line.policyName ?? t('workflow.fee.noPolicy')}{line.capped ? ` · ${t('workflow.fee.capped')}` : ''}</span>
-                  <span>{money(minorToMajorText(line.feeMinor), { currency: feePreview.currency })}</span>
+                  <span>{money(minorToMajorTextUnits(line.feeMinor, feePreview.minorUnits, feePreview.currency), { currency: feePreview.currency })}</span>
                 </li>
               ))}
             </ul>

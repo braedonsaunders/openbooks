@@ -16,6 +16,7 @@ import { attachDocumentLoad } from "../stored-value/document-loads.ts";
 import { StoredValueError } from "../stored-value/errors.ts";
 import {
   replaceDocumentTenders,
+  resolveCashPostingTenders,
   settleCashRefundTenders,
   TenderRefusal,
 } from "./document-tenders.ts";
@@ -272,6 +273,77 @@ test("a bearer gift card still tops up from any refund", { skip: !DB }, async ()
     );
     assert.equal(settled.settled, 1);
     assert.equal(await accountBalance(org.orgId, issued.accountId), toUnits("50"));
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("concurrent refund loads with one idempotency key credit an account once", { skip: !DB }, async () => {
+  const setup = await setupGuardWorld();
+  const { org, actorId } = setup;
+  try {
+    const refundId = await draftCashRefund(org, setup.customerB);
+    const journalEntryId = await seedJournal(org, actorId, refundId);
+    const idempotencyKey = `refund-load-${randomUUID()}`;
+    const load = () => withBypass(() => attachDocumentLoad({
+      orgId: org.orgId,
+      allowedSubsidiaryIds: null,
+      accountId: setup.accountB,
+      customerPartyId: setup.customerB,
+      amountMinor: toUnits("25"),
+      currency: "CAD",
+      documentId: refundId,
+      journalEntryId,
+      idempotencyKey,
+      actorId,
+    }));
+    const results = await Promise.all([load(), load()]);
+    assert.deepEqual(results.map((result) => result.replayed).sort(), [false, true]);
+    assert.equal(await accountBalance(org.orgId, setup.accountB), toUnits("75"));
+    const entries = (await withBypass(() => db.execute<{ count: number }>(sql`
+      select count(*)::int as count from stored_value_entries
+       where org_id = ${org.orgId} and idempotency_key = ${`stored-value:load-entry:${idempotencyKey}`}`))).rows;
+    assert.equal(entries[0]?.count, 1);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("expired stored value is refused before a refund posts and when its load settles", { skip: !DB }, async () => {
+  const setup = await setupGuardWorld();
+  const { org, actorId } = setup;
+  try {
+    await withBypassContext(() => db.execute(sql`
+      update stored_value_accounts set expires_on = '0001-01-01'
+       where org_id = ${org.orgId} and id = ${setup.accountB}`));
+    const refundId = await draftCashRefund(org, setup.customerB);
+    await assert.rejects(
+      withBypass(() => replaceDocumentTenders(db, org.orgId, refundId, [
+        { kind: "stored_value", storedValueAccountId: setup.accountB, amount: "25" },
+      ], { allowedSubsidiaryIds: null })),
+      (error: unknown) => error instanceof TenderRefusal && error.code === "stored_value_account_expired",
+    );
+
+    const tenderId = await insertTender(org, refundId, actorId, { storedValueAccountId: setup.accountB, amount: "25" });
+    await assert.rejects(
+      withBypass(() => resolveCashPostingTenders(db, org.orgId, refundId, {
+        kind: "cash_refund", documentNumber: "Expired refund", kindLabel: "cash refund",
+        partyId: setup.customerB, custom: {},
+      }, { validateRefundLoads: true })),
+      (error: unknown) => error instanceof TenderRefusal && error.code === "stored_value_account_expired",
+    );
+
+    const journalEntryId = await seedJournal(org, actorId, refundId);
+    await postCashDoc(org, refundId, journalEntryId);
+    await assert.rejects(
+      withBypass(() => attachDocumentLoad({
+        orgId: org.orgId, allowedSubsidiaryIds: null, accountId: setup.accountB,
+        customerPartyId: setup.customerB, amountMinor: toUnits("25"), currency: "CAD",
+        documentId: refundId, journalEntryId, idempotencyKey: `cash-refund-tender:${refundId}:${tenderId}`, actorId,
+      })),
+      (error: unknown) => error instanceof StoredValueError && error.code === "stored_value_account_expired",
+    );
+    assert.equal(await accountBalance(org.orgId, setup.accountB), toUnits("50"));
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

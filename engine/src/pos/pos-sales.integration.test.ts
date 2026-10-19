@@ -14,8 +14,9 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { PosError } from "./errors.ts";
+import { completeRequestedDocumentVoid, requestDocumentVoid } from "../ledger/document-void.ts";
 import { completePosRefund, completePosSale, readPosReceipt, type PosAuthority, type PosPricingDeps } from "./sales.ts";
-import { openSession, readSessionSummary } from "./sessions.ts";
+import { listSessions, openSession, readSessionSummary } from "./sessions.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const SALE_INSTANT = "2026-07-15T15:00:00.000Z";
@@ -25,13 +26,17 @@ const cashier: PosAuthority = { overridePrice: false, discount: false };
 
 interface Fixture { org: ScratchOrg; actorId: string; registerId: string; sessionId: string; unitsAccountId: string }
 
-async function fixture(options: { noChargeUnits?: boolean } = {}): Promise<Fixture> {
+async function fixture(options: { noChargeUnits?: boolean; subsidiaryCurrency?: string } = {}): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Register Manager", "register_manager"));
   await withBypassContext(() => grantScratchPermissions(org.orgId, actorId, ["pos.sell", "pos.refund", "pos.override", "cash_sales.create", "cash_sales.post"]));
   const registerId = randomUUID();
   const unitsAccountId = await withBypassContext(() => seedPostingAccount(org.orgId, "9100", "Units given at no charge", "statistical"));
   await withBypassContext(async () => {
+    if (options.subsidiaryCurrency) {
+      await db.execute(sql`update orgs set base_currency = 'CAD' where id = ${org.orgId}`);
+      await db.execute(sql`update subsidiaries set base_currency = ${options.subsidiaryCurrency} where org_id = ${org.orgId} and id = ${org.subsidiaryId}`);
+    }
     if (options.noChargeUnits !== false) {
       await db.execute(sql`
         update orgs set settings = jsonb_set(settings, '{controlAccounts,noChargeUnits}', to_jsonb(${unitsAccountId}::text))
@@ -187,6 +192,71 @@ test("a full discount needs the register override permission", { skip: !DB }, as
   }
 });
 
+test("voided POS sales do not count toward session totals or expected cash", { skip: !DB }, async () => {
+  const f = await fixture();
+  let stage = "preparing the service item";
+  try {
+    const serviceItem = await withBypassContext(() => db.execute<{ id: string }>(sql`
+      update items set recognition_rule_id = null, deferred_account_id = null
+       where org_id = ${f.org.orgId} and id = ${f.org.items.service}
+       returning id`));
+    assert.equal(serviceItem.rows.length, 1, 'the sale fixture uses a non-recurring service item');
+    stage = "completing the sale";
+    const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
+      lines: [{ itemId: f.org.items.service, quantity: "1" }],
+      payments: [{ kind: "cash", tendered: "10.00" }],
+      expectedTotal: "10.0000",
+    }), cashier, pricing));
+    assert.equal(sold.total, "10.0000");
+
+    stage = "requesting the void";
+    const requested = await withOrg(f.org.orgId, () => requestDocumentVoid({
+      documentId: sold.documentId,
+      orgId: f.org.orgId,
+      actorId: f.actorId,
+      reason: "Sale entered in error",
+      reversalDate: f.org.date,
+      source: "api",
+    }));
+    assert.equal(requested.status, "voided");
+    stage = "completing the void";
+    await withOrg(f.org.orgId, () => completeRequestedDocumentVoid(sold.documentId, f.org.orgId, null));
+
+    stage = "reading the session summary";
+    const summary = await withOrg(f.org.orgId, () => readSessionSummary(db, f.org.orgId, f.sessionId, null));
+    assert.deepEqual([summary.saleCount, summary.salesTotalMinor, summary.saleCashMinor, summary.expectedCashMinor], [0, 0n, 0n, 0n]);
+    stage = "listing the session";
+    const sessions = await withOrg(f.org.orgId, () => listSessions(db, f.org.orgId, { registerId: f.registerId }, null));
+    assert.deepEqual([sessions.rows[0]?.saleCount, sessions.rows[0]?.salesTotalMinor], [0, "0"]);
+  } catch (error) {
+    const detail = error instanceof Error
+      ? `${error.name}: ${error.message.replace(/\s+/g, " ")}; cause: ${error.cause instanceof Error ? error.cause.message.replace(/\s+/g, " ") : String(error.cause ?? "")}`
+      : String(error);
+    assert.fail(`Voided POS sales scenario failed while ${stage}: ${detail}`);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
+
+test("registers use their subsidiary currency for sessions and POS documents", { skip: !DB }, async () => {
+  const f = await fixture({ subsidiaryCurrency: "USD" });
+  try {
+    const sessionCurrency = (await withOrg(f.org.orgId, () => db.execute<{ currency: string }>(sql`
+      select currency from pos_sessions where org_id = ${f.org.orgId} and id = ${f.sessionId}`))).rows[0]?.currency;
+    assert.equal(sessionCurrency, "USD");
+    const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
+      lines: [{ itemId: f.org.items.fifo, quantity: "1" }],
+      payments: [{ kind: "cash", tendered: "10.00" }],
+      expectedTotal: "10.0000",
+    }), cashier, pricing));
+    const currency = (await withOrg(f.org.orgId, () => db.execute<{ currency: string }>(sql`
+      select currency from documents where org_id = ${f.org.orgId} and id = ${sold.documentId}`))).rows[0]?.currency;
+    assert.equal(currency, "USD");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
+
 test("a zero-total sale takes no payment, and a sale with an amount due still needs one", { skip: !DB }, async () => {
   const f = await fixture();
   try {
@@ -246,6 +316,41 @@ test("a register refund of stocked goods pays back the tender and restocks from 
     const summary = await withOrg(f.org.orgId, () => readSessionSummary(db, f.org.orgId, f.sessionId, null));
     assert.equal(summary.noChargeSaleCount, 0);
     assert.equal(summary.saleCashMinor - summary.refundCashMinor, 200000n);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
+
+test("successive partial refunds allocate the full original line amount", { skip: !DB }, async () => {
+  const f = await fixture();
+  try {
+    const salePricing: PosPricingDeps = { unitPrice: async () => "3.3333" };
+    const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
+      lines: [{ itemId: f.org.items.fifo, quantity: "3" }],
+      payments: [{ kind: "cash", tendered: "10.00" }],
+      expectedTotal: "10.0000",
+    }), manager, salePricing));
+
+    const refundTotals: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const refund = await withSimClock(SALE_INSTANT, () => completePosRefund({
+        orgId: f.org.orgId,
+        actorId: f.actorId,
+        sessionId: f.sessionId,
+        idempotencyKey: randomUUID(),
+        originalDocumentId: sold.documentId,
+        lines: [{ lineNumber: 1, quantity: "1" }],
+        payments: [{ kind: "cash" }],
+        reason: null,
+        allowedSubsidiaryIds: null,
+      }));
+      refundTotals.push(refund.total);
+    }
+
+    assert.deepEqual(refundTotals, ["3.3300", "3.3400", "3.3300"]);
+    const receipt = await withOrg(f.org.orgId, () => readPosReceipt(db, f.org.orgId, sold.documentId, null));
+    assert.equal(receipt.lines[0]!.refundedQuantity, "3.0000");
+    assert.equal(receipt.lines[0]!.refundableQuantity, "0.0000");
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }

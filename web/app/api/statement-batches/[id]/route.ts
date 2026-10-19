@@ -25,9 +25,9 @@ export const GET = defineRoute({
   const { id } = params
   if (!can(gate, 'ar.read')) return NextResponse.json({ error: 'missing permission: ar.read' }, { status: 403 })
   if (!isUuid(id)) return notFound("record")
-  const run = await getStatementBatchRun(gate.user.orgId, id)
+  const run = await getStatementBatchRun(gate.user.orgId, id, gate.allowedSubsidiaryIds)
   if (!run) return notFound("record")
-  const items = await listStatementBatchItems(gate.user.orgId, id)
+  const items = await listStatementBatchItems(gate.user.orgId, id, gate.allowedSubsidiaryIds)
   const counts = {
     queued: items.filter((item) => item.status === 'queued' || item.status === 'sending').length,
     sent: items.filter((item) => item.status === 'sent').length,

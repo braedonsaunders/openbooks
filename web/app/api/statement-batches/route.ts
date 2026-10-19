@@ -50,7 +50,7 @@ export const GET = defineRoute({
   if (!can(gate, 'ar.read')) return NextResponse.json({ error: 'missing permission: ar.read' }, { status: 403 })
   const params = new URL(req.url).searchParams
   const limit = Math.min(Math.max(Number(params.get('limit') || 25), 1), 100)
-  const runs = await listStatementBatchRuns(gate.user.orgId, { limit })
+  const runs = await listStatementBatchRuns(gate.user.orgId, { limit, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
   return NextResponse.json({ runs })
   },
 })

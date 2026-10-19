@@ -7,6 +7,7 @@ const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
 const { loadCustomerPulse } = await import('./customer-pulse.ts')
+const { loadCustomerPulseTimeline } = await import('./customer-pulse-timeline.ts')
 
 const FULL: CustomerPulseSections = { ar: true, crm: true, projects: true }
 const AR_ONLY: CustomerPulseSections = { ar: true, crm: false, projects: false }
@@ -27,6 +28,11 @@ test('customer pulse gates each section by its own permission', { skip: !env.OPE
     const activityId = randomUUID()
     const projectId = randomUUID()
     await withBypass(async () => {
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(
+          coalesce(settings, '{}'::jsonb), '{features}',
+          coalesce(settings->'features', '{}'::jsonb) || '{"crm":true,"projects":true}'::jsonb
+        ) where id = ${scratch.orgId}`)
       await db.execute(sql`
         insert into customer_roles (org_id, party_id, credit_limit, currency)
         values (${scratch.orgId}, ${scratch.customerId}, 10000, 'CAD')`)
@@ -113,6 +119,45 @@ test('customer pulse gates each section by its own permission', { skip: !env.OPE
       // No sections: no access, no payload.
       assert.equal(await loadCustomerPulse(scratch.customerId, scratch.orgId, null, { ar: false, crm: false, projects: false }), null)
       assert.equal(await loadCustomerPulse(scratch.customerId, scratch.orgId, null, undefined), null)
+    })
+
+    // A CRM reader must not need an exchange rate for the AR-only credit
+    // limit. The role remains foreign currency while the CRM section loads.
+    await withBypass(() => db.execute(sql`
+      update customer_roles set currency = 'USD'
+       where org_id = ${scratch.orgId} and party_id = ${scratch.customerId}`))
+    await withOrgContext(scratch.orgId, async () => {
+      const crmWithoutAr = await loadCustomerPulse(
+        scratch.customerId,
+        scratch.orgId,
+        null,
+        { ar: false, crm: true, projects: false },
+      )
+      assert.ok(crmWithoutAr)
+      assert.equal(crmWithoutAr.credit, undefined)
+      assert.ok(!('creditLimit' in crmWithoutAr.party))
+    })
+
+    await withBypass(async () => {
+      await db.execute(sql`
+        update customer_roles set currency = 'CAD'
+         where org_id = ${scratch.orgId} and party_id = ${scratch.customerId}`)
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(
+          coalesce(settings, '{}'::jsonb), '{features}',
+          coalesce(settings->'features', '{}'::jsonb) || '{"crm":false,"projects":false}'::jsonb
+        ) where id = ${scratch.orgId}`)
+    })
+    await withOrgContext(scratch.orgId, async () => {
+      const crmOnly = { ar: false, crm: true, projects: false }
+      const projectsOnly = { ar: false, crm: false, projects: true }
+      assert.equal(await loadCustomerPulse(scratch.customerId, scratch.orgId, null, crmOnly), null)
+      assert.equal(await loadCustomerPulse(scratch.customerId, scratch.orgId, null, projectsOnly), null)
+      assert.equal(await loadCustomerPulseTimeline(scratch.customerId, scratch.orgId, null, crmOnly), null)
+      assert.equal(await loadCustomerPulseTimeline(scratch.customerId, scratch.orgId, null, projectsOnly), null)
+      const arOnly = await loadCustomerPulse(scratch.customerId, scratch.orgId, null, AR_ONLY)
+      assert.ok(arOnly, 'AR remains available when CRM and Projects are disabled')
+      assert.deepEqual(arOnly.sections, AR_ONLY)
     })
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
@@ -231,10 +276,10 @@ test('customer pulse keeps money exact through aggregation and JSON', { skip: !e
         values (${scratch.orgId}, ${scratch.customerId}, 10000, 'CAD')`)
       for (const [id, amount] of [[randomUUID(), '0.10'], [randomUUID(), '0.20']] as const) {
         await db.execute(sql`insert into documents
-          (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date,
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, due_date,
            currency, fx_rate, subtotal, tax_total, total, created_by)
           values (${id}, ${scratch.orgId}, 'customer_invoice', 'draft', ${id}, ${scratch.subsidiaryId},
-            ${scratch.customerId}, ${scratch.date}, 'CAD', '1', ${amount}, 0, ${amount}, ${actor})`)
+            ${scratch.customerId}, ${scratch.date}, '2099-12-31', 'CAD', '1', ${amount}, 0, ${amount}, ${actor})`)
         await db.execute(sql`insert into document_lines
           (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
           values (${scratch.orgId}, ${id}, 1, ${scratch.accounts.revenue}, 1, ${amount}, ${amount}, 0, ${amount})`)

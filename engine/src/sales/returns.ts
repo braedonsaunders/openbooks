@@ -116,7 +116,7 @@ function parseQuantity(value: unknown, label: string, allowZero = false): string
   return quantity;
 }
 
-function parseAcceptedQuantity(value: unknown, label: string): string {
+export function parseAcceptedQuantity(value: unknown, label: string): string {
   const quantity = parseQuantity(value, label, true);
   if ((quantity.split(".")[1]?.length ?? 0) > 4) {
     throw refusal(`${label} exceeds the four decimal places supported by inventory movements`, "invalid_quantity", 422, "Enter an accepted quantity with no more than four decimal places");

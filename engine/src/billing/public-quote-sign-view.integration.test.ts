@@ -79,6 +79,7 @@ test("public signing view renders terms and records typed names", { skip: !DB },
           orgId: org.orgId,
           actorId: actor,
           quoteId,
+          allowedSubsidiaryIds: null,
           signerName: "Ada Customer",
           signerEmail: "ada@example.com",
         });
@@ -142,7 +143,7 @@ test("public signing view renders terms and records typed names", { skip: !DB },
     // remedy — and signing it refuses by name.
     const stale = await seedQuote("Q-SIGN-3");
     await withOrgContext(org.orgId, async () => {
-      const { voided } = await voidSignatureRequestsForSubject(db, org.orgId, QUOTE_SUBJECT_TABLE, stale.quoteId);
+      const { voided } = await voidSignatureRequestsForSubject(db, org.orgId, QUOTE_SUBJECT_TABLE, stale.quoteId, null);
       assert.equal(voided, 1);
     });
     const voidedView = await publicQuoteSignView(stale.token);
@@ -156,6 +157,7 @@ test("public signing view renders terms and records typed names", { skip: !DB },
         orgId: org.orgId,
         actorId: actor,
         quoteId: stale.quoteId,
+        allowedSubsidiaryIds: null,
         signerName: "Zed Resend",
         signerEmail: "zed@example.com",
       }),

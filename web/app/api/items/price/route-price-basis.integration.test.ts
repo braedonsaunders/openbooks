@@ -14,6 +14,7 @@ const stateKey = Symbol.for("openbooks.items-price-basis-test");
 interface GateState {
   authz: {
     user: { orgId: string; id: string };
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
 }
 const gateState: GateState = { authz: null };
@@ -24,6 +25,11 @@ const mockAuthz = `
   export async function guardPermission(_permission) {
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
+  }
+  export function guardSubsidiaryScope(authz, subsidiaryId, options = {}) {
+    if (authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(subsidiaryId) ||
+        (subsidiaryId == null && options.orgWideNull === true)) return null
+    return Response.json({ error: 'not_found' }, { status: 404 })
   }
 `;
 
@@ -84,28 +90,50 @@ async function seedPricing(): Promise<Fixture> {
   });
 }
 
-async function preview(fixture: Fixture, onDate: string) {
-  gateState.authz = { user: { orgId: fixture.orgId, id: fixture.actorId } };
+async function previewResponse(
+  fixture: Fixture,
+  onDate: string,
+  allowedSubsidiaryIds: Set<string> | null = null,
+): Promise<Response> {
+  gateState.authz = {
+    user: { orgId: fixture.orgId, id: fixture.actorId },
+    allowedSubsidiaryIds,
+  };
   try {
     // The route reads through RLS like production: run it inside the org
     // context, the same wrapper the order-line basis test uses.
-    const res = await withOrgContext(fixture.orgId, () => POST(new Request("http://localhost/api/items/price", {
+    return await withOrgContext(fixture.orgId, () => POST(new Request("http://localhost/api/items/price", {
       method: "POST",
       body: JSON.stringify({
         itemId: fixture.itemId, customerId: fixture.customerId,
         currency: "CAD", onDate, lineQuantity: "1",
       }),
     })));
-    assert.equal(res.status, 200);
-    return (await res.json()) as { price: {
-      unitPrice: string; source: string; scheduleId: string | null;
-      priceLevelId: string | null; priceLevelName: string | null;
-      assignmentId: string | null; resolvedAt: string;
-    } | null };
   } finally {
     gateState.authz = null;
   }
 }
+
+async function preview(fixture: Fixture, onDate: string) {
+  const res = await previewResponse(fixture, onDate);
+  assert.equal(res.status, 200);
+  return (await res.json()) as { price: {
+    unitPrice: string; source: string; scheduleId: string | null;
+    priceLevelId: string | null; priceLevelName: string | null;
+    assignmentId: string | null; resolvedAt: string;
+  } | null };
+}
+
+test("customer-specific price previews hide customers outside the caller's subsidiary scope", async () => {
+  const fixture = await seedPricing();
+  try {
+    const response = await previewResponse(fixture, "2026-07-15", new Set());
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "not_found" });
+  } finally {
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
 test(
   "the preview carries price lineage, and falls to base after the revoke",

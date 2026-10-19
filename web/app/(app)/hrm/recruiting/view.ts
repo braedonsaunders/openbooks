@@ -55,7 +55,7 @@ async function canMoveFunnel(
   }
 }
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { setupSectionParams } from '../../../../lib/list-params'
+import { isUuid, setupSectionParams } from '../../../../lib/list-params'
 import { recruitingHref } from '../../../../lib/hrm/workspace-href'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
 import {
@@ -113,6 +113,12 @@ import {
  */
 
 const STATUSES = ['draft', 'open', 'on_hold', 'filled', 'cancelled'] as const
+const APPLICATION_STATUSES = ['active', 'rejected', 'withdrawn', 'hired'] as const
+type ApplicationStatusFilter = (typeof APPLICATION_STATUSES)[number] | 'all'
+
+function isApplicationStatusFilter(value: string | undefined): value is ApplicationStatusFilter {
+  return value === 'all' || (value !== undefined && (APPLICATION_STATUSES as readonly string[]).includes(value))
+}
 
 export interface RecruitingRow {
   id: string
@@ -440,6 +446,12 @@ export async function loadRecruitingPage(
     (STATUSES as readonly string[]).includes(sp.status)
       ? sp.status
       : null
+  const requestedApplicationStatus = sp.applicationStatus
+  const applicationStatus: ApplicationStatusFilter = isApplicationStatusFilter(requestedApplicationStatus)
+    ? requestedApplicationStatus
+    : 'active'
+  const opening = sp.opening && isUuid(sp.opening) ? sp.opening : undefined
+  const stage = sp.stage && isUuid(sp.stage) ? sp.stage : undefined
   // Route sub-tabs. An unknown tab param falls back to Openings.
   const tab: DepthTab = resolveDepthTab(sp.tab??(sp.requisition||sp.candidate||sp.offer?'openings':undefined))
   // Drawer hrefs preserve the depth tab, the status filter, and the
@@ -447,7 +459,7 @@ export async function loadRecruitingPage(
   // drawer returns to the same tab/filter instead of the default view.
   const preservedParams = {
     ...(status ? { status } : {}),
-    ...(tab==='applications'?{applicationStatus:sp.applicationStatus??'active',opening:sp.opening,stage:sp.stage}:{}),
+    ...(tab === 'applications' ? { applicationStatus, opening, stage } : {}),
     tab,
     ...setupSectionParams(sp),
   }
@@ -466,8 +478,22 @@ export async function loadRecruitingPage(
   const offerId =
     typeof sp.offer === 'string' && sp.offer.length > 0 ? sp.offer : null
 
-  const applicationSource=tab==='applications'?await listApplicationWorklist({orgId:authz.user.orgId,actorId:authz.user.id,status:sp.applicationStatus==='all'?undefined:sp.applicationStatus??'active',opening:sp.opening,stage:sp.stage}):[]
-  const filterSource=tab==='applications'&&(sp.opening||sp.stage)?await listApplicationWorklist({orgId:authz.user.orgId,actorId:authz.user.id,status:sp.applicationStatus==='all'?undefined:sp.applicationStatus??'active'}):applicationSource
+  const applicationSource = tab === 'applications'
+    ? await listApplicationWorklist({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        status: applicationStatus === 'all' ? undefined : applicationStatus,
+        opening,
+        stage,
+      })
+    : []
+  const filterSource = tab === 'applications' && (opening || stage)
+    ? await listApplicationWorklist({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        status: applicationStatus === 'all' ? undefined : applicationStatus,
+      })
+    : applicationSource
   const applicationRows=applicationSource.map(row=>({...row,status:tw(`applicationStatuses.${row.status}`),href:recruitingHref(preservedParams,{application:row.id})}))
   const uniqueOptions=(key:'opening'|'stage',idKey:'requisitionId'|'stageId')=>Array.from(new Map(filterSource.map(row=>[row[idKey],{value:row[idKey],label:row[key]}])).values())
   const applicationFilters=[{paramKey:'applicationStatus',label:tw('status'),allLabel:tw('active'),options:['all','rejected','withdrawn','hired'].map(value=>({value,label:value==='all'?tw('allApplications'):tw(`applicationStatuses.${value}`)}))},{paramKey:'opening',label:tw('opening'),allLabel:tw('allOpenings'),options:uniqueOptions('opening','requisitionId')},{paramKey:'stage',label:tw('stage'),allLabel:tw('allStages'),options:uniqueOptions('stage','stageId')}]

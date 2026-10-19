@@ -1,6 +1,6 @@
 import { agencyForPurchaseLine,isAgencyConfirmationLine } from '../inventory/drop-ship-agency.ts';
 import { sql } from "drizzle-orm";
-import { cmp, neg } from "../money/money.ts";
+import { cmp, mulRate, neg } from "../money/money.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
@@ -94,12 +94,14 @@ export async function applyDropShipConfirmationInventory(
   const receipt = (await runner.execute<{
     document_date: string;
     subsidiary_id: string | null;
+    fx_rate: string;
     kind: string;
     status: string;
     has_confirmation: boolean;
     has_drop_ship_order: boolean;
   }>(sql`
     select receipt.document_date::text as document_date, receipt.subsidiary_id,
+           receipt.fx_rate::text as fx_rate,
            receipt.kind, receipt.status,
            receipt.custom ? 'dropShipConfirmation' as has_confirmation,
            exists (
@@ -233,6 +235,7 @@ export async function applyDropShipConfirmationInventory(
     const locationId = line.stock_location_id
       ? await stockLocationDim(runner, orgId, line.stock_location_id, line.location_id)
       : line.location_id;
+    const functionalAmount = mulRate(line.amount, receipt.fx_rate);
     try {
       await postInventoryEntry(runner, {
         orgId,
@@ -246,8 +249,8 @@ export async function applyDropShipConfirmationInventory(
         memo: "Drop-ship confirmation",
         custom: { dropShipConfirmation: { receiptId, receiptLineId: line.line_id } },
         lines: [
-          { accountId: line.cogs_account_id, amount: line.amount, departmentId: line.department_id, projectId: line.project_id, locationId, memo: "Cost of goods sold" },
-          { accountId: clearing.accountId, amount: neg(line.amount), departmentId: line.department_id, projectId: line.project_id, locationId, memo: "Received not billed" },
+          { accountId: line.cogs_account_id, amount: functionalAmount, departmentId: line.department_id, projectId: line.project_id, locationId, memo: "Cost of goods sold" },
+          { accountId: clearing.accountId, amount: neg(functionalAmount), departmentId: line.department_id, projectId: line.project_id, locationId, memo: "Received not billed" },
         ],
       });
     } catch (error) {

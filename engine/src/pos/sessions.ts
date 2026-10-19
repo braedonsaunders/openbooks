@@ -217,13 +217,15 @@ export async function readSessionSummary(
   const register = (await runner.execute<{ id: string; code: string; name: string; cash_account_id: string }>(sql`
     select id, code, name, cash_account_id from pos_registers where org_id = ${orgId} and id = ${session.registerId}`)).rows[0]!;
   const totals = (await runner.execute<{ sale_count: number; refund_count: number; no_charge_sale_count: number; no_charge_refund_count: number; sales_total: string; refunds_total: string }>(sql`
-    select count(*) filter (where kind = 'sale')::int as sale_count,
-           count(*) filter (where kind = 'refund')::int as refund_count,
-           count(*) filter (where kind = 'sale' and total_minor = 0)::int as no_charge_sale_count,
-           count(*) filter (where kind = 'refund' and total_minor = 0)::int as no_charge_refund_count,
-           coalesce(sum(total_minor) filter (where kind = 'sale'), 0)::text as sales_total,
-           coalesce(sum(total_minor) filter (where kind = 'refund'), 0)::text as refunds_total
-      from pos_transactions where org_id = ${orgId} and session_id = ${session.id}`)).rows[0]!;
+    select count(*) filter (where t.kind = 'sale')::int as sale_count,
+           count(*) filter (where t.kind = 'refund')::int as refund_count,
+           count(*) filter (where t.kind = 'sale' and t.total_minor = 0)::int as no_charge_sale_count,
+           count(*) filter (where t.kind = 'refund' and t.total_minor = 0)::int as no_charge_refund_count,
+           coalesce(sum(t.total_minor) filter (where t.kind = 'sale'), 0)::text as sales_total,
+           coalesce(sum(t.total_minor) filter (where t.kind = 'refund'), 0)::text as refunds_total
+      from pos_transactions t
+      join documents d on d.org_id = t.org_id and d.id = t.document_id and d.status = 'posted' -- Live entries only: voided transactions do not contribute to current session reconciliation
+     where t.org_id = ${orgId} and t.session_id = ${session.id}`)).rows[0]!;
   const tenders = (await runner.execute<{ kind: string; method_label: string; sale_minor: string; refund_minor: string; cash_minor: string; refund_cash_minor: string }>(sql`
     select dt.kind, dt.method_label,
            coalesce(sum(dt.amount_minor) filter (where t.kind = 'sale'), 0)::text as sale_minor,
@@ -231,6 +233,7 @@ export async function readSessionSummary(
            coalesce(sum(dt.amount_minor) filter (where t.kind = 'sale' and dt.kind = 'cash' and dt.account_id = ${register.cash_account_id}::uuid), 0)::text as cash_minor,
            coalesce(sum(dt.amount_minor) filter (where t.kind = 'refund' and dt.kind = 'cash' and dt.account_id = ${register.cash_account_id}::uuid), 0)::text as refund_cash_minor
       from pos_transactions t
+      join documents d on d.org_id = t.org_id and d.id = t.document_id and d.status = 'posted'
       join document_tenders dt on dt.org_id = t.org_id and dt.document_id = t.document_id
      where t.org_id = ${orgId} and t.session_id = ${session.id}
      group by dt.kind, dt.method_label
@@ -497,10 +500,12 @@ export async function listSessions(
       left join users ou on ou.org_id = s.org_id and ou.id = s.opened_by
       left join users cu on cu.org_id = s.org_id and cu.id = s.closed_by
       left join lateral (
-        select count(*) filter (where kind = 'sale') as sale_count,
-               sum(total_minor) filter (where kind = 'sale') as sales_total,
-               sum(total_minor) filter (where kind = 'refund') as refunds_total
-          from pos_transactions pt where pt.org_id = s.org_id and pt.session_id = s.id
+        select count(*) filter (where pt.kind = 'sale') as sale_count,
+               sum(pt.total_minor) filter (where pt.kind = 'sale') as sales_total,
+               sum(pt.total_minor) filter (where pt.kind = 'refund') as refunds_total
+          from pos_transactions pt
+          join documents d on d.org_id = pt.org_id and d.id = pt.document_id and d.status = 'posted' -- Live entries only: voided transactions do not contribute to current session totals
+         where pt.org_id = s.org_id and pt.session_id = s.id
       ) t on true
      ${where}
      order by s.opened_at desc, s.id

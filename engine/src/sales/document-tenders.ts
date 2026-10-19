@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
+import { businessToday } from "../platform/business-date.ts";
 import { cmp, fromUnits, toUnits } from "../money/money.ts";
 import type { Money } from "../money/brands.ts";
 import type { CashPostingTender } from "../journal/posting-contracts.ts";
@@ -11,6 +12,7 @@ import {
   programLiabilityAccount,
   redeemStoredValue,
   storedValueAccountOwnedByCustomer,
+  storedValueExpired,
 } from "../stored-value/accounts.ts";
 import { attachDocumentLoad } from "../stored-value/document-loads.ts";
 import { StoredValueError } from "../stored-value/errors.ts";
@@ -56,6 +58,7 @@ export type TenderRefusalCode =
   | "account_invalid"
   | "stored_value_unknown"
   | "stored_value_unusable"
+  | "stored_value_account_expired"
   | "stored_value_cross_entity"
   | "stored_value_currency_mismatch"
   | "stored_value_insufficient_balance"
@@ -225,6 +228,7 @@ type StoredValueAccountView = {
   status: string;
   codeLast4: string;
   balanceMinor: bigint;
+  expiresOn: string | null;
 };
 
 /**
@@ -252,10 +256,12 @@ async function lockTenderStoredValueAccounts(
       status: string;
       codeLast4: string;
       balanceMinorRaw: string;
+      expiresOn: string | null;
     }>(sql`
       select id, program_id as "programId", kind, customer_party_id as "customerPartyId",
              currency, subsidiary_id as "subsidiaryId", status,
-             code_last4 as "codeLast4", balance_minor::text as "balanceMinorRaw"
+             code_last4 as "codeLast4", balance_minor::text as "balanceMinorRaw",
+             expires_on::text as "expiresOn"
         from stored_value_accounts
        where org_id = ${orgId} and id = ${accountId}
        for update
@@ -279,6 +285,7 @@ async function lockTenderStoredValueAccounts(
       status: row.status,
       codeLast4: row.codeLast4,
       balanceMinor: BigInt(row.balanceMinorRaw),
+      expiresOn: row.expiresOn,
     });
   }
   return byId;
@@ -396,6 +403,8 @@ export async function replaceDocumentTenders(
     .filter((input) => input.kind === "stored_value" && typeof input.storedValueAccountId === "string")
     .map((input) => input.storedValueAccountId as string);
   const storedValueById = await lockTenderStoredValueAccounts(runner, orgId, storedValueIds, tenderScope);
+  const tenderedByAccount = new Map<string, bigint>();
+  let tenderBusinessDate: string | undefined;
   type PreparedTender = {
     kind: string;
     methodLabel: string;
@@ -565,9 +574,24 @@ export async function replaceDocumentTenders(
             : "Issue a new code instead.",
         );
       }
-      if (isSale && amountMinor > storedValueAccount.balanceMinor) {
+      if (storedValueAccount.expiresOn) {
+        tenderBusinessDate ??= await businessToday(orgId);
+        if (storedValueExpired(storedValueAccount.expiresOn, tenderBusinessDate)) {
+          throw refusal(
+            `${label} stored value …${storedValueAccount.codeLast4} expired on ${storedValueAccount.expiresOn} and cannot be tendered or loaded.`,
+            "stored_value_account_expired",
+            409,
+            isSale
+              ? "Choose an unexpired gift card or store credit account."
+              : "Choose an unexpired account, or remove it so the refund issues new store credit.",
+          );
+        }
+      }
+      const accountTotal = (tenderedByAccount.get(storedValueAccount.id) ?? 0n) + amountMinor;
+      tenderedByAccount.set(storedValueAccount.id, accountTotal);
+      if (isSale && accountTotal > storedValueAccount.balanceMinor) {
         throw refusal(
-          `${label} stored value …${storedValueAccount.codeLast4} holds ${fromUnits(storedValueAccount.balanceMinor)}, which is less than the tendered ${fromUnits(amountMinor)}.`,
+          `${label} stored value …${storedValueAccount.codeLast4} holds ${fromUnits(storedValueAccount.balanceMinor)}, which is less than the combined tendered ${fromUnits(accountTotal)}.`,
           "stored_value_insufficient_balance",
           409,
           `Tender at most ${fromUnits(storedValueAccount.balanceMinor)}, or split the total across another payment method.`,
@@ -623,6 +647,7 @@ export async function replaceDocumentTenders(
 }
 
 type PostingTenderParent = {
+  kind: "cash_sale" | "cash_refund";
   documentNumber: string;
   kindLabel: string;
   partyId: string | null;
@@ -640,6 +665,7 @@ export async function resolveCashPostingTenders(
   orgId: string,
   documentId: string,
   parent: PostingTenderParent,
+  options: { validateRefundLoads?: boolean } = {},
 ): Promise<CashPostingTender[]> {
   const rows = await readDocumentTenders(runner, orgId, documentId);
   const resolved: CashPostingTender[] = [];
@@ -693,8 +719,13 @@ export async function resolveCashPostingTenders(
       });
       continue;
     }
-    const accounts = (await runner.execute<{ program_id: string; kind: string; customerPartyId: string | null }>(sql`
-      select program_id as program_id, kind, customer_party_id as "customerPartyId" from stored_value_accounts
+    const accounts = (await runner.execute<{
+      program_id: string; kind: string; customerPartyId: string | null; status: string;
+      expiresOn: string | null; liabilityAccountId: string | null;
+    }>(sql`
+      select program_id as program_id, kind, customer_party_id as "customerPartyId",
+             status, expires_on::text as "expiresOn",
+             liability_account_id as "liabilityAccountId" from stored_value_accounts
        where org_id = ${orgId} and id = ${row.storedValueAccountId}
     `)).rows;
     const programId = accounts[0]?.program_id;
@@ -714,8 +745,28 @@ export async function resolveCashPostingTenders(
         "Tender a gift card or store credit issued to this document's customer instead.",
       );
     }
+    if (options.validateRefundLoads && parent.kind === "cash_refund") {
+      const account = accounts[0];
+      if (account.status !== "active") {
+        throw new TenderRefusal(
+          `Cash refund ${parent.documentNumber} tender ${row.position} names stored value that is ${account.status} and cannot be loaded.`,
+          "stored_value_unusable",
+          409,
+          "Choose an active account, or remove it so the refund issues new store credit.",
+        );
+      }
+      if (account.expiresOn && storedValueExpired(account.expiresOn, await businessToday(orgId))) {
+        throw new TenderRefusal(
+          `Cash refund ${parent.documentNumber} tender ${row.position} names stored value that expired on ${account.expiresOn} and cannot be loaded.`,
+          "stored_value_account_expired",
+          409,
+          "Choose an unexpired account, or remove it so the refund issues new store credit.",
+        );
+      }
+    }
     const program = await loadStoredValueProgram(orgId, programId, runner);
-    const liabilityAccountId = await programLiabilityAccount(orgId, program, runner);
+    const liabilityAccountId = accounts[0].liabilityAccountId
+      ?? await programLiabilityAccount(orgId, program, runner);
     resolved.push({
       kind: row.kind,
       methodLabel: row.methodLabel,

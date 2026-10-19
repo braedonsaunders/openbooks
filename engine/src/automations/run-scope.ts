@@ -124,13 +124,9 @@ export async function resolveRunSubjectSubsidiaries(
   const leaves = bucket(["leave_request"]);
   if (leaves.length > 0) {
     const rows = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
-      select r.id, e.employer_subsidiary_id as subsidiary_id
+      select r.id, w.employer_subsidiary_id as subsidiary_id
         from hrm_leave_requests r
-        left join employment_assignment_versions e
-          on e.org_id = r.org_id and e.employment_id = r.employment_id
-         and e.recorded_until is null and e.is_primary
-         and e.effective_from <= current_date
-         and (e.effective_to is null or e.effective_to > current_date)
+        join worker_employments w on w.org_id = r.org_id and w.id = r.employment_id
        where r.org_id = ${orgId} and r.id = any(${`{${leaves.join(",")}}`}::uuid[])
     `)).rows;
     for (const row of rows) store("leave_request", row.id, row.subsidiary_id);

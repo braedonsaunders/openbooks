@@ -177,13 +177,14 @@ export async function loadSubjectSnapshot(
     case "leave_request": {
       const rows = await db.execute<Record<string, unknown>>(sql`
         select r.id, r.status, r.leave_type_id, r.starts_on, r.ends_on, r.hours,
-               r.employment_id, e.department_id, e.employer_subsidiary_id as subsidiary_id
+               r.employment_id, a.department_id, w.employer_subsidiary_id as subsidiary_id
           from hrm_leave_requests r
-          left join employment_assignment_versions e
-            on e.org_id = r.org_id and e.employment_id = r.employment_id
-           and e.recorded_until is null and e.is_primary
-           and e.effective_from <= current_date
-           and (e.effective_to is null or e.effective_to > current_date)
+          join worker_employments w on w.org_id = r.org_id and w.id = r.employment_id
+          left join employment_assignment_versions a
+            on a.org_id = r.org_id and a.employment_id = r.employment_id
+           and a.recorded_until is null and a.is_primary
+           and a.effective_from <= current_date
+           and (a.effective_to is null or a.effective_to > current_date)
          where r.org_id = ${orgId} and r.id = ${subjectId}
          limit 1
       `);

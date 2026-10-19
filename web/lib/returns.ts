@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { adjustInventory } from '@openbooks/engine/inventory/movements'
 import { db, withOrgContext, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { PORTAL_ACTOR_ID } from '@openbooks/engine/portal'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/submit'
 import { controlDeps } from '@openbooks/engine/ledger/document-service'
 import { postDocument } from '@openbooks/engine/ledger/posting-document'
@@ -12,7 +13,7 @@ import { postedDocumentControlAccount } from '@openbooks/engine/ledger/posting-c
 import { runPostDocumentEffects } from '@openbooks/engine/ledger/posting-dispatch'
 import { runRecordFlows } from '@openbooks/engine/flows/module'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/money/decimal'
-import { quantumScale, roundDiv, toUnits } from '@openbooks/engine/money'
+import { apportion, fromUnits, mulPercent, quantumScale, roundDiv, toUnits } from '@openbooks/engine/money'
 import {
   recordRestockingFeeWaiver,
   resolveRestockingFee,
@@ -32,6 +33,7 @@ import {
   completeReturnInspection,
   getReturnAuthorization,
   listReturnAuthorizations,
+  parseAcceptedQuantity,
   receiveReturn,
   recordReturnInspection,
   rejectReturn,
@@ -135,6 +137,12 @@ export async function createReturnAuthorization(input: {
       })
     }
     const body: DocumentEditInput = { ...input.body, lines: documentLines }
+    const portalRequest = input.actorId === PORTAL_ACTOR_ID
+      ? portalReturnRequest(body.custom)
+      : null
+    if (input.actorId === PORTAL_ACTOR_ID && !portalRequest) {
+      throw new ReturnRefusal('The portal return request details are missing', 'invalid_input', 422, 'Ask the customer to submit the return again')
+    }
     const draft = await createDocument({
       orgId: input.orgId,
       userId: input.actorId,
@@ -144,6 +152,7 @@ export async function createReturnAuthorization(input: {
       subsidiaryId: body.subsidiaryId ?? null,
       requestBody: input.requestBody,
       onBehalfOfPartyId: input.onBehalfOfPartyId ?? null,
+      ...(portalRequest ? { nativeCustom: { portalRequest } } : {}),
     })
     if (draft.status === 'created') {
       await runRecordFlows({ kind: 'on_create', source: 'ui' }, 'rma', draft.id, { orgId: input.orgId, userId: input.actorId })
@@ -283,7 +292,7 @@ async function customerCreditLine(
       amount: source.amount,
       taxCodeId: source.tax_code_id,
       taxGroupId: source.tax_group_id,
-      taxOverridden: true,
+      taxOverridden: source.tax_code_id !== null || source.tax_group_id !== null,
       taxAmount: source.tax_amount,
       stockLocationId: line.dispositionLocationId,
       inventoryReturnSource,
@@ -378,7 +387,7 @@ async function customerCreditLine(
     amount: billed.amount,
     taxCodeId: billed.tax_code_id,
     taxGroupId: billed.tax_group_id,
-    taxOverridden: true,
+    taxOverridden: billed.tax_code_id !== null || billed.tax_group_id !== null,
     taxAmount: billed.tax_amount,
     stockLocationId: line.dispositionLocationId,
     inventoryReturnSource,
@@ -458,9 +467,10 @@ export async function previewReturnRestockingFee(input: {
   const linesById = new Map(current.lines.map((line) => [line.lineId, line]))
   const credited: CreditedReturnLine[] = []
   const claims: OrderLineClaims = new Map()
-  for (const { lineId, accepted } of input.lines) {
+  for (const { lineId, accepted: rawAccepted } of input.lines) {
+    const accepted = parseAcceptedQuantity(rawAccepted, `Accepted quantity for return line ${lineId}`)
     const rmaLine = linesById.get(lineId)
-    if (!rmaLine?.sourceIssueMovementId || accepted === '0') continue
+    if (!rmaLine?.sourceIssueMovementId || lineIsZero(accepted)) continue
     const credit = await customerCreditLine(input.orgId, current.id, {
       lineId, accepted, disposition: null, dispositionLocationId: null,
     }, rmaLine.sourceIssueMovementId, claims)
@@ -494,12 +504,53 @@ async function createVendorReturnDrafts(input: {
   }
   const created: string[] = []
   for (const [vendorId, lines] of byVendor) {
+    const sourceLines = (await db.execute<{
+      line_id: string
+      line_number: number
+      item_id: string | null
+      description: string | null
+      unit: string | null
+      asset_account_id: string | null
+    }>(sql`
+      select line.id as line_id, line.line_number, line.item_id, line.description, line.unit,
+             profile.asset_account_id
+        from document_lines line
+        left join item_inventory_profiles profile on profile.org_id = line.org_id and profile.item_id = line.item_id
+       where line.org_id = ${input.orgId} and line.document_id = ${input.rma.id}
+         and line.id in (${sql.join(lines.map((line) => sql`${line.lineId}`), sql`, `)})
+       order by line.line_number`)).rows
+    const sourceByLine = new Map(sourceLines.map((line) => [line.line_id, line]))
+    const vendorCreditLines: DocumentLineInput[] = lines.map((decision) => {
+      const source = sourceByLine.get(decision.lineId)
+      if (!source?.item_id || !source.asset_account_id) {
+        throw new ReturnRefusal(
+          `RMA line ${decision.lineId} has no inventory asset account for a vendor return`,
+          'source_unavailable', 422,
+          'Set an inventory costing profile with an asset account, then inspect the return again',
+        )
+      }
+      return {
+        accountId: source.asset_account_id,
+        itemId: source.item_id,
+        description: source.description ?? `Return from ${input.rma.documentNumber}`,
+        quantity: decision.accepted,
+        unit: source.unit,
+        unitPrice: '0',
+        amount: '0',
+        taxCodeId: null,
+        taxGroupId: null,
+        taxOverridden: false,
+        taxAmount: '0',
+        stockLocationId: decision.dispositionLocationId,
+      }
+    })
     const key = randomUUID()
     const result = await createDocument({
       orgId: input.orgId,
       userId: input.actorId,
       kind: 'vendor_credit',
       key,
+      nativeCustom: { rmaVendorReturnDraft: { rmaId: input.rma.id } },
       subsidiaryId: input.rma.subsidiaryId,
       requestBody: { kind: 'vendor_credit', rmaId: input.rma.id, vendorId },
       body: {
@@ -508,6 +559,7 @@ async function createVendorReturnDrafts(input: {
         documentDate: input.rmaDocumentDate,
         referenceNumber: input.rma.documentNumber,
         memo: `Vendor return requested from ${input.rma.documentNumber}`,
+        lines: vendorCreditLines,
       },
     })
     if (result.status === 'created') {
@@ -563,6 +615,95 @@ function lineIsZero(value: string): boolean {
   return exact !== null && compareDecimal(exact, '0') === 0
 }
 
+type PortalReturnRequest = {
+  resolution: 'refund' | 'exchange' | 'store_credit'
+  storeCreditBonusPercent: string
+}
+
+function portalReturnRequest(value: unknown): PortalReturnRequest | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const portalRequest = (value as Record<string, unknown>).portalRequest
+  if (!portalRequest || typeof portalRequest !== 'object' || Array.isArray(portalRequest)) return null
+  const request = portalRequest as Record<string, unknown>
+  const resolution = request.resolution
+  const bonus = typeof request.storeCreditBonusPercent === 'string'
+    ? canonicalDecimal(request.storeCreditBonusPercent, 2)
+    : null
+  if (resolution !== 'refund' && resolution !== 'exchange' && resolution !== 'store_credit') {
+    throw new ReturnRefusal('The portal return outcome is invalid', 'invalid_input', 422, 'Ask the customer to submit the return again')
+  }
+  if (bonus === null || compareDecimal(bonus, '0') < 0 || compareDecimal(bonus, '100') > 0
+    || (resolution !== 'store_credit' && !lineIsZero(bonus))) {
+    throw new ReturnRefusal('The portal return store credit bonus is invalid', 'invalid_input', 422, 'Correct Customer Portal return settings, then submit the return again')
+  }
+  return { resolution, storeCreditBonusPercent: bonus }
+}
+
+async function storeCreditProgramForCurrency(orgId: string, currency: string): Promise<string> {
+  const programs = (await db.execute<{ id: string; currency: string | null }>(sql`
+    select id, currency from stored_value_programs
+     where org_id = ${orgId} and kind = 'store_credit' and is_active
+       and (currency = ${currency} or currency is null)
+     order by currency desc nulls last, created_at, id`)).rows
+  const exact = programs.filter((program) => program.currency === currency)
+  if (exact.length === 1) return exact[0]!.id
+  if (exact.length > 1) {
+    throw new ReturnRefusal(
+      `More than one active store credit program issues ${currency}`,
+      'invalid_input', 422,
+      `Keep one active ${currency} store credit program or contact your administrator to select the return program`,
+    )
+  }
+  const currencyNeutral = programs.filter((program) => program.currency === null)
+  if (currencyNeutral.length === 1) return currencyNeutral[0]!.id
+  if (currencyNeutral.length > 1) {
+    throw new ReturnRefusal(
+      `More than one active store credit program accepts ${currency}`,
+      'invalid_input', 422,
+      `Keep one active currency-neutral store credit program or create one for ${currency}`,
+    )
+  }
+  throw new ReturnRefusal(
+    `No active store credit program issues ${currency}`,
+    'invalid_input', 422,
+    `Create an active store credit program for ${currency} in Setup → Sales → Stored value programs`,
+  )
+}
+
+function storeCreditBonusLines(
+  lines: DocumentLineInput[],
+  percent: string,
+  quantum: number,
+): DocumentLineInput[] {
+  if (lineIsZero(percent)) return []
+  const scale = quantumScale(quantum)
+  const weights = lines.map((line) => roundDiv(toUnits(line.amount), scale))
+  if (weights.some((weight) => weight < 0n)) {
+    throw new ReturnRefusal('A store credit bonus cannot be allocated to a negative return line', 'invalid_input', 422, 'Review the return line prices before inspecting it')
+  }
+  const baseMinor = weights.reduce((sum, weight) => sum + weight, 0n)
+  if (baseMinor === 0n) return []
+  const bonus = mulPercent(fromUnits(baseMinor * scale), percent, quantum)
+  const bonusMinor = roundDiv(toUnits(bonus), scale)
+  const allocations = apportion(bonusMinor, weights)
+  return lines.flatMap((line, index) => {
+    const amountMinor = allocations[index] ?? 0n
+    if (amountMinor === 0n) return []
+    const amount = fromUnits(amountMinor * scale)
+    return [{
+      accountId: line.accountId,
+      description: 'Store credit bonus',
+      quantity: '1',
+      unitPrice: amount,
+      amount,
+      taxCodeId: null,
+      taxGroupId: null,
+      taxOverridden: false,
+      taxAmount: '0',
+    }]
+  })
+}
+
 function customerCreditKey(rmaId: string): string {
   const bytes = createHash('sha256').update(`customer-return:${rmaId}`).digest().subarray(0, 16)
   bytes[6] = (bytes[6]! & 0x0f) | 0x50
@@ -590,10 +731,14 @@ export async function inspectReturnAuthorization(input: {
       throw new ReturnRefusal(`${current.documentNumber} must be received before inspection`, 'wrong_stage', 409, 'Receive the authorized goods before inspection')
     }
     validateReturnInspection(current, input.inspectionLines)
-    const header = (await db.execute<{ party_id: string; subsidiary_id: string; document_date: string; status: string; currency: string }>(sql`
-      select party_id, subsidiary_id, document_date::text, status, currency
+    const header = (await db.execute<{ party_id: string; subsidiary_id: string; document_date: string; status: string; currency: string; created_by: string | null; custom: unknown }>(sql`
+      select party_id, subsidiary_id, document_date::text, status, currency, created_by, custom
         from documents where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`)).rows[0]
     if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
+    const portalRequest = header.created_by === PORTAL_ACTOR_ID ? portalReturnRequest(header.custom) : null
+    if (header.created_by === PORTAL_ACTOR_ID && !portalRequest) {
+      throw new ReturnRefusal('The portal return request details are missing', 'invalid_input', 422, 'Ask the customer to submit the return again')
+    }
     const quantum = await creditQuantum(header.currency)
     const scale = quantumScale(quantum)
     let creditId = current.customerCreditId
@@ -613,6 +758,12 @@ export async function inspectReturnAuthorization(input: {
         }
       }
       if (creditLines.length === 0) throw new ReturnRefusal('Accept at least one unit before issuing a customer credit', 'invalid_input', 422, 'Accept a received quantity for at least one line')
+      const storeCreditProgramId = portalRequest?.resolution === 'store_credit'
+        ? await storeCreditProgramForCurrency(input.orgId, header.currency)
+        : null
+      if (portalRequest?.resolution === 'store_credit') {
+        creditLines.push(...storeCreditBonusLines(creditLines, portalRequest.storeCreditBonusPercent, quantum))
+      }
       // The restocking fee rides on the accepted value: one income line per
       // fee-bearing return line, reducing the credit the customer receives.
       const fee = await resolveInspectionRestockingFee({
@@ -650,11 +801,22 @@ export async function inspectReturnAuthorization(input: {
           partyId: header.party_id,
           subsidiaryId: header.subsidiary_id,
           documentDate: header.document_date,
+          currency: header.currency,
           referenceNumber: current.documentNumber,
           memo: `Customer return under ${current.documentNumber}`,
           lines: creditLines,
-          ...(sourceControlAccountId ? { custom: { controlAccountId: sourceControlAccountId } } : {}),
+          ...(sourceControlAccountId
+            ? { custom: {
+                controlAccountId: sourceControlAccountId,
+              } }
+            : {}),
         },
+        ...(portalRequest
+          ? { nativeCustom: {
+              ...(storeCreditProgramId ? { storeCreditProgramId } : {}),
+              portalReturnResolution: portalRequest.resolution,
+            } }
+          : {}),
       })
       creditId = created.id
       if (created.status === 'created') {
