@@ -14,7 +14,7 @@ import {
 } from "../testing/fixtures.ts";
 import { submitForApproval } from "./submit.ts";
 import { retryFlowRun } from "./run.ts";
-import { decideGate, delegateGate, escalateDueGate, worklistGates } from "./gates.ts";
+import { decideGate, delegateGate, escalateDueGate, gateDecisionCapability, worklistGates } from "./gates.ts";
 import { createDelegation } from "./delegations.ts";
 
 /**
@@ -607,6 +607,56 @@ test("a delegate who is the submitter still cannot decide (SoD survives delegati
     );
     assert.equal((await gateRows({ subjectId: docId }))[0]!.status, "pending", "gate stays decidable by an eligible approver");
     assert.equal(await docStatus(docId), "pending_approval");
+  });
+});
+
+test("default SoD excludes maker and submitter and blocks them through delegated authority", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
+      assignees: [
+        { type: "user", userId: actors.approver1Id },
+        { type: "user", userId: actors.submitterId },
+        { type: "user", userId: actors.adminId },
+      ],
+    });
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.approver1Id });
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
+    const createdGates = await gateRows({ subjectId: docId });
+    assert.deepEqual(createdGates.map((gate) => gate.assigneeUserId), [actors.adminId]);
+
+    const gate = createdGates[0]!;
+    await db.execute(sql`update flow_gates set assignee_user_id = ${actors.submitterId} where id = ${gate.id}`);
+    const now = await dbNow();
+    await createDelegation({
+      orgId: org.orgId,
+      fromUserId: actors.submitterId,
+      toUserId: actors.approver2Id,
+      startsAt: new Date(now - 3_600_000),
+      endsAt: new Date(now + 24 * 3_600_000),
+    });
+    assert.deepEqual(await gateDecisionCapability(gate.id, actors.approver2Id), {
+      canAct: false,
+      signatureRequired: false,
+      sodBlocked: true,
+    });
+    await assert.rejects(
+      decideGate({ gateId: gate.id, decision: "approved", userId: actors.approver2Id }),
+      /you cannot approve your own submission/,
+    );
+
+    await assert.rejects(
+      delegateGate(gate.id, actors.adminId, actors.approver1Id),
+      /cannot be delegated to its submitter or maker/,
+    );
+
+    await db.execute(sql`update flow_gates set assignee_user_id = ${actors.approver2Id}, delegated_from_user_id = ${actors.approver1Id} where id = ${gate.id}`);
+    assert.deepEqual(await gateDecisionCapability(gate.id, actors.approver2Id), {
+      canAct: false,
+      signatureRequired: false,
+      sodBlocked: true,
+    });
   });
 });
 
