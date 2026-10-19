@@ -7,6 +7,7 @@
 // and the token-removal control the package deliberately leaves to the host.
 
 import { useState, useTransition } from 'react'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import {
   FeedbackSettingsForm,
@@ -32,6 +33,7 @@ function toFormValue(settings: FeedbackSettingsView): FeedbackSettingsValue {
 }
 
 export function PlatformFeedbackClient({ settings }: { settings: FeedbackSettingsView }) {
+  const t = useTranslations('platform.feedback')
   const [value, setValue] = useState<FeedbackSettingsValue>(() => toFormValue(settings))
   const [hasToken, setHasToken] = useState(settings.hasToken)
   const [pending, startTransition] = useTransition()
@@ -57,9 +59,9 @@ export function PlatformFeedbackClient({ settings }: { settings: FeedbackSetting
     <PageContainer>
       <div className="space-y-5">
         <PageHeader
-          title="Issue reporting"
-          description="Where in-app product reports are filed, for the whole deployment."
-          back={{ href: '/platform', label: 'Back to platform' }}
+          title={t('title')}
+          description={t('description')}
+          back={{ href: '/platform', label: t('backToPlatform') }}
         />
         <div className="flex flex-col gap-4">
           <FeedbackSettingsForm
@@ -77,26 +79,23 @@ export function PlatformFeedbackClient({ settings }: { settings: FeedbackSetting
                     searchDuplicates: next.searchDuplicates,
                     token: next.token.trim() || undefined,
                   }),
-                  'Issue reporting settings saved',
+                  t('saved'),
                 )
               })
             }
             labels={{
-              settingsDescription:
-                'One destination for the whole deployment. People report from any page; reports are generalized — personal and company details removed — before an issue is filed.',
-              tokenHelp:
-                'Needs Issues: Read and write (fine-grained) or repo (classic). Leave blank to keep the stored token. Saving with reporting enabled verifies the token against the repository first.',
+              settingsDescription: t('settingsDescription'),
+              tokenHelp: t('tokenHelp'),
             }}
           />
           {hasToken ? (
             <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
               <div>
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  Stored access token
+                  {t('storedToken')}
                 </p>
                 <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                  Removing it also turns reporting off — a destination with no credential can only
-                  fail. Existing filed issues are unaffected.
+                  {t('storedTokenDescription')}
                 </p>
               </div>
               <Button
@@ -105,11 +104,11 @@ export function PlatformFeedbackClient({ settings }: { settings: FeedbackSetting
                 disabled={pending}
                 onClick={() =>
                   startTransition(async () => {
-                    apply(await clearFeedbackTokenAction(), 'Access token removed')
+                    apply(await clearFeedbackTokenAction(), t('tokenRemoved'))
                   })
                 }
               >
-                Remove token
+                {t('removeToken')}
               </Button>
             </div>
           ) : null}

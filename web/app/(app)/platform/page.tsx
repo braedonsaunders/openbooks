@@ -1,41 +1,45 @@
 import { PlatformHub } from '@braedonsaunders/appkit-superadmin/react'
 import { ShieldCheck } from 'lucide-react'
 import { platformSummary } from '../../../lib/platform-admin'
-import { getFormatter } from 'next-intl/server'
-import { OPENBOOKS_PLATFORM_NAV } from '../../../lib/platform-console'
+import { getFormatter, getTranslations } from 'next-intl/server'
+import { createOpenBooksPlatformNav } from '../../../lib/platform-console'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PlatformPage() {
   const format = await getFormatter()
+  const t = await getTranslations('platform')
   const summary = await platformSummary()
-  const tiles = OPENBOOKS_PLATFORM_NAV.tiles.map((tile) => {
+  const tiles = createOpenBooksPlatformNav(t).tiles.map((tile) => {
     if (tile.id === 'tenants') {
       return {
         ...tile,
         stat: format.number(summary.organizations),
-        detail: `${summary.productionOrganizations} production · ${summary.environments} non-production`,
+        detail: t('hub.organizationsDetail', {
+          production: format.number(summary.productionOrganizations),
+          nonProduction: format.number(summary.environments),
+        }),
       }
     }
     if (tile.id === 'users') {
       return {
         ...tile,
         stat: format.number(summary.activeUsers),
-        detail: `${summary.superAdmins} super administrator${summary.superAdmins === 1 ? '' : 's'}`,
+        detail: t('hub.superAdminsDetail', { count: summary.superAdmins }),
       }
     }
     if (tile.id === 'access') {
       return {
         ...tile,
         stat: format.number(summary.activeGrants),
-        detail: 'Active explicit grants',
+        detail: t('hub.activeGrantsDetail'),
       }
     }
     if (tile.id === 'emailLog') {
       return {
         ...tile,
         stat: format.number(summary.failedEmails),
-        detail: 'Failed deliveries requiring attention',
+        detail: t('hub.failedDeliveriesDetail'),
       }
     }
     return tile
@@ -43,8 +47,8 @@ export default async function PlatformPage() {
 
   return (
     <PlatformHub
-      title="Platform"
-      description="Platform-wide operations, identities, access controls, and delivery evidence."
+      title={t('hub.title')}
+      description={t('hub.description')}
       tiles={tiles}
       notice={
         <div className="rounded-xl border border-warning/30 bg-warning-subtle/70 p-4">
@@ -53,10 +57,9 @@ export default async function PlatformPage() {
               <ShieldCheck size={20} />
             </span>
             <div>
-              <p className="text-sm font-semibold text-fg">Platform workspace</p>
+              <p className="text-sm font-semibold text-fg">{t('notice.title')}</p>
               <p className="mt-0.5 text-sm text-fg-muted">
-                This workspace bypasses organization boundaries for authorized operators. Every
-                access-control mutation is validated and written to the immutable audit trail.
+                {t('notice.description')}
               </p>
             </div>
           </div>

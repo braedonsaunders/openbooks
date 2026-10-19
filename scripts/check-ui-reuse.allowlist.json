@@ -45,10 +45,6 @@
       "reason": "Platform operations console page with its own shell, outside module navigation."
     },
     {
-      "path": "web/app/(app)/platform/users/[id]/page.tsx",
-      "reason": "Platform operations console page with its own shell, outside module navigation."
-    },
-    {
       "path": "web/app/(app)/platform/users/page.tsx",
       "reason": "Platform operations console page with its own shell, outside module navigation."
     }

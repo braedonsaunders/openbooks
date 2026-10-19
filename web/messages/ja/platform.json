@@ -25,5 +25,210 @@
       "createdLinkOnly": "{name} を作成しました。管理者のパスワード設定用の一回限りのリンクを今すぐコピーしてください。",
       "requestFailed": "組織を作成できませんでした。"
     }
+  },
+  "nav": {
+    "access": "組織間アクセス",
+    "accessDescription": "ログイン ID と組織間のアクセスを管理します。",
+    "overview": "概要",
+    "organizations": "組織",
+    "users": "ユーザー",
+    "feedback": "問題の報告",
+    "emailLog": "メールログ",
+    "group": "プラットフォーム",
+    "overviewDescription": "全環境の運用、ID、アクセス制御、配信証跡。",
+    "organizationsDescription": "本番組織、サンドボックス、プレビュー環境。",
+    "usersDescription": "本番のログイン ID、組織ロール、プラットフォーム権限。",
+    "feedbackDescription": "アプリ内の問題報告先を設定します。",
+    "emailLogDescription": "全組織の配信証跡。",
+    "workspace": "組織ワークスペース"
+  },
+  "hub": {
+    "title": "プラットフォーム",
+    "description": "全環境の運用、ID、アクセス制御、配信証跡。",
+    "organizationsDetail": "本番 {production} · 非本番 {nonProduction}",
+    "superAdminsDetail": "スーパー管理者 {count} 人",
+    "activeGrantsDetail": "有効な明示的アクセス権",
+    "failedDeliveriesDetail": "対応が必要な配信失敗"
+  },
+  "notice": {
+    "title": "プラットフォームワークスペース",
+    "description": "このワークスペースでは、許可された運用者が組織の境界を越えて操作できます。アクセス制御の変更はすべて検証され、改変できない監査ログに記録されます。"
+  },
+  "access": {
+    "title": "組織間アクセス",
+    "description": "ログイン ID と組織間の管理された関連付けです。スーパー管理者に付与は不要です。",
+    "backToPlatform": "プラットフォームに戻る",
+    "grantAccess": "アクセスを付与",
+    "emptyFiltered": "条件に一致するアクセス権はありません。",
+    "empty": "アクセス権はありません。ログイン ID に別の組織へのアクセスを付与してください。",
+    "searchPlaceholder": "メンバー、組織、代理ユーザーを検索…",
+    "status": "状態",
+    "statuses": {
+      "active": "有効",
+      "revoked": "取り消し済み"
+    },
+    "columns": {
+      "member": "メンバー",
+      "organization": "組織",
+      "actingUser": "代理ユーザー",
+      "lastChanged": "最終変更"
+    },
+    "historyPreserved": "履歴を保持",
+    "revoke": "取り消す",
+    "mutation": {
+      "revoked": "組織間アクセスを取り消しました",
+      "requestFailed": "アクセスを変更できませんでした。",
+      "working": "処理中…"
+    },
+    "grant": {
+      "title": "組織間アクセスを付与",
+      "description": "メンバー ID、対象組織、適用する権限を持つ有効なユーザーを選択してください。",
+      "memberHelp": "ホーム組織のログイン ID です。別の組織にアクセスする場合も、このメンバーが責任者となります。",
+      "member": "メンバー ID",
+      "selectMember": "メンバーを選択…",
+      "organizationHelp": "メンバーがアクセスできる本番組織です。ホーム組織へのアクセスは既に含まれています。",
+      "organization": "対象組織",
+      "selectOrganization": "組織を選択…",
+      "actingUserHelp": "対象組織でメンバーが操作する際に適用されるロールと権限を持つ有効なユーザーです。",
+      "actingUser": "代理ユーザー",
+      "selectActingUser": "代理ユーザーを選択…",
+      "granting": "付与中…",
+      "submit": "アクセスを付与",
+      "success": "組織間アクセスを付与しました",
+      "requestFailed": "アクセスを付与できませんでした。"
+    }
+  },
+  "users": {
+    "title": "ユーザー",
+    "description": "本番のログイン ID、組織ロール、プラットフォーム権限。",
+    "backToPlatform": "プラットフォームに戻る",
+    "emptyFiltered": "条件に一致するユーザーはいません。",
+    "empty": "ユーザーはいません。",
+    "searchPlaceholder": "名前、メール、組織を検索…",
+    "status": "状態",
+    "statuses": {
+      "active": "有効",
+      "inactive": "無効",
+      "superAdmin": "スーパー管理者"
+    },
+    "columns": {
+      "user": "ユーザー",
+      "homeOrganization": "ホーム組織",
+      "roles": "ロール",
+      "grants": "アクセス権",
+      "lastLogin": "最終ログイン"
+    },
+    "explicitGrants": "明示的 {count} 件",
+    "homeOnly": "ホーム組織のみ",
+    "never": "なし",
+    "manage": "管理",
+    "drawerDescription": "{organization} · {email}",
+    "drawerTabsLabel": "ユーザー詳細",
+    "tabs": {
+      "overview": "概要",
+      "grants": "組織間アクセス"
+    },
+    "currentOperator": "現在の運用者",
+    "revokeSuperAdmin": "スーパー管理者を取り消す",
+    "makeSuperAdmin": "スーパー管理者にする",
+    "mutation": {
+      "superAdminRevoked": "スーパー管理者権限を取り消しました",
+      "superAdminGranted": "スーパー管理者権限を付与しました",
+      "requestFailed": "プラットフォームの変更を完了できませんでした。",
+      "working": "処理中…"
+    },
+    "facts": {
+      "email": "メール",
+      "homeOrganization": "ホーム組織",
+      "roles": "ロール",
+      "lastLogin": "最終ログイン",
+      "created": "作成日",
+      "accountId": "アカウント ID"
+    },
+    "noGrants": "明示的な組織間アクセスはありません。スーパー管理者でない場合、この ID はホーム組織にのみアクセスできます。"
+  },
+  "tenants": {
+    "title": "組織",
+    "description": "すべての本番企業、サンドボックス、プレビュー環境です。組織を開くと、そのワークスペースに切り替わります。",
+    "backToPlatform": "プラットフォームに戻る",
+    "emptyFiltered": "条件に一致する組織はありません。",
+    "empty": "組織はありません。",
+    "searchPlaceholder": "組織を検索…",
+    "environment": "環境",
+    "environments": {
+      "production": "本番",
+      "sandbox": "サンドボックス",
+      "preview": "プレビュー"
+    },
+    "columns": {
+      "organization": "組織",
+      "locale": "地域",
+      "users": "ユーザー",
+      "sandboxes": "サンドボックス"
+    },
+    "parentNote": "{name} の子環境",
+    "open": "開く",
+    "productionOnly": "ここから開けるのは本番組織のみです。"
+  },
+  "emailLog": {
+    "title": "メールログ",
+    "description": "全組織の配信証跡。",
+    "backToPlatform": "プラットフォームに戻る",
+    "emptyFiltered": "条件に一致する配信はありません。",
+    "empty": "配信ログはありません。",
+    "searchPlaceholder": "件名、宛先、組織を検索…",
+    "status": "状態",
+    "statuses": {
+      "queued": "待機中",
+      "sent": "送信済み",
+      "failed": "失敗",
+      "suppressed": "抑制",
+      "uncertain": "不明"
+    },
+    "columns": {
+      "subject": "件名",
+      "organization": "組織",
+      "recipient": "宛先",
+      "delivery": "配信",
+      "logged": "記録日時"
+    },
+    "unknownProvider": "不明なプロバイダー"
+  },
+  "feedback": {
+    "title": "問題の報告",
+    "description": "この環境でアプリ内の問題報告を送信する先です。",
+    "backToPlatform": "プラットフォームに戻る",
+    "saved": "問題報告の設定を保存しました",
+    "settingsDescription": "全環境で共通の送信先を使用します。どのページからでも報告でき、チケット作成前に個人情報と会社情報が削除されます。",
+    "tokenHelp": "Issues: Read and write（細粒度）または repo（従来型）が必要です。保存済みトークンを維持するには空欄にします。報告を有効にして保存すると、リポジトリでトークンを確認します。",
+    "storedToken": "保存済みアクセストークン",
+    "storedTokenDescription": "トークンを削除すると認証情報なしで問題を登録できないため、報告機能も無効になります。既存のチケットには影響しません。",
+    "tokenRemoved": "アクセストークンを削除しました",
+    "removeToken": "トークンを削除"
+  },
+  "mutations": {
+    "requestFailed": "プラットフォームの変更を完了できませんでした。",
+    "working": "処理中…"
+  },
+  "actions": {
+    "invalidUser": "ユーザー ID が無効です。",
+    "cannotRevokeOwn": "自分自身のスーパー管理者権限は取り消せません。",
+    "userNotFound": "ユーザーが見つかりません。",
+    "finalSuperAdmin": "最後の有効なスーパー管理者の権限は取り消せません。",
+    "superAdminFailed": "プラットフォームの変更を完了できませんでした。",
+    "invalidMember": "メンバー ID が無効です。",
+    "invalidOrganization": "組織 ID が無効です。",
+    "invalidActingUser": "代理ユーザー ID が無効です。",
+    "grantIdentityNotFound": "メンバー、組織、または代理ユーザーが見つかりません。",
+    "memberMustBeProduction": "メンバー ID は本番組織に属している必要があります。",
+    "targetMustBeProduction": "明示的なアクセス付与先は本番組織に限られます。",
+    "homeAccessAlreadyImplicit": "メンバーは既にホーム組織へ暗黙的にアクセスできます。",
+    "actingUserMustBelongToTarget": "代理ユーザーは対象組織に所属している必要があります。",
+    "actingUserMustBeActive": "代理ユーザーは有効である必要があります。",
+    "grantCouldNotSave": "アクセス権を保存できませんでした。",
+    "grantFailed": "アクセスを付与できませんでした。",
+    "invalidGrant": "アクセス権 ID が無効です。",
+    "grantNotFound": "アクセス権が見つかりません。",
+    "revokeFailed": "組織間アクセスを取り消せませんでした。"
   }
 }

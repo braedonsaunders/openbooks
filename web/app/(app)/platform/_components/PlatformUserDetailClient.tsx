@@ -1,102 +1,126 @@
 'use client'
 
-import { Badge, Card, CardContent, PageContainer, PageHeader } from '@braedonsaunders/appkit-ui'
+import { useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { Badge, UrlDrawer } from '@openbooks/ui'
+import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
 import { ServerPagedTable } from '../../../../components/server-paged-table'
-import type { PlatformGrant, PlatformOrganization, PlatformUser } from '../../../../lib/platform-admin'
+import type { PlatformGrant, PlatformUser } from '../../../../lib/platform-admin'
 import { asDate } from '../../../../lib/platform-console'
-import { GrantAccessForm } from './GrantAccessForm'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { PlatformMutationButton } from './PlatformMutationButton'
 import { setSuperAdminAction } from '../actions'
 import { GrantActingCell, GrantControlCell } from '../users/[id]/sections'
-import { useViewerFormat } from '@/lib/viewer-format'
 
-export function PlatformUserDetailClient({
-  user,
-  grants,
-  grantsTotal,
-  grantsPage,
-  grantsPerPage,
-  basePath,
-  listParams,
-  members,
-  organizations,
-  actingUsers,
-  isSelf,
-}: {
+type UserDetail = {
   user: PlatformUser
   grants: PlatformGrant[]
-  grantsTotal: number
+  totalGrants: number
   grantsPage: number
   grantsPerPage: number
-  basePath: string
-  listParams: Record<string, string | string[] | undefined>
-  members: Pick<PlatformUser, 'id' | 'name' | 'email' | 'orgName' | 'orgId'>[]
-  organizations: Pick<PlatformOrganization, 'id' | 'name'>[]
-  actingUsers: Pick<PlatformUser, 'id' | 'name' | 'email' | 'orgName' | 'orgId'>[]
   isSelf: boolean
+}
+
+export function PlatformUserDetailClient({
+  detail,
+  closeHref,
+  listParams,
+}: {
+  detail: UserDetail
+  closeHref: string
+  listParams: Record<string, string | string[] | undefined>
 }) {
+  const t = useTranslations('platform.users')
+  const tAccess = useTranslations('platform.access')
   const { dateTime } = useViewerFormat()
+  const [tab, setTab] = useState<'overview' | 'grants'>('overview')
+  const { user, grants, totalGrants, grantsPage, grantsPerPage, isSelf } = detail
+  const grantsParams = {
+    ...listParams,
+    grantPage: String(grantsPage),
+    grantPerPage: String(grantsPerPage),
+  }
+
   return (
-    <PageContainer>
-      <div className="space-y-5">
-        <PageHeader
-          title={user.name}
-          description={`${user.email} · ${user.orgName}`}
-          back={{ href: '/platform/users', label: 'Users' }}
-          actions={
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={user.isActive ? 'success' : 'secondary'}>
-                {user.isActive ? 'Active' : 'Inactive'}
-              </Badge>
-              {user.isSuperAdmin ? <Badge variant="warning">Super admin</Badge> : null}
-              <PlatformMutationButton
-                action={setSuperAdminAction.bind(null, user.id, !user.isSuperAdmin)}
-                success={user.isSuperAdmin ? 'Super-admin access revoked' : 'Super-admin access granted'}
-                variant={user.isSuperAdmin ? 'destructive' : 'outline'}
-                disabled={isSelf && user.isSuperAdmin}
-              >
-                {user.isSuperAdmin ? (isSelf ? 'Current operator' : 'Revoke super admin') : 'Make super admin'}
-              </PlatformMutationButton>
-            </div>
-          }
-        />
-        <GrantAccessForm
-          members={members}
-          organizations={organizations}
-          actingUsers={actingUsers}
-          defaultMemberUserId={user.id}
-        />
-        <ServerPagedTable
-          rows={grants} rowKey={(grant) => grant.id}
-          total={grantsTotal} page={grantsPage} perPage={grantsPerPage}
-          basePath={basePath} currentParams={listParams}
-          empty="No grants. This identity only has its home organization, unless it is a super admin."
-          columns={[
-            { key: 'organization', header: 'Organization', cell: (grant) => grant.orgName },
-            { key: 'actingUser', header: 'Acts as', cell: (grant) => <GrantActingCell name={grant.actingName} email={grant.actingEmail} /> },
-            { key: 'status', header: 'Status', cell: (grant) => <Badge variant={grant.isActive ? 'success' : 'secondary'}>{grant.isActive ? 'Active' : 'Revoked'}</Badge> },
-            { key: 'revoke', header: <span className="sr-only">Revoke</span>, className: 'w-px whitespace-nowrap px-2 text-center', style: { width: 64 }, cell: (grant) => <GrantControlCell grantId={grant.id} isActive={grant.isActive} /> },
+    <UrlDrawer
+      open
+      openKey={user.id}
+      closeHref={closeHref}
+      size="xl"
+      title={user.name}
+      description={t('drawerDescription', { email: user.email, organization: user.orgName })}
+      headerActions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={user.isActive ? 'success' : 'secondary'}>
+            {user.isActive ? t('statuses.active') : t('statuses.inactive')}
+          </Badge>
+          {user.isSuperAdmin ? <Badge variant="warning">{t('statuses.superAdmin')}</Badge> : null}
+          <PlatformMutationButton
+            action={setSuperAdminAction.bind(null, user.id, !user.isSuperAdmin)}
+            success={user.isSuperAdmin ? t('mutation.superAdminRevoked') : t('mutation.superAdminGranted')}
+            fallbackError={t('mutation.requestFailed')}
+            pendingLabel={t('mutation.working')}
+            variant={user.isSuperAdmin ? 'destructive' : 'outline'}
+            disabled={isSelf && user.isSuperAdmin}
+          >
+            {user.isSuperAdmin
+              ? isSelf
+                ? t('currentOperator')
+                : t('revokeSuperAdmin')
+              : t('makeSuperAdmin')}
+          </PlatformMutationButton>
+        </div>
+      }
+      subtabs={
+        <DrawerTabStrip
+          ariaLabel={t('drawerTabsLabel')}
+          activeKey={tab}
+          onSelect={setTab}
+          tabs={[
+            { key: 'overview', label: t('tabs.overview') },
+            { key: 'grants', label: t('tabs.grants'), count: totalGrants },
           ]}
         />
-        <Card>
-          <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
-            {[
-              { label: 'Email', value: user.email },
-              { label: 'Home organization', value: user.orgName },
-              { label: 'Last login', value: asDate(user.lastLoginAt) ? dateTime(asDate(user.lastLoginAt)!) : 'Never' },
-              { label: 'Created', value: asDate(user.createdAt) ? dateTime(asDate(user.createdAt)!) : '—' },
-              { label: 'Account ID', value: user.id, mono: true },
-            ].map((fact) => (
-              <div key={fact.label}>
-                <div className="text-xs font-medium uppercase tracking-wide text-fg-subtle">{fact.label}</div>
-                <div className={fact.mono ? 'mt-1 truncate font-mono text-xs text-fg' : 'mt-1 text-sm font-semibold text-fg'}>
-                  {fact.value}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-    </PageContainer>
+      }
+    >
+      {tab === 'overview' ? (
+        <dl className="grid gap-x-6 gap-y-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 dark:border-slate-800">
+          <Fact label={t('facts.email')} value={user.email} />
+          <Fact label={t('facts.homeOrganization')} value={user.orgName} />
+          <Fact label={t('facts.roles')} value={user.roles.length ? user.roles.join(', ') : '—'} />
+          <Fact label={t('facts.lastLogin')} value={asDate(user.lastLoginAt) ? dateTime(asDate(user.lastLoginAt)!) : t('never')} />
+          <Fact label={t('facts.created')} value={asDate(user.createdAt) ? dateTime(asDate(user.createdAt)!) : '—'} />
+          <Fact label={t('facts.accountId')} value={user.id} mono />
+        </dl>
+      ) : (
+        <ServerPagedTable
+          rows={grants}
+          rowKey={(grant) => grant.id}
+          total={totalGrants}
+          page={grantsPage}
+          perPage={grantsPerPage}
+          pageParamKey="grantPage"
+          perPageParamKey="grantPerPage"
+          basePath="/platform/users"
+          currentParams={grantsParams}
+          empty={t('noGrants')}
+          columns={[
+            { key: 'organization', header: tAccess('columns.organization'), cell: (grant) => grant.orgName },
+            { key: 'actingUser', header: tAccess('columns.actingUser'), cell: (grant) => <GrantActingCell name={grant.actingName} email={grant.actingEmail} /> },
+            { key: 'status', header: tAccess('status'), cell: (grant) => <Badge variant={grant.isActive ? 'success' : 'secondary'}>{grant.isActive ? tAccess('statuses.active') : tAccess('statuses.revoked')}</Badge> },
+            { key: 'revoke', header: <span className="sr-only">{tAccess('revoke')}</span>, className: 'w-px whitespace-nowrap px-2 text-center', style: { width: 64 }, cell: (grant) => <GrantControlCell grantId={grant.id} isActive={grant.isActive} labels={{ preserved: tAccess('historyPreserved'), revoked: tAccess('mutation.revoked'), requestFailed: tAccess('mutation.requestFailed'), working: tAccess('mutation.working'), revoke: tAccess('revoke') }} /> },
+          ]}
+        />
+      )}
+    </UrlDrawer>
+  )
+}
+
+function Fact({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className={mono ? 'mt-1 break-all font-mono text-xs' : 'mt-1 text-sm font-medium'}>{value}</dd>
+    </div>
   )
 }

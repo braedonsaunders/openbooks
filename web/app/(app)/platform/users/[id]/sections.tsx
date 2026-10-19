@@ -6,6 +6,7 @@ import {
   CardTitle,
   DetailHeader,
 } from '@openbooks/ui'
+import { useTranslations } from 'next-intl'
 import { revokeAccessAction, setSuperAdminAction } from '../../actions'
 import { PlatformMutationButton } from '../../_components/PlatformMutationButton'
 
@@ -37,6 +38,7 @@ export function PlatformUserHeader({
   backHref: string
   backLabel: string
 }) {
+  const t = useTranslations('platform.users')
   return (
     <DetailHeader
       back={{ href: backHref, label: backLabel }}
@@ -45,19 +47,21 @@ export function PlatformUserHeader({
       badge={
         <div className="flex items-center gap-2">
           <Badge variant={isActive ? 'success' : 'secondary'}>
-            {isActive ? 'active' : 'inactive'}
+            {isActive ? t('statuses.active') : t('statuses.inactive')}
           </Badge>
-          {isSuperAdmin ? <Badge variant="warning">super admin</Badge> : null}
+          {isSuperAdmin ? <Badge variant="warning">{t('statuses.superAdmin')}</Badge> : null}
         </div>
       }
       actions={
         <PlatformMutationButton
           action={setSuperAdminAction.bind(null, userId, !isSuperAdmin)}
-          success={isSuperAdmin ? 'Super-admin access revoked' : 'Super-admin access granted'}
+          success={isSuperAdmin ? t('mutation.superAdminRevoked') : t('mutation.superAdminGranted')}
+          fallbackError={t('mutation.requestFailed')}
+          pendingLabel={t('mutation.working')}
           variant={isSuperAdmin ? 'destructive' : 'outline'}
           disabled={isSelf && isSuperAdmin}
         >
-          {isSuperAdmin ? (isSelf ? 'Current operator' : 'Revoke super admin') : 'Make super admin'}
+          {isSuperAdmin ? (isSelf ? t('currentOperator') : t('revokeSuperAdmin')) : t('makeSuperAdmin')}
         </PlatformMutationButton>
       }
     />
@@ -75,25 +79,29 @@ export function GrantActingCell({ name, email }: { name: string; email: string }
 }
 
 /** Revoke control, or the preserved marker once a grant is already revoked. */
-export function GrantControlCell({ grantId, isActive }: { grantId: string; isActive: boolean }) {
-  if (!isActive) return <span className="text-xs text-slate-400">Preserved</span>
+export function GrantControlCell({ grantId, isActive, labels }: { grantId: string; isActive: boolean; labels?: { preserved: string; revoked: string; requestFailed: string; working: string; revoke: string } }) {
+  const t = useTranslations('platform.access')
+  if (!isActive) return <span className="text-xs text-slate-400">{labels?.preserved ?? t('historyPreserved')}</span>
   return (
     <PlatformMutationButton
       action={revokeAccessAction.bind(null, grantId)}
-      success="Cross-organization access revoked"
+      success={labels?.revoked ?? t('mutation.revoked')}
+      fallbackError={labels?.requestFailed ?? t('mutation.requestFailed')}
+      pendingLabel={labels?.working ?? t('mutation.working')}
       size="sm"
       variant="ghost"
     >
-      Revoke
+      {labels?.revoke ?? t('revoke')}
     </PlatformMutationButton>
   )
 }
 
 /** The empty grants card body. */
 export function NoGrantsBody() {
+  const t = useTranslations('platform.users')
   return (
     <CardContent className="p-5 text-sm text-slate-500 dark:text-slate-400">
-      No explicit cross-organization grants.
+      {t('noGrants')}
     </CardContent>
   )
 }

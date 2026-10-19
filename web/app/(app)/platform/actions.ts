@@ -5,9 +5,10 @@ import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../lib/list-params";
 import { lockSuperAdminActor, requireSuperAdmin } from "../../../lib/super-admin";
+import { getTranslations } from 'next-intl/server'
 
-function assertUuid(value: string, label: string): void {
-  if (!isUuid(value)) throw new Error(`${label} is invalid`);
+function assertUuid(value: string, invalidMessage: string): void {
+  if (!isUuid(value)) throw new Error(invalidMessage);
 }
 
 /**
@@ -65,10 +66,11 @@ export async function setSuperAdminAction(
   value: boolean,
 ): Promise<PlatformMutationResult> {
   try {
+    const t = await getTranslations('platform.actions')
     const authz = await requireSuperAdmin();
-    assertUuid(userId, "User");
+    assertUuid(userId, t('invalidUser'));
     if (userId === authz.user.homeUserId && !value) {
-      throw new Error("You cannot revoke your own super-admin access");
+      throw new Error(t('cannotRevokeOwn'));
     }
 
     // bypass: cross-org-by-design — platform super-admin status is installation-wide, not an organization's.
@@ -97,7 +99,7 @@ export async function setSuperAdminAction(
         }[];
       };
       const target = targetResult.rows[0];
-      if (!target) throw new Error("User not found");
+      if (!target) throw new Error(t('userNotFound'));
       if (target.isSuperAdmin === value) return;
 
       if (!value) {
@@ -108,7 +110,7 @@ export async function setSuperAdminAction(
         `)) as { rows: { count: number }[] };
         if (Number(countResult.rows[0]?.count ?? 0) <= 1) {
           throw new Error(
-            "The final active super administrator cannot be revoked",
+            t('finalSuperAdmin'),
           );
         }
       }
@@ -137,7 +139,7 @@ export async function setSuperAdminAction(
     revalidatePath(`/platform/users/${userId}`);
     return { ok: true };
   } catch (error) {
-    return refusal(error, "The platform change could not be completed");
+    return refusal(error, (await getTranslations('platform.actions'))('superAdminFailed'));
   }
 }
 
@@ -148,13 +150,14 @@ export async function setSuperAdminAction(
  */
 export async function grantAccessAction(formData: FormData): Promise<PlatformMutationResult> {
   try {
+    const t = await getTranslations('platform.actions')
     const authz = await requireSuperAdmin();
     const memberUserId = String(formData.get("memberUserId") ?? "");
     const orgId = String(formData.get("orgId") ?? "");
     const actingUserId = String(formData.get("actingUserId") ?? "");
-    assertUuid(memberUserId, "Member");
-    assertUuid(orgId, "Organization");
-    assertUuid(actingUserId, "Acting user");
+    assertUuid(memberUserId, t('invalidMember'));
+    assertUuid(orgId, t('invalidOrganization'));
+    assertUuid(actingUserId, t('invalidActingUser'));
 
     // bypass: cross-org-by-design — an access grant links a member of one organization to another organization.
     await withBypass(async () => {
@@ -180,22 +183,22 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
       };
       const row = validation.rows[0];
       if (!row)
-        throw new Error("Member, organization, or acting user was not found");
+        throw new Error(t('grantIdentityNotFound'));
       if (row.memberEnvKind !== "production")
         throw new Error(
-          "The member identity must belong to a production organization",
+          t('memberMustBeProduction'),
         );
       if (row.targetEnvKind !== "production")
         throw new Error(
-          "Explicit access can only target a production organization",
+          t('targetMustBeProduction'),
         );
       if (row.memberOrgId === orgId)
         throw new Error(
-          "A user already has implicit access to their home organization",
+          t('homeAccessAlreadyImplicit'),
         );
       if (row.actingOrgId !== orgId)
-        throw new Error("The acting user must belong to the target organization");
-      if (!row.actingActive) throw new Error("The acting user must be active");
+        throw new Error(t('actingUserMustBelongToTarget'));
+      if (!row.actingActive) throw new Error(t('actingUserMustBeActive'));
 
       const beforeResult = (await db.execute(sql`
         select id, acting_user_id as "actingUserId", is_active as "isActive"
@@ -220,7 +223,7 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
         returning id
       `)) as { rows: { id: string }[] };
       const accessId = result.rows[0]?.id;
-      if (!accessId) throw new Error("Access grant could not be saved");
+      if (!accessId) throw new Error(t('grantCouldNotSave'));
 
       await auditPlatformMutation({
         orgId,
@@ -249,15 +252,16 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
     revalidatePath(`/platform/users/${memberUserId}`);
     return { ok: true };
   } catch (error) {
-    return refusal(error, "Access could not be granted");
+    return refusal(error, (await getTranslations('platform.actions'))('grantFailed'));
   }
 }
 
 /** Soft-revoke an access grant so the control history remains intact. */
 export async function revokeAccessAction(accessId: string): Promise<PlatformMutationResult> {
   try {
+    const t = await getTranslations('platform.actions')
     const authz = await requireSuperAdmin();
-    assertUuid(accessId, "Access grant");
+    assertUuid(accessId, t('invalidGrant'));
     let memberUserId: string | null = null;
 
     // bypass: cross-org-by-design — an access grant links a member of one organization to another organization.
@@ -280,7 +284,7 @@ export async function revokeAccessAction(accessId: string): Promise<PlatformMuta
         }[];
       };
       const before = beforeResult.rows[0];
-      if (!before) throw new Error("Access grant not found");
+      if (!before) throw new Error(t('grantNotFound'));
       memberUserId = before.memberUserId;
       if (!before.isActive) return;
 
@@ -307,6 +311,6 @@ export async function revokeAccessAction(accessId: string): Promise<PlatformMuta
     if (memberUserId) revalidatePath(`/platform/users/${memberUserId}`);
     return { ok: true };
   } catch (error) {
-    return refusal(error, "Cross-organization access could not be revoked");
+    return refusal(error, (await getTranslations('platform.actions'))('revokeFailed'));
   }
 }

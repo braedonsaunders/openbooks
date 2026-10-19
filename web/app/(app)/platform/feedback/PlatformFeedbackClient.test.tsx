@@ -20,6 +20,7 @@ stubModules({
   features: false,
   extra: {
     './actions': ACTION_STUB,
+    'next-intl': `export function useTranslations(namespace){const labels={"platform.feedback.title":"Issue reporting","platform.feedback.description":"Where in-app product reports are filed for this deployment.","platform.feedback.backToPlatform":"Back to platform","platform.feedback.settingsDescription":"One destination for the whole deployment.","platform.feedback.tokenHelp":"Token requirements.","platform.feedback.storedToken":"Stored access token","platform.feedback.storedTokenDescription":"Removing the token turns reporting off.","platform.feedback.removeToken":"Remove token"};return key=>labels[namespace+"."+key]??key}`,
   },
 })
 

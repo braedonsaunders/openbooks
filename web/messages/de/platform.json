@@ -25,5 +25,210 @@
       "createdLinkOnly": "{name} angelegt. Kopieren Sie jetzt den einmaligen Passwort-Link des Administrators.",
       "requestFailed": "Die Organisation konnte nicht angelegt werden."
     }
+  },
+  "nav": {
+    "access": "Organisationsübergreifender Zugriff",
+    "accessDescription": "Gesteuerten Zugriff zwischen Anmeldeidentitäten und Organisationen verwalten.",
+    "overview": "Übersicht",
+    "organizations": "Organisationen",
+    "users": "Benutzer",
+    "feedback": "Fehlerberichte",
+    "emailLog": "E-Mail-Protokoll",
+    "group": "Plattform",
+    "overviewDescription": "Bereitstellungsweite Abläufe, Identitäten, Zugriffskontrollen und Zustellnachweise.",
+    "organizationsDescription": "Produktivorganisationen, Sandboxes und Vorschauumgebungen.",
+    "usersDescription": "Produktive Anmeldeidentitäten, Organisationsrollen und Plattformrechte.",
+    "feedbackDescription": "Ziel für In-App-Fehlerberichte konfigurieren.",
+    "emailLogDescription": "Zustellnachweise aus allen Organisationen.",
+    "workspace": "Organisationsarbeitsbereich"
+  },
+  "hub": {
+    "title": "Plattform",
+    "description": "Bereitstellungsweite Abläufe, Identitäten, Zugriffskontrollen und Zustellnachweise.",
+    "organizationsDetail": "{production} produktiv · {nonProduction} nicht produktiv",
+    "superAdminsDetail": "{count, plural, one {# Superadministrator} other {# Superadministratoren}}",
+    "activeGrantsDetail": "Aktive explizite Zugriffsrechte",
+    "failedDeliveriesDetail": "Fehlgeschlagene Zustellungen mit Handlungsbedarf"
+  },
+  "notice": {
+    "title": "Plattformarbeitsbereich",
+    "description": "Dieser Arbeitsbereich übergeht für autorisierte Betreiber Organisationsgrenzen. Jede Änderung an Zugriffskontrollen wird geprüft und unveränderlich im Prüfprotokoll erfasst."
+  },
+  "access": {
+    "title": "Organisationsübergreifender Zugriff",
+    "description": "Kontrollierte Zuordnungen zwischen Anmeldeidentitäten und Organisationen. Superadministratoren benötigen keine Zugriffsrechte.",
+    "backToPlatform": "Zur Plattform",
+    "grantAccess": "Zugriff gewähren",
+    "emptyFiltered": "Keine Zugriffe entsprechen diesen Filtern.",
+    "empty": "Noch keine Zugriffe. Gewähren Sie einer Anmeldeidentität Zugriff auf eine andere Organisation.",
+    "searchPlaceholder": "Mitglied, Organisation oder handelnden Benutzer suchen…",
+    "status": "Zustand",
+    "statuses": {
+      "active": "Aktiv",
+      "revoked": "Widerrufen"
+    },
+    "columns": {
+      "member": "Mitglied",
+      "organization": "Organisation",
+      "actingUser": "Handelt als",
+      "lastChanged": "Zuletzt geändert"
+    },
+    "historyPreserved": "Verlauf aufbewahrt",
+    "revoke": "Widerrufen",
+    "mutation": {
+      "revoked": "Organisationsübergreifender Zugriff widerrufen",
+      "requestFailed": "Der Zugriff konnte nicht geändert werden.",
+      "working": "Wird ausgeführt…"
+    },
+    "grant": {
+      "title": "Organisationsübergreifenden Zugriff gewähren",
+      "description": "Wählen Sie die Mitgliederidentität, die Zielorganisation und den aktiven Benutzer aus, dessen Berechtigungen dort gelten.",
+      "memberHelp": "Die Anmeldeidentität der Heimatorganisation. Sie bleibt für den Zugriff auf andere Organisationen verantwortlich.",
+      "member": "Mitgliederidentität",
+      "selectMember": "Mitglied auswählen…",
+      "organizationHelp": "Die Produktivorganisation, auf die das Mitglied zugreifen darf. Der Zugriff auf die Heimatorganisation besteht bereits.",
+      "organization": "Zielorganisation",
+      "selectOrganization": "Organisation auswählen…",
+      "actingUserHelp": "Der aktive Benutzer, dessen Rollen und Berechtigungen gelten, wenn das Mitglied in der Zielorganisation arbeitet.",
+      "actingUser": "Handelt als",
+      "selectActingUser": "Handelnden Benutzer auswählen…",
+      "granting": "Zugriff wird gewährt…",
+      "submit": "Zugriff gewähren",
+      "success": "Organisationsübergreifender Zugriff gewährt",
+      "requestFailed": "Der Zugriff konnte nicht gewährt werden."
+    }
+  },
+  "users": {
+    "title": "Benutzer",
+    "description": "Produktive Anmeldeidentitäten, Organisationsrollen und Plattformrechte.",
+    "backToPlatform": "Zur Plattform",
+    "emptyFiltered": "Keine Benutzer entsprechen diesen Filtern.",
+    "empty": "Noch keine Benutzer.",
+    "searchPlaceholder": "Name, E-Mail oder Organisation suchen…",
+    "status": "Zustand",
+    "statuses": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "superAdmin": "Superadministrator"
+    },
+    "columns": {
+      "user": "Benutzer",
+      "homeOrganization": "Heimatorganisation",
+      "roles": "Rollen",
+      "grants": "Zugriffe",
+      "lastLogin": "Letzte Anmeldung"
+    },
+    "explicitGrants": "{count, plural, one {# explizit} other {# explizit}}",
+    "homeOnly": "Nur Heimatorganisation",
+    "never": "Nie",
+    "manage": "Verwalten",
+    "drawerDescription": "{email} · Organisation {organization}",
+    "drawerTabsLabel": "Benutzerdetails",
+    "tabs": {
+      "overview": "Übersicht",
+      "grants": "Organisationsübergreifende Zugriffe"
+    },
+    "currentOperator": "Aktueller Betreiber",
+    "revokeSuperAdmin": "Superadministrator widerrufen",
+    "makeSuperAdmin": "Zum Superadministrator machen",
+    "mutation": {
+      "superAdminRevoked": "Superadministratorrechte widerrufen",
+      "superAdminGranted": "Superadministratorrechte gewährt",
+      "requestFailed": "Die Plattformänderung konnte nicht abgeschlossen werden.",
+      "working": "Wird ausgeführt…"
+    },
+    "facts": {
+      "email": "E-Mail",
+      "homeOrganization": "Heimatorganisation",
+      "roles": "Rollen",
+      "lastLogin": "Letzte Anmeldung",
+      "created": "Erstellt",
+      "accountId": "Konto-ID"
+    },
+    "noGrants": "Keine expliziten organisationsübergreifenden Zugriffe. Diese Identität hat Zugriff auf ihre Heimatorganisation, sofern sie kein Superadministrator ist."
+  },
+  "tenants": {
+    "title": "Organisationen",
+    "description": "Alle Produktivorganisationen, Sandboxes und Vorschauumgebungen. Öffnen Sie eine Organisation, um in ihren Arbeitsbereich zu wechseln.",
+    "backToPlatform": "Zur Plattform",
+    "emptyFiltered": "Keine Organisationen entsprechen diesen Filtern.",
+    "empty": "Noch keine Organisationen.",
+    "searchPlaceholder": "Organisationen suchen…",
+    "environment": "Umgebung",
+    "environments": {
+      "production": "Produktiv",
+      "sandbox": "Testumgebung",
+      "preview": "Vorschau"
+    },
+    "columns": {
+      "organization": "Organisation",
+      "locale": "Region",
+      "users": "Benutzer",
+      "sandboxes": "Testumgebungen"
+    },
+    "parentNote": "von {name}",
+    "open": "Öffnen",
+    "productionOnly": "Nur Produktivorganisationen können von hier aus geöffnet werden."
+  },
+  "emailLog": {
+    "title": "E-Mail-Protokoll",
+    "description": "Zustellnachweise aus allen Organisationen.",
+    "backToPlatform": "Zur Plattform",
+    "emptyFiltered": "Keine Zustellungen entsprechen diesen Filtern.",
+    "empty": "Noch keine Zustellungen protokolliert.",
+    "searchPlaceholder": "Betreff, Empfänger oder Organisation suchen…",
+    "status": "Zustand",
+    "statuses": {
+      "queued": "In Warteschlange",
+      "sent": "Gesendet",
+      "failed": "Fehlgeschlagen",
+      "suppressed": "Unterdrückt",
+      "uncertain": "Ungewiss"
+    },
+    "columns": {
+      "subject": "Betreff",
+      "organization": "Organisation",
+      "recipient": "Empfänger",
+      "delivery": "Zustellung",
+      "logged": "Protokolliert"
+    },
+    "unknownProvider": "Unbekannter Anbieter"
+  },
+  "feedback": {
+    "title": "Fehlerberichte",
+    "description": "Ziel für In-App-Produktberichte in dieser Bereitstellung.",
+    "backToPlatform": "Zur Plattform",
+    "saved": "Einstellungen für Fehlerberichte gespeichert",
+    "settingsDescription": "Ein Ziel gilt für die gesamte Bereitstellung. Berichte können von jeder Seite aus gesendet werden; persönliche und Unternehmensdaten werden vor dem Erstellen eines Vorgangs entfernt.",
+    "tokenHelp": "Erfordert Issues: Lesen und Schreiben (feingranular) oder repo (klassisch). Leer lassen, um das gespeicherte Token beizubehalten. Bei aktivierten Berichten wird das Token beim Speichern im Repository geprüft.",
+    "storedToken": "Gespeichertes Zugriffstoken",
+    "storedTokenDescription": "Beim Entfernen des Tokens werden Berichte deaktiviert, da ohne Zugangsdaten keine Vorgänge erstellt werden können. Vorhandene Vorgänge bleiben unberührt.",
+    "tokenRemoved": "Zugriffstoken entfernt",
+    "removeToken": "Token entfernen"
+  },
+  "mutations": {
+    "requestFailed": "Die Plattformänderung konnte nicht abgeschlossen werden.",
+    "working": "Wird ausgeführt…"
+  },
+  "actions": {
+    "invalidUser": "Die Benutzerkennung ist ungültig.",
+    "cannotRevokeOwn": "Sie können Ihre eigenen Superadministratorrechte nicht widerrufen.",
+    "userNotFound": "Benutzer nicht gefunden.",
+    "finalSuperAdmin": "Der letzte aktive Superadministrator kann nicht widerrufen werden.",
+    "superAdminFailed": "Die Plattformänderung konnte nicht abgeschlossen werden.",
+    "invalidMember": "Die Mitgliederkennung ist ungültig.",
+    "invalidOrganization": "Die Organisationskennung ist ungültig.",
+    "invalidActingUser": "Die Kennung des handelnden Benutzers ist ungültig.",
+    "grantIdentityNotFound": "Mitglied, Organisation oder handelnder Benutzer wurde nicht gefunden.",
+    "memberMustBeProduction": "Die Mitgliederidentität muss zu einer Produktivorganisation gehören.",
+    "targetMustBeProduction": "Expliziter Zugriff kann nur auf eine Produktivorganisation gewährt werden.",
+    "homeAccessAlreadyImplicit": "Das Mitglied hat bereits impliziten Zugriff auf seine Heimatorganisation.",
+    "actingUserMustBelongToTarget": "Der handelnde Benutzer muss zur Zielorganisation gehören.",
+    "actingUserMustBeActive": "Der handelnde Benutzer muss aktiv sein.",
+    "grantCouldNotSave": "Der Zugriffsgrant konnte nicht gespeichert werden.",
+    "grantFailed": "Zugriff konnte nicht gewährt werden.",
+    "invalidGrant": "Die Kennung des Zugriffsgrants ist ungültig.",
+    "grantNotFound": "Zugriffsgrant nicht gefunden.",
+    "revokeFailed": "Der organisationsübergreifende Zugriff konnte nicht widerrufen werden."
   }
 }

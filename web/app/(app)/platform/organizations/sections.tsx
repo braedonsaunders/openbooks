@@ -1,5 +1,6 @@
 import { Badge } from '@openbooks/ui'
 import { OpenOrganizationButton } from './open-organization-button'
+import { useTranslations } from 'next-intl'
 
 /**
  * The composite cells in the organizations list.
@@ -23,13 +24,14 @@ export function OrgEnvironmentCell({
   variant,
   parentNote,
 }: {
-  envKind: string
+  envKind: 'production' | 'sandbox' | 'preview'
   variant: 'success' | 'warning' | 'secondary'
   parentNote: string
 }) {
+  const t = useTranslations('platform.tenants')
   return (
     <>
-      <Badge variant={variant}>{envKind}</Badge>
+      <Badge variant={variant}>{t(`environments.${envKind}`)}</Badge>
       {parentNote ? (
         <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{parentNote}</div>
       ) : null}
