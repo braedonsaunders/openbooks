@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 const { sql } = await import('drizzle-orm')
+const { withSimClock } = await import('@openbooks/engine/testing/platform/clock')
 const { withBypass, withBypassContext, db, env } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 const { importStatement, startReconciliation } = await import('@openbooks/engine/banking/banking')
@@ -162,7 +163,9 @@ test('previewRules refuses an out-of-scope account without reading lines', { ski
     await assertUniformNotFound(
       previewRules(fx.orgId, fx.bankA, { onlyUnmatched: true, allowedSubsidiaryIds: new Set([fx.subB]) }),
     )
-    const preview = await previewRules(fx.orgId, fx.bankA, { onlyUnmatched: true, windowDays: 366, allowedSubsidiaryIds: new Set([fx.subA]) })
+    const preview = await withSimClock(fx.date, () => previewRules(fx.orgId, fx.bankA, {
+      onlyUnmatched: true, allowedSubsidiaryIds: new Set([fx.subA]),
+    }))
     assert.equal(preview.scanned, 1)
   } finally { await dropScratchOrg(fx.orgId) }
 })
@@ -638,6 +641,7 @@ const consolidatedRows = [
               } from "./engine/src/testing/fixtures.ts";
               import { importStatement } from "./engine/src/banking/banking.ts";
               import { previewRules } from "./web/lib/banking-rules.ts";
+              import { withSimClock } from "./engine/src/platform/clock.ts";
 
               installTrustedTestDatabaseBypass();
               const org = await createScratchOrg();
@@ -684,8 +688,7 @@ const consolidatedRows = [
                      100, true, \${actorId})
                 \`);
 
-                const preview = await previewRules(org.orgId, org.accounts.bank, {
-                  windowDays: 366,
+                const preview = await withSimClock(org.date, () => previewRules(org.orgId, org.accounts.bank, {
                   draftRule: {
                     criteria: {
                       version: 2,
@@ -697,7 +700,7 @@ const consolidatedRows = [
                     outcome: { action: "exclude" },
                     priority: 100,
                   },
-                });
+                }));
                 assert.equal(preview.matched, 1);
                 // A new draft sorts after every same-priority saved rule once saved,
                 // so the incumbent wins the line on apply and the preview must say so.
