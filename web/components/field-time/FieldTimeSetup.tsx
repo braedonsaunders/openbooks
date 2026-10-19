@@ -267,7 +267,7 @@ export function FieldTimeSetup({
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-base font-semibold">{t('field.approvalRoutingTitle')}</h2>
         <p className="text-sm text-slate-500">{t('field.approvalRoutingHint')}</p>
-        <Link href="/flows" className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-400">
+        <Link href="/admin/flows" className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-400">
           {t('field.approvalRoutingLink')}
         </Link>
       </section>
