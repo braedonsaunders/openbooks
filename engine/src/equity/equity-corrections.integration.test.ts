@@ -260,7 +260,7 @@ test("runs are offered and posted only for open periods with activity due, and a
       vestingStart: "2026-07-01", vestingMonths: 12, cliffMonths: 0, vestingFrequency: "monthly", valuation: { sharePrice: "1.00", attribution: "straight_line" },
     });
     await closeGl(w, "2026-07");
-    assert.equal((await run("compensation", "2026-10-19"))?.name, "2026-08", "the closed month is skipped");
+    assert.equal((await run("compensation", "2026-10-19"))?.name, "P08 FY2026", "the closed month is skipped, and the period reads with its fiscal label");
     await assert.rejects(postCompensationRun({ ...entity(w), throughDate: "2026-07-31" }), refusal("equity_period_closed"));
     // A period still under way on the organization's business date is not run.
     await withSimClock("2026-12-20T12:00:00Z", async () => {

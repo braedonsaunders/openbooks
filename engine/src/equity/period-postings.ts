@@ -8,6 +8,7 @@
  */
 import { sql } from "drizzle-orm";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { canonicalPeriodLabel } from "../periods/period-policy.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { compensationCatchUp, compensationRunChange, compensationRunChanges } from "./compensation-run.ts";
 import { EQUITY_FEATURE_KEY, EquityError } from "./errors.ts";
@@ -146,6 +147,7 @@ export async function closeEquityPostings(orgId: string, input: { through: strin
 
 export interface EquityRunPeriod {
   periodId: string;
+  /** The period's canonical fiscal label (P03 FY2026). */
   name: string;
   endsOn: string;
 }
@@ -168,8 +170,8 @@ export async function nextEquityRunPeriod(input: { orgId: string; actorId: strin
     const table = input.kind === "compensation" ? sql`equity_compensation_runs` : sql`equity_interest_runs`;
     const last = (await db.execute<{ through: string | null }>(sql`
       select max(through_date)::text as through from ${table} where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId}`)).rows[0]?.through ?? null;
-    const periods = (await db.execute<{ id: string; name: string; ends_on: string }>(sql`
-      select p.id, p.name, p.ends_on::text as ends_on from accounting_periods p
+    const periods = (await db.execute<{ id: string; fiscal_year: number; period_number: number; ends_on: string }>(sql`
+      select p.id, p.fiscal_year, p.period_number, p.ends_on::text as ends_on from accounting_periods p
        where p.org_id = ${input.orgId} and not p.is_adjustment and p.ends_on <= ${input.today}::date
          ${last ? sql`and p.ends_on > ${last}::date` : sql``}
          and p.fiscal_calendar_id in (select id from fiscal_calendars where org_id = ${input.orgId} and is_default and is_active)
@@ -183,6 +185,8 @@ export async function nextEquityRunPeriod(input: { orgId: string; actorId: strin
       ? (await compensationRunChanges(input.orgId, input.subsidiaryId, dates)).map((row) => nonZero(row.expense) || row.releaseLines > 0)
       : (await interestRunChanges(input.orgId, input.subsidiaryId, dates)).map((row) => row.lines > 0);
     const index = due.findIndex(Boolean);
-    return index < 0 ? null : { periodId: open[index]!.id, name: open[index]!.name, endsOn: open[index]!.ends_on };
+    if (index < 0) return null;
+    const period = open[index]!;
+    return { periodId: period.id, name: canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false }), endsOn: period.ends_on };
   }, { isolationLevel: "REPEATABLE READ" });
 }

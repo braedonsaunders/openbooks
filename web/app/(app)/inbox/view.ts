@@ -4,6 +4,7 @@ import { registeredListTable } from '../../../lib/list/prepared-spec'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { inArray, sql } from 'drizzle-orm'
 import { getFormatter, getLocale, getTranslations } from 'next-intl/server'
+import { periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
 import { db, schema } from '@openbooks/engine/platform/db'
 import { flowSubjectSubsidiarySql, listFlowSubjectProfiles } from '@openbooks/engine/flows/registry'
 import {
@@ -607,9 +608,11 @@ export async function loadApprovals(
     // starter, and for every other subject the user whose submit started the
     // run. The subject's legal entity comes from its kind's declared scope,
     // so restricted callers see only submissions inside their entities.
+    // A period close names its period with the native fiscal label.
+    const closePeriodLabel = periodDisplayLabelSql(locale, 'cp')
     const flowRes = await db.execute<Record<string, unknown>>(sql`
       select r.id as "runId", f.name as "flowName", r.subject_id as "subjectId",
-             coalesce(d.document_number, cp.name) as "documentNumber", min(g.title) as "gateTitle",
+             coalesce(d.document_number, case when cp.id is not null then ${closePeriodLabel} end) as "documentNumber", min(g.title) as "gateTitle",
              coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) as kind,
              d.total, d.currency, d.subsidiary_id as "subsidiaryId", coalesce(d.status, cr.status, 'pending_approval') as "docStatus", p.display_name as "partyName",
              min(g.created_at) as "waitingSince",
@@ -632,12 +635,12 @@ export async function loadApprovals(
          ${
            query
              ? sql`and position(${query.toLowerCase()} in lower(concat_ws(' ',
-           d.document_number, d.kind, r.subject_kind, f.name, p.display_name, cp.name))) > 0`
+           d.document_number, d.kind, r.subject_kind, f.name, p.display_name, cp.name, case when cp.id is not null then ${closePeriodLabel} end))) > 0`
              : sql``
          }
          ${subsidiaryVisibleFilter(flowSubjectSubsidiarySql({ kind: sql`r.subject_kind`, id: sql`r.subject_id`, org: sql`r.org_id` }), authz.allowedSubsidiaryIds)}
        group by r.id, f.name, r.subject_id, d.document_number, d.kind, d.total, d.currency,
-                d.subsidiary_id, d.status, cr.id, cr.status, cp.name, p.display_name
+                d.subsidiary_id, d.status, cr.id, cr.status, cp.id, p.display_name
        order by min(g.created_at), r.id
        limit ${prefix}
     `)

@@ -347,3 +347,45 @@ test("equity subjects name their holder and figures from the recorded request", 
     await dropScratchOrgReporting(w.org.orgId);
   }
 });
+
+test("a submitted period close is named by its fiscal period label, never the stored period name", { skip: !DB }, async () => {
+  const w = await withBypassContext(() => setupEquityWorld());
+  try {
+    const { periodDisplayLabel } = await import("@openbooks/engine/periods/period-policy");
+    const period = (await withBypassContext(() => db.execute<{ id: string; fiscal_year: number; period_number: number; starts_on: string; ends_on: string; name: string }>(sql`
+      select id, fiscal_year, period_number, starts_on::text as starts_on, ends_on::text as ends_on, name from accounting_periods
+       where org_id = ${w.org.orgId} and not is_adjustment order by starts_on limit 1`))).rows[0]!;
+    const blueprintId = randomUUID();
+    const closeRunId = randomUUID();
+    const flowId = randomUUID();
+    const runId = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into close_blueprints (id, org_id, name) values (${blueprintId}, ${w.org.orgId}, 'Month-end close')`);
+      await db.execute(sql`
+        insert into close_runs (id, org_id, period_id, book_id, blueprint_id, status, current_stage, target_close_date, scope, started_at, started_by, created_by, updated_by)
+        values (${closeRunId}, ${w.org.orgId}, ${period.id}, ${w.org.bookId}, ${blueprintId}, 'in_progress', 'review', current_date + 30, '{}'::jsonb, now(),
+                ${w.managerId}, ${w.managerId}, ${w.managerId})`);
+      await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
+        values (${flowId}, ${w.org.orgId}, 'Close sign-off', 'close_run', true, '{}'::jsonb)`);
+      await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status, created_by)
+        values (${runId}, ${w.org.orgId}, ${flowId}, 'close_run', ${closeRunId}, 'on_submit', 'waiting', ${w.managerId})`);
+      await db.execute(sql`insert into flow_gates
+        (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key, quorum, status, assignee_user_id)
+        values (${randomUUID()}, ${w.org.orgId}, ${flowId}, ${runId}, 'gate', 'close_run', ${closeRunId}, 'Sign off the close', 'gate', 'any', 'pending', ${w.approverId})`);
+    });
+    const label = periodDisplayLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false, startsOn: period.starts_on, endsOn: period.ends_on }, "en");
+    assert.notEqual(label, period.name, "the stored name differs from the native label");
+
+    state.authz = authzFor(w.org.orgId, w.managerId, "equity_manager", ["equity.read", "equity.manage"]);
+    const submitted = await withOrgContext(w.org.orgId, () => loadApprovals({ tab: "submitted" }));
+    const row = submitted!.submittedRows.find((candidate) => candidate.kind === "close_run");
+    assert.ok(row, "the close's starter sees it under Submitted by me");
+    assert.equal(row.documentNumber, label);
+    const searched = await withOrgContext(w.org.orgId, () => loadApprovals({ tab: "submitted", q: label.split(" · ")[0]! }));
+    assert.ok(searched!.submittedRows.some((candidate) => candidate.kind === "close_run"), "the shown label finds the row");
+    const byName = await withOrgContext(w.org.orgId, () => loadApprovals({ tab: "submitted", q: period.name }));
+    assert.ok(byName!.submittedRows.some((candidate) => candidate.kind === "close_run"), "the stored name still finds the row");
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
