@@ -436,8 +436,9 @@ test(
 
       const preview = await previewRule(org, actorId, ruleId);
       assert.equal(preview.computation.targets.length, 3);
+      assert.equal(preview.computation.targets.filter((target) => isZero(target.amount)).length, 2);
       assert.ok(preview.computation.lines.every((line) => !isZero(line.amount)));
-      assert.equal(preview.computation.lines.filter((line) => line.contributorKind === "rule").length, 1);
+      assert.equal(preview.computation.lines.filter((line) => line.contributorKind === "rule").length, 2);
 
       const posted = await postAllocationRun(preview.id, actorId, "Post rounded allocation shares");
       assert.equal(posted.status, "posted");
