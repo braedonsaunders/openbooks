@@ -16,7 +16,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const { default: messages } = await import('../../../messages/en')
 const { MoneyProvider } = await import('../../../components/money-provider')
 const { SecurityDrawer } = await import('./SecurityDrawer')
-type DrawerProps = React.ComponentProps<typeof SecurityDrawer>
+type DrawerProps = import('./view').SecurityDrawerData
 
 const SUB = 'a0000000-0000-4000-8000-000000000001'
 const CERT = 's0000000-0000-4000-8000-000000000003'
@@ -360,4 +360,21 @@ test('a round opens in its drawer with its pre-money basis, refuses a void while
   } finally {
     await screen.close()
   }
+})
+
+
+test('a missing security keeps its requested drawer shell with a refusal and retry', async () => {
+  const screen = await mount(<SecurityDrawer {...{
+    securityId: '00000000-0000-4000-8000-000000000000', closeHref: '/equity?view=securities',
+    refusal: { message: 'This security was not found.', remedy: 'Select a security in this legal entity.' },
+  }} />, '/equity?view=securities&security=00000000-0000-4000-8000-000000000000')
+  try {
+    assert.equal(document.querySelectorAll('[role=dialog]').length, 1)
+    assert.match(text(dialog()), /This security was not found/)
+    assert.match(text(dialog()), /Select a security in this legal entity/)
+    const retry = Array.from(dialog().querySelectorAll('button')).find(button => text(button) === 'Retry')
+    assert.ok(retry)
+    await act(async () => retry.click())
+    assert.equal(document.querySelectorAll('[role=dialog]').length, 1)
+  } finally { await screen.close() }
 })

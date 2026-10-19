@@ -57,6 +57,16 @@ test('every equity view loads from one recorded book and composes its spec', { s
     assert.deepEqual(securities.securities?.rows.map((row) => row.kind), ['option'])
     assert.equal(securities.securities?.holders.length, 2)
 
+    for (const security of ['00000000-0000-4000-8000-000000000000', 'invalid-security']) {
+      const missing = await loadEquity(sp({ view: 'securities', security }))
+      assert.equal(missing.drawerOpen, true)
+      assert.ok(missing.drawer && 'refusal' in missing.drawer)
+      assert.equal(missing.drawer.securityId, security)
+      assert.ok(missing.drawer.refusal.message)
+      assert.ok(!missing.drawer.closeHref.includes('security='))
+      equitySpec(missing)
+    }
+
     const waterfall = await loadEquity(sp({ view: 'waterfall' }))
     assert.equal(waterfall.waterfall?.anchor?.postMoney, '5000000.0000', 'the default exit is the Seed post-money')
     assert.equal(waterfall.waterfall?.inputs.exitValue, '5000000.0000')

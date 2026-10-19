@@ -9,6 +9,7 @@
 // stamping in document.ts still covers every page this appends.)
 
 import type PDFKit from 'pdfkit'
+import { createRequire } from 'node:module'
 import type { PdfCellStyle, PdfTableCell, PdfColumnAlign, PdfColumnStyle, PdfTableGroup, PdfTheme } from './types'
 import type { ResolvedPage } from './page'
 import { pdfColor, pdfContrastText, pdfColorTint } from './color'
@@ -24,7 +25,41 @@ function styledCell(cell: PdfTableCell): cell is Exclude<PdfTableCell, string | 
   return cell !== null && typeof cell === 'object'
 }
 
-/** Compute column widths (pt) that fill `contentWidth`, with sensible caps. */
+// Use the same Unicode line-break opportunities as PDFKit. The dependency is
+// JavaScript-only; keep its boundary typed without replacing its algorithm.
+const LineBreaker = createRequire(import.meta.url)('linebreak') as new (text: string) => {
+  nextBreak(): { position: number; required: boolean } | null
+}
+
+export class PdfLayoutError extends RangeError {
+  readonly status = 422
+  readonly code = 'pdf_layout_too_narrow'
+  readonly remedy = 'Choose a wider page, smaller print density or fewer report columns.'
+
+  constructor() {
+    super('The report columns cannot fit legibly on this page. Choose a wider page, smaller print density or fewer report columns.')
+    this.name = 'PdfLayoutError'
+  }
+}
+
+function textWidths(doc: InstanceType<typeof PDFKit>, text: string): { preferred: number; minimum: number } {
+  let minimum = 0
+  const breaker = new LineBreaker(text)
+  let start = 0
+  for (let next = breaker.nextBreak(); next; next = breaker.nextBreak()) {
+    minimum = Math.max(minimum, doc.widthOfString(text.slice(start, next.position).trim()))
+    start = next.position
+  }
+  // Compact identifiers are read and reconciled as a unit, even when Unicode
+  // would permit a line break at their hyphen.
+  for (const match of text.matchAll(/\b[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+\b/g)) {
+    minimum = Math.max(minimum, doc.widthOfString(match[0]))
+  }
+  const preferred = Math.max(0, ...text.split(/\r?\n/).map(line => doc.widthOfString(line)))
+  return { preferred, minimum }
+}
+
+/** Fill the page while preserving padding and unbroken words in every row. */
 export function computeColumnWidths(
   doc: InstanceType<typeof PDFKit>,
   group: PdfTableGroup,
@@ -33,59 +68,52 @@ export function computeColumnWidths(
 ): number[] {
   const n = group.columns.length
   if (n === 0) return []
-  if (group.columnWeights) {
-    const weights = group.columnWeights;
-    if (weights.length !== n || weights.some(weight => !Number.isFinite(weight) || weight <= 0))
-      throw new RangeError('Report column weights must be positive and match the column count.');
-    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-    const widths = weights.map(weight => contentWidth * weight / totalWeight);
-    if (widths.some(width => width < MIN_COL_W))
-      throw new RangeError('The configured grid columns are too narrow. Choose a wider page or fewer date columns.');
-    return widths;
-  }
-  const maxColW = contentWidth * MAX_COL_FRAC
+  const minima: number[] = []
   const natural: number[] = []
-  doc.font(theme.fontBold).fontSize(theme.table)
-  const sampleRows = group.rows.slice(0, 200)
   for (let i = 0; i < n; i++) {
-    let w = doc.widthOfString(group.columns[i]!)
-    for (const row of sampleRows) {
+    let minimum = MIN_COL_W
+    let preferred = MIN_COL_W
+    const measure = (text: string, bold: boolean) => {
+      doc.font(bold ? theme.fontBold : theme.font).fontSize(theme.table)
+      const measured = textWidths(doc, text)
+      // Leave a small tolerance for PDFKit's wrapping arithmetic.
+      minimum = Math.max(minimum, measured.minimum + theme.cellPadX * 2 + 0.5)
+      preferred = Math.max(preferred, measured.preferred + theme.cellPadX * 2 + 0.5)
+    }
+    measure(group.columns[i]!, group.columnStyles?.[i]?.header?.bold ?? theme.design !== 'modern')
+    for (const row of group.rows) {
       const cell = row[i]
-      if (cell === null || cell === undefined) continue
-      w = Math.max(w, doc.widthOfString(pdfCellText(cell)))
+      if (styledCell(cell) && cell.segments?.length) {
+        for (const segment of cell.segments) measure(segment.text, segment.bold === true)
+      } else {
+        measure(cell == null ? '—' : pdfCellText(cell),
+          (styledCell(cell) ? cell.bold : undefined) ?? group.columnStyles?.[i]?.body?.bold ?? false)
+      }
     }
-    natural[i] = Math.min(Math.max(Math.ceil(w), MIN_COL_W), maxColW)
+    minima.push(minimum)
+    natural.push(Math.max(minimum, Math.min(preferred, contentWidth * MAX_COL_FRAC)))
   }
 
-  const total = natural.reduce((a, b) => a + b, 0)
+  if (group.columnWeights) {
+    const weights = group.columnWeights
+    if (weights.length !== n || weights.some(weight => !Number.isFinite(weight) || weight <= 0))
+      throw new RangeError('Report column weights must be positive and match the column count.')
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+    const widths = weights.map(weight => contentWidth * weight / totalWeight)
+    if (widths.some((width, i) => width < minima[i]!)) throw new PdfLayoutError()
+    return widths
+  }
+
+  const floor = minima.reduce((sum, width) => sum + width, 0)
+  if (floor > contentWidth) throw new PdfLayoutError()
+  const total = natural.reduce((sum, width) => sum + width, 0)
   if (total <= contentWidth) {
-    // Fill the page width by distributing slack evenly.
-    const extra = contentWidth - total
-    for (let i = 0; i < n; i++) natural[i] = natural[i]! + extra / n
-    return natural.map((w) => Math.round(w))
+    return natural.map(width => width + (contentWidth - total) / n)
   }
-
-  // Overflow: scale down, then iteratively reclaim slack from columns still
-  // above the floor until the total fits (or every column is at the floor).
-  const scale = contentWidth / total
-  const widths = natural.map((w) => Math.max(w * scale, MIN_COL_W))
-  for (let guard = 0; guard < 64; guard++) {
-    const sum = widths.reduce((a, b) => a + b, 0)
-    if (sum <= contentWidth + 0.5) break
-    const shrinkable = widths
-      .map((w, i) => ({ i, slack: w - MIN_COL_W }))
-      .filter((x) => x.slack > 0.5)
-    if (shrinkable.length === 0) break
-    const excess = sum - contentWidth
-    const slackSum = shrinkable.reduce((a, b) => a + b.slack, 0)
-    for (const s of shrinkable) {
-      widths[s.i] = Math.max(widths[s.i]! - (excess * s.slack) / slackSum, MIN_COL_W)
-    }
-  }
-  return widths.map((w) => Math.round(Math.max(w, MIN_COL_W)))
+  const available = contentWidth - floor
+  const flexible = total - floor
+  return minima.map((minimum, i) => minimum + available * (natural[i]! - minimum) / flexible)
 }
-
-
 
 /**
  * Render a table group's body (header + rows) starting at `startY`. Handles
@@ -110,7 +138,8 @@ export function drawTable(
     x += w
   }
 
-  const headerHeight = measureRowHeight(doc, group.columns, widths, theme, theme.fontBold)
+  const headerStyles = group.columns.map((_, i) => ({ body: { bold: group.columnStyles?.[i]?.header?.bold ?? theme.design !== 'modern' } }))
+  const headerHeight = measureRowHeight(doc, group.columns, widths, theme, theme.font, headerStyles)
   let y = startY
 
   const drawHeader = (topY: number) => {
@@ -273,7 +302,7 @@ function measureRowHeight(
     const v = cells[i]
     const text = pdfCellText(v)
     const w = Math.max(widths[i]! - theme.cellPadX * 2, 1)
-    doc.font((styledCell(v) && v.bold) || columnStyles?.[i]?.body?.bold ? theme.fontBold : font).fontSize(theme.table)
+    doc.font(((styledCell(v) ? v.bold : undefined) ?? columnStyles?.[i]?.body?.bold) ? theme.fontBold : font).fontSize(theme.table)
     const h = styledCell(v) && v.segments?.length
       ? v.segments.reduce((sum, segment, index) => {
           doc.font(segment.bold ? theme.fontBold : font).fontSize(theme.table)

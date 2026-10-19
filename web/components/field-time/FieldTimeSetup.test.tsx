@@ -246,6 +246,9 @@ test("a blank policy stays undeclared through save and shows the native remedy",
   const { validateFieldTimeSettings } = await import('@openbooks/engine/hrm/field-time/settings');
   const seen: Record<string, unknown>[] = [];
   const prior = globalThis.fetch;
+  const priorScroll = window.HTMLElement.prototype.scrollIntoView;
+  let revealed: HTMLElement | null = null;
+  window.HTMLElement.prototype.scrollIntoView = function(this: HTMLElement) { revealed = this; };
   globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
     seen.push(body);
@@ -277,10 +280,12 @@ test("a blank policy stays undeclared through save and shows the native remedy",
     for (const key of ['roundingMode', 'equipmentToleranceHours', 'signatureRequired', 'photoRequired']) assert.equal(seen[0]?.[key], null);
     assert.match(host.querySelector('[role="alert"]')?.textContent ?? '', /Rounding mode is not declared.*Timesheets setup/);
     assert.equal(host.textContent?.includes(msg('rulesSaved')), false);
+    assert.equal(revealed, host.querySelector('[role="alert"]'), 'the native refusal is brought into the visible scroll area');
   } finally {
     await act(async () => root.unmount());
     host.remove();
     globalThis.fetch = prior;
+    window.HTMLElement.prototype.scrollIntoView = priorScroll;
   }
 });
 

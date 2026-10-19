@@ -79,6 +79,9 @@ export function FieldTimeSetup({
   const [kioskName, setKioskName] = useState('')
   const [pinWorker, setPinWorker] = useState('')
   const [pin, setPin] = useState('')
+  const revealRefusal = useCallback((element: HTMLParagraphElement | null) => {
+    element?.scrollIntoView({ block: 'nearest' })
+  }, [])
 
   const saveSettings = useCallback(async () => {
     setBusy(true)
@@ -338,7 +341,7 @@ export function FieldTimeSetup({
       </section>
 
       {error ? (
-        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+        <p ref={revealRefusal} className="text-sm text-red-600 dark:text-red-400" role="alert">
           {error}
         </p>
       ) : null}

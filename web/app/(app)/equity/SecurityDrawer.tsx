@@ -4,14 +4,16 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { Badge, Button, Input, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Input, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea } from '@openbooks/ui'
 import { DrawerTabStrip } from '@/components/drawer-tab-strip'
 import { JournalEntryLink } from '@/components/journal-entry-link'
 import { useMoney } from '@/components/money-provider'
 import { formatDecimal } from '@/lib/money-format'
 import { useAppAction } from '@/lib/use-app-action'
 import type { RecordEventResult } from '@openbooks/engine/equity'
-import type { SecurityDrawerData } from './view'
+import type { SecurityDrawerData, SecurityDrawerRefusal } from './view'
+import { AsyncUrlDrawer } from '@/components/async-url-drawer'
+import { joinRefusal } from '@/lib/refusal-sentence'
 import {
   CommandRefusal, Field, LINK, PendingActions, STATUS_VARIANT, SegmentTabs, Stat, postCommand, toastGoverned, useCivilDate, useDecimal, usePercent, usePrice, useShares, withParams,
 } from './shared'
@@ -47,7 +49,33 @@ const str = (value: unknown): string | null => (typeof value === 'string' && val
  * actions an Equity action Flow holds for approval are listed above the
  * tabs until decided.
  */
-export function SecurityDrawer({ context, detail, releases, closeHref, holders, rounds, commonClasses, considerationAccounts }: SecurityDrawerData) {
+/** The requested identity owns one shell through refusal, retry and detail. */
+export function SecurityDrawer(drawer: SecurityDrawerData | SecurityDrawerRefusal) {
+  const t = useTranslations('equity')
+  const common = useTranslations('common')
+  const router = useRouter()
+  const refusal = 'refusal' in drawer ? drawer : null
+  const loaded = 'detail' in drawer ? drawer : null
+  const s = loaded?.detail.security
+  const status = loaded?.detail.state?.status ?? loaded?.detail.convertible?.status ?? 'outstanding'
+  const election = loaded?.detail.election83b
+  return (
+    <AsyncUrlDrawer open openKey={refusal?.securityId ?? String(s?.id)} closeHref={drawer.closeHref} size="2xl"
+      pending={false} error={refusal ? joinRefusal(refusal.refusal.message, refusal.refusal.remedy) : null}
+      onRetry={() => router.refresh()}
+      title={s ? <span className="flex items-center gap-2.5">
+        <span className="font-mono">{String(s.security_number)}</span>
+        <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{t(`status.${status}`)}</Badge>
+        {election && <Badge variant={election.state === 'filed' ? 'success' : election.state === 'open' ? 'warning' : 'outline'}>{t(`election83b.${election.state}`)}</Badge>}
+      </span> : common('feedback.loadFailed')}
+      description={s && loaded ? `${t(`kind.${String(s.kind)}`)} · ${loaded.detail.holderName}` : undefined}
+    >
+      {loaded ? <SecurityDrawerBody {...loaded} /> : null}
+    </AsyncUrlDrawer>
+  )
+}
+
+function SecurityDrawerBody({ context, detail, releases, holders, rounds, commonClasses, considerationAccounts }: SecurityDrawerData) {
   const t = useTranslations('equity')
   const locale = useLocale()
   const shares = useShares()
@@ -115,20 +143,7 @@ export function SecurityDrawer({ context, detail, releases, closeHref, holders, 
   ]
   const election = detail.election83b
   return (
-    <UrlDrawer
-      open
-      closeHref={closeHref}
-      size="2xl"
-      title={
-        <span className="flex items-center gap-2.5">
-          <span className="font-mono">{String(s.security_number)}</span>
-          <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{t(`status.${status}`)}</Badge>
-          {election && <Badge variant={election.state === 'filed' ? 'success' : election.state === 'open' ? 'warning' : 'outline'}>{t(`election83b.${election.state}`)}</Badge>}
-        </span>
-      }
-      description={`${t(`kind.${kind}`)} · ${detail.holderName}`}
-    >
-      <div className="space-y-5 p-1">
+    <div className="space-y-5 p-1">
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {detail.state ? (
             <>
@@ -379,8 +394,7 @@ export function SecurityDrawer({ context, detail, releases, closeHref, holders, 
             carrying={detail.convertible?.convertingAmount ?? null}
           />
         )}
-      </div>
-    </UrlDrawer>
+    </div>
   )
 }
 

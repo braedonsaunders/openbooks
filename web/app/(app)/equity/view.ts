@@ -8,6 +8,7 @@ import { POINT_IN_TIME_PERIOD_PRESETS } from '@openbooks/reports'
 import {
   CONSIDERATION_ACCOUNT_TYPES,
   EquityError,
+  equityError,
   listCompensationRuns,
   listEquityEntities,
   listInterestRuns,
@@ -247,6 +248,12 @@ export interface SecurityDrawerData {
   considerationAccounts: Option[]
 }
 
+export interface SecurityDrawerRefusal {
+  securityId: string
+  closeHref: string
+  refusal: { message: string; remedy: string }
+}
+
 export interface NewRecordData {
   context: EquityContext
   kind: NewRecordKind
@@ -318,7 +325,7 @@ export interface EquityPageData {
   waterfall: WaterfallViewData | null
   runs: RunsViewData | null
   drawerOpen: boolean
-  drawer: SecurityDrawerData | null
+  drawer: SecurityDrawerData | SecurityDrawerRefusal | null
   newOpen: boolean
   newRecord: NewRecordData | null
 }
@@ -603,8 +610,14 @@ async function loadEquityPage(sp: Record<string, string | string[] | undefined>)
     return runsData(sp, await contextRead, keep, orgId, actor, entity.id, today, can(authz, 'periods.manage'))
   }
 
-  const drawerRead = async (): Promise<SecurityDrawerData | null> => {
-    if (!securityParam || !isUuid(securityParam)) return null
+  const drawerRead = async (): Promise<SecurityDrawerData | SecurityDrawerRefusal | null> => {
+    if (!securityParam) return null
+    const missing = async (): Promise<SecurityDrawerRefusal> => ({
+      securityId: securityParam,
+      closeHref: keep({ security: undefined }),
+      refusal: await readerRefusal(equityError('securityUnknown')),
+    })
+    if (!isUuid(securityParam)) return missing()
     try {
       const [detail, structureView, holders, accounts, context] = await Promise.all([
         loadSecurityDetail({ ...actor, securityId: securityParam, asOf }),
@@ -613,7 +626,7 @@ async function loadEquityPage(sp: Record<string, string | string[] | undefined>)
         canManage ? considerationAccounts(orgId) : [],
         contextRead,
       ])
-      if (detail.entity.id !== entity.id) return null
+      if (detail.entity.id !== entity.id) return missing()
       return {
         context,
         detail,
@@ -625,8 +638,12 @@ async function loadEquityPage(sp: Record<string, string | string[] | undefined>)
         considerationAccounts: accounts,
       }
     } catch (error) {
-      if (!(error instanceof EquityError) || error.status !== 404) throw error
-      return null
+      if (!(error instanceof EquityError)) throw error
+      return {
+        securityId: securityParam,
+        closeHref: keep({ security: undefined }),
+        refusal: await readerRefusal(error),
+      }
     }
   }
 
