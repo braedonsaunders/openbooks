@@ -330,6 +330,11 @@ export async function autoMatchBillLinesToOrders(
     if (!advanced) {
       throw new InventoryError("a purchase-order line changed while the bill was being matched");
     }
+    // The next bill line may target this same order line. Carry forward the
+    // quantity written above so its ordered and received cover is current.
+    poLine.quantity_billed = fromQuantityUnits(
+      toQuantityUnits(poLine.quantity_billed) + billUnits,
+    );
     const bag = (isJsonRecord(row.line.custom) ? { ...row.line.custom } : {}) as Record<string, unknown>;
     bag.purchaseOrderLineId = poLine.id;
     bag.convertedFrom = { documentId: poLine.document_id, lineId: poLine.id, quantity: row.cover };

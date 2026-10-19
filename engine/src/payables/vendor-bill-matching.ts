@@ -423,6 +423,11 @@ export async function matchVendorBillLines(input: {
           );
         }
         prepared.push({ billLine, poLine, cover: fromQuantityUnits(billUnits) });
+        // Later bill lines in this request must see the cover consumed by
+        // earlier lines targeting the same purchase-order line.
+        poLine.quantity_billed = fromQuantityUnits(
+          toQuantityUnits(poLine.quantity_billed) + billUnits,
+        );
       }
       const reopened: string[] = [];
       const reopenForWrites = async (id: string, status: string, label: string) => {

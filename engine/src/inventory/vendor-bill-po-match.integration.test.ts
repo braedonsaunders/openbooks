@@ -16,7 +16,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  * the billed cover and the variance entries back.
  * Runs in a child with React's server condition like its siblings.
  */
-test("a hand-coded bill for received stock auto-matches on post, refuses when ambiguous", { skip: !DB }, () => {
+test("a hand-coded bill for received stock auto-matches on post and refuses duplicate receipt claims", { skip: !DB }, () => {
   const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
@@ -37,6 +37,64 @@ test("a hand-coded bill for received stock auto-matches on post, refuses when am
         update item_inventory_profiles set unit_conversions = '{"lb": 1}'::jsonb
          where org_id = \${org.orgId} and item_id in (\${org.items.fifo}, \${org.items.movingAvg})
       \`);
+      // Two lines cannot claim the same received quantity twice in one
+      // Match action, even though the order line still has ordered quantity.
+      const partialOrder = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null));
+      const partialSource = randomUUID();
+      await db.execute(sql\`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, account_id, description, quantity, unit,
+           unit_price, amount, tax_amount, quantity_fulfilled, quantity_billed, stock_location_id, custom)
+        values
+          (\${partialSource}, \${org.orgId}, \${partialOrder.id}, 1, \${org.items.fifo}, \${org.accounts.invAsset},
+           'Partially received grain', '20', 'lb', '6', '120', '0', '0', '0', \${org.stockLocationId}, '{}'::jsonb)
+      \`);
+      await db.execute(sql\`
+        update documents
+           set status = 'approved', party_id = \${org.vendorId}, subsidiary_id = \${org.subsidiaryId},
+               document_date = \${org.date}, subtotal = '120', total = '120'
+         where id = \${partialOrder.id} and org_id = \${org.orgId}
+      \`);
+      await withOrg(org.orgId, () => receivePurchaseOrder(org.orgId, userId, partialOrder.id, {
+        receiptDate: org.date, idempotencyKey: "m27-partial-receipt",
+        lines: [{ sourceLineId: partialSource, quantity: "10" }],
+      }));
+      const partialBillId = randomUUID();
+      const partialBillLineA = randomUUID();
+      const partialBillLineB = randomUUID();
+      const currency = (await db.execute(sql\`select base_currency as c from orgs where id = \${org.orgId}\`)).rows[0].c;
+      await db.execute(sql\`
+        insert into documents (id, org_id, kind, document_number, party_id, document_date, due_date, currency,
+                               status, subsidiary_id, subtotal, tax_total, total, custom, created_by)
+        values (\${partialBillId}, \${org.orgId}, 'vendor_bill', 'BILL-M27-PARTIAL', \${org.vendorId}, \${org.date}, \${org.date},
+                \${currency}, 'draft', \${org.subsidiaryId}, '120', '0', '120', '{}'::jsonb, \${userId})
+      \`);
+      await db.execute(sql\`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, account_id, description, quantity, unit,
+           unit_price, amount, tax_amount, stock_location_id, custom)
+        values
+          (\${partialBillLineA}, \${org.orgId}, \${partialBillId}, 1, \${org.items.fifo}, \${org.accounts.clearing},
+           'Partially received grain A', '10', 'lb', '6', '60', '0', \${org.stockLocationId}, '{}'::jsonb),
+          (\${partialBillLineB}, \${org.orgId}, \${partialBillId}, 2, \${org.items.fifo}, \${org.accounts.clearing},
+           'Partially received grain B', '10', 'lb', '6', '60', '0', \${org.stockLocationId}, '{}'::jsonb)
+      \`);
+      const { matchVendorBillLines } = await import("./engine/src/payables/vendor-bill-matching.ts");
+      await assert.rejects(
+        withOrg(org.orgId, () => matchVendorBillLines({
+          orgId: org.orgId, billId: partialBillId, actorId: userId,
+          matches: [
+            { billLineId: partialBillLineA, purchaseOrderLineId: partialSource },
+            { billLineId: partialBillLineB, purchaseOrderLineId: partialSource },
+          ],
+        })),
+        /only 0 received and unbilled/,
+      );
+      const partialBilled = (await db.execute(sql\`
+        select quantity_billed::text as billed from document_lines where id = \${partialSource}
+      \`)).rows[0].billed;
+      assert.equal(partialBilled, "0", "a refused multi-line match leaves billed quantity unchanged");
+
       const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null));
       const sourceA = randomUUID();
       const sourceB = randomUUID();
@@ -65,7 +123,6 @@ test("a hand-coded bill for received stock auto-matches on post, refuses when am
       // stocked lines are hand-coded straight to received-not-billed and a
       // freight line rides the inventory asset, exactly the tenant shape.
       const billId = randomUUID();
-      const currency = (await db.execute(sql\`select base_currency as c from orgs where id = \${org.orgId}\`)).rows[0].c;
       await db.execute(sql\`
         insert into documents (id, org_id, kind, document_number, party_id, document_date, due_date, currency,
                                status, subsidiary_id, subtotal, tax_total, total, custom, created_by)
