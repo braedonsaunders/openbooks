@@ -13,7 +13,7 @@
   },
   "emptySubmitted": {
     "title": "No pending submissions",
-    "description": "Documents you submit for approval will appear here while they wait."
+    "description": "Anything you submit for approval appears here while it waits."
   },
   "submitted": {
     "withdrawn": "{document} withdrawn — nothing was applied"

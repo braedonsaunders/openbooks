@@ -13,7 +13,7 @@
   },
   "emptySubmitted": {
     "title": "Aucune soumission en attente",
-    "description": "Les documents que vous soumettez pour approbation apparaîtront ici pendant leur attente."
+    "description": "Tout ce que vous soumettez à approbation apparaît ici pendant son attente."
   },
   "submitted": {
     "withdrawn": "{document} retiré — rien n’a été appliqué"

@@ -13,7 +13,7 @@
   },
   "emptySubmitted": {
     "title": "没有待处理的提交",
-    "description": "您提交审批的单据在等待期间将显示在此处。"
+    "description": "您提交审批的所有内容在等待期间都会显示在这里。"
   },
   "submitted": {
     "withdrawn": "已撤回 {document}，未应用任何内容"

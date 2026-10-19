@@ -13,7 +13,7 @@
   },
   "emptySubmitted": {
     "title": "保留中の申請はありません",
-    "description": "承認のために提出した書類が、承認待ちの間ここに表示されます。"
+    "description": "承認を申請したものは、待機中ここに表示されます。"
   },
   "submitted": {
     "withdrawn": "{document} を取り下げました。何も適用されていません"

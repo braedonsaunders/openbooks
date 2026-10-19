@@ -13,7 +13,7 @@
   },
   "emptySubmitted": {
     "title": "Keine ausstehenden Einreichungen",
-    "description": "Dokumente, die Sie zur Genehmigung einreichen, werden hier angezeigt, während sie warten."
+    "description": "Alles, was Sie zur Genehmigung einreichen, erscheint hier, solange es wartet."
   },
   "submitted": {
     "withdrawn": "{document} zurückgezogen – nichts wurde angewendet"

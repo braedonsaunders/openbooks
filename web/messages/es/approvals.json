@@ -13,7 +13,7 @@
   },
   "emptySubmitted": {
     "title": "No hay envíos pendientes",
-    "description": "Los documentos que envíe para aprobación aparecerán aquí mientras esperan."
+    "description": "Todo lo que envíe para aprobación aparece aquí mientras espera."
   },
   "submitted": {
     "withdrawn": "{document} retirado: no se aplicó nada"

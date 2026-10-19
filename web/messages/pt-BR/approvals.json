@@ -13,7 +13,7 @@
   },
   "emptySubmitted": {
     "title": "Nenhuma submissão pendente",
-    "description": "Documentos que você enviar para aprovação aparecerão aqui enquanto aguardam."
+    "description": "Tudo o que você enviar para aprovação aparece aqui enquanto aguarda."
   },
   "submitted": {
     "withdrawn": "{document} retirado — nada foi aplicado"
