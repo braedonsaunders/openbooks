@@ -7,6 +7,7 @@ import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
+  grantScratchPermissions,
   seedApprovalFlow,
   seedDraftDocument,
   type ScratchOrg,
@@ -239,6 +240,7 @@ test("submit FAILS CLOSED when the approval flow resolves to zero approvers", { 
  * (pinned by the test below), so a retry can never double-fan-out gates. */
 test("a failed run can be retried once its gate resolves", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
+    await grantScratchPermissions(org.orgId, actors.adminId, ["flows.manage"]);
     await seedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
       mode: "any",
@@ -297,20 +299,23 @@ test("retrying a non-failed run is refused", { skip: !DB }, async () => {
   });
 });
 
-test("the submitter cannot approve their own document (secure by default)", { skip: !DB }, async () => {
+test("the maker cannot approve their document even after a gate is assigned to them", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
-    // Gate directly assigned to the submitter, no preventSelfApproval flag.
+    // Normal routing excludes the maker; retarget a live gate to prove the
+    // decision boundary also refuses a legacy or otherwise reassigned row.
     await seedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
       mode: "any",
-      assignees: [{ type: "user", userId: actors.submitterId }],
+      assignees: [{ type: "user", userId: actors.approver1Id }],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
     await submitForApproval("vendor_bill", docId);
     const [gate] = await gateRows({ subjectId: docId });
+    assert.ok(gate, "an independent approver receives the gate");
+    await db.execute(sql`update flow_gates set assignee_user_id = ${actors.submitterId} where id = ${gate.id}`);
 
     await assert.rejects(
-      () => decideGate({ gateId: gate!.id, decision: "approved", userId: actors.submitterId }),
+      () => decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId }),
       /your own submission/,
     );
     assert.equal(await docStatus(docId), "pending_approval", "still gated, not self-approved");
