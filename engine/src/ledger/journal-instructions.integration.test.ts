@@ -73,7 +73,7 @@ test("scheduled reversals include live allocation entries in secondary books",{s
   const id=await journal(org,actor,'monetary',[{account:org.accounts.cogs,amount:'10'},{account:org.accounts.ap,amount:'-10'}],{reverseOn});
   const sourceEntry=await postDocument(id,controls(org),{audit:{actorId:actor,source:'ui'}});
   const allocation=await postEntry(db,{orgId:org.orgId,bookId:secondaryBook,subsidiaryId:org.subsidiaryId,
-   entryNumber:`ALLOC-${id}`,postingDate:org.date,periodId:org.periodId,origin:'allocation',sourceDocumentId:id,actorId:actor,
+   entryNumber:`ALLOC-${id}`,postingDate:org.date,periodId:org.periodId,origin:'allocation',sourceDocumentId:id,actorId:actor,currency:'CAD',
    lines:[{accountId:org.accounts.cogs,amount:'7'},{accountId:org.accounts.ap,amount:'-7'}]});
 
   const result=await runScheduledJournalReversals({orgId:org.orgId,actorId:actor,asOf:reverseOn});

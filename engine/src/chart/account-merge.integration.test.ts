@@ -146,9 +146,11 @@ test("P&L merge balances and period locks follow each subsidiary's fiscal calend
               (${marchPeriod},${s.org.orgId},${defaultCalendar},2026,3,'2026-03','2026-03-01','2026-03-31')`);
       await postEntry(db,{orgId:s.org.orgId,bookId:s.org.bookId,subsidiaryId:s.org.subsidiaryId,
         entryNumber:`PRE-FY-${randomUUID().slice(0,8)}`,postingDate:'2026-01-15',periodId:januaryPeriod,origin:'manual',
+        currency:'CAD',
         lines:[{accountId:s.source,amount:'500'},{accountId:s.org.accounts.bank,amount:'-500'}]});
       await postEntry(db,{orgId:s.org.orgId,bookId:s.org.bookId,subsidiaryId:s.org.subsidiaryId,
         entryNumber:`PRE-FY-${randomUUID().slice(0,8)}`,postingDate:'2026-03-15',periodId:marchPeriod,origin:'manual',
+        currency:'CAD',
         lines:[{accountId:s.source,amount:'300'},{accountId:s.org.accounts.bank,amount:'-300'}]});
       await db.execute(sql`insert into fiscal_calendars(id,org_id,name,year_start_month,is_default,is_active)
         values(${entityCalendar},${s.org.orgId},'April fiscal year',4,false,true)`);
