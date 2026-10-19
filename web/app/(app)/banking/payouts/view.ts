@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/platform/database'
 import { page, pageHeader, grid, statTile, widgetBlock, ref, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
+import { builtInReportDefinitionId } from '../../../../lib/custom-reports'
 import { getMoneyFormatter } from '@/lib/money-server'
 
 /**
@@ -116,7 +117,7 @@ export interface PayoutsData {
   tiles: [PayoutTile, PayoutTile, PayoutTile]
   queue: PayoutQueueRow[]
   batches: PayoutBatchRow[]
-  reportHref: string
+  reportHref: string | null
   queueAllHref: string
   strings: PayoutsStrings
 }
@@ -139,7 +140,7 @@ export async function loadPayouts(
 
   // Unreconciled payouts: posted batches whose bank legs match no statement
   // line yet — the same derivation the drawer tie-out reads.
-  const [unreconciledResult, unmatchedResult, inTransitResult, queueResult, batchesResult] = await Promise.all([
+  const [unreconciledResult, unmatchedResult, inTransitResult, queueResult, batchesResult, reportId] = await Promise.all([
     db.execute<{ count: string }>(sql`
     select count(*)::text as count from psp_settlement_batches b
      where b.org_id = ${orgId} and b.status = 'posted'${subsidiaryFilter}
@@ -195,6 +196,9 @@ export async function loadPayouts(
      order by b.settlement_date desc, b.created_at desc
      limit 50
   `),
+    can(authz, 'reports.read')
+      ? builtInReportDefinitionId(orgId, 'payout-reconciliation')
+      : Promise.resolve(null),
   ])
   const unreconciled = unreconciledResult.rows[0]
   const unmatched = unmatchedResult.rows[0]
@@ -264,7 +268,7 @@ export async function loadPayouts(
       amount: money(row.amount, { currency: row.currency }),
     })),
     batches: batchRows,
-    reportHref: '/reports/payout-reconciliation',
+    reportHref: reportId ? `/reports/custom/run/${reportId}` : null,
     queueAllHref: '/banking/payouts/unmatched',
     strings: {
       queueTitle: t('queueTitle'),

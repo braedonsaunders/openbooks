@@ -49,7 +49,7 @@ export interface PayoutsWorkspaceProps {
   tiles: [PayoutTile, PayoutTile, PayoutTile]
   queue: PayoutQueueRow[]
   batches: PayoutBatchRow[]
-  reportHref: string
+  reportHref: string | null
   queueAllHref: string
   strings: PayoutsStrings
   emptyTitle: string
@@ -191,11 +191,11 @@ function PayoutsDrawer({
       if (signal?.aborted) return
       setDetail(data)
       setLoading(false)
-    } catch {
+    } catch (error: unknown) {
       // Aborts and network loss both land here; an abort means a newer
       // load owns the shell, so only a live shell reports failure.
       if (!signal?.aborted) {
-        setFailed(strings.loadFailedLabel)
+        setFailed(error instanceof Error ? error.message : strings.loadFailedLabel)
         setLoading(false)
       }
     }
@@ -677,14 +677,18 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
             </Button>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">{strings.accrueHint}</p>
-          <p className="mt-2 text-sm">
-            <Link className="underline" href={reportHref}>{strings.reportLinkLabel}</Link>
-          </p>
+          {reportHref ? (
+            <p className="mt-2 text-sm">
+              <Link className="underline" href={reportHref}>{strings.reportLinkLabel}</Link>
+            </p>
+          ) : null}
         </DisclosureSection>
       ) : (
-        <p className="text-sm">
-          <Link className="underline" href={reportHref}>{strings.reportLinkLabel}</Link>
-        </p>
+        reportHref ? (
+          <p className="text-sm">
+            <Link className="underline" href={reportHref}>{strings.reportLinkLabel}</Link>
+          </p>
+        ) : null
       )}
       {selectedBatchId ? (
         <PayoutsDrawer

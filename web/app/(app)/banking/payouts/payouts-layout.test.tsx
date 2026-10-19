@@ -28,22 +28,81 @@ const props = {
     { lineId: 'line-b', batchId: 'batch-b', provider: 'Secondary provider', externalRef: 'Secondary payout', settlementDate: '2026-10-02', kind: 'sale', amount: '20.00 USD' },
   ],
   batches: [{ id: 'batch-a', provider: 'Provider', externalRef: 'Batch payout', settlementDate: '2026-10-01', netAmount: '10.00 USD', status: 'draft', statusLabel: 'Draft', unmatchedLines: 1, tied: false, accrued: false }],
-  reportHref: '/reports', queueAllHref: '/banking/payouts/unmatched', strings,
+  reportHref: '/reports/custom/run/payout-report', queueAllHref: '/banking/payouts/unmatched', strings,
   emptyTitle: 'No payouts', emptyDescription: 'Import a provider payout to review it.',
 } as unknown as PayoutsWorkspaceProps
 
-async function mount() {
+async function mount(workspaceProps: PayoutsWorkspaceProps = props) {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
   const render = async () => act(async () => root.render(
     <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-      <MoneyProvider currency="USD"><PayoutsWorkspace {...props} /></MoneyProvider>
+      <MoneyProvider currency="USD"><PayoutsWorkspace {...workspaceProps} /></MoneyProvider>
     </NextIntlClientProvider>,
   ))
   await render()
   return { host, render, async close() { await act(async () => root.unmount()); host.remove() } }
 }
+
+test('the payout report link uses its run URL and is hidden when unavailable', async () => {
+  route.query = ''
+  const view = await mount()
+  try {
+    const link = [...view.host.querySelectorAll('a')].find((anchor) => anchor.textContent === 'reportLinkLabel')
+    assert.equal(link?.getAttribute('href'), '/reports/custom/run/payout-report')
+  } finally { await view.close() }
+
+  const withoutReport = await mount({ ...props, reportHref: null })
+  try {
+    assert.ok(![...withoutReport.host.querySelectorAll('a')].some((anchor) => anchor.textContent === 'reportLinkLabel'))
+  } finally { await withoutReport.close() }
+})
+
+test('a payout detail refresh preserves the server refusal message', async () => {
+  const originalFetch = globalThis.fetch
+  let detailReads = 0
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url.includes('batchId=')) {
+      detailReads += 1
+      if (detailReads > 1) {
+        return new Response(JSON.stringify({ error: 'The payout batch is closed', remedy: 'Reopen the batch before matching it.' }), {
+          status: 409,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify({
+        batch: { id: 'batch-a', provider: 'Provider', externalRef: 'Batch payout', status: 'draft', currency: 'USD', netAmount: '10.00', settlementDate: '2026-10-01' },
+        lines: [],
+        tieout: { status: 'not_posted' },
+        accruals: [],
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url === '/api/psp/settlements' && init?.method === 'POST') {
+      return new Response(JSON.stringify({ lines: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    throw new Error(`Unexpected request: ${url}`)
+  }
+
+  let view: Awaited<ReturnType<typeof mount>> | null = null
+  try {
+    route.query = 'view=batches&payout=batch-a'
+    view = await mount({ ...props, canReconcile: true })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    const match = [...document.body.querySelectorAll('button')].find((button) => button.textContent === 'matchLabel')
+    assert.ok(match, `the loaded payout detail offers its match action: ${document.body.textContent}`)
+    await act(async () => {
+      match.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    assert.ok(document.body.textContent?.includes('The payout batch is closed — Reopen the batch before matching it.'))
+    assert.ok(!document.body.textContent?.includes('loadFailedLabel'))
+  } finally {
+    if (view) await view.close()
+    globalThis.fetch = originalFetch
+  }
+})
 
 test('payout review and batches replace each other rather than stacking tables', async () => {
   route.query = 'subsidiaryId=entity-a'
