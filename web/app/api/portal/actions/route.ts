@@ -4,6 +4,7 @@ import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
+import { notFound } from '@/lib/api/responses'
 import { db, withOrgContext } from '@openbooks/engine/platform/database'
 import {
   PORTAL_ACTOR_ID,
@@ -15,6 +16,7 @@ import {
   pauseSubscription,
   previewSubscriptionChange,
   resolvePortalSession,
+  readPortalSettings,
   resolvePortalSetupCurrency,
   resumeSubscription,
 } from '@openbooks/engine/portal'
@@ -29,8 +31,8 @@ export const runtime = 'nodejs'
 const sessionToken = z.string().min(16).max(256)
 
 const bodySchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('previewSubscription'), sessionToken, subscriptionId: uuidString(), quantity: z.unknown().optional(), unitPrice: z.unknown().optional(), componentKey: z.string().max(120).optional(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
-  z.object({ action: z.literal('changeSubscription'), sessionToken, subscriptionId: uuidString(), quantity: z.unknown().optional(), unitPrice: z.unknown().optional(), componentKey: z.string().max(120).optional(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
+  z.object({ action: z.literal('previewSubscription'), sessionToken, subscriptionId: uuidString(), quantity: z.unknown().optional(), componentKey: z.string().max(120).optional(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict(),
+  z.object({ action: z.literal('changeSubscription'), sessionToken, subscriptionId: uuidString(), quantity: z.unknown().optional(), componentKey: z.string().max(120).optional(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict(),
   z.object({ action: z.literal('pauseSubscription'), sessionToken, subscriptionId: uuidString() }),
   z.object({ action: z.literal('resumeSubscription'), sessionToken, subscriptionId: uuidString() }),
   z.object({ action: z.literal('cancelSubscription'), sessionToken, subscriptionId: uuidString(), reason: z.string().max(200) }),
@@ -54,6 +56,29 @@ const bodySchema = z.discriminatedUnion('action', [
 
 type Body = z.output<typeof bodySchema>
 
+function sectionForAction(action: Body['action']): 'subscriptions' | 'paymentMethods' | 'giftCards' | 'invoices' | null {
+  switch (action) {
+    case 'previewSubscription':
+    case 'changeSubscription':
+    case 'pauseSubscription':
+    case 'resumeSubscription':
+    case 'cancelSubscription':
+    case 'acceptSaveOffer':
+      return 'subscriptions'
+    case 'setDefaultMethod':
+    case 'removeMethod':
+    case 'startMethodSetup':
+      return 'paymentMethods'
+    case 'lookupGiftCard':
+      return 'giftCards'
+    case 'payInvoice':
+    case 'acceptBillingReview':
+    case 'disputeBillingReview':
+      return 'invoices'
+  }
+  return null
+}
+
 /**
  * Public: every portal mutation. The session token is verified in-route on
  * every request and every record is scope-checked to the session party —
@@ -64,12 +89,15 @@ export const POST = defineRoute({
   body: bodySchema,
   opaque: {
     quantity: "quantities are parsed to exact decimals by parsePortalDecimal in previewSubscriptionChange and applySubscriptionChange with a named 422",
-    unitPrice: "prices are parsed to exact decimals by parsePortalDecimal in previewSubscriptionChange and applySubscriptionChange with a named 422",
   },
   handler: async ({ body }: { body: Body }) => {
     const session = await resolvePortalSession(body.sessionToken)
     if (!session) return NextResponse.json({ error: 'This portal session is invalid or expired' }, { status: 404 })
     const { orgId, partyId, linkId } = session
+    const section = sectionForAction(body.action)
+    if (section && !(await withOrgContext(orgId, () => readPortalSettings(orgId, db))).sections[section]) {
+      return notFound('portal section')
+    }
     switch (body.action) {
       case 'previewSubscription':
         return NextResponse.json(await previewSubscriptionChange(orgId, partyId, body))

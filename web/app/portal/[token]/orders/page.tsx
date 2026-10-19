@@ -11,10 +11,10 @@ export default async function PortalOrdersPage({ params }: { params: Promise<{ t
   const { token } = await params
   const t = await getTranslations('portal')
   const locale = await getLocale()
-  const { home, orgId } = await portalPage(token, 'orders')
+  const { home, orgId, partyId } = await portalPage(token, 'orders')
   const tracking = new Map<string, Awaited<ReturnType<typeof portalOrderTracking>>>()
   for (const order of home.orders) {
-    tracking.set(order.id, await withOrgContext(orgId, () => portalOrderTracking(orgId, order.id, db)))
+    tracking.set(order.id, await withOrgContext(orgId, () => portalOrderTracking(orgId, partyId, order.id, db)))
   }
   return (
     <PortalShell orgName={home.settings.portalName} title={t('orders.title')}>

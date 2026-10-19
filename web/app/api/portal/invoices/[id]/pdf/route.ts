@@ -1,9 +1,10 @@
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
+import { notFound } from '@/lib/api/responses'
 import { db, withOrgContext } from '@openbooks/engine/platform/database'
 import { businessToday } from '@openbooks/engine/platform/business-date'
-import { assertPortalDocument, resolvePortalSession } from '@openbooks/engine/portal'
+import { assertPortalDocument, readPortalSettings, resolvePortalSession } from '@openbooks/engine/portal'
 import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { unexpectedServerError } from '@/lib/api/unexpected'
 import { pdfResponse, safeName } from '@/lib/export'
@@ -29,6 +30,8 @@ export const GET = defineRoute({
     const url = new URL(request.url)
     const session = await resolvePortalSession(url.searchParams.get('sessionToken') ?? '')
     if (!session) return NextResponse.json({ error: 'record not found' }, { status: 404 })
+    const settings = await withOrgContext(session.orgId, () => readPortalSettings(session.orgId, db))
+    if (!settings.sections.invoices) return notFound('portal section')
     if (!isUuid(params.id)) return NextResponse.json({ error: 'record not found' }, { status: 404 })
     const meta = PDF_RECORD_TYPE_BY_KEY['customer_invoice']
     if (!meta) return NextResponse.json({ error: 'unknown record type' }, { status: 400 })

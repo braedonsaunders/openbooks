@@ -203,14 +203,16 @@ export function extractPayloadTracking(payload: unknown): string | null {
   return null;
 }
 
+/** Read order tracking only when the order belongs to the session customer. */
 export async function portalOrderTracking(
   orgId: string,
+  partyId: string,
   orderId: string,
   runner: SqlExecutor = db,
 ): Promise<PortalOrderTracking[]> {
   const order = (await runner.execute<{ postingId: string | null }>(sql`
     select posting_document_id as "postingId" from channel_orders
-     where org_id = ${orgId} and id = ${orderId} limit 1
+     where org_id = ${orgId} and customer_party_id = ${partyId} and id = ${orderId} limit 1
   `)).rows[0];
   const tracking: PortalOrderTracking[] = [];
   if (order?.postingId) {
@@ -236,9 +238,12 @@ export async function portalOrderTracking(
     }
   }
   const fulfilments = (await runner.execute<{ payload: unknown; occurredAt: string }>(sql`
-    select payload, occurred_at::text as "occurredAt" from channel_order_events
-     where org_id = ${orgId} and order_id = ${orderId} and kind = 'fulfilment'
-     order by occurred_at desc
+    select e.payload, e.occurred_at::text as "occurredAt"
+      from channel_order_events e
+      join channel_orders o on o.org_id = e.org_id and o.id = e.order_id
+     where e.org_id = ${orgId} and o.customer_party_id = ${partyId}
+       and e.order_id = ${orderId} and e.kind = 'fulfilment'
+     order by e.occurred_at desc
   `)).rows;
   for (const event of fulfilments) {
     tracking.push({
