@@ -206,8 +206,8 @@ test("till drops use the selected subsidiary functional currency", { skip: !DB }
     await withBypassContext(() => db.execute(sql`
       update orgs set settings = settings || jsonb_build_object('cashSales',
         coalesce(settings->'cashSales', '{}'::jsonb) ||
-        jsonb_build_object('depositAccountIds', jsonb_build_array(${branchBankId}),
-                           'defaultCashAccountId', ${branchTillId}))
+        jsonb_build_object('depositAccountIds', jsonb_build_array(${branchBankId}::text),
+                           'defaultCashAccountId', ${branchTillId}::text))
        where id = ${org.orgId}`));
     stage = "creating the USD cash sale";
     await draftSale(org, branchTillId, "2026-07-12", "40.0000", subsidiaryId, "USD");
