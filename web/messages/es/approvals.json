@@ -34,19 +34,19 @@
     "waitingSince": "En espera desde"
   },
   "kinds": {
-    "vendor_bill": "factura de proveedor",
-    "customer_invoice": "factura de cliente",
-    "expense_report": "informe de gastos",
-    "journal": "asiento contable",
-    "purchase_order": "orden de compra",
-    "sales_order": "orden de venta",
-    "quote": "cotización",
-    "field_ticket": "parte de trabajo",
-    "close_run": "cierre de período",
-    "budget_scenario": "presupuesto",
-    "hrm_employment_change_request": "cambio de empleo",
-    "prebill": "prefactura",
-    "equity_action": "acción de capital"
+    "vendor_bill": "Factura de proveedor",
+    "customer_invoice": "Factura de cliente",
+    "expense_report": "Informe de gastos",
+    "journal": "Asiento contable",
+    "purchase_order": "Orden de compra",
+    "sales_order": "Orden de venta",
+    "quote": "Cotización",
+    "field_ticket": "Parte de trabajo",
+    "close_run": "Cierre de período",
+    "budget_scenario": "Presupuesto",
+    "hrm_employment_change_request": "Cambio de empleo",
+    "prebill": "Prefactura",
+    "equity_action": "Acción de capital"
   },
   "decide": {
     "rejectionReason": "Motivo del rechazo:",
@@ -99,5 +99,21 @@
     "signTitle": "Firmar para aprobar",
     "signLabel": "Escriba su nombre completo para firmar esta aprobación"
   },
-  "awaitingOthersSummary": "{count} en espera de otro aprobador"
+  "awaitingOthersSummary": "{count} en espera de otro aprobador",
+  "statuses": {
+    "draft": "Borrador",
+    "pending_approval": "Pendiente de aprobación",
+    "approved": "Aprobado",
+    "posted": "Contabilizado",
+    "voided": "Anulado",
+    "in_progress": "En curso",
+    "review": "En revisión",
+    "closed": "Cerrado",
+    "published": "Publicado",
+    "cancelled": "Cancelado"
+  },
+  "quantity": {
+    "shares": "{count, plural, one {{quantity} acción} other {{quantity} acciones}}"
+  },
+  "weekOf": "Semana del {date}"
 }

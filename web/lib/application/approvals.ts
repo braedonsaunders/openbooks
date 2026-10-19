@@ -25,10 +25,21 @@ import { ApplicationError, forbidden, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
 export type ApprovalWorklistItem =
-  | ({ kind: "flow_gate"; awaitingAnotherApprover?: boolean } & WorklistGate)
+  | ({
+      kind: "flow_gate";
+      awaitingAnotherApprover?: boolean;
+      /**
+       * The viewer may decide this gate through the native decide path
+       * (assigned directly, by role, by delegation, or as an organization
+       * admin, and not barred by separation of duties). Set by the
+       * organization reader, whose rows are not all the viewer's to decide;
+       * the caller's own worklist carries only gates that reach them.
+       */
+      canDecide?: boolean;
+    } & WorklistGate)
   | ({ kind: "document" } & WorklistDocument)
   | ({ kind: "budget" } & WorklistBudget)
-  | ({ kind: "timesheet" } & WorklistTimesheet);
+  | ({ kind: "timesheet"; canDecide?: boolean } & WorklistTimesheet);
 
 /**
  * One worklist for every thing awaiting the caller's approval: pending Flows
@@ -131,6 +142,76 @@ export async function approvalWorklistPageForAuthz(
       // The leg already excludes the actor's own weeks under
       // prevent-self-approval, so every row here is actionable.
       if (mayTimesheets) out.push({ ...item.timesheet, kind: "timesheet" });
+    }
+  }
+  return { items: out, total: page.total, kindCounts: page.kindCounts };
+}
+
+/**
+ * Every pending, live approval in the organization, inside the viewer's
+ * legal-entity boundary: Flows gates of every subject kind whatever their
+ * assignee, gateless pending documents, pending budget scenarios and
+ * gateless submitted timesheet weeks, whoever submitted them. This is the
+ * oversight view behind Inbox → All approvals, so it requires flows.manage;
+ * the caller's own worklist (My approvals, the dashboard tile, the badge and
+ * get_vitals) stays on approvalWorklistPageForAuthz.
+ *
+ * Each leg follows its own feature switch and read grant: gates and gateless
+ * documents ride the Flows feature, budgets ride Budgets with budgets.read or
+ * budgets.approve, and weeks ride Time Tracking with time.read or
+ * time.approve. Whether the viewer may decide a row is resolved per row:
+ * a gate through gateDecisionCapability — the same check the decide route's
+ * decideGate enforces, which admits the assignee, a role holder, an active
+ * delegate and an organization admin, and refuses the submitter under
+ * separation of duties — and a week by time.approve plus the week's own
+ * self-approval bar. Gateless documents and budgets decide in their record
+ * drawers, so their rows carry no inline decision.
+ */
+export async function approvalWorklistOrganizationPageForAuthz(
+  authz: Authz,
+  window: ApprovalWorklistWindow,
+): Promise<{ items: ApprovalWorklistItem[]; total: number; kindCounts: Map<string, number> }> {
+  if (!can(authz, "flows.manage")) throw forbidden("flows.manage");
+  const orgId = authz.user.orgId;
+  const [flowsOn, budgetsOn, timeTrackingOn] = await Promise.all([
+    isFeatureEnabled(orgId, "flows"),
+    isFeatureEnabled(orgId, "budgets"),
+    isFeatureEnabled(orgId, "timeTracking"),
+  ]);
+  const includeBudgets = budgetsOn && (can(authz, "budgets.read") || can(authz, "budgets.approve"));
+  const includeTimesheets = timeTrackingOn && (can(authz, "time.read") || can(authz, "time.approve"));
+  const mayDecideTimesheets = timeTrackingOn && can(authz, "time.approve");
+  if (!flowsOn && !includeBudgets && !includeTimesheets) return { items: [], total: 0, kindCounts: new Map() };
+  const page = await worklistApprovalsPage(
+    orgId,
+    authz.user.id,
+    {
+      roles: authz.user.roles.map((role) => role.key),
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      includeFlows: flowsOn,
+      includeBudgets,
+      includeTimesheets,
+      audience: "organization",
+    },
+    { limit: window.limit, offset: window.offset, kind: window.kind, query: window.query, overdue: window.overdue },
+  );
+  const out: ApprovalWorklistItem[] = [];
+  for (const item of page.items) {
+    if (item.kind === "flow_gate") {
+      // Bounded by the page window, like the caller reader's SoD check.
+      const capability = await gateDecisionCapability(item.gate.id, authz.user.id);
+      out.push({
+        ...item.gate,
+        kind: "flow_gate",
+        canDecide: capability.canAct,
+        awaitingAnotherApprover: capability.sodBlocked,
+      });
+    } else if (item.kind === "document") {
+      out.push({ ...item.document, kind: "document" });
+    } else if (item.kind === "budget") {
+      out.push({ ...item.budget, kind: "budget" });
+    } else if (item.kind === "timesheet") {
+      out.push({ ...item.timesheet, kind: "timesheet", canDecide: mayDecideTimesheets && item.timesheet.actorMayApprove });
     }
   }
   return { items: out, total: page.total, kindCounts: page.kindCounts };

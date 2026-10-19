@@ -51,5 +51,6 @@
   "sourceUnavailable": "{source} nicht verfügbar: {reason}",
   "delegatePlaceholder": "Delegieren an…",
   "count": "{count, plural, one {# Eintrag} other {# Einträge}}",
-  "sourceFailed": "Aufgaben aus {source} konnten gerade nicht geladen werden. Ihre übrigen Aufgaben werden angezeigt; versuchen Sie es gleich noch einmal und informieren Sie Ihren Administrator, wenn das weiterhin passiert."
+  "sourceFailed": "Aufgaben aus {source} konnten gerade nicht geladen werden. Ihre übrigen Aufgaben werden angezeigt; versuchen Sie es gleich noch einmal und informieren Sie Ihren Administrator, wenn das weiterhin passiert.",
+  "waitingSince": "Wartet seit {date}"
 }

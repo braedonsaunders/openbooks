@@ -337,3 +337,53 @@ for (const tab of ["mine", "all"] as const) {
     }
   });
 }
+
+test("All approvals lists gateless work org-wide, including the viewer's own, without offering it for decision", { skip: !DB }, async () => {
+  // The organization view drops the assignee and own-submission conditions
+  // the caller's worklist applies; whether a row is the viewer's to decide
+  // is resolved per row, so the viewer's own week lists without Approve.
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const submitter = await withBypass(() => createScratchUser(org.orgId, "Org Submitter", "accountant"));
+    const controller = await withBypass(() => createScratchUser(org.orgId, "Org Controller", "controller"));
+    await withBypass(async () => {
+      await db.execute(sql`update orgs set settings = settings || '{"features": {"flows": true, "timeTracking": true}}'::jsonb where id = ${org.orgId}`);
+    });
+    const ownDoc = await withBypass(() => postedPendingDoc(org, controller as unknown as string));
+    const otherDoc = await withBypass(() => postedPendingDoc(org, submitter as unknown as string));
+    const ownWeek = await withBypass(() => postedSubmittedWeek(org, submitter as unknown as string, "Org Controller", "2026-07-12"));
+    const otherWeek = await withBypass(() => postedSubmittedWeek(org, submitter as unknown as string, "Field Worker", "2026-07-12"));
+    await withBypass(() => db.execute(sql`update users set party_id = ${ownWeek.employeeId} where id = ${controller as unknown as string} and org_id = ${org.orgId}`));
+    const viewer = (permissions: string[]): Authz => ({
+      ...weekAuthzFor(org.orgId, controller as unknown as string, "Org Controller"),
+      permissions: new Set(permissions),
+    });
+
+    state.authz = viewer(["flows.manage", "flows.approve", "time.approve"]);
+    const mine = await withOrgContext(org.orgId, () => loadApprovals({ tab: "mine" }));
+    assert.deepEqual(
+      mine!.approvalRows.map((r) => r.key).sort(),
+      [`doc:${otherDoc.docId}`, `week:${otherWeek.weekId}`].sort(),
+      "the caller's worklist still excludes their own submission and their own week",
+    );
+    const all = await withOrgContext(org.orgId, () => loadApprovals({ tab: "all" }));
+    assert.deepEqual(
+      all!.approvalRows.map((r) => r.key).sort(),
+      [`doc:${ownDoc.docId}`, `doc:${otherDoc.docId}`, `week:${ownWeek.weekId}`, `week:${otherWeek.weekId}`].sort(),
+    );
+    assert.equal(all!.total, 4);
+    const row = (key: string) => all!.approvalRows.find((r) => r.key === key)!;
+    assert.equal(row(`week:${ownWeek.weekId}`).canDecide, false, "self-approval of a week is barred, so no Approve");
+    assert.equal(row(`week:${otherWeek.weekId}`).canDecide, true);
+    assert.equal(row(`doc:${ownDoc.docId}`).canDecide, false, "gateless documents decide in their drawer");
+    assert.equal(all!.awaitingOthers, 0, "the organization view marks rows itself, not a caller summary");
+
+    // Without time.approve the weeks still list (time.read) but none is decidable.
+    state.authz = viewer(["flows.manage", "time.read"]);
+    const readOnly = await withOrgContext(org.orgId, () => loadApprovals({ tab: "all" }));
+    assert.equal(readOnly!.total, 4);
+    assert.ok(readOnly!.approvalRows.filter((r) => r.kind === "timesheet_week").every((r) => !r.canDecide));
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});

@@ -95,7 +95,11 @@ const INTL_SERVER_DEFAULT =
   // Key-echo translator with no catalog: `has` reports every key missing.
   `export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}` +
   `export async function getMessages(){return {}}` +
-  `export async function getLocale(){return 'en'}`;
+  `export async function getLocale(){return 'en'}` +
+  // Formatter in the same neutral locale and zone.
+  `export async function getFormatter(){return {` +
+  `dateTime:(value,options)=>new Intl.DateTimeFormat('en',{...(options??{}),timeZone:'UTC'}).format(value),` +
+  `number:(value,options)=>new Intl.NumberFormat('en',options).format(value)}}`;
 
 function authzSource(permissions: string[] | null): string {
   const granted =

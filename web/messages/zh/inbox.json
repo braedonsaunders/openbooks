@@ -51,5 +51,6 @@
   "sourceUnavailable": "{source}不可用：{reason}",
   "delegatePlaceholder": "委派给…",
   "count": "{count}项",
-  "sourceFailed": "暂时无法加载{source}任务。已显示您的其他任务；请稍后重试，如果问题持续出现，请告知您的管理员。"
+  "sourceFailed": "暂时无法加载{source}任务。已显示您的其他任务；请稍后重试，如果问题持续出现，请告知您的管理员。",
+  "waitingSince": "自 {date} 起等待"
 }

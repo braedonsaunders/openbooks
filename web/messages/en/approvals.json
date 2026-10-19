@@ -34,19 +34,19 @@
     "waitingSince": "Waiting since"
   },
   "kinds": {
-    "vendor_bill": "vendor bill",
-    "customer_invoice": "customer invoice",
-    "expense_report": "expense report",
-    "journal": "journal",
-    "purchase_order": "purchase order",
-    "sales_order": "sales order",
-    "quote": "quote",
-    "field_ticket": "field ticket",
-    "close_run": "period close",
-    "budget_scenario": "budget",
-    "hrm_employment_change_request": "employment change",
-    "prebill": "pre-billing worksheet",
-    "equity_action": "equity action"
+    "vendor_bill": "Vendor bill",
+    "customer_invoice": "Customer invoice",
+    "expense_report": "Expense report",
+    "journal": "Journal",
+    "purchase_order": "Purchase order",
+    "sales_order": "Sales order",
+    "quote": "Quote",
+    "field_ticket": "Field ticket",
+    "close_run": "Period close",
+    "budget_scenario": "Budget",
+    "hrm_employment_change_request": "Employment change",
+    "prebill": "Pre-billing worksheet",
+    "equity_action": "Equity action"
   },
   "decide": {
     "rejectionReason": "Rejection reason:",
@@ -99,5 +99,21 @@
       "escalates": "Escalates {date}"
     }
   },
-  "awaitingOthersSummary": "{count} awaiting another approver"
+  "awaitingOthersSummary": "{count} awaiting another approver",
+  "statuses": {
+    "draft": "Draft",
+    "pending_approval": "Pending approval",
+    "approved": "Approved",
+    "posted": "Posted",
+    "voided": "Voided",
+    "in_progress": "In progress",
+    "review": "In review",
+    "closed": "Closed",
+    "published": "Published",
+    "cancelled": "Cancelled"
+  },
+  "quantity": {
+    "shares": "{count, plural, one {{quantity} share} other {{quantity} shares}}"
+  },
+  "weekOf": "Week of {date}"
 }

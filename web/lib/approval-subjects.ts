@@ -36,6 +36,13 @@ export interface ApprovalSubjectDetail {
   /** Currency of `amount` (org base applies when absent). */
   currency?: string | null
   /**
+   * Share quantity the subject carries, as a decimal string: rendered as a
+   * count of shares, never as money.
+   */
+  quantity?: string | null
+  /** The quantity is a signed change (a reserve increase or reduction). */
+  quantitySigned?: boolean
+  /**
    * The command endpoint that withdraws the subject while it awaits a
    * decision, for kinds whose requester may withdraw it (the endpoint
    * itself verifies the requester and the pending state).
@@ -200,10 +207,27 @@ async function resolveFinancialChanges(
   return out
 }
 
+/** An exact decimal string as recorded (optionally signed); anything else is not a figure. */
+const EXACT_DECIMAL = /^[+-]?\d+(\.\d+)?$/
+
+function exactDecimal(value: string | null): string | null {
+  const text = value?.trim() ?? ''
+  return EXACT_DECIMAL.test(text) ? text : null
+}
+
 /**
- * Governed equity actions: the action and the record it concerns, the
- * holder it affects, and the amount it carries, from the request as its
- * requester recorded it. A pending request names its withdrawal endpoint.
+ * Governed equity actions, from the request as its requester recorded it:
+ * the kind label names the action ("Equity action · Reserve change"), the
+ * summary the record it concerns, the party the holder it affects, and the
+ * figure what it carries. The request's frozen `summary` holds the figures a
+ * Flow condition reads — `holderName` for security events and MFN elections,
+ * `quantity` in shares (a signed delta for a plan reserve change, authorized
+ * shares for a class amendment, the event quantity for security events),
+ * `amount` with its `currency` for security events, MFN elections and round
+ * amendments (pre-money valuation), and a class amendment's conversion price,
+ * which carries no currency of its own and so reads in the legal entity's
+ * functional currency. Runs, policy versions and splits carry no figure.
+ * A pending request names its withdrawal endpoint.
  */
 async function resolveEquityActions(
   orgId: string,
@@ -212,28 +236,37 @@ async function resolveEquityActions(
   const out = new Map<string, ApprovalSubjectDetail>()
   const ids = [...new Set(subjectIds)].filter((id) => isUuid(id))
   if (ids.length === 0) return out
-  const t = await getTranslations('equity')
+  const [t, ta] = await Promise.all([getTranslations('equity'), getTranslations('approvals')])
   const rows = (await db.execute<{
     id: string
     action: string
     subjectLabel: string
     status: string
     holderName: string | null
+    quantity: string | null
     amount: string | null
     currency: string | null
   }>(sql`
-    select id::text as id, action, subject_label as "subjectLabel", status,
-           summary->>'holderName' as "holderName", summary->>'amount' as amount, summary->>'currency' as currency
-      from equity_action_requests
-     where org_id = ${orgId} and id = any(${pgTextArrayLiteral(ids)}::uuid[])
+    select r.id::text as id, r.action, r.subject_label as "subjectLabel", r.status,
+           nullif(btrim(r.summary->>'holderName'), '') as "holderName",
+           r.summary->>'quantity' as quantity, r.summary->>'amount' as amount,
+           coalesce(nullif(btrim(r.summary->>'currency'), ''), nullif(btrim(s.base_currency), '')) as currency
+      from equity_action_requests r
+      left join subsidiaries s on s.id = r.subsidiary_id and s.org_id = r.org_id
+     where r.org_id = ${orgId} and r.id = any(${pgTextArrayLiteral(ids)}::uuid[])
   `)).rows
   for (const row of rows) {
     const action = t.has(`approval.action.${row.action}`) ? t(`approval.action.${row.action}` as never) : row.action
+    const amount = exactDecimal(row.amount)
     out.set(String(row.id), {
       partyName: row.holderName,
-      summary: `${action} · ${row.subjectLabel}`,
-      amount: row.amount && /^-?\d+(\.\d+)?$/.test(row.amount) ? row.amount : null,
-      currency: row.currency,
+      summary: row.subjectLabel,
+      kindLabel: `${ta('kinds.equity_action')} · ${action}`,
+      quantity: exactDecimal(row.quantity),
+      quantitySigned: row.action === 'reserve_change',
+      // Money without a resolvable currency is not shown as money.
+      amount: amount && row.currency ? amount : null,
+      currency: amount ? row.currency : null,
       withdrawEndpoint: row.status === 'pending_approval' ? `/api/equity/requests/${row.id}/withdraw` : null,
     })
   }

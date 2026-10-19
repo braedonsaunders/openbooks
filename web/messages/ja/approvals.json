@@ -99,5 +99,21 @@
     "signTitle": "署名して承認する",
     "signLabel": "この承認に署名するため氏名を入力してください"
   },
-  "awaitingOthersSummary": "他の承認待ち：{count}件"
+  "awaitingOthersSummary": "他の承認待ち：{count}件",
+  "statuses": {
+    "draft": "下書き",
+    "pending_approval": "承認待ち",
+    "approved": "承認済み",
+    "posted": "転記済み",
+    "voided": "無効",
+    "in_progress": "進行中",
+    "review": "レビュー中",
+    "closed": "締め済み",
+    "published": "公開済み",
+    "cancelled": "中止"
+  },
+  "quantity": {
+    "shares": "{count, plural, other {{quantity} 株}}"
+  },
+  "weekOf": "{date} の週"
 }

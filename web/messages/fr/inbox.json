@@ -51,5 +51,6 @@
   "sourceUnavailable": "{source} indisponible : {reason}",
   "delegatePlaceholder": "Déléguer à…",
   "count": "{count, plural, one {# élément} other {# éléments}}",
-  "sourceFailed": "Les tâches {source} n’ont pas pu être chargées pour le moment. Vos autres tâches sont affichées ; réessayez dans un instant et prévenez votre administrateur si cela se reproduit."
+  "sourceFailed": "Les tâches {source} n’ont pas pu être chargées pour le moment. Vos autres tâches sont affichées ; réessayez dans un instant et prévenez votre administrateur si cela se reproduit.",
+  "waitingSince": "En attente depuis le {date}"
 }

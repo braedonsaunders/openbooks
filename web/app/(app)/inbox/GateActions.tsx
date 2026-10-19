@@ -3,7 +3,8 @@
 // Per-row decision controls for the approvals worklist. Flow gates decide
 // through POST /api/flows/gates/decide|delegate. Reject collects a reason via
 // the shared promptDialog; Delegate shows an inline user picker for the row's
-// direct assignee or an admin.
+// direct assignee or an admin. A row the viewer cannot decide (another
+// approver's gate on the organization view) renders no Approve/Reject.
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -20,11 +21,14 @@ export type DelegateOption = {
 
 export function GateActions({
   gateId,
+  canDecide = true,
   canDelegate,
   users,
   signatureRequired,
 }: {
   gateId: string
+  /** The viewer may decide this gate — shows Approve/Reject. */
+  canDecide?: boolean
   /** Current assignee or admin — shows the delegate picker. */
   canDelegate: boolean
   users: DelegateOption[]
@@ -117,12 +121,16 @@ export function GateActions({
   return (
     <span className="inline-flex flex-col items-start gap-2">
       <span className="inline-flex items-center gap-2">
-        <Button size="sm" disabled={busy} onClick={() => decide('approved')}>
-          {tc('actions.approve')}
-        </Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => decide('rejected')}>
-          {tc('actions.reject')}
-        </Button>
+        {canDecide ? (
+          <>
+            <Button size="sm" disabled={busy} onClick={() => decide('approved')}>
+              {tc('actions.approve')}
+            </Button>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => decide('rejected')}>
+              {tc('actions.reject')}
+            </Button>
+          </>
+        ) : null}
         {canDelegate && users.length > 0 ? (
           delegating ? (
             <span className="inline-flex items-center gap-1">

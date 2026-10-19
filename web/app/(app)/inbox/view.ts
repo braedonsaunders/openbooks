@@ -3,10 +3,9 @@ import 'server-only'
 import { registeredListTable } from '../../../lib/list/prepared-spec'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { inArray, sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getFormatter, getLocale, getTranslations } from 'next-intl/server'
 import { db, schema } from '@openbooks/engine/platform/db'
-import { type WorklistGate } from '@openbooks/engine/flows/module'
-import { flowSubjectSubsidiarySql } from '@openbooks/engine/flows/registry'
+import { flowSubjectSubsidiarySql, listFlowSubjectProfiles } from '@openbooks/engine/flows/registry'
 import {
   dueBusinessDay,
   type InboxItem,
@@ -14,6 +13,7 @@ import {
 } from '@openbooks/engine/inbox/runtime'
 import {
   approvalWorklistAwaitingForAuthz,
+  approvalWorklistOrganizationPageForAuthz,
   approvalWorklistPageForAuthz,
   type ApprovalWorklistItem,
 } from '../../../lib/application/approvals'
@@ -44,9 +44,11 @@ import { getAuthz, can } from '../../../lib/authz'
 import { APPROVALS_BULK_BATCH_MAX } from '../../../lib/approvals-limits'
 import { clamp, pickString } from '../../../lib/list-params'
 import { approvalRecordHref } from '../../../lib/approvals-links'
-import { resolveApprovalSubjects } from '../../../lib/approval-subjects'
+import { resolveApprovalSubjects, type ApprovalSubjectDetail } from '../../../lib/approval-subjects'
 import { pgTextArrayLiteral } from '../../../lib/pg-array'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { formatCivilDate } from '../../../lib/format'
+import { formatDecimal } from '../../../lib/money-format'
 import type { ApprovalRow } from './ApprovalsTable'
 import type { DelegateOption } from './GateActions'
 
@@ -59,10 +61,17 @@ import type { DelegateOption } from './GateActions'
  *
  *   • mine      — approvals I can act on (direct, role, delegated-to-me),
  *                 with counts-by-kind chips, aging, and bulk approve/reject.
+ *                 The badge, the dashboard tile and get_vitals count this
+ *                 same caller worklist.
  *   • tasks     — my tasks: the non-decision inbox kinds (signatures,
  *                 notices, acknowledgements) with their generic actions.
- *   • submitted — where MY documents are: who they're pending with, since when.
- *   • all       — org-wide pending items (flows.manage / admin only).
+ *   • submitted — where MY submissions are: who they're pending with, since when.
+ *   • all       — every pending, live approval in the organization inside the
+ *                 viewer's legal-entity boundary, whatever its assignee and
+ *                 whoever submitted it (flows.manage only). Each row shows its
+ *                 assignee and offers Approve/Reject only when the viewer may
+ *                 decide it through the native decide path; Delegate follows
+ *                 the delegation rule.
  *
  * `tasks` IS A TAB and not a panel. It used to render as a titled panel
  * stacked under the approvals table, so one page showed two unrelated
@@ -95,7 +104,7 @@ const INBOX_FILTERS: readonly InboxFilter[] = [
   'overdue',
 ]
 
-// Document kinds with catalog labels — unknown kinds fall back to the raw code.
+// Document kinds offered as Submitted-by-me kind filters.
 const KIND_KEYS = [
   'vendor_bill',
   'customer_invoice',
@@ -108,9 +117,6 @@ const KIND_KEYS = [
   'budget_scenario',
   'hrm_employment_change_request',
 ]
-
-// Approval subjects that are not documents but still carry a catalog label.
-const SUBJECT_LABEL_KEYS = [...KIND_KEYS, 'prebill', 'equity_action']
 
 export interface SubmittedListRow {
   key: string
@@ -138,6 +144,8 @@ export interface InboxTaskListRow {
   kindLabel: string
   title: string
   subtitle: string | null
+  /** "Waiting since <date>" in the viewer's locale, for items awaiting a decision. */
+  waitingSinceLabel: string | null
   dueLabel: string | null
   priorityLabel: string | null
   priorityTone: 'rose' | 'amber' | 'slate'
@@ -220,7 +228,10 @@ export async function loadApprovals(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ApprovalsData | null> {
   const { money: formatMoney } = await getMoneyFormatter()
+  const format = await getFormatter()
+  const locale = await getLocale()
   const t = await getTranslations('approvals')
+  const tSubjects = await getTranslations('customization.recordTypes')
   const tc = await getTranslations('common')
   const ti = await getTranslations('inbox')
   const th = await getTranslations('hrm')
@@ -289,40 +300,66 @@ export async function loadApprovals(
     if (single != null) paginationParams[key] = single
   }
 
-  const kindLabel = (kind: string) =>
-    SUBJECT_LABEL_KEYS.includes(kind) ? t(`kinds.${kind}`) : kind.replace(/_/g, ' ')
+  // Kind labels: the approvals catalog first, then the Flows subject
+  // profile's record-type label (the vocabulary the Flows builder shows),
+  // then the profile's own name; an unregistered kind keeps its code.
+  const subjectProfileLabel = new Map(
+    listFlowSubjectProfiles().map((profile) => [profile.subjectKind, profile.labelKey ? profile.labelKey : profile.label]),
+  )
+  const kindLabel = (kind: string): string => {
+    if (t.has(`kinds.${kind}` as never)) return t(`kinds.${kind}` as never)
+    const key = subjectProfileLabel.get(kind) ?? kind
+    return tSubjects.has(key as never) ? tSubjects(key as never) : key
+  }
+  // Statuses the Submitted query returns (document, close-run and budget
+  // lifecycles, plus pending_approval for non-document subjects).
+  const statusLabel = (status: string): string =>
+    t.has(`statuses.${status}` as never) ? t(`statuses.${status}` as never) : status
+  // Instants render in the viewer's locale and the organization's time zone
+  // (the next-intl request configuration); civil dates never shift by zone.
+  const viewerDay = (instant: string): string => format.dateTime(new Date(instant), { dateStyle: 'medium' })
+  // Share quantities render as counts with their unit, in the viewer's
+  // locale; a signed change keeps its sign.
+  const formatQuantity = (quantity: string, signed: boolean): string =>
+    t('quantity.shares', {
+      count: Number(quantity),
+      quantity: formatDecimal(locale, quantity, { signDisplay: signed ? 'exceptZero' : 'auto', maximumFractionDigits: 6 }),
+    })
 
-  // ---- My + All approvals: the unified worklist -----------------
+  // ---- My approvals: the caller's unified worklist -------------------------
   // The dashboard tile counts approvalWorklistForAuthz (Flows gates +
   // gateless document approvals + pending budgets); the center reads the
   // same reader so same-labeled figures tie by construction. Same doorway
   // as the tile and get_vitals: a caller who cannot approve anything sees
   // no rows rather than a forbidden error. Same doorway as the count route.
+  //
+  // ---- All approvals: the organization-wide oversight view ----------------
+  // The same paged reader in its organization audience: every pending, live
+  // item in the viewer's legal-entity boundary whatever its assignee, with
+  // per-row decision capability. The tab is flows.manage-gated above, so
+  // the reader never runs for a caller who cannot see it.
   const mayApprove = maySeeUnion(authz)
   // One server-side page over the union: each leg fetches its leading
   // offset+limit rows in SQL and the total/chips come from aggregates, so no
-  // request ever scans a whole leg. Same reader family as the dashboard tile
-  // (approvalWorklistForAuthz), same doorway, same per-item shape.
-  const unionPage = mayApprove && onApprovals
-    ? await approvalWorklistPageForAuthz(authz, {
-        limit: perPage,
-        offset,
-        kind: kindFilter,
-        query,
-        overdue: overdueOnly,
-      })
-    : {
-        items: [] as ApprovalWorklistItem[],
-        total: 0,
-        kindCounts: new Map<string, number>(),
-      }
+  // request ever scans a whole leg.
+  const window = { limit: perPage, offset, kind: kindFilter, query, overdue: overdueOnly }
+  const unionPage =
+    tab === 'all'
+      ? await approvalWorklistOrganizationPageForAuthz(authz, window)
+      : mayApprove && tab === 'mine'
+        ? await approvalWorklistPageForAuthz(authz, window)
+        : {
+            items: [] as ApprovalWorklistItem[],
+            total: 0,
+            kindCounts: new Map<string, number>(),
+          }
   const unified: ApprovalWorklistItem[] = unionPage.items
   const unionTotal = unionPage.total
   // Gates awaiting ANOTHER approver for this viewer (SoD-blocked): counted
-  // separately from actionable items — the tab keeps its headline total
-  // while the awaiting rows render without decision actions under their
-  // own figure in the table.
-  const awaitingOthers = mayApprove && onApprovals ? await approvalWorklistAwaitingForAuthz(authz) : 0
+  // separately from actionable items — My approvals keeps its headline total
+  // while the awaiting rows render without decision actions under their own
+  // figure in the table. The organization view marks each such row itself.
+  const awaitingOthers = mayApprove && tab === 'mine' ? await approvalWorklistAwaitingForAuthz(authz) : 0
   // Chips ignore the kind filter, so their counts sum to the unfiltered
   // total (drives the mine bubble and the empty state).
   let unfilteredTotal = 0
@@ -343,7 +380,8 @@ export async function loadApprovals(
     for (const r of rows) flowNames.set(r.id, r.name)
   }
 
-  // Display names for gate assignees (the union carries ids/roles only).
+  // Display names for gate assignees on the organization view: the user a
+  // gate names, else the role it is routed to (the union carries ids/keys).
   const assigneeIds = [
     ...new Set(
       unified.flatMap((i) =>
@@ -353,21 +391,85 @@ export async function loadApprovals(
       ),
     ),
   ]
+  const assigneeRoles = [
+    ...new Set(
+      unified.flatMap((i) =>
+        i.kind === 'flow_gate' && i.assigneeUserId == null && i.assigneeRole != null
+          ? [i.assigneeRole]
+          : [],
+      ),
+    ),
+  ]
   const assigneeNames = new Map<string, string>()
-  if (assigneeIds.length > 0) {
+  const roleNames = new Map<string, string>()
+  if (tab === 'all' && assigneeIds.length > 0) {
     const rows = await db.execute<Record<string, unknown>>(sql`
       select id, name from users where org_id = ${orgId} and id = any(${pgTextArrayLiteral(assigneeIds)}::uuid[])
     `)
     for (const r of rows.rows) assigneeNames.set(String(r.id), String(r.name))
   }
+  if (tab === 'all' && assigneeRoles.length > 0) {
+    const rows = await db.execute<Record<string, unknown>>(sql`
+      select key, name from app_roles where org_id = ${orgId} and key = any(${pgTextArrayLiteral(assigneeRoles)}::text[])
+    `)
+    for (const r of rows.rows) roleNames.set(String(r.key), String(r.name))
+  }
+  const assigneeOf = (item: ApprovalWorklistItem): string | null => {
+    if (tab !== 'all' || item.kind !== 'flow_gate') return null
+    if (item.assigneeUserId != null) return assigneeNames.get(item.assigneeUserId) ?? null
+    return item.assigneeRole != null ? roleNames.get(item.assigneeRole) ?? item.assigneeRole : null
+  }
 
-  const gateToRow = (g: WorklistGate & { awaitingAnotherApprover?: boolean }, assignee: string | null): ApprovalRow => {
+  // Subject-kind detail for flow gates (party + decision summary): one
+  // batched, org-scoped read through the per-kind registry — unresolvable
+  // subjects stay absent and their rows keep the id fallback.
+  const subjectDetails = await resolveApprovalSubjects(
+    orgId,
+    unified.flatMap((item) =>
+      item.kind === 'flow_gate'
+        ? [{ kind: item.subjectKind, subjectId: item.subjectId }]
+        : [],
+    ),
+    th,
+  )
+  // Amounts a subject carries format in their own currency (the shared
+  // formatter stays the org-base fallback) — one cached formatter per
+  // currency on the page, never one per row.
+  const subjectFormatters = new Map<string, (value: string) => string>()
+  const loadSubjectFormatters = async (details: Iterable<ApprovalSubjectDetail>): Promise<void> => {
+    await Promise.all(
+      [
+        ...new Set(
+          [...details].flatMap((detail) =>
+            detail.currency && !subjectFormatters.has(detail.currency) ? [detail.currency] : [],
+          ),
+        ),
+      ].map(async (currency) => {
+        subjectFormatters.set(currency, (await getMoneyFormatter(orgId, currency)).money)
+      }),
+    )
+  }
+  await loadSubjectFormatters(subjectDetails.values())
+  // A subject's figure: share quantities as counts with their unit, money in
+  // its own currency, both when the subject carries both.
+  const formatSubjectFigure = (detail: ApprovalSubjectDetail | undefined): string | null => {
+    if (!detail) return null
+    const parts = [
+      detail.quantity ? formatQuantity(detail.quantity, detail.quantitySigned === true) : null,
+      detail.amount
+        ? (detail.currency ? subjectFormatters.get(detail.currency) : undefined)?.(detail.amount) ??
+          formatMoney(detail.amount)
+        : null,
+    ].filter((part): part is string => part != null && part !== '')
+    return parts.length > 0 ? parts.join(' · ') : null
+  }
+
+  const gateToRow = (g: Extract<ApprovalWorklistItem, { kind: 'flow_gate' }>, assignee: string | null): ApprovalRow => {
     const kind = g.document?.kind ?? g.subjectKind
     // Subject-kind detail (the employee and the decision summary for
-    // change requests): resolved in one batch below through the
+    // change requests): resolved in one batch above through the
     // per-kind registry — never inline special cases here.
     const subject = subjectDetails.get(`${g.subjectKind}:${g.subjectId}`)
-    const subjectAmount = subject?.amount ? subject.amount : null
     return {
       key: `gate:${g.id}`,
       gateId: g.id,
@@ -380,21 +482,20 @@ export async function loadApprovals(
         g.subjectLabel ??
         g.subjectId.slice(0, 8),
       kind,
-      // Financial-change gates name their accounting event (never the bare
-      // subject kind) and carry the subject title, party, and proposed
-      // amount the resolver read off the frozen change.
+      // Financial-change gates name their accounting event and equity
+      // gates their action (never the bare subject kind), and carry the
+      // subject title, party, and figure the resolver read off the record.
       kindLabel: subject?.kindLabel ?? kindLabel(kind),
       href: g.href ?? approvalRecordHref(kind, g.subjectId),
       party: g.document?.partyName ?? subject?.partyName ?? null,
-      amount: g.document
-        ? formatMoney(g.document.total)
-        : subjectAmount
-          ? formatSubjectAmount({ amount: subjectAmount, currency: subject?.currency })
-          : null,
+      amount: g.document ? formatMoney(g.document.total, { currency: g.document.currency }) : formatSubjectFigure(subject),
       approvalTitle: g.title,
       engineName: flowNames.get(g.flowId) ?? '',
       requestedAt: iso(g.createdAt),
       assignee,
+      // The caller's own worklist lists only gates that reach them; the
+      // organization view resolved each row through the native gate check.
+      canDecide: g.canDecide ?? true,
       canDelegate: canManageFlows || g.assigneeUserId === user.id,
       quorumAll: g.quorum === 'all',
       signatureRequired: g.signatureRequired,
@@ -419,11 +520,12 @@ export async function loadApprovals(
     kindLabel: kindLabel(d.docKind),
     href: approvalRecordHref(d.docKind, d.id),
     party: d.partyName,
-    amount: formatMoney(d.total),
+    amount: formatMoney(d.total, { currency: d.currency }),
     approvalTitle: null,
     engineName: '',
     requestedAt: iso(d.submittedAt ?? d.createdAt),
     assignee: null,
+    canDecide: false,
     canDelegate: false,
     quorumAll: false,
     signatureRequired: false,
@@ -447,6 +549,7 @@ export async function loadApprovals(
     engineName: '',
     requestedAt: iso(b.submittedAt ?? b.createdAt),
     assignee: null,
+    canDecide: false,
     canDelegate: false,
     quorumAll: false,
     signatureRequired: false,
@@ -461,7 +564,7 @@ export async function loadApprovals(
     key: `week:${w.id}`,
     gateId: null,
     timesheetItemId: `timesheet_approval:${w.id}`,
-    documentNumber: `Week of ${w.weekStart}`,
+    documentNumber: t('weekOf', { date: formatCivilDate(w.weekStart, locale) }),
     kind: 'timesheet_week',
     kindLabel: kindLabel('timesheet_week'),
     href: `/timesheets?timesheet=${w.employeePartyId}:${w.weekStart}`,
@@ -471,50 +574,17 @@ export async function loadApprovals(
     engineName: '',
     requestedAt: iso(w.submittedAt ?? w.createdAt),
     assignee: null,
+    canDecide: w.canDecide ?? true,
     canDelegate: false,
     quorumAll: false,
     signatureRequired: false,
   })
 
-  // Subject-kind detail for flow gates (party + decision summary): one
-  // batched, org-scoped read through the per-kind registry — unresolvable
-  // subjects stay absent and their rows keep the id fallback.
-  const subjectDetails = await resolveApprovalSubjects(
-    orgId,
-    unified.flatMap((item) =>
-      item.kind === 'flow_gate'
-        ? [{ kind: item.subjectKind, subjectId: item.subjectId }]
-        : [],
-    ),
-    th,
-  )
-  // Amounts a subject carries format in their own currency (the shared
-  // formatter stays the org-base fallback) — one cached formatter per
-  // currency on the page, never one per row.
-  const subjectFormatters = new Map<string, (value: string) => string>()
-  await Promise.all(
-    [
-      ...new Set(
-        [...subjectDetails.values()].flatMap((detail) =>
-          detail.currency ? [detail.currency] : [],
-        ),
-      ),
-    ].map(async (currency) => {
-      subjectFormatters.set(currency, (await getMoneyFormatter(orgId, currency)).money)
-    }),
-  )
-  const formatSubjectAmount = (detail: { amount: string; currency?: string | null }): string =>
-    (detail.currency ? subjectFormatters.get(detail.currency) : undefined)?.(detail.amount) ??
-    formatMoney(detail.amount)
-
-  const unionToRow = (
-    item: ApprovalWorklistItem,
-    assignee: string | null,
-  ): ApprovalRow => {
+  const unionToRow = (item: ApprovalWorklistItem): ApprovalRow => {
     if (item.kind === 'document') return docToRow(item)
     if (item.kind === 'budget') return budgetToRow(item)
     if (item.kind === 'timesheet') return weekToRow(item)
-    return gateToRow(item, assignee)
+    return gateToRow(item, assigneeOf(item))
   }
 
   // The engine returns the window in merge order; re-sorting the bounded
@@ -522,29 +592,7 @@ export async function loadApprovals(
   const byRequestedAt = (a: ApprovalRow, b: ApprovalRow) =>
     a.requestedAt.localeCompare(b.requestedAt) ||
     (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
-  const mineRows: ApprovalRow[] = unified
-    .map((item) => unionToRow(item, null))
-    .sort(byRequestedAt)
-
-  // ---- All approvals (same union reader as mine + tile) --------------------
-  // The tab stays canSeeAll-gated, but its rows are the caller's actionable
-  // union — identical to the tile count by construction.
-  let allRows: ApprovalRow[] = []
-  if (tab === 'all' && canSeeAll) {
-    const assigneeOf = (item: ApprovalWorklistItem): string | null => {
-      if (item.kind !== 'flow_gate') return null
-      if (item.assigneeUserId != null) {
-        return (
-          assigneeNames.get(item.assigneeUserId) ?? item.assigneeRole ?? null
-        )
-      }
-      return item.assigneeRole ?? null
-    }
-    allRows = unified
-      .map((item) => unionToRow(item, assigneeOf(item)))
-      .sort(byRequestedAt)
-  }
-
+  const approvalRows: ApprovalRow[] = unified.map(unionToRow).sort(byRequestedAt)
   // ---- Submitted by me ------------------------------------------------------
   // Same window as the union tabs: the flow leg pages in SQL (window total
   // via over()), the caller's own budgets ride along capped (their scope is
@@ -561,9 +609,9 @@ export async function loadApprovals(
       select r.id as "runId", f.name as "flowName", r.subject_id as "subjectId",
              coalesce(d.document_number, cp.name) as "documentNumber", min(g.title) as "gateTitle",
              coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) as kind,
-             d.total, d.subsidiary_id as "subsidiaryId", coalesce(d.status, cr.status, 'pending_approval') as "docStatus", p.display_name as "partyName",
+             d.total, d.currency, d.subsidiary_id as "subsidiaryId", coalesce(d.status, cr.status, 'pending_approval') as "docStatus", p.display_name as "partyName",
              min(g.created_at) as "waitingSince",
-             string_agg(distinct coalesce(u.name, g.assignee_role), ', ') as "pendingWith",
+             string_agg(distinct coalesce(u.name, ar.name, g.assignee_role), ', ') as "pendingWith",
              count(*) over () as "fullCount"
         from flow_runs r
         join flows f on f.id = r.flow_id and f.org_id = r.org_id
@@ -572,7 +620,8 @@ export async function loadApprovals(
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
         left join close_runs cr on cr.id = r.subject_id and cr.org_id = r.org_id and r.subject_kind = 'close_run'
         left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id
-        left join users u on u.id = g.assignee_user_id
+        left join users u on u.id = g.assignee_user_id and u.org_id = g.org_id
+        left join app_roles ar on ar.org_id = g.org_id and ar.key = g.assignee_role and g.assignee_user_id is null
        where r.org_id = ${orgId} and r.status = 'waiting'
          and (case when d.id is not null then d.created_by
                    when cr.id is not null then cr.started_by
@@ -585,7 +634,7 @@ export async function loadApprovals(
              : sql``
          }
          ${subsidiaryVisibleFilter(flowSubjectSubsidiarySql({ kind: sql`r.subject_kind`, id: sql`r.subject_id`, org: sql`r.org_id` }), authz.allowedSubsidiaryIds)}
-       group by r.id, f.name, r.subject_id, d.document_number, d.kind, d.total,
+       group by r.id, f.name, r.subject_id, d.document_number, d.kind, d.total, d.currency,
                 d.subsidiary_id, d.status, cr.id, cr.status, cp.name, p.display_name
        order by min(g.created_at), r.id
        limit ${prefix}
@@ -599,17 +648,11 @@ export async function loadApprovals(
       flowRes.rows.flatMap((r) => (r.documentNumber == null ? [{ kind: String(r.kind), subjectId: String(r.subjectId) }] : [])),
       th,
     )
-    const submittedFormatters = new Map<string, (value: string) => string>()
-    for (const currency of new Set([...submittedSubjects.values()].flatMap((detail) => (detail.currency ? [detail.currency] : [])))) {
-      submittedFormatters.set(currency, (await getMoneyFormatter(orgId, currency)).money)
-    }
+    await loadSubjectFormatters(submittedSubjects.values())
     submittedRows = flowRes.rows.map((r): SubmittedListRow => {
       const kind = String(r.kind)
       const waitingSince = iso(r.waitingSince)
       const subject = r.documentNumber == null ? submittedSubjects.get(`${kind}:${String(r.subjectId)}`) : undefined
-      const subjectAmount = subject?.amount
-        ? (subject.currency ? submittedFormatters.get(subject.currency) : undefined)?.(subject.amount) ?? formatMoney(subject.amount)
-        : null
       return {
         key: `run:${r.runId}`,
         documentNumber: String(r.documentNumber ?? subject?.summary ?? r.gateTitle ?? String(r.subjectId).slice(0, 8)),
@@ -617,13 +660,15 @@ export async function loadApprovals(
         kindLabel: subject?.kindLabel ?? kindLabel(kind),
         href: approvalRecordHref(kind, String(r.subjectId)),
         party: (r.partyName as string | null) ?? subject?.partyName ?? null,
-        amount: r.total != null ? formatMoney(r.total as string) : subjectAmount,
+        amount: r.total != null
+          ? formatMoney(r.total as string, r.currency ? { currency: String(r.currency) } : undefined)
+          : formatSubjectFigure(subject),
         withdrawEndpoint: subject?.withdrawEndpoint ?? null,
         engineName: String(r.flowName),
         pendingWith: (r.pendingWith as string | null) ?? null,
         waitingSince,
-        waitingSinceDate: waitingSince.slice(0, 10),
-        statusLabel: String(r.docStatus).replace(/_/g, ' '),
+        waitingSinceDate: viewerDay(waitingSince),
+        statusLabel: statusLabel(String(r.docStatus)),
       }
     })
 
@@ -666,8 +711,8 @@ export async function loadApprovals(
           engineName: '',
           pendingWith: (r.pendingWith as string | null) ?? null,
           waitingSince,
-          waitingSinceDate: waitingSince.slice(0, 10),
-          statusLabel: String(r.docStatus).replace(/_/g, ' '),
+          waitingSinceDate: viewerDay(waitingSince),
+          statusLabel: statusLabel(String(r.docStatus)),
           withdrawEndpoint: null,
         })
       }
@@ -696,13 +741,11 @@ export async function loadApprovals(
   // Counts come from the union aggregates (unfiltered by kind, sorted by code
   // so dropdown order is stable across locales); the rows arrive kind-filtered
   // from SQL, so there is deliberately no second filter here.
-  const rowsForTab = tab === 'all' ? allRows : mineRows
   const chipCounts = new Map<string, number>(
     [...unionPage.kindCounts.entries()].sort(([a], [b]) =>
       a < b ? -1 : a > b ? 1 : 0,
     ),
   )
-  const visibleRows = rowsForTab
   const visibleSubmitted = submittedRows
 
   // ---- Task list (new inbox kinds + notices) ------------------------------
@@ -738,7 +781,9 @@ export async function loadApprovals(
     kindLabel: ti(`kinds.${item.kind}`),
     title: item.title,
     subtitle: item.subtitle,
-    dueLabel: item.dueAt ? dueBusinessDay(item.dueAt, ctx.timeZone) : null,
+    waitingSinceLabel: item.waitingSince ? ti('waitingSince', { date: viewerDay(item.waitingSince) }) : null,
+    // The due business day, as a civil date in the viewer's locale.
+    dueLabel: item.dueAt ? formatCivilDate(dueBusinessDay(item.dueAt, ctx.timeZone), locale) : null,
     priorityLabel:
       item.priority === 'overdue'
         ? ti('priorities.overdue')
@@ -758,7 +803,7 @@ export async function loadApprovals(
   // a page, so neither `showUnion` nor `showTasks` reads the filter any more:
   // the filter narrows the list the tab already chose.
   const showUnion = onApprovals
-  const unionVisible = visibleRows
+  const unionVisible = approvalRows
   const showTasks = tab === 'tasks'
   const taskRows = tasksActive
     .filter((item) => {

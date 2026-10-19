@@ -22,6 +22,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button } from '@openbooks/ui'
 import { promptDialog } from '../../../lib/prompt'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { useViewerFormat } from '../../../lib/viewer-format'
 import { APPROVALS_BULK_BATCH_MAX } from '../../../lib/approvals-limits'
 import { GateActions, type DelegateOption } from './GateActions'
 import { TimesheetActions } from './TimesheetActions'
@@ -56,6 +57,12 @@ export interface ApprovalRow {
   /** ISO timestamp the approval was requested — drives the aging chip. */
   requestedAt: string
   assignee: string | null
+  /**
+   * The viewer may decide this row through its native decide path. Rows on
+   * the organization view that are assigned to someone else carry false and
+   * render no Approve/Reject (Delegate still follows canDelegate).
+   */
+  canDecide: boolean
   canDelegate: boolean
   quorumAll: boolean
   /** Gate demands a typed e-signature to approve (blocks bulk approve). */
@@ -123,6 +130,7 @@ export function ApprovalsTable({
 }) {
   const t = useTranslations('approvals')
   const tc = useTranslations('common')
+  const { date } = useViewerFormat()
   const router = useRouter()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
@@ -130,10 +138,10 @@ export function ApprovalsTable({
   // Selection survives filters upstream; drop keys for rows no longer shown.
   // Only actionable flow-gate rows are selectable: bulk decide/delegate post
   // gate ids, so document/pay-run rows (gateId null) never enter the
-  // selection — and neither do gates awaiting another approver, whose
-  // decision would refuse per row.
+  // selection — and neither do gates awaiting another approver or gates the
+  // viewer cannot decide, whose decision would refuse per row.
   const selectableRows = useMemo(
-    () => rows.filter((r) => r.gateId != null && !r.awaitingAnotherApprover),
+    () => rows.filter((r) => r.gateId != null && r.canDecide && !r.awaitingAnotherApprover),
     [rows],
   )
   const visibleSelected = useMemo(
@@ -324,7 +332,7 @@ export function ApprovalsTable({
                   headerClassName: 'w-10',
                   cell: (r: ApprovalRow) => (
                     <>
-                      {r.gateId != null && !r.awaitingAnotherApprover ? (
+                      {r.gateId != null && r.canDecide && !r.awaitingAnotherApprover ? (
                         <input
                           type="checkbox"
                           className="h-4 w-4 accent-teal-600"
@@ -456,7 +464,7 @@ export function ApprovalsTable({
             cell: (r: ApprovalRow) => (
               <>
                 <span className="inline-flex items-baseline gap-2">
-                  {r.requestedAt.slice(0, 10)}
+                  {date(r.requestedAt)}
                   <Aging
                     requestedAt={r.requestedAt}
                     label={(days) => t('aging.days', { days })}
@@ -504,14 +512,15 @@ export function ApprovalsTable({
                         >
                           {tc('approvalFlow.awaitingAnother')}
                         </span>
-                      ) : r.gateId != null ? (
+                      ) : r.gateId != null && (r.canDecide || r.canDelegate) ? (
                         <GateActions
                           gateId={r.gateId}
+                          canDecide={r.canDecide}
                           canDelegate={r.canDelegate}
                           users={users}
                           signatureRequired={r.signatureRequired}
                         />
-                      ) : r.timesheetItemId != null ? (
+                      ) : r.timesheetItemId != null && r.canDecide ? (
                         <TimesheetActions itemId={r.timesheetItemId} />
                       ) : null}
                     </>

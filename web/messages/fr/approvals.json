@@ -34,19 +34,19 @@
     "waitingSince": "En attente depuis"
   },
   "kinds": {
-    "vendor_bill": "facture fournisseur",
-    "customer_invoice": "facture client",
-    "expense_report": "note de frais",
-    "journal": "écriture de journal",
-    "purchase_order": "bon de commande",
-    "sales_order": "commande client",
-    "quote": "soumission",
-    "field_ticket": "fiche de travail",
-    "close_run": "clôture de période",
-    "budget_scenario": "budget",
-    "hrm_employment_change_request": "modification d'emploi",
-    "prebill": "préfacture",
-    "equity_action": "opération sur capital"
+    "vendor_bill": "Facture fournisseur",
+    "customer_invoice": "Facture client",
+    "expense_report": "Note de frais",
+    "journal": "Écriture de journal",
+    "purchase_order": "Bon de commande",
+    "sales_order": "Commande client",
+    "quote": "Soumission",
+    "field_ticket": "Fiche de travail",
+    "close_run": "Clôture de période",
+    "budget_scenario": "Budget",
+    "hrm_employment_change_request": "Modification d'emploi",
+    "prebill": "Préfacture",
+    "equity_action": "Opération sur capital"
   },
   "decide": {
     "rejectionReason": "Motif du rejet :",
@@ -99,5 +99,21 @@
     "signTitle": "Signer pour approuver",
     "signLabel": "Saisissez votre nom complet pour signer cette approbation"
   },
-  "awaitingOthersSummary": "{count} en attente d'un autre approbateur"
+  "awaitingOthersSummary": "{count} en attente d'un autre approbateur",
+  "statuses": {
+    "draft": "Brouillon",
+    "pending_approval": "En attente d’approbation",
+    "approved": "Approuvé",
+    "posted": "Comptabilisé",
+    "voided": "Annulé",
+    "in_progress": "En cours",
+    "review": "En révision",
+    "closed": "Clôturé",
+    "published": "Publié",
+    "cancelled": "Abandonné"
+  },
+  "quantity": {
+    "shares": "{count, plural, one {{quantity} action} other {{quantity} actions}}"
+  },
+  "weekOf": "Semaine du {date}"
 }

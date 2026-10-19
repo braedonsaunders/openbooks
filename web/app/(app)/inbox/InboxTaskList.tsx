@@ -32,6 +32,8 @@ export interface InboxTaskRow {
   kindLabel: string
   title: string
   subtitle: string | null
+  /** Localized "Waiting since <date>" for items awaiting a decision. */
+  waitingSinceLabel?: string | null
   dueLabel: string | null
   priorityLabel: string | null
   priorityTone: 'rose' | 'amber' | 'slate'
@@ -185,6 +187,9 @@ export function InboxTaskList({
               cell: (row) => (
                 <>
                   <span className="line-clamp-2">{row.subtitle ?? '—'}</span>
+                  {row.waitingSinceLabel ? (
+                    <span className="block text-xs text-slate-400 dark:text-slate-500">{row.waitingSinceLabel}</span>
+                  ) : null}
                 </>
               ),
               search: (row) =>
