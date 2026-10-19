@@ -99,6 +99,7 @@ const renderers = {
               ) : null}
               {workflow ? (
                 <ReturnWorkflowPanel
+                  key={`${workflow.id}:${workflow.stage}`}
                   authorization={workflow}
                   canInspect={workflowCanInspect === true}
                   canManage={workflowCanManage === true}
