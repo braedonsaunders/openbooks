@@ -46,6 +46,8 @@ function fakeCtx(overrides: {
     ? { kinderlosenzuschlag: "true", abschlag_kinder: "0" }
     : overrides.pv;
   const ctx = {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     taxYear: 2026,
     income: overrides.income ?? "3000.00",
     nonPeriodic: overrides.nonPeriodic ?? "0",

@@ -20,6 +20,8 @@ import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 /** Minimal adapter context: no certificates answered, June versement. */
 function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
   return {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     tx: null as never,
     orgId: "org",
     documentId: "doc",

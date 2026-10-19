@@ -1,3 +1,4 @@
+import { assessedCanadianWages } from "../testing/payroll-canadian-wages.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -548,10 +549,10 @@ test(
           [260, "wcb", "employer_contribution"],
         ],
       );
-      const expected = calculateT4127({
+      const expected = calculateT4127(assessedCanadianWages({
         payDate: "2026-07-21", province: "ON", periodsPerYear: 26,
         income: "1200.00", federalClaimCode: 1, ytd: { pensionable: "74000.00" },
-      });
+      }));
       const cpp2 = lines.rows.find((row) => row.system_key === "cpp2");
       assert.ok(cpp2 && cmp(cpp2.amount, "0") > 0, "second-tier CPP posts a positive line");
       assert.equal(cpp2!.amount, expected.cpp2);

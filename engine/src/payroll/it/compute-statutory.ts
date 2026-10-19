@@ -1116,12 +1116,8 @@ export async function computeItStatutoryWithRates(
   rates: ItStatutoryRates,
 ): Promise<Record<string, string>> {
   const { taxYear, income, pensionable, nonPeriodic, periodsPerYear, pushStatutory, certificateFor, bool } = ctx;
-  // The one-off share already inside the pensionable leg (the engine reports
-  // it; unit-constructed contexts omit it and keep legacy math). Annualising
-  // the whole leg and adding the one-off again below (pensBase) would count
-  // it periodsPerYear + 1 times — a December bonus priced 13 months of INPS,
-  // wiping the lavoroNet so IRPEF prices zero.
-  const pensionableOneOff = U(ctx.pensionableNonPeriodic ?? "0");
+  // The classified one-off share is already included in the total pensionable base.
+  const pensionableOneOff = U(ctx.pensionableNonPeriodic);
   if (taxYear !== 2025 && taxYear !== 2026) {
     throw new ItPayrollRefusal(
       `IT payroll pack has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed `

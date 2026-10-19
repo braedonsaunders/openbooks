@@ -666,7 +666,9 @@ test("{year} published federal claim-code K1 values", () => {
     const tc = claimCodeAmount(RATES_{year}_JAN.federal.claimCodes, code);
     const result = calculateT4127({
       payDate: "{year}-01-15", province: "ON", periodsPerYear: 26,
-      income: "1.00", federalClaim: tc, provincialClaimCode: 0,
+      income: "1.00", pensionable: "1.00", insurable: "1.00", qpipInsurable: "1.00",
+      pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",
+      federalClaim: tc, provincialClaimCode: 0,
       cppExempt: true, eiExempt: true,
     });
     assert.equal(result.factors.K1, PUBLISHED_K1[code - 1] + "00", "claim code " + code);

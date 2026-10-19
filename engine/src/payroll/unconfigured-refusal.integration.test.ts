@@ -389,6 +389,7 @@ test(
       // hire carries one and the profile points at it.
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
         country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
       }, { percentFloor: '0', method: 'accrue' });
 

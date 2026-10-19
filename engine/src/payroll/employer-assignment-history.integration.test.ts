@@ -36,7 +36,8 @@ test('dated employer assignments change only their recorded pay dates, stale dra
         orgId: f.orgId, actorId: f.actorId, country: 'CA', filingAccountId: id!, factKey: 'ei_employer_multiplier',
         effectiveFrom: '2026-01-01', value: value!, changeReason: 'Dated employer account approval',
       });
-      const liability = (await db.execute<{ id: string }>(sql`select (settings->'payroll'->>'eiPayableAccountId') as id from orgs where id=${f.orgId}`)).rows[0]!.id;
+      const liability = (await db.execute<{ id: string }>(sql`select liability_account_id::text as id from pay_components
+        where org_id=${f.orgId} and country='CA' and system_key='ei' and kind='deduction'`)).rows[0]!.id;
       await setPackSlotAccount(f.orgId, f.actorId, 'CA', 'wcb', liability);
       const run = await createPayRun({ orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
         periodStart: '2026-07-01', periodEnd: '2026-07-07', payDate: '2026-07-08' });

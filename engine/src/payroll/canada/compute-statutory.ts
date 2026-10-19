@@ -11,13 +11,13 @@ import { PayrollError } from "../error.ts";
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
 import "./employee-facts.ts";
-import { calculateT4127, type T4127Input } from "./t4127.ts";
+import { assertCaContributionBases, calculateT4127, type T4127Input } from "./t4127.ts";
 import { calculateTp1015 } from "./quebec/tp1015.ts";
 import { qcRatesForPayDate } from "./quebec/rates.ts";
 import { ratesForPayDate, type Province } from "./rates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { CA_SUPPLEMENTAL_PAY_TREATMENT } from "./supplemental-pay.ts";
-import { EMPTY_PERIOD_PRIORS, periodPriorsEmpty } from "../period-priors.ts";
+import { periodPriorsEmpty } from "../period-priors.ts";
 import { cumulativeHistory } from "./cumulative-history.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import { PayrollPackError } from "../payroll-error.ts";
@@ -245,11 +245,15 @@ export async function computeCaStatutory(
     employeeName,
     payDate: run.pay_date!,
   });
-  // The QPIP program's own insurable base — never the EI leg. Absent only on
-  // unit-constructed contexts, where it reads the `insurable` leg (legacy
-  // math, bit-identical); the engine always provides it via the pack's
-  // declared contribution program.
-  const qpipInsurable = ctx.programBases?.["qpip"] ?? insurable;
+  const contributionBases = {
+    pensionable: ctx.pensionable, insurable: ctx.insurable,
+    qpipInsurable: ctx.programBases?.qpip,
+    pensionableNonPeriodic: ctx.pensionableNonPeriodic,
+    insurableNonPeriodic: ctx.insurableNonPeriodic,
+    qpipNonPeriodic: ctx.programNonPeriodicBases?.qpip,
+  };
+  assertCaContributionBases(contributionBases);
+  const qpipInsurable = contributionBases.qpipInsurable;
   const { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings, cntAmount, cntEarnings } = employerLevies;
   const wcbAdjustmentAmount = employerLevies.wcbAdjustmentAmount;
   const ehtAdjustmentAmount = employerLevies.ehtAdjustmentAmount;
@@ -331,12 +335,15 @@ export async function computeCaStatutory(
   // follows the org's supplemental method. With no priors every combined leg
   // below equals its current leg and every subtraction is zero, so the first
   // run of a period prices exactly as a standalone run.
-  const priors = ctx.periodPriors ?? EMPTY_PERIOD_PRIORS;
+  if (!ctx.periodPriors || !['per_run', 'period_cumulative'].includes(ctx.supplementalTaxMethod)) {
+    throw new PayrollError("Canadian payroll requires resolved period history and a supplemental tax method — review payroll settings and recalculate");
+  }
+  const priors = ctx.periodPriors;
   const priorFactor = (key: string): string => priors.factors[key] ?? "0";
   const priorWithheld = (keys: readonly string[]): string =>
     sum(keys.map((key) => priors.withheldBySystemKey[key] ?? "0"));
   const hasPriors = !periodPriorsEmpty(priors);
-  const supplementalMethod = ctx.supplementalTaxMethod ?? "per_run";
+  const supplementalMethod = ctx.supplementalTaxMethod;
   const runType = (run.run_type as string) ?? "regular";
   // A supplemental run IS periodic pay for tax (that is what distinguishes it
   // from a bonus run), so under the cumulative method its own non-periodic
@@ -392,7 +399,7 @@ export async function computeCaStatutory(
   }
   // Contribution payment classification uses actual current and prior
   // remuneration, before supplemental tax folding or a bonus I reference.
-  const periodNonPeriodicPensionable = add(priorFactor("CA_BPE"), ctx.pensionableNonPeriodic ?? nonPeriodic);
+  const periodNonPeriodicPensionable = add(priorFactor("CA_BPE"), ctx.pensionableNonPeriodic);
   const separateNonPeriodicPayment = cmp(add(priorFactor("I"), income), "0") === 0 &&
     (cmp(add(priorFactor("B"), nonPeriodic), "0") > 0 || cmp(periodNonPeriodicPensionable, "0") > 0) &&
     cmp(periodPensionable, periodNonPeriodicPensionable) <= 0;
@@ -401,7 +408,7 @@ export async function computeCaStatutory(
     averaging:cumulative?.averaging,
     pensionableNonPeriodic: foldBonus ? "0" : ctx.pensionableNonPeriodic,
     insurableNonPeriodic: foldBonus ? "0" : ctx.insurableNonPeriodic,
-    qpipNonPeriodic: foldBonus ? "0" : ctx.programNonPeriodicBases?.qpip,
+    qpipNonPeriodic: foldBonus ? "0" : contributionBases.qpipNonPeriodic,
     payDate: run.pay_date!, province: region as Province, periodsPerYear: P,
     income: taxIncome, nonPeriodic: taxNonPeriodic,
     pensionable: periodPensionable, insurable: periodInsurable, qpipInsurable: periodQpipInsurable, eiEmployerMultiple,
@@ -487,7 +494,7 @@ export async function computeCaStatutory(
       pensionable, insurable, qpipInsurable,
       pensionableNonPeriodic: ctx.pensionableNonPeriodic,
       insurableNonPeriodic: ctx.insurableNonPeriodic,
-      qpipNonPeriodic: ctx.programNonPeriodicBases?.qpip,
+      qpipNonPeriodic: contributionBases.qpipNonPeriodic,
       pensionDeductions: deduction("pension_f"),
       alimonyDeductions: deduction("alimony"),
       nonPeriodicPensionDeductions: deduction("pension_f_bonus"),
@@ -537,7 +544,7 @@ export async function computeCaStatutory(
       pensionable, insurable, qpipInsurable,
       pensionableNonPeriodic: ctx.pensionableNonPeriodic,
       insurableNonPeriodic: ctx.insurableNonPeriodic,
-      qpipNonPeriodic: ctx.programNonPeriodicBases?.qpip,
+      qpipNonPeriodic: contributionBases.qpipNonPeriodic,
       cppWithheld: cpp, cpp2Withheld: cpp2, eiWithheld: ei, qpipWithheld: qpip,
       pensionDeductions: deduction("pension_f"), alimonyDeductions: deduction("alimony"),
       unionDues: deduction("union_dues"), nonPeriodicPensionDeductions: deduction("pension_f_bonus"),
@@ -641,9 +648,9 @@ export async function computeCaStatutory(
       T: incomeTaxOverride.amount!,
       CA_TAX_OVERRIDE: incomeTaxOverride.amount!,
     } : {}),
-    CA_PE:add(pensionable,neg(ctx.pensionableNonPeriodic??"0")),CA_IE:add(insurable,neg(ctx.insurableNonPeriodic??"0")),
-    CA_QPIP_PE:add(qpipInsurable,neg(ctx.programNonPeriodicBases?.qpip??"0")),
-    CA_BPE:ctx.pensionableNonPeriodic??"0",CA_BIE:ctx.insurableNonPeriodic??"0",CA_BQPIP:ctx.programNonPeriodicBases?.qpip??"0",
+    CA_PE:add(pensionable,neg(ctx.pensionableNonPeriodic)),CA_IE:add(insurable,neg(ctx.insurableNonPeriodic)),
+    CA_QPIP_PE:add(qpipInsurable,neg(contributionBases.qpipNonPeriodic)),
+    CA_BPE:ctx.pensionableNonPeriodic,CA_BIE:ctx.insurableNonPeriodic,CA_BQPIP:contributionBases.qpipNonPeriodic,
     CA_T_BASE: referencedBonusTax
       ? nonNegative(add(currentTax.periodicTax, neg(t4127Input.additionalTaxPerPeriod ?? "0")))
       : (hasPriors || foldBonus)

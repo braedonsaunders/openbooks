@@ -192,6 +192,8 @@ function stubContext(
   };
   const storedCertificates = stubStored(stored);
   const ctx: PayrollStatutoryComputeContext = {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     // No committed history in unit tests: the annual cap prices the declared opening alone.
     // The sealed profile BSN verifies (the suite always sets OPENBOOKS_DATA_KEY), so unit runs
     // price the standard tables, never the anonymous rate.

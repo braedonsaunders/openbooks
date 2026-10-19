@@ -1,3 +1,4 @@
+import { assessedCanadianWages } from "../../testing/payroll-canadian-wages.ts";
 /**
  * Generated conformance sweep: every jurisdiction × pay frequency × an income
  * grid, both 2026 editions. Asserts the statutory invariants that must hold
@@ -33,11 +34,11 @@ test("sweep: statutory invariants across jurisdictions, frequencies, incomes", (
       for (const P of FREQUENCIES) {
         let previousTotal = -1n;
         for (const income of INCOMES) {
-          const result = calculateT4127({
+          const result = calculateT4127(assessedCanadianWages({
             payDate, province, periodsPerYear: P,
             income, federalClaimCode: 1,
             ...(province !== "QC" && province !== "ZZ" ? { provincialClaimCode: 1 } : {}),
-          });
+          }));
           const label = `${payDate} ${province} P=${P} I=${income}`;
           // Non-negativity
           for (const [key, value] of Object.entries(result)) {
@@ -75,7 +76,7 @@ test("sweep: YTD progression through the CPP/CPP2/EI crossover is continuous", (
   let cpp = 0n, cpp2 = 0n, ei = 0n, pensionable = 0n;
   const toCents = cents;
   for (let period = 1; period <= 26; period++) {
-    const result = calculateT4127({
+    const result = calculateT4127(assessedCanadianWages({
       payDate: "2026-02-13", province: "ON", periodsPerYear: 26,
       income: "4000.00", federalClaimCode: 1, provincialClaimCode: 1,
       ytd: {
@@ -84,7 +85,7 @@ test("sweep: YTD progression through the CPP/CPP2/EI crossover is continuous", (
         ei: `${(ei / 100n)}.${(ei % 100n).toString().padStart(2, "0")}`,
         pensionable: `${(pensionable / 100n)}.${(pensionable % 100n).toString().padStart(2, "0")}`,
       },
-    });
+    }));
     cpp += toCents(result.cpp);
     cpp2 += toCents(result.cpp2);
     ei += toCents(result.ei);

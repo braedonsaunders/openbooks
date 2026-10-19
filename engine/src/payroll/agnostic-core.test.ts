@@ -1,7 +1,9 @@
+import { demandingHolidays, recordHolidayAssertion } from "./holiday-attestations.ts";
+import { seedEmployment } from "../testing/hrm-harness.ts";
 import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
-  seedPayrollProfile, seedPayrollWage, createScratchOrg, seedFlowActors, seedWorkerEmployment,
+  seedPayrollProfile, seedPayrollWage, createScratchOrg, seedFlowActors,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -695,7 +697,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
     });
     // Stub calculation refuses employees without an HRM employment, so the
     // hire carries one and the profile points at it.
-    const employmentId = await seedWorkerEmployment(orgId, id, org.subsidiaryId);
+    const { employmentId } = await seedEmployment(orgId, org.subsidiaryId, { workerPartyId: id, status: "active", from: "2020-01-01" });
     // Every row is Canadian, including 'ZZ': that is the extra-provincial
     // withholding code, not another country — the CA pack prices all four.
     // Coverage is out of scope here (this asserts holiday pay, never WCB):
@@ -703,6 +705,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
     // money identical either way.
     await seedPayrollProfile(orgId, id, employmentId, scheduleId, actorId, {
       country: 'CA', province: province, payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+      statutoryOccupationClass: 'general',
       wcbExempt: true, wcbExemptReason: 'agnostic fixture: workers-compensation coverage out of scope',
     }, { percentFloor: '4', method: 'accrue' });
 
@@ -796,13 +799,22 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   // Supplying the authoritative facts reaches the same resolver used by a
   // real run. Quebec's commission employee must take the 12-week ÷60 arm,
   // while Ontario's explicit consent assertion allows its ordinary ÷20 rule.
-  const holidayEligibility = {
-    [ontarioId]: { paidOnCommission: false, absentWithoutConsent: false },
-    [quebecId]: { paidOnCommission: true, absentWithoutConsent: false },
-    [manitobaId]: { paidOnCommission: false, absentWithoutConsent: false },
-  };
+  await db.transaction(async tx => {
+    for (const [employeePartyId, province, paidOnCommission] of [
+      [ontarioId, 'ON', false], [quebecId, 'QC', true], [manitobaId, 'MB', false],
+    ] as const) {
+      await tx.execute(sql`update employee_payroll_profiles set paid_on_commission=${paidOnCommission}, updated_at=clock_timestamp()
+        where org_id=${orgId} and employee_party_id=${employeePartyId}`);
+      const holidays = await demandingHolidays(tx, { orgId, country: 'CA', province, labourJurisdiction: null,
+        employeeName: employeePartyId, periodStart: '2026-06-21', periodEnd: '2026-07-04' });
+      for (const holiday of holidays.filter(holiday => holiday.needsAbsenceAssertion)) {
+        await recordHolidayAssertion(tx, { orgId, documentId: run2.documentId, employeePartyId,
+          holidayKey: holiday.key, holidayDate: holiday.date, absentWithoutConsent: false, actorId });
+      }
+    }
+  });
   const onResult = await calculatePayRun({
-    orgId, documentId: run2.documentId, actorId, holidayEligibility,
+    orgId, documentId: run2.documentId, actorId,
   });
   // Ontario calculates with the declared ESA formula. Manitoba is DECLARED now
   // and its measure is a normal working day, so it refuses for a different and
@@ -830,7 +842,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
       values (${orgId}, ${mbSchedule}, ${dayIndex}, '8', ${actorId}, ${actorId})`);
   }
   const withSchedule = await calculatePayRun({
-    orgId, documentId: run2.documentId, actorId, holidayEligibility,
+    orgId, documentId: run2.documentId, actorId,
   });
   assert.equal(withSchedule.employees, 3, `holiday calculation refusals after recording the schedule: ${JSON.stringify(withSchedule.errors)}`);
   assert.equal(withSchedule.errors.length, 1, "only the undeclared jurisdiction is left");
@@ -865,17 +877,38 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   // rather than silently applying the ordinary $2,400 ÷ 20 = $120 formula.
   assert.equal(cmp(quebecStat.amount, "40.00"), 0);
 
+  // The stored employment class selects construction pay through the same native calculation.
+  await db.execute(sql`update employee_payroll_profiles set statutory_occupation_class='construction', updated_at=clock_timestamp()
+    where org_id=${orgId} and employee_party_id=${manitobaId}`);
+  const construction = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
+  assert.equal(construction.employees, 3);
+  const constructionPay = (await db.execute<{amount:string}>(sql`
+    select l.amount::text as amount from pay_stub_lines l
+    join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
+    join pay_components c on c.id=l.component_id and c.org_id=l.org_id
+    where s.org_id=${orgId} and s.pay_run_document_id=${run2.documentId}
+      and s.employee_party_id=${manitobaId} and c.system_key='stat_holiday'`)).rows;
+  assert.equal(constructionPay.length, 1);
+  assert.equal(cmp(constructionPay[0]!.amount, '48.00'), 0);
+  await db.execute(sql`update employee_payroll_profiles set statutory_occupation_class='general', updated_at=clock_timestamp()
+    where org_id=${orgId} and employee_party_id=${manitobaId}`);
+
   // The same production entry point honours an asserted unconsented absence:
   // Ontario's last-and-first scheduled-shift test disqualifies the holiday,
   // while the other employees retain their supplied facts.
+  await db.transaction(async tx => {
+    const holidays = await demandingHolidays(tx, { orgId, country: 'CA', province: 'ON', labourJurisdiction: null,
+      employeeName: 'Olive Ontario', periodStart: '2026-06-21', periodEnd: '2026-07-04' });
+    for (const holiday of holidays.filter(holiday => holiday.needsAbsenceAssertion)) {
+      await recordHolidayAssertion(tx, { orgId, documentId: run2.documentId, employeePartyId: ontarioId,
+        holidayKey: holiday.key, holidayDate: holiday.date, absentWithoutConsent: true, actorId });
+    }
+  });
   const denied = await calculatePayRun({
     orgId,
     documentId: run2.documentId,
     actorId,
-    holidayEligibility: {
-      ...holidayEligibility,
-      [ontarioId]: { paidOnCommission: false, absentWithoutConsent: true },
-    },
+
   });
   assert.equal(denied.employees, 3);
   assert.equal(denied.errors.length, 1);

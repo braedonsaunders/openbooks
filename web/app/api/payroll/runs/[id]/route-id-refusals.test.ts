@@ -12,7 +12,7 @@ import { isUuid } from '../../../../../lib/list-params'
  * Covers the six sites the bulk-adjustment batch left behind: the
  * single-adjustment and hours paths of 'invalid adjustment' (2 sites),
  * delete-adjustment's 'invalid adjustment', 'invalid scope', 'invalid
- * holidayEligibility', and this file's 'invalid employee'. Each refusal names
+ * and invalid employee identifiers. Each refusal names
  * the field, the value received (capped via suppliedValue), and a remedy that
  * exists; amounts reuse the shared decimal classifier. The engine boundary
  * (`mutatePayRunAdjustment`) is mocked; this file proves the adapter around
@@ -239,39 +239,17 @@ test('income-tax override requires an idempotency key and crosses the native com
   assert.equal((routeState.adjustmentCalls[0] as { mutation: { amount: string } }).mutation.amount, '0')
 })
 
-// ---------------------------------------------------------------------------
-// holidayEligibility: five causes, one collapsed 'invalid holidayEligibility'
-// ---------------------------------------------------------------------------
-
-test('holidayEligibility refusals name the cause, value, and remedy', async () => {
-  const cases: Array<{ name: string; value: unknown; patterns: RegExp[] }> = [
-    { name: 'non-map', value: null, patterns: [/holidayEligibility must be a map of employee ids/, /got "a null"/, /or omit it/] },
-    { name: 'non-uuid key', value: { nope: {} }, patterns: [/holidayEligibility key "nope" is not an employee id/, /fix that key/] },
-    { name: 'non-object facts', value: { [uuid(1)]: 'yes' }, patterns: [new RegExp(`holidayEligibility\\["${uuid(1)}"\\] must be a map of attestation facts`), /got "yes"/, /paidOnCommission, absentWithoutConsent, and constructionEmployee/] },
-    { name: 'unknown fact', value: { [uuid(1)]: { onLeave: true } }, patterns: [/has unknown fact "onLeave"/, /only paidOnCommission, absentWithoutConsent, and constructionEmployee exist/] },
-    { name: 'non-boolean fact', value: { [uuid(1)]: { paidOnCommission: 'yes' } }, patterns: [/paidOnCommission must be true or false/, /got "yes"/] },
-  ]
-  for (const { name, value, patterns } of cases) {
+test('calculation facts must be filed through their native durable records', async () => {
+  for (const holidayEligibility of [null, {}, { [uuid(1)]: { paidOnCommission: true, absentWithoutConsent: false } }]) {
     reset()
-    const { status, error } = await errorOf(validAdd({ holidayEligibility: value }))
-    assert.equal(status, 422, `${name} should refuse`)
-    for (const pattern of patterns) assert.match(error, pattern, name)
-    assert.equal(routeState.adjustmentCalls.length, 0, `${name} should write nothing`)
+    const { status, error } = await errorOf(validAdd({ holidayEligibility }))
+    assert.equal(status, 422)
+    assert.match(error, /holidayEligibility is not a calculation input/)
+    assert.match(error, /file holiday assertions on the pay run/)
+    assert.equal(routeState.adjustmentCalls.length, 0)
   }
-})
-
-test('holidayEligibility accepts absence, an empty map, and a full attestation', async () => {
-  for (const value of [
-    undefined,
-    {},
-    { [uuid(1)]: {} },
-    { [uuid(1)]: { paidOnCommission: true, absentWithoutConsent: false } },
-  ]) {
-    reset()
-    const res = await post(validAdd({ holidayEligibility: value }))
-    assert.equal(res.status, 200, `holidayEligibility ${JSON.stringify(value)} should be accepted`)
-    assert.equal(routeState.adjustmentCalls.length, 1)
-  }
+  reset()
+  assert.equal((await post(validAdd())).status, 200)
 })
 
 // ---------------------------------------------------------------------------
@@ -532,34 +510,6 @@ test('exclude-employee and include-employee accept a well-formed id', async () =
 // from the old collapsed literal — otherwise the literal survived.
 // ---------------------------------------------------------------------------
 
-interface HolidayFacts {
-  paidOnCommission?: boolean
-  absentWithoutConsent?: boolean
-}
-
-function oldParseHolidayEligibility(value: unknown): Record<string, HolidayFacts> | null {
-  if (value === undefined) return {}
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
-  const clean: Record<string, HolidayFacts> = {}
-  for (const [employeeId, facts] of Object.entries(value as Record<string, unknown>)) {
-    if (!isUuid(employeeId)) return null
-    if (facts === null || typeof facts !== 'object' || Array.isArray(facts)) return null
-    const entry: HolidayFacts = {}
-    for (const [key, fact] of Object.entries(facts as Record<string, unknown>)) {
-      if ((key !== 'paidOnCommission' && key !== 'absentWithoutConsent') || typeof fact !== 'boolean') {
-        return null
-      }
-      entry[key as keyof HolidayFacts] = fact as boolean
-    }
-    clean[employeeId] = entry
-  }
-  return clean
-}
-
-function oldHolidayRefuses(value: unknown): boolean {
-  return value !== undefined && oldParseHolidayEligibility(value) === null
-}
-
 function oldCanonicalAdjustmentHours(value: unknown): string | null {
   if (value == null || value === '') return null
   const exact = canonicalDecimal(value, 2)
@@ -614,39 +564,6 @@ async function refused(body: unknown): Promise<{ refused: boolean; error: string
   assert.ok(status === 200 || status === 422, `unexpected status ${status} for ${JSON.stringify(body)}`)
   return { refused: status === 422, error }
 }
-
-test('PARITY holidayEligibility: old guard and new causes agree on every input', async () => {
-  const table: unknown[] = [
-    undefined,
-    null,
-    'x',
-    42,
-    true,
-    [],
-    {},
-    { nope: {} },
-    { [uuid(1)]: null },
-    { [uuid(1)]: [] },
-    { [uuid(1)]: 'yes' },
-    { [uuid(1)]: {} },
-    { [uuid(1)]: { paidOnCommission: true } },
-    { [uuid(1)]: { paidOnCommission: 'yes' } },
-    { [uuid(1)]: { onLeave: true } },
-    { [uuid(1)]: { paidOnCommission: true, absentWithoutConsent: false } },
-    { [uuid(1)]: { absentWithoutConsent: 1 } },
-    { [uuid(1)]: {}, [uuid(2)]: { paidOnCommission: false } },
-    { [uuid(1)]: {}, nope: {} },
-  ]
-  for (const value of table) {
-    const expected = oldHolidayRefuses(value)
-    const { refused: actual, error } = await refused(validAdd({ holidayEligibility: value }))
-    assert.equal(actual, expected, `holidayEligibility ${JSON.stringify(value)}: old=${expected} new=${actual}`)
-    if (actual) {
-      assert.notEqual(error, 'invalid holidayEligibility', `literal survived for ${JSON.stringify(value)}`)
-      assert.match(error, /holidayEligibility/)
-    }
-  }
-})
 
 test('PARITY add-adjustment: old guard and new causes agree on every input', async () => {
   const base = validAdd()

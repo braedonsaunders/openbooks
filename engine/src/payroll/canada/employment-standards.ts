@@ -345,6 +345,10 @@ export const MB_CONSTRUCTION_HOLIDAY = {
 } as const;
 
 const MB_HOLIDAY_PAY: PayrollHolidayPayRule = {
+  occupationClasses: {
+    general: { label: "General employee", citation: "The Employment Standards Code (Manitoba), CCSM c E110, ss. 22–25" },
+    construction: { label: "Construction employee", citation: MB_CONSTRUCTION_HOLIDAY.citation },
+  },
   citation: "The Employment Standards Code (Manitoba), CCSM c E110, ss. 22–25",
   basis: {
     kind: "normal_day",

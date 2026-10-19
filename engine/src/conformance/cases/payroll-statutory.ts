@@ -64,6 +64,8 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateT4127({
+        pensionable: "1500.00", insurable: "1500.00", qpipInsurable: "1500.00",
+        pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",
         payDate: "2026-01-15",
         province: "SK",
         periodsPerYear: 52,
@@ -120,6 +122,8 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateT4127({
+        pensionable: "2000.00", insurable: "2000.00", qpipInsurable: "2000.00",
+        pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",
         payDate: "2026-01-15",
         province: "SK",
         periodsPerYear: 26,
@@ -169,6 +173,8 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateT4127({
+        pensionable: "2000.00", insurable: "2000.00", qpipInsurable: "2000.00",
+        pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",
         payDate: "2026-01-15",
         province: "SK",
         periodsPerYear: 26,
@@ -221,6 +227,8 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateT4127({
+        pensionable: "1500.00", insurable: "1500.00", qpipInsurable: "1500.00",
+        pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",
         payDate: "2026-01-15",
         province: "QC",
         periodsPerYear: 52,
@@ -276,6 +284,8 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateT4127({
+        pensionable: "2000.00", insurable: "2000.00", qpipInsurable: "2000.00",
+        pensionableNonPeriodic: "2000.00", insurableNonPeriodic: "2000.00", qpipNonPeriodic: "2000.00",
         payDate: "2026-01-15",
         province: "ON",
         periodsPerYear: 52,
@@ -482,7 +492,9 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
       values: { periodicTax: "0.0000" },
     },
     run:()=>{
-      const result=calculateT4127({payDate:"2026-06-30",province:"AB",periodsPerYear:4,income:"10000",cppExempt:true,eiExempt:true,federalClaimCode:1,provincialClaimCode:1,
+      const result=calculateT4127({
+        pensionable: "10000", insurable: "10000", qpipInsurable: "10000",
+        pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",payDate:"2026-06-30",province:"AB",periodsPerYear:4,income:"10000",cppExempt:true,eiExempt:true,federalClaimCode:1,provincialClaimCode:1,
         averaging:{elapsedPeriods:2,income:"60000",pensionDeductions:"0",alimonyDeductions:"0",unionDues:"0",f5A:"0",pensionablePeriodic:"0",insurablePeriodic:"0",qpipPeriodic:"0",pensionableNonPeriodic:"0",insurableNonPeriodic:"0",qpipNonPeriodic:"0",periodicTax:"18655.02",bonusTax:"0"}})
       return {values:{periodicTax:result.periodicTax}}
     },

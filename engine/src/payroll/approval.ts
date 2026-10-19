@@ -4,7 +4,7 @@ import { PayrollError } from "./error.ts";
 import { PAY_RUN_SUBJECT_KIND } from "../flows/pay-runs-adapter.ts";
 import { returnDocumentToDraft, ReturnToDraftError } from "../flows/submit.ts";
 import { payRunStaleness } from "./readiness.ts";
-import { calculatePayRun, type CalculatePayRunInput, type PayRunCalculation } from "./run-calculation.ts";
+import { calculatePayRun, type PayRunCalculation } from "./run-calculation.ts";
 import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
@@ -240,7 +240,6 @@ export interface RecalculateApprovedPayRunInput {
   orgId: string;
   documentId: string;
   actorId: string;
-  holidayEligibility?: CalculatePayRunInput["holidayEligibility"];
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }
 
@@ -278,7 +277,7 @@ function refusalForDocumentStatus(status: string): string {
 export async function recalculateStaleApprovedPayRun(
   input: RecalculateApprovedPayRunInput,
 ): Promise<RecalculatedApprovedPayRun> {
-  const { orgId, documentId, actorId, holidayEligibility } = input;
+  const { orgId, documentId, actorId } = input;
   return withOrgTransaction(orgId, async () => {
     for (const permission of ["payroll.run", PAY_RUN_WORKFLOW_PERMISSIONS.approve]) {
       if (!(await actorHasPermission(db, orgId, actorId, permission))) {
@@ -327,7 +326,7 @@ export async function recalculateStaleApprovedPayRun(
     }
 
     const calculation = await calculatePayRun({
-      orgId, documentId, actorId, dryRun: false, holidayEligibility, allowedSubsidiaryIds,
+      orgId, documentId, actorId, dryRun: false, allowedSubsidiaryIds,
     });
     return {
       calculation,

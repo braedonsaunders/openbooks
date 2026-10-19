@@ -301,12 +301,12 @@ export type StubComputationInput = {
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   /**
    * This employee's period-to-date priors from earlier runs of the same
-   * period and schedule (undefined for the period's first run), resolved
+   * period and schedule, including an explicit empty first-period result, resolved
    * once per run by the calculation driver.
    */
-  periodPriors?: PayPeriodPriors;
+  periodPriors: PayPeriodPriors;
   /** The org's supplemental income-tax method, resolved once per run. */
-  supplementalTaxMethod?: SupplementalTaxMethod;
+  supplementalTaxMethod: SupplementalTaxMethod;
   onBonusIncomeReference?: (source: CaBonusIncomeReferenceSource) => void;
   /** Approved leave inputs consumed with this employee's calculation. */
   leavePayrollInputs?: readonly LeavePayrollInput[];

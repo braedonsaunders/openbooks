@@ -181,6 +181,8 @@ async function price(year: Year, input: Input): Promise<object> {
     need: (systemKey: string, kind: string): Record<string, unknown> => ({ id: `${systemKey}:${kind}` }),
   });
   const ctx = {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     taxYear: year, region: "BR", run: { pay_date: input.payDate }, emp: { br_dependentes: "0" },
     income: input.payslip, nonPeriodic: "", pensionable: input.payslip, insurable: input.payslip,
     periodsPerYear: 12, filingAccountId: null, pushStatutory, certificateFor: () => null, assertRegionSupported: () => {},

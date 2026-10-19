@@ -257,15 +257,13 @@ const consolidatedRows = [
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
 
-        test("calculate accepts holidayEligibility and clears the demand", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+        test("calculate reads filed holiday assertions and clears the demand", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
             state.gate = runGate(fx);
             const { documentId } = await christmasRun(fx);
-            const res = await calculate(documentId, {
-              action: "calculate",
-              holidayEligibility: { [fx.employeeId]: { absentWithoutConsent: false } },
-            });
+            await fileAbsence(fx, documentId, fx.employeeId, fx.employeeName, "ON", false);
+            const res = await calculate(documentId, { action: "calculate" });
             assert.equal(res.status, 200, JSON.stringify(await res.clone().json()).slice(0, 500));
             const body = await res.json() as { ok: boolean; errors: { message: string }[] };
             assert.equal(body.ok, true);
@@ -273,7 +271,7 @@ const consolidatedRows = [
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
 
-        test("calculate refuses malformed holidayEligibility", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+        test("calculate refuses request-only holiday facts", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
             state.gate = runGate(fx);
@@ -390,7 +388,7 @@ const consolidatedRows = [
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
 
-        test("the per-request map overrides stored absence answers", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+        test("refiling the persisted absence decision changes holiday pay", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
             state.gate = runGate(fx);
@@ -423,11 +421,9 @@ const consolidatedRows = [
                  and s.employee_party_id = ${fx.employeeId}
                  and c.system_key = 'stat_holiday_premium'`)).rows[0]!.total);
             assert.equal(Number(denied), 0);
-            // The same request with an explicit per-request FALSE wins: the premium is paid.
-            res = await calculate(documentId, {
-              action: "calculate",
-              holidayEligibility: { [fx.employeeId]: { absentWithoutConsent: false } },
-            });
+            // Refile the durable decision, then calculate from that source.
+            await fileAbsence(fx, documentId, fx.employeeId, fx.employeeName, "ON", false);
+            res = await calculate(documentId, { action: "calculate" });
             assert.equal(res.status, 200);
             body = await res.json() as { ok: boolean; errors: unknown[] };
             assert.deepEqual(body.errors, []);

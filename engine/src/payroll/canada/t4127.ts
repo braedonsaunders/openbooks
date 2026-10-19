@@ -68,7 +68,24 @@ export interface T4127Averaging {
   bonusTax:string
 }
 
-export interface T4127Input {
+export interface CaContributionBases {
+  pensionable: string;
+  insurable: string;
+  qpipInsurable: string;
+  pensionableNonPeriodic: string;
+  insurableNonPeriodic: string;
+  qpipNonPeriodic: string;
+}
+
+export function assertCaContributionBases(input: Partial<CaContributionBases>): asserts input is CaContributionBases {
+  for (const key of ['pensionable','insurable','qpipInsurable','pensionableNonPeriodic','insurableNonPeriodic','qpipNonPeriodic'] as const) {
+    if (typeof input[key] !== 'string' || !input[key].trim()) {
+      throw new PayrollError(`Canadian payroll requires its explicit ${key} earnings base — classify the native earning components and recalculate`);
+    }
+  }
+}
+
+export interface T4127Input extends CaContributionBases {
   /** Pay date — selects the edition (122nd Jan–Jun 2026, 123rd Jul–Dec). */
   payDate: string;
   /** Province of employment; "ZZ" = outside Canada / beyond any province. */
@@ -82,8 +99,6 @@ export interface T4127Input {
   income: string;
   /** B — non-periodic payment this period (bonus, retro, unused-vacation payout). */
   nonPeriodic?: string;
-  /** PI — pensionable income this period. Defaults to income + nonPeriodic. */
-  pensionable?: string;
   /**
    * Actual payment contains only separately paid non-periodic remuneration.
    * Resolved before any regular-income reference used solely for bonus tax.
@@ -91,17 +106,6 @@ export interface T4127Input {
    * This CPP rule does not change QPP treatment.
    */
   separateNonPeriodicPayment?: boolean;
-  /** IE — insurable earnings this period. Defaults to income + nonPeriodic. */
-  insurable?: string;
-  /**
-   * The QPIP program's own insurable base this period (the pack's declared
-   * contribution program, accumulated per stub). Absent (undefined) only on
-   * unit-constructed inputs, where it reads the EI leg (legacy math,
-   * bit-identical); the engine always provides it. QPIP premiums price off
-   * this base, never EI's: EI-excluded earnings can be QPIP-insurable and
-   * the reverse.
-   */
-  qpipInsurable?: string;
 
   /** F — period RPP/RRSP/PRPP/RCA deductions (from periodic pay). */
   pensionDeductions?: string;
@@ -159,9 +163,6 @@ export interface T4127Input {
 
   /** An explicit election enables Option 2; absent preserves Option 1. */
   averaging?:T4127Averaging;
-  pensionableNonPeriodic?:string;
-  insurableNonPeriodic?:string;
-  qpipNonPeriodic?:string;
   /**
    * CPP/EI/QPIP actually withheld on THIS run, for the K2 credits and the F5
    * deduction. A supplemental-period share prices contributions on the
@@ -369,13 +370,12 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const traceExact = (key: string, value: Rational) => trace(key, roundRational(value));
   const income = U(input.income);
   const bonus = opt(input.nonPeriodic);
-  if(averaging&&bonus>ZERO&&[input.pensionableNonPeriodic,input.insurableNonPeriodic,input.qpipNonPeriodic].some(value=>value===undefined))
-    throw new PayrollError('Cumulative averaging requires the pensionable, EI and QPIP bases of non-periodic pay — review its earning-component classifications before calculating');
-  const PI = input.pensionable === undefined ? income + bonus : U(input.pensionable);
-  const pensionableBonus = input.pensionableNonPeriodic === undefined ? bonus : U(input.pensionableNonPeriodic);
+  assertCaContributionBases(input);
+  const PI = U(input.pensionable);
+  const pensionableBonus = U(input.pensionableNonPeriodic);
   const separateNonPeriodicPayment = input.separateNonPeriodicPayment ??
     (income === ZERO && (bonus > ZERO || pensionableBonus > ZERO) && PI <= pensionableBonus);
-  const IE = input.insurable === undefined ? income + bonus : U(input.insurable);
+  const IE = U(input.insurable);
   const ytd = input.ytd ?? {};
 
   // ---- CPP / QPP -----------------------------------------------------------
@@ -419,7 +419,7 @@ export function calculateT4127(input: T4127Input): T4127Result {
   let qpip = ZERO;
   let qpipEmployer = ZERO;
   if (isQuebec) {
-    const IE_QPIP = input.qpipInsurable === undefined ? IE : U(input.qpipInsurable);
+    const IE_QPIP = U(input.qpipInsurable);
     const priorQpip = opt(ytd.qpip);
     qpip = max0(bmin(U(rates.qpip.maxEmployee) - priorQpip, mulRateCents(IE_QPIP, rates.qpip.employeeRate)));
     const priorQpipEr = opt(ytd.qpipEmployer);
@@ -509,8 +509,8 @@ export function calculateT4127(input: T4127Input): T4127Result {
   let cppCreditBasis: Rational;
   let eiCreditBasis: Rational;
   if (averaging) {
-    const projectedPe = qa(project(Q(PI - opt(input.pensionableNonPeriodic) + U(averaging.pensionablePeriodic))), Q(U(averaging.pensionableNonPeriodic)));
-    const projectedIe = qa(project(Q(IE - opt(input.insurableNonPeriodic) + U(averaging.insurablePeriodic))), Q(U(averaging.insurableNonPeriodic)));
+    const projectedPe = qa(project(Q(PI - U(input.pensionableNonPeriodic) + U(averaging.pensionablePeriodic))), Q(U(averaging.pensionableNonPeriodic)));
+    const projectedIe = qa(project(Q(IE - U(input.insurableNonPeriodic) + U(averaging.insurablePeriodic))), Q(U(averaging.insurableNonPeriodic)));
     cppCreditBasis = input.cppExempt || PM === 0 ? QZERO : qmin(maxBaseProrated,
       qrate(qmax0(qs(projectedPe, qratio(Q(U("3500")), BigInt(PM), 12n))), plan.baseRate));
     eiCreditBasis = input.eiExempt ? QZERO : qmin(Q(eiMax), qrate(qmax0(projectedIe), eiRate));
@@ -525,7 +525,7 @@ export function calculateT4127(input: T4127Input): T4127Result {
     eiCreditBasis = input.eiExempt ? QZERO : eiMaxReached ? Q(eiMax) : qmin(Q(mulInt(creditEi, P)), Q(eiMax));
   }
   const projectedQpip = averaging
-    ? qa(project(Q((input.qpipInsurable === undefined ? IE : U(input.qpipInsurable)) - opt(input.qpipNonPeriodic) + U(averaging.qpipPeriodic))), Q(U(averaging.qpipNonPeriodic)))
+    ? qa(project(Q((U(input.qpipInsurable)) - U(input.qpipNonPeriodic) + U(averaging.qpipPeriodic))), Q(U(averaging.qpipNonPeriodic)))
     : QZERO;
   const qpipCreditBasis = isQuebec ? qmin(averaging
     ? qrate(qmax0(projectedQpip), rates.qpip.employeeRate) : Q(mulInt(creditQpip, P)), Q(U(rates.qpip.maxEmployee))) : QZERO;

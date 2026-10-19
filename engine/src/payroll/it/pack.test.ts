@@ -222,13 +222,13 @@ function fakeCtx(overrides: {
     altri_familiari_a_carico: null,
   };
   const ctx = {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, insurableNonPeriodic: "0", programNonPeriodicBases: {},
     taxYear: overrides.taxYear ?? 2025,
     income: overrides.income ?? "2500.00",
     nonPeriodic: overrides.nonPeriodic ?? "0",
     pensionable: overrides.pensionable ?? "2500.00",
-    // Omitted on purpose unless the test passes it: unit-constructed contexts
-    // without the split keep legacy math, and the engine always provides it.
-    pensionableNonPeriodic: overrides.pensionableNonPeriodic,
+    pensionableNonPeriodic: overrides.pensionableNonPeriodic ?? "0",
     insurable: "0",
     reducedBases: reduceTaxBases(
       [],

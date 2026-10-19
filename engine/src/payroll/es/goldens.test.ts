@@ -203,6 +203,8 @@ function esAdapterContext(c: AdapterCase): { ctx: PayrollStatutoryComputeContext
     onFile: true, effectiveFrom: null, missing: [], answers,
   });
   const ctx = {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     tx: { execute: async () => ({ rows: [{ changed: c.priorChanged ?? false }] }) },
     orgId: "org", employeePartyId: "employee", documentId: "run", taxYear: 2026, region: "MD",
     run: { pay_date: c.payDate },

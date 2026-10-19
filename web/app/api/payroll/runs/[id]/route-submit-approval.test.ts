@@ -283,7 +283,7 @@ test('payroll approval authority recalculates and resubmits the new evidence', a
   assert.equal(body.gated, true)
   assert.equal(body.gross, '2000.0000')
   assert.deepEqual(routeState.recalculationCalls, [{
-    orgId: 'org-1', documentId: RUN_ID, actorId: 'actor-1', holidayEligibility: {}, allowedSubsidiaryIds: null,
+    orgId: 'org-1', documentId: RUN_ID, actorId: 'actor-1', allowedSubsidiaryIds: null,
   }])
   assert.deepEqual(routeState.submitCalls, [['pay_run', RUN_ID, 'actor-1']])
   assert.equal(routeState.commitCalls.length, 0)

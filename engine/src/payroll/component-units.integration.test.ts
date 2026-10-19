@@ -1,5 +1,5 @@
 import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
+  seedPayrollStatutoryTreatment, seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
   seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
   seedPayrollAccountingConfiguration,
 } from "../testing/fixtures.ts";
@@ -56,6 +56,12 @@ test("quantity-unit lines pay their amount and count zero hours", { skip: !DB },
     const premiumId = randomUUID();
     await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,basis,value,taxable,pensionable,insurable,vacationable,non_periodic)
       values(${premiumId},${org.orgId},'HRPREM','Hourly premium','earning','CA','per_hour','2.0000',true,true,true,false,false)`);
+    for (const componentId of [tripsId, extraId, premiumId]) {
+      await seedPayrollStatutoryTreatment(org.orgId, componentId, {
+        effectiveFrom: "2026-01-01", programExclusions: [], vacationable: false,
+        createdBy: actorId, updatedBy: actorId,
+      });
+    }
     const worker = randomUUID();
     await seedPayrollPerson(org.orgId, worker, "Units Worker");
     await seedPayrollEmployeeRole(org.orgId, worker, { id: randomUUID(), workerCompGroupId: null, terminatedOn: null });

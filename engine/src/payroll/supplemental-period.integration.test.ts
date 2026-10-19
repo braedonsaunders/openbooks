@@ -1,5 +1,5 @@
 import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
+  seedPayrollStatutoryTreatment, seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
   seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
   seedPayrollAccountingConfiguration,
 } from "../testing/fixtures.ts";
@@ -90,6 +90,12 @@ async function payrollOrg(setting: "per_run" | "period_cumulative" | null): Prom
   const benNinsComponentId = randomUUID();
   await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,non_periodic)
     values(${benNinsComponentId},${org.orgId},'BEN_NINS','Taxable benefit (non-insurable)','earning','CA',true,true,false,false,false)`);
+  for (const componentId of [bonusComponentId, benInsComponentId, benNinsComponentId]) {
+    await seedPayrollStatutoryTreatment(org.orgId, componentId, {
+      effectiveFrom: "2026-01-01", programExclusions: [], vacationable: false,
+      createdBy: actorId, updatedBy: actorId,
+    });
+  }
   const worker = randomUUID();
   await seedPayrollPerson(org.orgId, worker, "Supplemental Worker");
   await seedPayrollEmployeeRole(org.orgId, worker, { id: randomUUID(), workerCompGroupId: null, terminatedOn: null });
@@ -98,6 +104,7 @@ async function payrollOrg(setting: "per_run" | "period_cumulative" | null): Prom
   });
   const employmentId = await seedWorkerEmployment(org.orgId, worker, org.subsidiaryId);
   await seedPayrollProfile(org.orgId, worker, employmentId, scheduleId, actorId, {
+      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
     country: "CA", province: "ON", payBasis: "hourly",
     federalClaimAmount: "16452", provincialClaimAmount: "12989",
   }, { percentFloor: "4", method: "accrue" });

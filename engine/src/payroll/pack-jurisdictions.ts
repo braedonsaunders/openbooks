@@ -90,6 +90,9 @@ export function holidayOccupationClassesOf(jurisdictionKeyValue: string): readon
   const classes: RecognisedHolidayOccupation[] = [];
   for (const edition of jurisdiction?.holidayPay ?? []) {
     const rule = edition.rule;
+    for (const [classKey, arm] of Object.entries(rule.occupationClasses ?? {})) {
+      if (!classes.some(entry => entry.classKey === classKey)) classes.push({ classKey, ...arm });
+    }
     for (const value of rule.weeklyCap?.values ?? []) {
       if (!classes.some((entry) => entry.classKey === value)) {
         classes.push({ classKey: value, label: humanizeOccupationClass(value), citation: rule.citation });

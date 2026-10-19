@@ -22,7 +22,6 @@ import { rendererStatusResponse } from '../../../../../lib/api/pdf-renderer'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
 import { canonicalAdjustmentHours, mutatePayRunAdjustment, recordPayRunHolidayHours, payRunBulkAdjustmentId, PayRunAdjustmentIdempotencyConflict } from '@openbooks/engine/payroll/run-adjustments'
-import { storedHolidayEligibilityForRun } from '@openbooks/engine/payroll/holiday-attestations'
 import { normalizeMoney } from '@openbooks/engine/money/money'
 import '../../../../../lib/feature-gates';
 import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
@@ -44,8 +43,7 @@ const payrollRunMoney = z.string().superRefine((value, context) => {
     context.addIssue({ code: 'custom', message: decimalNullRefusal('amount', 'an amount', value, 4) })
   }
 })
-const holidayEligibilityBody = z.json().optional()
-const actionBody = <A extends string>(action: A) => ({ action: z.literal(action), holidayEligibility: holidayEligibilityBody })
+const actionBody = <A extends string>(action: A) => ({ action: z.literal(action) })
 // The handler validates each entry with its index so an operator can repair a
 // specific row in a long payroll roster; the boundary validates list shape.
 const employeeIds = (remedy: string) => z.array(z.json(), {
@@ -54,7 +52,13 @@ const employeeIds = (remedy: string) => z.array(z.json(), {
 const rosterIds = z.array(z.json(), {
   error: (issue) => `rosterPartyIds must be a list of employee ids — got "${suppliedValue(issue.input)}"; pass the run roster as a list`,
 })
-const requestBodySchema = z.discriminatedUnion('action', [
+const requestBodySchema = z.preprocess((value, context) => {
+  if (value && typeof value === 'object' && Object.hasOwn(value, 'holidayEligibility')) {
+    context.addIssue({ code: 'custom', message: "holidayEligibility is not a calculation input — file holiday assertions on the pay run and standing commission or occupation facts on the employee, then recalculate" });
+    return z.NEVER;
+  }
+  return value;
+}, z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('calculate') }),
   z.strictObject({ ...actionBody('dry-run') }),
   z.strictObject({ ...actionBody('bulk-adjustment'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, employeePartyIds: employeeIds('pass the employees to adjust as a list'), note: z.json().optional(), replaceComponent: z.json().optional() }),
@@ -81,69 +85,9 @@ const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('resolve-employment-links'), employeePartyIds: employeeIds('pass the employees to link as a list').optional() }),
   z.strictObject({ ...actionBody('attribute-entity'), subsidiaryId: payrollRunUuid('subsidiaryId', 'a subsidiary id', 'choose a subsidiary to attribute this run to') }),
   z.strictObject({ ...actionBody('commit') }),
-])
+]))
 
 export const dynamic = 'force-dynamic'
-
-/** Statutory-holiday attestation facts, mirroring the engine's input shape. */
-interface HolidayEligibilityFacts {
-  paidOnCommission?: boolean
-  absentWithoutConsent?: boolean
-  constructionEmployee?: boolean
-}
-
-/**
- * Parse the optional `holidayEligibility` map for calculate/dry-run.
- * One pass builds the clean map AND names the first malformed shape, so the
- * accept/refuse set cannot drift between a checker and a builder.
- * `undefined` input yields an empty clean map — absence of attestations is
- * the engine's fail-closed default, not a request error. Every refusal names
- * the offending key or fact, the value received, and a remedy that exists.
- */
-function parseHolidayEligibility(
-  value: unknown,
-): { ok: true; map: Record<string, HolidayEligibilityFacts> } | { ok: false; refusal: string } {
-  if (value === undefined) return { ok: true, map: {} }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return {
-      ok: false,
-      refusal: `holidayEligibility must be a map of employee ids to attestation facts — got "${suppliedValue(value)}"; pass an object keyed by employee id, or omit it`,
-    }
-  }
-  const clean: Record<string, HolidayEligibilityFacts> = {}
-  for (const [employeeId, facts] of Object.entries(value as Record<string, unknown>)) {
-    if (!isUuid(employeeId)) {
-      return {
-        ok: false,
-        refusal: `holidayEligibility key "${suppliedValue(employeeId)}" is not an employee id — fix that key and try again`,
-      }
-    }
-    if (facts === null || typeof facts !== 'object' || Array.isArray(facts)) {
-      return {
-        ok: false,
-        refusal: `holidayEligibility["${employeeId}"] must be a map of attestation facts — got "${suppliedValue(facts)}"; pass paidOnCommission, absentWithoutConsent, and constructionEmployee as true or false, or omit the entry`,
-      }
-    }
-    const entry: HolidayEligibilityFacts = {}
-    for (const [key, fact] of Object.entries(facts as Record<string, unknown>)) {
-      if (key !== 'paidOnCommission' && key !== 'absentWithoutConsent' && key !== 'constructionEmployee') {
-        return {
-          ok: false,
-          refusal: `holidayEligibility["${employeeId}"] has unknown fact "${suppliedValue(key)}" — only paidOnCommission, absentWithoutConsent, and constructionEmployee exist; fix the name and try again`,
-        }
-      }
-      if (typeof fact !== 'boolean') {
-        return {
-          ok: false,
-          refusal: `holidayEligibility["${employeeId}"].${key} must be true or false — got "${suppliedValue(fact)}"; pass a boolean or omit the fact`,
-        }
-      }
-      entry[key] = fact
-    }
-    clean[employeeId] = entry
-  }
-  return { ok: true, map: clean }
-}
 
 /**
  * One pay run.
@@ -320,32 +264,11 @@ export const POST = defineRoute({
     const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
-    // Employer attestations for statutory-holiday rules that read them (the
-    // last-and-first-shift absence assertion, commission-pay status). The
-    // engine fails closed when a declaring rule's fact is missing, and neither
-    // the wizard nor this route could supply it — so any run spanning a paid
-    // holiday in a declaring jurisdiction was incalculable. Keys are employee
-    // ids; unknown ids are refused rather than silently unattested.
-    const parsedEligibility = parseHolidayEligibility(body.holidayEligibility)
-    if (!parsedEligibility.ok) {
-      return NextResponse.json({ error: parsedEligibility.refusal }, { status: 422 })
-    }
-    const holidayEligibility = parsedEligibility.map
     try {
       if (body.action === 'calculate' || body.action === 'dry-run') {
-        // Stored attestation facts merge UNDER the per-request map: what the
-        // operator filed on the run (absence assertions) and on the employee
-        // (commission status) fills what this request omits. The request wins
-        // everywhere it answers, and an answer missing from both stays missing
-        // — the engine fails closed on it by name.
-        const mergedEligibility = await storedHolidayEligibilityForRun(db, {
-          orgId: gate.user.orgId, documentId: id,
-          perRequest: holidayEligibility,
-        })
         const result = await calculatePayRun({
           orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
           dryRun: body.action === 'dry-run',
-          holidayEligibility: mergedEligibility,
           allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         })
         return NextResponse.json({ ok: true, ...result })
@@ -864,12 +787,8 @@ export const POST = defineRoute({
         if (!can(gate, withdrawPermission)) {
           return NextResponse.json({ error: `missing permission: ${withdrawPermission}` }, { status: 403 })
         }
-        const mergedEligibility = await storedHolidayEligibilityForRun(db, {
-          orgId: gate.user.orgId, documentId: id, perRequest: holidayEligibility,
-        })
         const recalculated = await recalculateStaleApprovedPayRun({
           orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
-          holidayEligibility: mergedEligibility,
           allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         })
         const base = { ok: true, ...recalculated.calculation, reasons: recalculated.reasons }

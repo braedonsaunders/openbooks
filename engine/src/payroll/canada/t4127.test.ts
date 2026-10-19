@@ -1,3 +1,4 @@
+import { assessedCanadianWages, type CanadianWageScenario } from "../../testing/payroll-canadian-wages.ts";
 /**
  * T4127 conformance goldens, 2024–2026.
  *
@@ -13,7 +14,7 @@ import { payrollCertificate, resolveCertificate, type StoredCertificate } from "
 import "../packs.ts";
 import { unfilledPaths } from "../unfilled.ts";
 import { computeCaStatutory } from "./compute-statutory.ts";
-import { calculateT4127, periodTaxLegs, type T4127Input, type T4127Result } from "./t4127.ts";
+import { calculateT4127, periodTaxLegs, type T4127Result } from "./t4127.ts";
 import { D, r2, U } from "../../money/payroll-decimal.ts";
 import { RATES_2026_JAN, RATES_2026_JUL, ratesForPayDate, type Province } from "./rates.ts";
 import { RATES_2024_JAN } from "./rates-2024.ts";
@@ -23,7 +24,7 @@ type ResultKey = Exclude<keyof T4127Result, "factors">;
 interface Golden {
   year: number;
   label: string;
-  input: T4127Input;
+  input: CanadianWageScenario;
   /** Result legs; money as 2dp (the engine's 4dp with "00" appended), edition as a number. */
   expected?: Partial<Record<ResultKey, string | number>>;
   /** Trace factors; null asserts the factor is absent. */
@@ -320,7 +321,7 @@ const money = (value: string | number | null) =>
 
 for (const row of GOLDENS) {
   test(`${row.year} ${row.label}`, () => {
-    const result = calculateT4127(row.input);
+    const result = calculateT4127(assessedCanadianWages(row.input));
     const where = (key: string) => `${row.year} ${row.label}: ${key} (${row.citation})`;
     for (const [key, want] of Object.entries(row.expected ?? {})) {
       assert.equal(result[key as ResultKey], money(want), where(key));
@@ -342,8 +343,8 @@ test("annual provincial credits retain precision through the low-income reductio
     ["394.25", "388.64", "23.46", "6.33", "67.8746", "0.38", "3.07"],
     ["410.60", "381.76", "20.43", "6.22", "60.9662", "3.36", "8.78"],
   ] as const) {
-    const result = calculateT4127({ payDate: "2026-01-09", province: "ON", periodsPerYear: 52,
-      ...cc1, income, insurable, cppWithheld, eiWithheld });
+    const result = calculateT4127(assessedCanadianWages({ payDate: "2026-01-09", province: "ON", periodsPerYear: 52,
+      ...cc1, income, insurable, cppWithheld, eiWithheld }));
     assert.equal(result.factors.K1P, "655.9445");
     assert.equal(result.factors.K2P, K2P);
     assert.equal(result.factors.TP, money(provincial));
@@ -352,8 +353,8 @@ test("annual provincial credits retain precision through the low-income reductio
 });
 
 test("the supplemental Alberta credit keeps the published repeating rate ratio", () => {
-  const result = calculateT4127({ payDate: "2025-08-14", province: "AB", periodsPerYear: 26,
-    federalClaimCode: 1, provincialClaim: "90000.00", income: "3000.00" });
+  const result = calculateT4127(assessedCanadianWages({ payDate: "2025-08-14", province: "AB", periodsPerYear: 26,
+    federalClaimCode: 1, provincialClaim: "90000.00", income: "3000.00" }));
   // (5400 + 266.0148 - 3600) × 2/3, not a six-place approximation.
   assert.equal(result.factors.K5P, "1377.3432");
 });
@@ -362,22 +363,22 @@ test("a reduced employer EI multiple prices the employee premium times the multi
   // The 2024 Ontario biweekly $2,000 hand-worked stub prices EI 33.20 and
   // 46.48 at the statutory 1.4. At a CRA-approved 1.167 the same premium
   // prices 33.20 x 1.167 = 38.7444, half-up to 38.74.
-  const reduced = calculateT4127({
+  const reduced = calculateT4127(assessedCanadianWages({
     payDate: "2024-02-13", ...on26, income: "2000.00", eiEmployerMultiple: "1.167",
-  });
+  }));
   assert.equal(reduced.ei, money("33.20"));
   assert.equal(reduced.eiEmployer, money("38.74"));
-  const standard = calculateT4127({ payDate: "2024-02-13", ...on26, income: "2000.00" });
+  const standard = calculateT4127(assessedCanadianWages({ payDate: "2024-02-13", ...on26, income: "2000.00" }));
   assert.equal(standard.eiEmployer, money("46.48"));
 });
 
 test("2026 Ontario periodic withholding retains the low-income health-premium amount", () => {
-  const result = calculateT4127({
+  const result = calculateT4127(assessedCanadianWages({
     payDate: "2026-02-12", province: "ON", periodsPerYear: 52,
     income: "390.00", pensionable: "390.00", insurable: "390.00",
     cppWithheld: "19.20", eiWithheld: "6.36", eiEmployerMultiple: "1.167",
     federalClaim: "31452.00", provincialClaim: "24018.00",
-  });
+  }));
 
   assert.equal(result.factors.A, "20112.2017");
   assert.equal(result.factors.V2, "6.7321");
@@ -391,13 +392,13 @@ test("2026 Ontario periodic withholding retains the low-income health-premium am
 });
 
 test("annualized withholding uses source CPP and EI YTD when contribution ceilings differ", () => {
-  const result = calculateT4127({
+  const result = calculateT4127(assessedCanadianWages({
     payDate: "2026-07-29", province: "ON", periodsPerYear: 52,
     income: "390.04", pensionable: "390.04", insurable: "390.04",
     cppWithheld: "19.20", eiWithheld: "6.36",
     federalClaim: "16452.00", provincialClaim: "12989.00",
     ytd: { cpp: "3841.09", ei: "1081.39" },
-  });
+  }));
 
   assert.equal(result.cpp, money("19.20"));
   assert.equal(result.ei, money("6.36"));
@@ -415,7 +416,7 @@ test("an employer EI multiple outside 1.0000-1.4000 or past 4 places refuses", (
   ];
   for (const [multiple, label] of bad) {
     assert.throws(
-      () => calculateT4127({ payDate: "2024-02-13", ...on26, income: "2000.00", eiEmployerMultiple: multiple }),
+      () => calculateT4127(assessedCanadianWages({ payDate: "2024-02-13", ...on26, income: "2000.00", eiEmployerMultiple: multiple })),
       /employer EI multiple/,
       label,
     );
@@ -468,7 +469,9 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
       profile: { federal_claim_code: "1", provincial_claim_code: "1" }, asOf: "2026-02-13" });
     const taxes: Record<string, string> = {};
     let reads = 0;
-    await computeCaStatutory({ tx: { execute: async () => {
+    await computeCaStatutory({
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: { qpip: "1100.0000" }, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: { qpip: "0" }, tx: { execute: async () => {
       reads += 1;
       if (reads === 1) return { rows: [{ id: "legal-employer", currency: "CAD", payDate: "2026-02-13" }] };
       if (reads === 2 || reads === 3 || reads === 5) return { rows: [] };
@@ -505,8 +508,8 @@ test("a bonus never reduces the default basic personal amount of the step withou
   // Step 1 (A 237,673.60) takes the phased 15,267.36. Pricing step 2 on step 1's
   // claim would cost the periodic tax 1,184.64 × 14% / 12 ≈ 13.82 more.
   const base = { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, income: "15000.00" } as const;
-  const plain = calculateT4127(base);
-  const withBonus = calculateT4127({ ...base, nonPeriodic: "60000.00" });
+  const plain = calculateT4127(assessedCanadianWages(base));
+  const withBonus = calculateT4127(assessedCanadianWages({ ...base, nonPeriodic: "60000.00" }));
   assert.equal(plain.periodicTax, "4424.7900");
   assert.equal(withBonus.periodicTax, "4425.5400");
   assert.equal(withBonus.bonusTax, "28997.9800");
@@ -531,3 +534,15 @@ test("period tax rounds the federal leg directly and the provincial leg via ledg
     assert.equal(legs.federal, U(federal)); assert.equal(legs.provincial, U(provincial));
   }
 })
+
+
+test("Canadian formula refuses missing contribution classifications instead of substituting another base", () => {
+  const input = assessedCanadianWages({ payDate: "2026-03-31", province: "QC", periodsPerYear: 12, income: "3000" });
+  for (const key of ["pensionable", "insurable", "qpipInsurable", "pensionableNonPeriodic", "insurableNonPeriodic", "qpipNonPeriodic"] as const) {
+    const incomplete = { ...input, [key]: undefined };
+    assert.throws(() => calculateT4127(incomplete as unknown as Parameters<typeof calculateT4127>[0]), new RegExp(`explicit ${key} earnings base`));
+  }
+  const separated = calculateT4127({ ...input, qpipInsurable: "0", qpipNonPeriodic: "0" });
+  assert.equal(separated.qpip, "0.0000");
+  assert.ok(cmp(separated.ei, "0") > 0, "an EI-assessed wage need not be QPIP-assessed");
+});

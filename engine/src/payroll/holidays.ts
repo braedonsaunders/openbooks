@@ -1268,7 +1268,6 @@ export interface StatutoryHolidayPayInput {
    * that an attendance gap cannot establish.
    */
   paidOnCommission?: boolean;
-  absentWithoutConsent?: boolean;
   /**
    * The absence assertion per holiday occurrence (`holidayKey|holidayDate`),
    * filed one holiday at a time. An occurrence's own answer wins over the
@@ -1277,11 +1276,8 @@ export interface StatutoryHolidayPayInput {
   absentWithoutConsentByHoliday?: Readonly<Record<string, boolean>>;
   /**
    * The presented statutory occupation class (the profile column's raw
-   * value). Undefined means the caller never presented the question — probes
-   * and tests get the general rule. Null means presented but unrecorded,
-   * which a rule declaring an occupation arm (weekly cap or exclusion)
-   * refuses by name. The run always presents it, straight off the
-   * employment's profile row.
+   * value). A rule declaring occupation-specific pay refuses an unanswered
+   * class. The run reads this from the employment's payroll profile.
    */
   occupationClass?: string | null;
   /**
@@ -1304,12 +1300,6 @@ export interface StatutoryHolidayPayInput {
   /** Audited complete-evidence assertions by holiday occurrence key. */
   entitledDayAttestations?: Readonly<Record<string, number>>;
   /**
-   * Manitoba construction class (CCSM c E110, s. 30). The class takes the
-   * construction 4% instead of the general per-holiday rule; an omitted
-   * value runs the general rule, never a guess in either direction.
-   */
-  constructionEmployee?: boolean;
-  /**
    * The pay's regular wages for the construction 4% base, supplied by the
    * caller from the period's earning lines. Required when the Manitoba
    * construction path runs; never inferred from a lookback.
@@ -1325,7 +1315,6 @@ export interface StatutoryHolidayPayInput {
  */
 export interface StatutoryHolidayEligibilityFacts {
   paidOnCommission?: boolean;
-  absentWithoutConsent?: boolean;
   /**
    * The absence assertion per holiday occurrence (`holidayKey|holidayDate`),
    * filed one holiday at a time. An occurrence's own answer wins over the
@@ -1333,12 +1322,7 @@ export interface StatutoryHolidayEligibilityFacts {
    */
   absentWithoutConsentByHoliday?: Readonly<Record<string, boolean>>;
   entitledDayAttestations?: Readonly<Record<string, number>>;
-  /**
-   * Manitoba construction class (CCSM c E110, s. 30): the asserted class
-   * takes the construction 4% instead of the general per-holiday rule.
-   * Omitted runs the general rule.
-   */
-  constructionEmployee?: boolean;
+
 }
 
 /**
@@ -1408,7 +1392,7 @@ async function resolveMbConstructionHolidayPay(
  * never drifts between the resolver, the cap, and the profile UI.
  */
 export function ruleDeclaresOccupationArms(rule: PayrollHolidayPayRule): boolean {
-  return rule.weeklyCap !== undefined
+  return rule.occupationClasses !== undefined || rule.weeklyCap !== undefined
     || (rule.excludedOccupations !== undefined && Object.keys(rule.excludedOccupations).length > 0);
 }
 
@@ -1418,13 +1402,8 @@ export function ruleDeclaresOccupationArms(rule: PayrollHolidayPayRule): boolean
  * Pure (no database) so the goldens pin it directly; the resolver calls it
  * before pricing each holiday.
  *
- * Silence (the general rule) where the rule declares no arm, or where the
- * caller never presented the question (probes and tests). Refusal by name
- * with the profile remedy where the question was presented but the class is
- * unrecorded (null), or where the answer is outside the country pack's own
- * closed vocabulary (a typo, or a class no rule prices — never a guess). A
- * vocabulary value the rule does not name runs the general rule: the arms
- * are special cases, never a second general rule.
+ * A rule with occupation-specific pay requires a stored class from its
+ * declared vocabulary. Rules without occupation-specific pay need no class.
  */
 export function assertOccupationClass(
   rule: PayrollHolidayPayRule,
@@ -1432,15 +1411,15 @@ export function assertOccupationClass(
   occupationClass: string | null | undefined,
   employeeName: string,
 ): void {
-  if (!ruleDeclaresOccupationArms(rule) || occupationClass === undefined) return;
-  if (occupationClass === null) {
+  if (!ruleDeclaresOccupationArms(rule)) return;
+  if (occupationClass == null) {
     throw new PayrollHolidayError(
       `${employeeName} may be priced under an occupation holiday-pay arm, but their statutory `
       + "occupation class is not recorded — the run will not guess whether an arm applies. "
       + "Record it on the employee's payroll profile, then recalculate",
     );
   }
-  const vocabulary = occupationCapValues(country);
+  const vocabulary = rule.occupationClasses ? Object.keys(rule.occupationClasses) : occupationCapValues(country);
   if (!vocabulary.includes(occupationClass)) {
     throw new PayrollHolidayError(
       `${employeeName} carries unrecognized occupation class "${occupationClass}" — `
@@ -1494,7 +1473,7 @@ export async function applyOccupationWeeklyCap(
 ): Promise<{ pay: string; note: string | null }> {
   const unchanged = { pay: args.computedPay, note: null };
   const cap = args.rule.weeklyCap;
-  if (!cap || args.occupationClass === undefined) return unchanged;
+  if (!cap) return unchanged;
   if (cmp(args.hoursWorked, "0") > 0) return unchanged;
   // The resolver's `assertOccupationClass` gate already refused unrecorded
   // and out-of-vocabulary answers; a vocabulary value this rule does not
@@ -1641,7 +1620,11 @@ export async function resolveStatutoryHolidayPay(
 
   const periodHolidays = jurisdiction.holidayPay === null ? [] : observedIn(input.periodStart, input.periodEnd)
     .filter((holiday) => holiday.paid);
-  const mbConstruction = input.jurisdiction === "CA-MB" && input.constructionEmployee === true;
+  if (input.jurisdiction === "CA-MB") {
+    const rule = statutoryHolidayPayRule(input.jurisdiction, input.periodStart);
+    if (rule) assertOccupationClass(rule, input.country, input.occupationClass, input.employeeName);
+  }
+  const mbConstruction = input.jurisdiction === "CA-MB" && input.occupationClass === "construction";
   if (!mbConstruction && periodHolidays.length === 0 && workTriggeredHolidays.length === 0) return [];
   const employmentSource = await statutoryHolidayEmploymentSource(tx, input);
   const spells = holidayEmploymentSpells(employmentSource, input.employeeName);
@@ -1651,9 +1634,9 @@ export async function resolveStatutoryHolidayPay(
   // holiday admits that occurrence and its eligibility questions.
   const holidays = periodHolidays.filter(holiday => spellOn(holiday.date) !== undefined);
   // Manitoba construction (CCSM c E110, s. 30) replaces the whole general
-  // per-holiday rule for the asserted class — including on a pay with no
+  // per-holiday rule for the stored class — including on a pay with no
   // holiday in it, where the 4% still accrues, so this dispatch precedes
-  // the no-holiday early return. Only the asserted class takes this path;
+  // the no-holiday early return. Only the stored class takes this path;
   // everyone else runs the general rule below.
   if (mbConstruction) {
     return resolveMbConstructionHolidayPay(tx, input, holidays);

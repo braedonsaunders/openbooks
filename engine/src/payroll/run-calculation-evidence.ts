@@ -1,3 +1,4 @@
+import { loadStoredHolidayFacts } from "./holiday-facts-store.ts";
 import { statutoryHolidayEmploymentSource, type StatutoryHolidayEmploymentSource } from './holidays.ts';
 import { currentOpeningLevySourceSql } from './opening-levy-source-correction-authority.ts';
 import { resolveCaBonusIncomeReference, type CaBonusIncomeReferenceScope, type CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
@@ -216,6 +217,8 @@ export async function payRunCalculationSource(
                'basis', rate.basis,
                'rate', rate.rate::text,
                'annualHours', rate.annual_hours::text,
+               'payrollRateScale', rate.payroll_rate_scale,
+               'payrollAmountRounding', rate.payroll_amount_rounding,
                'currency', rate.currency,
                'effectiveFrom', rate.effective_from::text,
                'effectiveTo', rate.effective_to::text,
@@ -231,10 +234,7 @@ export async function payRunCalculationSource(
                  'resolvedRate', fx.resolved_rate::text,
                  'updatedAt', to_char(fx.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
                ) end
-             ) || case when rate.payroll_rate_scale <> 4 or rate.payroll_amount_rounding <> 'dimension_group'
-                  then jsonb_build_object('payrollRateScale', rate.payroll_rate_scale,
-                    'payrollAmountRounding', rate.payroll_amount_rounding)
-                  else '{}'::jsonb end order by rate.employee_party_id)
+             ) order by rate.employee_party_id)
                from locked_rates rate
                left join locked_fx fx on fx.employee_party_id = rate.employee_party_id
            ), '[]'::jsonb) as pay_rates,
@@ -729,30 +729,33 @@ export async function payRunCalculationSource(
   if (entitlementSettlementPlans.some(source => !isEntitlementSettlementPlanSource(source))) {
     throw new PayrollError('Entitlement settlement evidence is malformed — review the plan configuration and recalculate');
   }
+  const holidayFacts = (await loadStoredHolidayFacts(executor, {
+    orgId, documentId, employeePartyIds: holidaySubjects.map(subject => subject.employeePartyId), lockSources,
+  })).source;
   return {
-    version: 1,
-    timeEntries: row.time_entries ?? [],
-    timeTypes: row.time_types ?? [],
-    payRates: row.pay_rates ?? [],
-    itemAccounts: row.item_accounts ?? [],
-    // Omit unused package fields to preserve the protected evidence shape.
-    ...(compensationPackages.length ? { compensationPackages } : {}),
-    ...(employerAssignments.length ? { employerAssignments } : {}),
-    ...(assignmentRunPolicies.length ? { assignmentRunPolicies } : {}),
+    version: 2,
+    holidayFacts,
+    timeEntries: row.time_entries,
+    timeTypes: row.time_types,
+    payRates: row.pay_rates,
+    itemAccounts: row.item_accounts,
+    compensationPackages,
+    employerAssignments,
+    assignmentRunPolicies,
     payComponentStatutoryTreatments,
-    ...(historicalEmploymentRoster.length ? { historicalEmploymentRoster } : {}),
-    ...(holidayObligations.length ? { holidayObligations } : {}),
-    ...(holidayEmployments.length ? { holidayEmployments } : {}),
-    ...(bonusIncomeReferences.length ? { bonusIncomeReferences } : {}),
-    ...(openingEmployerAuthorities.length ? { openingEmployerAuthorities } : {}),
-    ...(incomeTaxOverrides.length ? { incomeTaxOverrides } : {}),
-    ...(bankCashInputs.length ? { bankCashInputs } : {}),
-    ...(employerLevyAdjustments.length ? { employerLevyAdjustments } : {}),
-    ...(declaredVacationAccruals.length ? { declaredVacationAccruals } : {}),
-    ...(openingLevySourceAuthorities.length ? { openingLevySourceAuthorities } : {}),
-    ...(openingBalanceSources.length ? { openingBalanceSources } : {}),
-    ...(usFilingAccountLineages.length ? { usFilingAccountLineages } : {}),
-    ...(entitlementSettlementPlans.length ? { entitlementSettlementPlans } : {}),
-    claimEntryIds: row.claim_entry_ids ?? [],
+    historicalEmploymentRoster,
+    holidayObligations,
+    holidayEmployments,
+    bonusIncomeReferences,
+    openingEmployerAuthorities,
+    incomeTaxOverrides,
+    bankCashInputs,
+    employerLevyAdjustments,
+    declaredVacationAccruals,
+    openingLevySourceAuthorities,
+    openingBalanceSources,
+    usFilingAccountLineages,
+    entitlementSettlementPlans,
+    claimEntryIds: row.claim_entry_ids,
   };
 }

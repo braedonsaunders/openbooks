@@ -1,3 +1,4 @@
+import { assessedCanadianWages } from "../testing/payroll-canadian-wages.ts";
 import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
 import { seedPayrollLine } from '../testing/fixtures.ts';
 import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
@@ -412,22 +413,22 @@ test(
       assert.equal(stub.gross, "2400.0000"); // 80h × $30
 
       // The T4127 engine, called directly with the SAME carry-in, is the oracle.
-      const withCarryIn = calculateT4127({
+      const withCarryIn = calculateT4127(assessedCanadianWages({
         payDate: "2026-07-21", province: "ON", periodsPerYear: 26,
         income: "2400.00", pensionable: "2400.00", insurable: "2400.00",
         federalClaimCode: 1, provincialClaimCode: 1,
         ytd: { cpp: "4400.0000", cpp2: "0.0000", ei: "1050.0000", pensionable: "84000.0000" },
-      });
+      }));
       assert.equal(stub.factors.C, withCarryIn.cpp);
       assert.equal(stub.factors.EI, withCarryIn.ei);
 
       // And the carry-in must actually BITE — the same period with no opening
       // balance withholds strictly more.
-      const fresh = calculateT4127({
+      const fresh = calculateT4127(assessedCanadianWages({
         payDate: "2026-07-21", province: "ON", periodsPerYear: 26,
         income: "2400.00", pensionable: "2400.00", insurable: "2400.00",
         federalClaimCode: 1, provincialClaimCode: 1,
-      });
+      }));
       assert.ok(
         cmp(add(fresh.cpp, fresh.ei), add(withCarryIn.cpp, withCarryIn.ei)) > 0,
         "an employee already at the ceiling must not be charged the full period amount again",

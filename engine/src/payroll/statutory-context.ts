@@ -205,26 +205,12 @@ export interface PayrollStatutoryComputeContext {
   statutoryExemptionAmounts?: readonly UsStatutoryExemptionAmount[];
   pensionable: string;
   insurable: string;
-  /**
-   * Per-program bases for contribution programs the pack declares, keyed by
-   * program key (see `PayrollContributionProgram`). Absent (undefined) only
-   * on unit-constructed contexts, where every program reads the `insurable`
-   * leg (legacy math, bit-identical); the engine always provides it. A pack
-   * prices and files each program off its own base, never another's.
-   */
-  programBases?: Record<string, string>;
-  /**
-   * The pensionable-flagged share of the period's non-periodic one-offs — a
-   * subset of `pensionable` (and, for taxable one-offs, of `nonPeriodic`).
-   * `pensionable` itself carries every pensionable period line INCLUDING a
-   * one-off, so a pack that annualises the leg and adds the one-off again
-   * counts it periodsPerYear + 1 times. Absent (undefined) only on
-   * unit-constructed contexts, where it defaults to "0" (legacy math,
-   * bit-identical); the engine always provides it.
-   */
-  pensionableNonPeriodic?: string;
-  insurableNonPeriodic?:string;
-  programNonPeriodicBases?:Record<string,string>;
+  /** Explicit eligible earnings for every contribution program declared by the pack. */
+  programBases: Record<string, string>;
+  /** Non-periodic portions already included in the corresponding total bases. */
+  pensionableNonPeriodic: string;
+  insurableNonPeriodic: string;
+  programNonPeriodicBases: Record<string, string>;
   /**
    * Each base above less the deduction lines carrying a treatment the pack
    * declares as reducing that base (`reduceTaxBases` over the pack's
@@ -253,21 +239,8 @@ export interface PayrollStatutoryComputeContext {
   /** Bound by `calculateStub` — the pack refuses unsupported regions itself. */
   assertRegionSupported: (region: string) => void;
   employerLevies: PayrollEmployerLevyFactors;
-  /**
-   * Period-to-date priors from earlier runs of the same period and schedule
-   * (see engine/src/payroll/period-priors.ts): bases and amounts those runs
-   * already paid and withheld. Absent (undefined) only on
-   * unit-constructed contexts, where every prior reads zero — the engine
-   * always provides it. The pack decides how each statutory item uses them;
-   * a pack with no `supplementalPayTreatment` declaration never receives a
-   * non-empty one (the generic layer refuses first).
-   */
-  periodPriors?: PayPeriodPriors;
-  /**
-   * The org's supplemental income-tax method for this run
-   * (`period_cumulative` or `per_run`), resolved from payroll settings by
-   * the generic layer. Absent (undefined) only on unit-constructed contexts,
-   * which read `per_run`.
-   */
-  supplementalTaxMethod?: SupplementalTaxMethod;
+  /** Period-to-date inputs resolved from native earlier runs of this period and schedule. */
+  periodPriors: PayPeriodPriors;
+  /** The organization's explicitly resolved supplemental income-tax method. */
+  supplementalTaxMethod: SupplementalTaxMethod;
 }

@@ -6,7 +6,7 @@ import type { SqlExecutor } from '../platform/db.ts';
 import { annualPeriodOpeningBounds } from './period-opening-bounds.ts';
 import { payrollPeriodOpeningPriors } from './period-opening-source.ts';
 import { employeeEmployerAssignmentHistory, lockEmployerAssignmentProfiles } from './employer-assignment-history.ts';
-import { CA_PAYROLL_PACK } from './canada/pack.ts';
+import { payrollPack } from './packs.ts';
 
 const orgId = '00000000-0000-4000-8000-000000000001';
 const employee = '00000000-0000-4000-8000-000000000002';
@@ -23,7 +23,7 @@ for (const operation of ['annual bounds', 'period priors', 'assignment history',
       switch (operation) {
         case 'annual bounds': return annualPeriodOpeningBounds(executor, orgId, [employee], 2026);
         case 'period priors': return payrollPeriodOpeningPriors(executor, {
-          orgId, employeePartyIds: [employee], pack: CA_PAYROLL_PACK, periodic: true,
+          orgId, employeePartyIds: [employee], pack: payrollPack('CA'), periodic: true,
           run: { payScheduleId: orgId, periodStart: '2026-07-12', periodEnd: '2026-07-18',
             payDate: '2026-07-21', taxYear: 2026, country: 'CA', currency: 'CAD', subsidiaryId: orgId, label: 'PAY-00001' },
         });

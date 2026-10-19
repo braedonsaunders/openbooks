@@ -193,6 +193,8 @@ function fakeCtx(overrides: {
     }
     : overrides.answers;
   const ctx = {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     taxYear: overrides.taxYear ?? 2026,
     income: overrides.income ?? "300000.0000",
     nonPeriodic: overrides.nonPeriodic ?? "0.0000",

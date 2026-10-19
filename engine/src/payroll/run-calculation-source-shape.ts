@@ -1,3 +1,4 @@
+import { type HolidayFactsSource, isHolidayFactsSource } from "./holiday-facts-store.ts";
 import { type StatutoryHolidayEmploymentSource } from './holidays.ts';
 import { validateOpeningLevySourceFacts, type OpeningLevySourceFacts } from './opening-levy-source-facts.ts';
 import { type CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
@@ -260,7 +261,8 @@ export function isHolidayEmploymentSource(value: unknown): value is StatutoryHol
 }
 
 export interface PayRunCalculationSourceSnapshot {
-  version: 1;
+  version: 2;
+  holidayFacts: HolidayFactsSource;
   timeEntries: {
     id: string;
     employeePartyId: string;
@@ -290,9 +292,8 @@ export interface PayRunCalculationSourceSnapshot {
     basis: string | null;
     rate: string | null;
     annualHours: string | null;
-    /** Existing four-place/group defaults omit these keys to retain stored digests. */
-    payrollRateScale?: number;
-    payrollAmountRounding?: string;
+    payrollRateScale: number;
+    payrollAmountRounding: string;
     currency: string | null;
     effectiveFrom: string | null;
     effectiveTo: string | null;
@@ -320,36 +321,33 @@ export interface PayRunCalculationSourceSnapshot {
     payrollExpenseAccountId: string | null;
     updatedAt: string;
   }[];
-  compensationPackages?: CompensationPackageAssignmentSource[];
-  employerAssignments?: EmployerAssignmentSource[];
-  assignmentRunPolicies?: { id: string; employeePartyId: string; employmentId: string | null; componentId: string; policy: string; from: string; to: string | null }[];
+  compensationPackages: CompensationPackageAssignmentSource[];
+  employerAssignments: EmployerAssignmentSource[];
+  assignmentRunPolicies: { id: string; employeePartyId: string; employmentId: string | null; componentId: string; policy: string; from: string; to: string | null }[];
   /** Exact component assessability versions consumed by earning lines at pay date. */
-  payComponentStatutoryTreatments?: (Omit<ComponentStatutoryTreatmentSource, 'vacationable'> & {
-    /** Absent only on snapshots captured before treatments carried vacation eligibility. */
-    vacationable?: boolean;
-  })[];
-  historicalEmploymentRoster?: HistoricalEmploymentRosterSource[];
-  holidayEmployments?: StatutoryHolidayEmploymentSource[];
-  holidayObligations?: HolidayObligationSource[];
-  bonusIncomeReferences?: CaBonusIncomeReferenceSource[];
+  payComponentStatutoryTreatments: ComponentStatutoryTreatmentSource[];
+  historicalEmploymentRoster: HistoricalEmploymentRosterSource[];
+  holidayEmployments: StatutoryHolidayEmploymentSource[];
+  holidayObligations: HolidayObligationSource[];
+  bonusIncomeReferences: CaBonusIncomeReferenceSource[];
   /** Exact retained employer and original-report identity of consumed opening history. */
-  openingEmployerAuthorities?: OpeningEmployerAuthoritySource[];
+  openingEmployerAuthorities: OpeningEmployerAuthoritySource[];
   /** Audited operator-entered absolute withholding amounts consumed by Canadian tax calculation. */
-  incomeTaxOverrides?: IncomeTaxOverrideSource[];
+  incomeTaxOverrides: IncomeTaxOverrideSource[];
   /** Audited operator-entered hours and optional keyed rates for bank cash lines. */
-  bankCashInputs?: BankCashInputSource[];
+  bankCashInputs: BankCashInputSource[];
   /** Audited issued employer levy amounts recorded as issued on this run. */
-  employerLevyAdjustments?: EmployerLevyAdjustmentSource[];
+  employerLevyAdjustments: EmployerLevyAdjustmentSource[];
   /** Audited per-cheque vacation bank accruals explicitly declared by an operator. */
-  declaredVacationAccruals?: DeclaredVacationAccrualSource[];
+  declaredVacationAccruals: DeclaredVacationAccrualSource[];
   /** Exact sealed source allocations consumed by this pay run, including EIN and jurisdiction identities. */
-  openingLevySourceAuthorities?: OpeningLevySourceAuthoritySource[];
+  openingLevySourceAuthorities: OpeningLevySourceAuthoritySource[];
   /** Opening rows that can affect employer-wide levies or make their source ambiguous. */
-  openingBalanceSources?: OpeningBalanceSourceState[];
+  openingBalanceSources: OpeningBalanceSourceState[];
   /** Original dated state-account affiliations used by current payroll and its statutory prior. */
-  usFilingAccountLineages?: UsFilingAccountLineageSource[];
+  usFilingAccountLineages: UsFilingAccountLineageSource[];
   /** The accounts each bank this run settles posts to: the plan liability and its accrual credit. */
-  entitlementSettlementPlans?: EntitlementSettlementPlanSource[];
+  entitlementSettlementPlans: EntitlementSettlementPlanSource[];
   claimEntryIds: string[];
 }
 
@@ -391,12 +389,7 @@ export type ComponentStatutoryTreatmentSource = {
   effectiveFrom: string; effectiveTo: string | null; programExclusions: string[]; vacationable: boolean;
 };
 
-/**
- * Retained snapshots from before treatments carried vacation eligibility omit
- * `vacationable`; they stay readable as captured. A present value must be a
- * boolean. Comparing such a snapshot with a current capture always differs,
- * so an uncommitted run calculated before the change reads stale.
- */
+/** Validate the complete component treatment consumed by calculation. */
 export function isComponentStatutoryTreatmentSource(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
@@ -407,7 +400,7 @@ export function isComponentStatutoryTreatmentSource(value: unknown): boolean {
     && (row.effectiveTo === null || typeof row.effectiveTo === 'string'
       && isIsoCalendarDate(row.effectiveTo) && row.effectiveTo >= row.effectiveFrom)
     && Array.isArray(row.programExclusions) && row.programExclusions.every(key => typeof key === 'string')
-    && (!Object.hasOwn(row, 'vacationable') || typeof row.vacationable === 'boolean');
+    && typeof row.vacationable === 'boolean';
 }
 
 /** Lock the dated group authority and policy rows before producing the source snapshot. */
@@ -544,45 +537,32 @@ export function parsePayRunCalculationSource(
 ): PayRunCalculationSourceSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const snapshot = value as Partial<PayRunCalculationSourceSnapshot>;
-  if (snapshot.version !== 1
+  if (snapshot.version !== 2
+      || !isHolidayFactsSource(snapshot.holidayFacts)
       || !Array.isArray(snapshot.timeEntries)
       || !Array.isArray(snapshot.timeTypes)
       || !Array.isArray(snapshot.payRates)
       || !Array.isArray(snapshot.claimEntryIds)
-      || (Object.hasOwn(snapshot, 'compensationPackages') && !Array.isArray(snapshot.compensationPackages))
-      || (Object.hasOwn(snapshot, 'assignmentRunPolicies') && !Array.isArray(snapshot.assignmentRunPolicies))
-      || (Object.hasOwn(snapshot, 'payComponentStatutoryTreatments') && (!Array.isArray(snapshot.payComponentStatutoryTreatments)
-        || snapshot.payComponentStatutoryTreatments.some(row => !isComponentStatutoryTreatmentSource(row))))
-      || (Object.hasOwn(snapshot, 'holidayEmployments') && (!Array.isArray(snapshot.holidayEmployments) || snapshot.holidayEmployments.some(row=>!isHolidayEmploymentSource(row))))
-      || (Object.hasOwn(snapshot, 'historicalEmploymentRoster') && !Array.isArray(snapshot.historicalEmploymentRoster))
-      || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))
-      || (Object.hasOwn(snapshot, 'holidayObligations') && !Array.isArray(snapshot.holidayObligations))
-      || (Object.hasOwn(snapshot, 'bonusIncomeReferences') && !Array.isArray(snapshot.bonusIncomeReferences))
-      || (Object.hasOwn(snapshot, 'incomeTaxOverrides') && (!Array.isArray(snapshot.incomeTaxOverrides)
-        || snapshot.incomeTaxOverrides.some(row => !isIncomeTaxOverrideSource(row))))
-      || (Object.hasOwn(snapshot, 'bankCashInputs') && (!Array.isArray(snapshot.bankCashInputs)
-        || snapshot.bankCashInputs.some(row => !isBankCashInputSource(row))))
-      || (Object.hasOwn(snapshot, 'employerLevyAdjustments') && (!Array.isArray(snapshot.employerLevyAdjustments)
-        || snapshot.employerLevyAdjustments.some(row => !isEmployerLevyAdjustmentSource(row))))
-      || (Object.hasOwn(snapshot, 'declaredVacationAccruals') && (!Array.isArray(snapshot.declaredVacationAccruals)
-        || snapshot.declaredVacationAccruals.some(row => !isDeclaredVacationAccrualSource(row))))
-      || (Object.hasOwn(snapshot, 'openingEmployerAuthorities') && (!Array.isArray(snapshot.openingEmployerAuthorities)
-        || snapshot.openingEmployerAuthorities.some(row => !isOpeningEmployerAuthoritySource(row))))
-      || (Object.hasOwn(snapshot, 'usFilingAccountLineages') && (!Array.isArray(snapshot.usFilingAccountLineages)
-        || snapshot.usFilingAccountLineages.some(row => !isUsFilingAccountLineageSource(row))))
-      || (Object.hasOwn(snapshot, 'openingLevySourceAuthorities') && (!Array.isArray(snapshot.openingLevySourceAuthorities)
-        || snapshot.openingLevySourceAuthorities.some(row => !isOpeningLevySourceAuthoritySource(row))))
-      || (Object.hasOwn(snapshot, 'openingBalanceSources') && (!Array.isArray(snapshot.openingBalanceSources)
-        || snapshot.openingBalanceSources.some(row => !isOpeningBalanceSourceState(row))))
-      || (Object.hasOwn(snapshot, 'entitlementSettlementPlans') && (!Array.isArray(snapshot.entitlementSettlementPlans)
-        || snapshot.entitlementSettlementPlans.some(row => !isEntitlementSettlementPlanSource(row))))) return null;
-  // Snapshots stored before item routing existed carry no itemAccounts; they
-  // read as "no mapped items", so the first post-upgrade commit compares
-  // honestly and refuses with the items reason instead of a bare selection.
-  return {
-    ...snapshot,
-    itemAccounts: Array.isArray(snapshot.itemAccounts) ? snapshot.itemAccounts : [],
-  } as PayRunCalculationSourceSnapshot;
+      || !Array.isArray(snapshot.itemAccounts)
+      || !Array.isArray(snapshot.compensationPackages)
+      || !Array.isArray(snapshot.assignmentRunPolicies)
+      || !Array.isArray(snapshot.historicalEmploymentRoster)
+      || !Array.isArray(snapshot.employerAssignments)
+      || !Array.isArray(snapshot.holidayObligations)
+      || !Array.isArray(snapshot.bonusIncomeReferences)
+      || (!Array.isArray(snapshot.payComponentStatutoryTreatments) || snapshot.payComponentStatutoryTreatments.some(row => !isComponentStatutoryTreatmentSource(row)))
+      || (!Array.isArray(snapshot.holidayEmployments) || snapshot.holidayEmployments.some(row => !isHolidayEmploymentSource(row)))
+      || (!Array.isArray(snapshot.incomeTaxOverrides) || snapshot.incomeTaxOverrides.some(row => !isIncomeTaxOverrideSource(row)))
+      || (!Array.isArray(snapshot.bankCashInputs) || snapshot.bankCashInputs.some(row => !isBankCashInputSource(row)))
+      || (!Array.isArray(snapshot.employerLevyAdjustments) || snapshot.employerLevyAdjustments.some(row => !isEmployerLevyAdjustmentSource(row)))
+      || (!Array.isArray(snapshot.declaredVacationAccruals) || snapshot.declaredVacationAccruals.some(row => !isDeclaredVacationAccrualSource(row)))
+      || (!Array.isArray(snapshot.openingEmployerAuthorities) || snapshot.openingEmployerAuthorities.some(row => !isOpeningEmployerAuthoritySource(row)))
+      || (!Array.isArray(snapshot.usFilingAccountLineages) || snapshot.usFilingAccountLineages.some(row => !isUsFilingAccountLineageSource(row)))
+      || (!Array.isArray(snapshot.openingLevySourceAuthorities) || snapshot.openingLevySourceAuthorities.some(row => !isOpeningLevySourceAuthoritySource(row)))
+      || (!Array.isArray(snapshot.openingBalanceSources) || snapshot.openingBalanceSources.some(row => !isOpeningBalanceSourceState(row)))
+      || (!Array.isArray(snapshot.entitlementSettlementPlans) || snapshot.entitlementSettlementPlans.some(row => !isEntitlementSettlementPlanSource(row)))
+      || snapshot.payRates.some(row => !row || !Number.isSafeInteger(row.payrollRateScale) || typeof row.payrollAmountRounding !== "string")) return null;
+  return snapshot as PayRunCalculationSourceSnapshot;
 }
 
 /**

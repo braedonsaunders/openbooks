@@ -1,3 +1,4 @@
+import { assessedCanadianWages } from "../testing/payroll-canadian-wages.ts";
 /**
  * A pack refusal must BE a payroll refusal, at the boundary the generic layer
  * catches on.
@@ -134,7 +135,7 @@ test("pack calculation entries refuse with a PayrollError", () => {
     PayrollError,
   );
   assert.throws(
-    () => calculateT4127({ payDate: "2026-01-15", province: "ON", periodsPerYear: 0, income: "1000.00" }),
+    () => calculateT4127(assessedCanadianWages({ payDate: "2026-01-15", province: "ON", periodsPerYear: 0, income: "1000.00" })),
     PayrollError,
   );
   // A Connecticut supplemental paid with no regular wages refuses as a

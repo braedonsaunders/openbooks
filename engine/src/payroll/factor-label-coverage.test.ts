@@ -1,3 +1,4 @@
+import { assessedCanadianWages } from "../testing/payroll-canadian-wages.ts";
 // source-pin-contract: factor-label coverage invariant — every factor a pack's engine can trace resolves to a label rather than its own code; the traced keys are derived by scanning each registered pack's own sources and driving its pure engines, never hand-listed.
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -332,13 +333,13 @@ function collectDynamic(country: string): Map<string, string> {
   if (country === "CA") {
     for (const province of ["ON", "QC", "ZZ"] as Province[]) {
       add(
-        calculateT4127({
+        calculateT4127(assessedCanadianWages({
           payDate: "2026-03-15",
           province,
           periodsPerYear: 26,
           income: "2000",
           nonPeriodic: "500",
-        }).factors,
+        })).factors,
         `calculateT4127/${province}`,
       );
     }

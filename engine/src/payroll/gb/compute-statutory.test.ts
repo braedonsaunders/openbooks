@@ -101,6 +101,8 @@ function gbContext(overrides: {
     pushed.push({ systemKey, kind, description, amount, sequence });
   }) as PushStatutoryFn;
   const ctx = {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     tx: overrides.tx ?? refusingTx(),
     orgId: "11111111-1111-4111-8111-111111111111",
     documentId: "22222222-2222-4222-8222-222222222222",

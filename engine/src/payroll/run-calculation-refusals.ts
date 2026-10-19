@@ -6,28 +6,31 @@ export function payRunCalculationSourceChanges(
   current: PayRunCalculationSourceSnapshot,
 ): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; components: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean; openingBalances: boolean; incomeTaxOverrides: boolean; bankCashInputs: boolean; declaredVacationAccruals: boolean; employerLevyAdjustments: boolean } {
   return {
-    openingBalances: canonicalJson(stored.openingEmployerAuthorities ?? []) !== canonicalJson(current.openingEmployerAuthorities ?? [])
-      || canonicalJson(stored.openingLevySourceAuthorities ?? []) !== canonicalJson(current.openingLevySourceAuthorities ?? [])
-      || canonicalJson(stored.openingBalanceSources ?? []) !== canonicalJson(current.openingBalanceSources ?? []),
-    incomeTaxOverrides: canonicalJson(stored.incomeTaxOverrides ?? []) !== canonicalJson(current.incomeTaxOverrides ?? []),
-    bankCashInputs: canonicalJson(stored.bankCashInputs ?? []) !== canonicalJson(current.bankCashInputs ?? []),
-    employerLevyAdjustments: canonicalJson(stored.employerLevyAdjustments ?? []) !== canonicalJson(current.employerLevyAdjustments ?? []),
-    declaredVacationAccruals: canonicalJson(stored.declaredVacationAccruals ?? []) !== canonicalJson(current.declaredVacationAccruals ?? []),
+    openingBalances: canonicalJson(stored.openingEmployerAuthorities) !== canonicalJson(current.openingEmployerAuthorities)
+      || canonicalJson(stored.openingLevySourceAuthorities) !== canonicalJson(current.openingLevySourceAuthorities)
+      || canonicalJson(stored.openingBalanceSources) !== canonicalJson(current.openingBalanceSources),
+    incomeTaxOverrides: canonicalJson(stored.incomeTaxOverrides) !== canonicalJson(current.incomeTaxOverrides),
+    bankCashInputs: canonicalJson(stored.bankCashInputs) !== canonicalJson(current.bankCashInputs),
+    employerLevyAdjustments: canonicalJson(stored.employerLevyAdjustments) !== canonicalJson(current.employerLevyAdjustments),
+    declaredVacationAccruals: canonicalJson(stored.declaredVacationAccruals) !== canonicalJson(current.declaredVacationAccruals),
     time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
       || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
     timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),
     wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates)
-      || canonicalJson(stored.bonusIncomeReferences ?? []) !== canonicalJson(current.bonusIncomeReferences ?? []),
-    compensationPackages: canonicalJson(stored.compensationPackages ?? []) !== canonicalJson(current.compensationPackages ?? []),
-    components: canonicalJson(stored.assignmentRunPolicies ?? []) !== canonicalJson(current.assignmentRunPolicies ?? [])
-      || canonicalJson(stored.payComponentStatutoryTreatments ?? []) !== canonicalJson(current.payComponentStatutoryTreatments ?? [])
-      || canonicalJson(stored.entitlementSettlementPlans ?? []) !== canonicalJson(current.entitlementSettlementPlans ?? []),
-    holidayObligations: canonicalJson(stored.holidayObligations ?? []) !== canonicalJson(current.holidayObligations ?? [])
-      || canonicalJson(stored.holidayEmployments ?? []) !== canonicalJson(current.holidayEmployments ?? []),
-    roster: canonicalJson(stored.usFilingAccountLineages ?? []) !== canonicalJson(current.usFilingAccountLineages ?? [])
-      || canonicalJson(stored.employerAssignments ?? []) !== canonicalJson(current.employerAssignments ?? [])
-      || canonicalJson(stored.historicalEmploymentRoster ?? []) !== canonicalJson(current.historicalEmploymentRoster ?? []),
-    items: canonicalJson(stored.itemAccounts ?? []) !== canonicalJson(current.itemAccounts ?? []),
+      || canonicalJson(stored.bonusIncomeReferences) !== canonicalJson(current.bonusIncomeReferences),
+    compensationPackages: canonicalJson(stored.compensationPackages) !== canonicalJson(current.compensationPackages),
+    components: canonicalJson(stored.assignmentRunPolicies) !== canonicalJson(current.assignmentRunPolicies)
+      || canonicalJson(stored.payComponentStatutoryTreatments) !== canonicalJson(current.payComponentStatutoryTreatments)
+      || canonicalJson(stored.entitlementSettlementPlans) !== canonicalJson(current.entitlementSettlementPlans),
+    holidayObligations: canonicalJson(stored.holidayFacts) !== canonicalJson(current.holidayFacts)
+      || canonicalJson(stored.holidayObligations) !== canonicalJson(current.holidayObligations)
+      || canonicalJson(stored.holidayEmployments) !== canonicalJson(current.holidayEmployments),
+    roster: canonicalJson(stored.holidayFacts) !== canonicalJson(current.holidayFacts)
+      || canonicalJson(stored.holidayEmployments) !== canonicalJson(current.holidayEmployments)
+      || canonicalJson(stored.usFilingAccountLineages) !== canonicalJson(current.usFilingAccountLineages)
+      || canonicalJson(stored.employerAssignments) !== canonicalJson(current.employerAssignments)
+      || canonicalJson(stored.historicalEmploymentRoster) !== canonicalJson(current.historicalEmploymentRoster),
+    items: canonicalJson(stored.itemAccounts) !== canonicalJson(current.itemAccounts),
   };
 }
 

@@ -191,7 +191,7 @@ test(
         subsidiaryId: fx.subsidiaryId, country: "CA", factKey: "mb_remembrance_day_act_exempt",
         effectiveFrom: "2026-01-01", value: "false", changeReason: "Subject to Manitoba Act" });
       const manitoba = await resolveStatutoryHolidayPay(db, { ...holidayInput(fx),
-        periodStart: "2026-11-11", periodEnd: "2026-11-11", jurisdiction: "CA-MB",
+        periodStart: "2026-11-11", periodEnd: "2026-11-11", jurisdiction: "CA-MB", occupationClass: "general",
         country: "CA", subsidiaryId: fx.subsidiaryId });
       assert.deepEqual(manitoba.map((line) => line.amount), ["240.0000", "120.0000"]);
       await upsertPayrollEmployerFact({

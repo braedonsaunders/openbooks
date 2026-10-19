@@ -17,6 +17,8 @@ import { PL_TAX_YEARS } from "./rates.ts";
 /** Minimal adapter context: PIT-2 filed, KUP 250, birth year 1990. */
 function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
   return {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     // A payer running its payroll here since January, five months of 8 000 zł committed.
     tx: { execute: async () => ({ rows: [{ dochod: "33265.0000", podstawa: "40000.0000", payer_first_pay: "2026-01-15", payer_first_period: "2026-01-01" }] }) },
     orgId: "org",

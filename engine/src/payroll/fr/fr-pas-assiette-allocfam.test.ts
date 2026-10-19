@@ -42,6 +42,8 @@ function ctxFor(brut: string, transmitted: string, employerEffectif = "10.00"): 
   const pushed: { systemKey: string; kind: string; amount: string }[] = [];
   let query = 0;
   return {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     tx: { execute: async () => ++query === 1
       ? ({ rows: [{ fact_value: employerEffectif }] })
       : query === 3

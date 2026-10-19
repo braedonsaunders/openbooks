@@ -162,7 +162,7 @@ test("a rehire cannot borrow tenure from a prior ended or disconnected spell", a
 });
 
 test("work-triggered holidays and construction premiums are also scoped to employment on their event date", async () => {
-  const remembrance = { ...input, jurisdiction: "CA-MB", periodStart: "2026-11-01", periodEnd: "2026-11-15" };
+  const remembrance = { ...input, jurisdiction: "CA-MB", occupationClass: "general", periodStart: "2026-11-01", periodEnd: "2026-11-15" };
   const after = database([active("2026-11-12")], { holidayHours: "2" });
   assert.deepEqual(await resolveStatutoryHolidayPay(after.executor, remembrance), []);
   assert.equal(after.queries.some(q => q.includes("time_entries") || q.includes("payroll_employer_facts")), false);
@@ -171,13 +171,13 @@ test("work-triggered holidays and construction premiums are also scoped to emplo
   assert.equal(during.queries.some(q => q.includes("payroll_employer_facts")), true);
   const construction = database([active("2026-04-05")], { holidayHours: "8" });
   const lines = await resolveStatutoryHolidayPay(construction.executor, {
-    ...input, jurisdiction: "CA-MB", constructionEmployee: true, periodRegularEarnings: "1000.00",
+    ...input, jurisdiction: "CA-MB", occupationClass: "construction", periodRegularEarnings: "1000.00",
   });
   assert.deepEqual(lines.map(line => [line.amount, line.periodWide]), [["40.0000", true]]);
   assert.equal(construction.queries.some(q => q.includes("time_entries")), false);
   const employedConstruction = database([active("2026-04-03")], { holidayHours: "8" });
   const workedLines = await resolveStatutoryHolidayPay(employedConstruction.executor, {
-    ...input, jurisdiction: "CA-MB", constructionEmployee: true, periodRegularEarnings: "1000.00",
+    ...input, jurisdiction: "CA-MB", occupationClass: "construction", periodRegularEarnings: "1000.00",
   });
   assert.deepEqual(workedLines.map(line => [line.amount, line.periodWide]), [["40.0000", true], ["100.0000", undefined]]);
   assert.equal(workedLines[1]?.holidayDate, "2026-04-03");

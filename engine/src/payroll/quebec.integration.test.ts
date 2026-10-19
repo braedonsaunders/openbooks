@@ -1,3 +1,4 @@
+import { assessedCanadianWages } from "../testing/payroll-canadian-wages.ts";
 import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
 import { seedPayrollVendorRole } from '../testing/fixtures.ts';
 import {
@@ -146,10 +147,10 @@ describe("quebec", () => {
         assert.equal(stub.gross, "2400.0000"); // 80h × $30
 
         // Both engines called directly with the same facts (pay date 2026-07-21).
-        const federal = calculateT4127({
+        const federal = calculateT4127(assessedCanadianWages({
           payDate: "2026-07-21", province: "QC", periodsPerYear: 26,
           income: "2400.00", federalClaimCode: 1,
-        });
+        }));
         const quebec = calculateTp1015({
           payDate: "2026-07-21", periodsPerYear: 26,
           income: "2400.00", qpp: federal.cpp, qpp2: federal.cpp2, pensionable: "2400.00",

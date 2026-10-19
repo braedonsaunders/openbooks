@@ -134,6 +134,7 @@ async function hourlyCalcFixture(label: string, days: { workedOn: string; hours:
   // Hires carry an HRM employment or stub calculation refuses them.
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId)
   await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
     country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
   }, { percentFloor: '4', method: 'accrue' });
 for (const day of days) {
@@ -184,6 +185,7 @@ test('a retro run settles quantified back pay; a regular run never does', { skip
     // Hires carry an HRM employment or stub calculation refuses them.
     const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId)
     await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
       country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
     }, { percentFloor: '4', method: 'accrue' });
 await seedPayrollTime(org.orgId, employeeId, actorId, {
@@ -269,6 +271,7 @@ test('a salaried employee holding only an hourly rate is refused before calculat
     // Hires carry an HRM employment or stub calculation refuses them.
     const employmentId = await seedWorkerEmployment(f.orgId, employeeId, f.subsidiaryId)
     await seedPayrollProfile(f.orgId, employeeId, employmentId, f.scheduleId, f.actorId, {
+      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
       country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
     }, { percentFloor: '4', method: 'accrue' });
 const calculated = await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
@@ -393,6 +396,7 @@ async function partialRefusalFixture(label: string) {
     // Hires carry an HRM employment or stub calculation refuses them.
     const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId)
     await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
       country: 'CA', province: 'ON', payBasis: payBasis, federalClaimCode: 1, provincialClaimCode: 1,
     }, { percentFloor: '4', method: 'accrue' });
 await seedPayrollTime(org.orgId, employeeId, actorId, {
@@ -650,6 +654,7 @@ test('a run where every in-scope employee refuses is not a success', { skip: !DB
       // Hires carry an HRM employment or stub calculation refuses them.
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId)
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
         country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
       }, { percentFloor: '4', method: 'accrue' });
 }

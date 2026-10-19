@@ -43,6 +43,8 @@ function adapterContext({ facts, answers, rates = {}, ctx }: AdapterInput, pushe
   let query = 0;
   const legs = { income: "2000.00", nonPeriodic: "0", pensionable: "2000.00", insurable: "0" };
   return {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     tx: { execute: async () => ({ rows: facts.length ? [facts[Math.min(query++, facts.length - 1)]] : [] }) } as never,
     orgId: "org", subsidiaryId: "legal-employer", documentId: "doc", employeePartyId: "emp", employmentId: "employment",
     employeeName: "Test", taxYear: 2026, country: "FR", region: "FR", emp: { hired_on: "2020-01-01" }, filingAccountId: "fr-siret-account",

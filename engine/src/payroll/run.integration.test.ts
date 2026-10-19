@@ -1,3 +1,4 @@
+import { assessedCanadianWages } from "../testing/payroll-canadian-wages.ts";
 import { seedCanadianPostingAccounts, seedUnionPostingAccounts } from "../testing/payroll-posting-fixture.ts";
 import { seedEnabledPayrollConfiguration } from '../testing/fixtures.ts';
 import { seedPayrollSettings } from '../testing/fixtures.ts';
@@ -175,10 +176,10 @@ test(
 
       // The stub must match the T4127 engine called directly with the same facts
       // (pay date 2026-07-21 → 123rd edition).
-      const expected = calculateT4127({
+      const expected = calculateT4127(assessedCanadianWages({
         payDate: "2026-07-21", province: "ON", periodsPerYear: 26,
         income: "2400.00", federalClaimCode: 1, provincialClaimCode: 1,
-      });
+      }));
       const factors = stub.factors as unknown as Record<string, string>;
       assert.equal(factors.C, expected.cpp);
       assert.equal(factors.EI, expected.ei);
@@ -281,14 +282,14 @@ test(
           select factors,gross,vacation_accrued from pay_stubs
            where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
         `));
-        const expected2 = calculateT4127({
+        const expected2 = calculateT4127(assessedCanadianWages({
           payDate: "2026-08-04", province: "ON", periodsPerYear: 26,
           income: gross, federalClaimCode: 1, provincialClaimCode: 1,
           ytd: {
             cpp: expected.cpp, cpp2: expected.cpp2, ei: expected.ei,
             pensionable: "2400.00",
           },
-        });
+        }));
         assert.equal(stub2.rows[0]!.gross, gross);
         assert.equal(stub2.rows[0]!.vacation_accrued, "0.0000");
         assert.equal(stub2.rows[0]!.factors.C, expected2.cpp);
@@ -395,11 +396,11 @@ test(
       assert.equal(dues?.kind, "deduction");
       assert.equal(dues?.amount, "48.0000");
       // U1 reduces annual taxable income: A = 52 × (1920 − F5A − 48)
-      const expected = calculateT4127({
+      const expected = calculateT4127(assessedCanadianWages({
         payDate: "2026-07-23", province: "ON", periodsPerYear: 52,
         income: "1920.00", federalClaimCode: 1, provincialClaimCode: 1,
         unionDues: "48.00",
-      });
+      }));
       assert.equal(factors.A, expected.factors.A);
       assert.equal(factors.T, expected.periodicTax);
 

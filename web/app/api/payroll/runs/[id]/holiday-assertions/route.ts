@@ -11,7 +11,6 @@ import {
   demandingHolidays,
   recordEntitledDaysAttestation,
   loadStoredHolidayFacts,
-  mergeHolidayEligibility,
   recordHolidayAssertion,
   type DemandingHoliday,
 } from '@openbooks/engine/payroll/holiday-attestations'
@@ -62,18 +61,14 @@ export const dynamic = 'force-dynamic'
  *
  *  GET  → every roster employee's standing commission and occupation-class
  *         answers, the run's filed assertions, demanding holidays, current
- *         entitlement-day counts, and the server-merged `suggested`
- *         eligibility map.
+ *         entitlement-day counts.
  *  POST → file one answer: the standing commission status or occupation class
  *         (stored on the employee's payroll profile, answered once), an
  *         absence assertion, or a complete entitlement-day assessment scoped
  *         to this run and holiday occurrence.
  *
- * The wizard's calculate action accepts a per-request `holidayEligibility`
- * map and nothing else, so the client sends `suggested` (plus anything the
- * operator just answered) as that map: stored facts reach the engine through
- * the contract it already honours, and an answer missing from both stays
- * missing — the engine fails closed on it by name.
+ * Calculation loads these persisted facts in its own transaction. Filing an
+ * answer updates the source; calculation requests do not carry overrides.
  */
 
 interface RosterEmployee {
@@ -109,7 +104,7 @@ async function loadRoster(orgId: string, payScheduleId: string): Promise<RosterE
            p.subsidiary_id as "subsidiaryId"
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
-     where prof.org_id = ${orgId} and prof.pay_schedule_id = ${payScheduleId}
+     where prof.org_id = ${orgId} and (prof.pay_schedule_id = ${payScheduleId} or prof.pay_schedule_id is null)
        and prof.is_active
      order by p.display_name`)).rows
   return rows.map((row) => ({
@@ -175,10 +170,6 @@ export const GET = defineRoute({
           }
           demanding.set(employee.employeePartyId, assessed)
         }
-        const suggested = mergeHolidayEligibility(undefined, stored, demanding)
-        // The day counts are server-owned audit facts. The client may answer only
-        // the two public booleans; calculation reloads the audited count itself.
-        for (const facts of Object.values(suggested)) delete facts.entitledDayAttestations
         return NextResponse.json({
           employees: roster.map((employee) => {
             const perEmployee = stored.assertions.get(employee.employeePartyId) ?? new Map<string, boolean>()
@@ -206,7 +197,6 @@ export const GET = defineRoute({
               demanding: demanding.get(employee.employeePartyId) ?? [],
             }
           }),
-          suggested,
         })
       })
     } catch (error) {

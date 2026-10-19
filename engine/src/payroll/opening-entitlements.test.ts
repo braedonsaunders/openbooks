@@ -148,6 +148,7 @@ async function seedEmployee(
   // Hires carry an HRM employment or stub calculation refuses them.
   const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
   await seedPayrollProfile(fx.orgId, employeeId, employmentId, fx.scheduleId, fx.actorId, {
+      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
     province: options.province ?? "ON", payBasis: 'hourly', country: 'CA', federalClaimCode: 1,
     provincialClaimCode: 1,
   }, { percentFloor: '4', method: 'accrue' });

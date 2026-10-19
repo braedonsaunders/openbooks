@@ -1614,7 +1614,7 @@ export async function payRunStaleness(
                 and exists (
                   select 1 from employee_payroll_profiles prof
                    where prof.org_id = r.org_id
-                     and prof.pay_schedule_id = r.pay_schedule_id
+                     and (prof.pay_schedule_id = r.pay_schedule_id or prof.pay_schedule_id is null)
                      and prof.is_active and prof.country = sr.country)
            )
            or exists (
@@ -1623,7 +1623,7 @@ export async function payRunStaleness(
                 and exists (
                   select 1 from employee_payroll_profiles prof
                    where prof.org_id = r.org_id
-                     and prof.pay_schedule_id = r.pay_schedule_id
+                     and (prof.pay_schedule_id = r.pay_schedule_id or prof.pay_schedule_id is null)
                      and prof.is_active and prof.country = ef.country)
            )) as statutory_rates_changed,
            -- Union agreements and fringe rates price stub lines fresh on
@@ -1637,7 +1637,7 @@ export async function payRunStaleness(
                  and exists (
                    select 1 from employee_payroll_profiles prof
                     where prof.org_id = r.org_id
-                      and prof.pay_schedule_id = r.pay_schedule_id
+                      and (prof.pay_schedule_id = r.pay_schedule_id or prof.pay_schedule_id is null)
                       and prof.is_active and prof.union_agreement_id = f.agreement_id))
             or exists (
               select 1 from union_agreements a
@@ -1645,7 +1645,7 @@ export async function payRunStaleness(
                  and exists (
                    select 1 from employee_payroll_profiles prof
                     where prof.org_id = r.org_id
-                      and prof.pay_schedule_id = r.pay_schedule_id
+                      and (prof.pay_schedule_id = r.pay_schedule_id or prof.pay_schedule_id is null)
                       and prof.is_active and prof.union_agreement_id = a.id)))
              as union_fringes_changed,
            -- Roster: the payroll profile (TD1/W-4, exemptions, schedule) and
@@ -1653,7 +1653,7 @@ export async function payRunStaleness(
            -- trade and WCB class.
            exists (
              select 1 from employee_payroll_profiles prof
-              where prof.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
+              where prof.org_id = r.org_id and (prof.pay_schedule_id = r.pay_schedule_id or prof.pay_schedule_id is null)
                 and prof.updated_at > r.calculated_at)
            or exists(select 1 from employee_tax_certificates certificate
              join employee_payroll_profiles profile on profile.org_id=certificate.org_id and profile.employee_party_id=certificate.employee_party_id
@@ -1663,7 +1663,7 @@ export async function payRunStaleness(
              select 1 from employee_roles er
               join employee_payroll_profiles prof
                 on prof.org_id = er.org_id and prof.employee_party_id = er.party_id
-              where er.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
+              where er.org_id = r.org_id and (prof.pay_schedule_id = r.pay_schedule_id or prof.pay_schedule_id is null)
                 and er.updated_at > r.calculated_at) as employment_changed,
            -- Per-employee assigned components: garnishments, benefits, RRSP,
            -- union dues overrides. Editing one of these changes net pay.
@@ -1671,7 +1671,7 @@ export async function payRunStaleness(
              select 1 from employee_pay_components epc
               join employee_payroll_profiles prof
                 on prof.org_id = epc.org_id and prof.employee_party_id = epc.employee_party_id
-              where epc.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
+              where epc.org_id = r.org_id and (prof.pay_schedule_id = r.pay_schedule_id or prof.pay_schedule_id is null)
                 and epc.updated_at > r.calculated_at) as components_changed,
            -- The component DEFINITIONS themselves (rate, taxability,
            -- pensionable/insurable flags, liability account), and the
@@ -1799,7 +1799,7 @@ export async function payRunStaleness(
                 and exists (
                   select 1 from employee_payroll_profiles prof
                    where prof.org_id = r.org_id
-                     and prof.pay_schedule_id = r.pay_schedule_id
+                     and (prof.pay_schedule_id = r.pay_schedule_id or prof.pay_schedule_id is null)
                      and prof.is_active and prof.country = eo.country))
             or exists (
              select 1 from audit_log al
@@ -1808,7 +1808,7 @@ export async function payRunStaleness(
                 and (al.changes->>'taxYear')::int = r.tax_year
                 and exists (select 1 from employee_payroll_profiles prof
                              where prof.org_id = r.org_id
-                               and prof.pay_schedule_id = r.pay_schedule_id
+                               and (prof.pay_schedule_id = r.pay_schedule_id or prof.pay_schedule_id is null)
                                and prof.is_active
                                and prof.country = al.changes->>'country'))) or
            -- Statutory carry-ins are the ONLY input for this year's annual
@@ -1909,13 +1909,7 @@ export async function payRunStaleness(
     exactAllowanceInputsChanged = allowanceProblem !== null;
   }
   const storedSource = parsePayRunCalculationSource(row.calculation_source_snapshot);
-  // Legacy calculated rows predate migration 0040. Keep their informational
-  // timestamp display intact; commit itself refuses the missing evidence and
-  // requires recalculation before money can move. A half-present/corrupt pair
-  // is different: that is damaged evidence and is stale everywhere.
-  if (row.calculation_source_snapshot == null && row.calculation_source_digest == null) {
-    // no exact-source overlay
-  } else if (!storedSource || !row.calculation_source_digest
+  if (!storedSource || !row.calculation_source_digest
       || payRunCalculationSourceDigest(storedSource) !== row.calculation_source_digest) {
     selectionChanged = true;
   } else {

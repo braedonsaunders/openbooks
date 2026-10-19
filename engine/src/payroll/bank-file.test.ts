@@ -635,7 +635,7 @@ async function payrollOrg(
     bank: await account(org.orgId, "1090", "Payroll funding bank", "asset_bank"),
   };
   await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: accounts.craPayable, ei: accounts.craPayable, qpip: accounts.craPayable, income_tax: accounts.craPayable, vacation: accounts.vacationPayable } },
+    slotAccounts: country === "CA" ? { CA: { cpp: accounts.craPayable, ei: accounts.craPayable, qpip: accounts.craPayable, income_tax: accounts.craPayable, vacation: accounts.vacationPayable } } : undefined,
         wageExpenseAccountId: accounts.wageExpense,
         burdenExpenseAccountId: accounts.burdenExpense,
         netPayAccountId: accounts.netPayable,

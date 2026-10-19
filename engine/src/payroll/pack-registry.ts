@@ -99,6 +99,7 @@ export function occupationCapValues(country: string): readonly string[] {
   const values = new Set<string>();
   for (const jurisdiction of pack?.jurisdictions ?? []) {
     for (const edition of jurisdiction.holidayPay ?? []) {
+      for (const value of Object.keys(edition.rule.occupationClasses ?? {})) values.add(value);
       for (const value of edition.rule.weeklyCap?.values ?? []) values.add(value);
       for (const value of Object.keys(edition.rule.excludedOccupations ?? {})) values.add(value);
     }

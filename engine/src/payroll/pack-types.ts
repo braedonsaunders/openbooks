@@ -1634,6 +1634,8 @@ export interface PayrollHolidayPayRule {
    * engine never invents one.
    */
   weeklyCap?: PayrollOccupationWeeklyCap;
+  /** Occupation classes with distinct holiday-pay formulas, including the general class. */
+  occupationClasses?: Readonly<Record<string, { label: string; citation: string }>>;
   /**
    * Occupations the statute excludes from holiday-pay entitlement outright,
    * keyed by the `statutory_occupation_class` value the employee answers —

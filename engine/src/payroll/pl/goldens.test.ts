@@ -270,6 +270,8 @@ function adapterContext(payDate: string, overrides: Record<string, unknown> = {}
     need: (systemKey: string, kind: string): Record<string, unknown> => ({ id: `${systemKey}:${kind}` }),
   });
   const ctx = {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     tx: historyTx(),
     orgId: "org", subsidiaryId: "payer", employeePartyId: "emp", documentId: "doc",
     taxYear: 2026,

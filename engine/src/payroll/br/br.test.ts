@@ -33,6 +33,8 @@ const RATES: BrEmployerRates = { ratPct: "2", fap: "1", terceirosPct: "5.8", reg
 
 function brContext(overrides: Record<string, unknown> = {}): PayrollStatutoryComputeContext {
   return {
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
+    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     taxYear: 2026,
     region: "BR",
     run: { pay_date: "2026-03-15" },

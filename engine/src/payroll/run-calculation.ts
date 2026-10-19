@@ -25,7 +25,7 @@ import { add } from "../money/money.ts";
 import { ensurePackSlotRoleAccounts, packRates, resolveEmployeePayrollContext, resolvePayrollRunContext } from "./packs.ts";
 import { installablePackOrThrow } from "./run-stub-records.ts";
 import { resolveStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
-import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
+import { loadStoredHolidayFacts, holidayEligibilityFromStoredFacts } from "./holiday-facts-store.ts";
 import { effectiveFilingAccountSql } from "./filing.ts";
 import { payrollPaymentMethodSettings } from "./payment-method.ts";
 import { payRunCalculationSourceDigest, payRunCalculationSource, type PayRunCalculationError, payRunCalculationRefusals, payRunRefusalDigest, parsePayRunCalculationErrors, parsePayRunRefusalAcknowledgement } from "./run-calculation-evidence.ts";
@@ -51,13 +51,6 @@ class DryRunRollback extends Error {
 
 export interface CalculatePayRunInput {
   orgId: string; documentId: string; actorId: string;
-  /**
-   * Authoritative employee facts used by statutory holiday rules. A missing
-   * fact fails closed when the employee's jurisdiction reads it; callers must
-   * not let the resolver infer commission status or consent from payroll
-   * amounts/timesheet gaps.
-   */
-  holidayEligibility?: Readonly<Record<string, StatutoryHolidayEligibilityFacts>>;
   /**
    * Compute and total the run without persisting anything — the operator sees
    * exactly what a real calculation would produce (including per-employee
@@ -418,6 +411,13 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     `));
     const excluded = new Set(excludedRows.rows.map((r) => r.employee_party_id));
     await applyEmployeeEmployerAssignmentHistory(tx, orgId, run.pay_date!, employees.rows.filter(e => !excluded.has(e.party_id!)));
+    const holidayEligibility = statHolidayPay
+      ? holidayEligibilityFromStoredFacts(await loadStoredHolidayFacts(tx, {
+          orgId, documentId,
+          employeePartyIds: employees.rows.filter(employee => !excluded.has(employee.party_id!)).map(employee => employee.party_id!),
+        }))
+      : {};
+
 
     const openingPriors = await payrollPeriodOpeningPriors(tx, { orgId, pack: calcPack,
       employeePartyIds: employees.rows.filter((employee) => !excluded.has(employee.party_id!)).map((employee) => employee.party_id!), periodic: PERIODIC_RUN_TYPES.has(runType),
@@ -534,10 +534,10 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           statutoryRatesFor,
           eftFallbackToCheque,
           statHolidayPay,
-          holidayEligibility: input.holidayEligibility,
+          holidayEligibility,
           simulate: input.simulate === true,
           allowedSubsidiaryIds: input.allowedSubsidiaryIds,
-          periodPriors: periodPriorsByEmployee.get(emp.party_id!),
+          periodPriors: periodPriorsByEmployee.get(emp.party_id!) ?? EMPTY_PERIOD_PRIORS,
           supplementalTaxMethod,
           leavePayrollInputs,
           allowancePayrollInputs,

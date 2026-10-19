@@ -1,3 +1,4 @@
+import { assessedCanadianWages } from "../../../testing/payroll-canadian-wages.ts";
 /**
  * TP-1015.F-V conformance goldens, 2024–2026.
  *
@@ -190,8 +191,8 @@ for (const row of GOLDENS) {
     const where = (key: string) => `${row.year} ${row.label}: ${key} (${row.citation})`;
     if (row.qppFrom) {
       const { payDate, periodsPerYear, income, qpp, qpp2 } = row.input;
-      const qppArm = calculateT4127({ payDate, province: "QC", periodsPerYear, income,
-        federalClaimCode: 1, ytd: row.qppFrom });
+      const qppArm = calculateT4127(assessedCanadianWages({ payDate, province: "QC", periodsPerYear, income,
+        federalClaimCode: 1, ytd: row.qppFrom }));
       assert.equal(qppArm.cpp, money(qpp), where("T4127 QPP C"));
       if (qpp2 !== undefined) assert.equal(qppArm.cpp2, money(qpp2), where("T4127 QPP C2"));
     }

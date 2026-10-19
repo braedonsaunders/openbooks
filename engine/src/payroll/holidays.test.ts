@@ -1130,7 +1130,7 @@ test("an excluded occupation is denied the day; the gate refuses unrecorded and 
   const nb = ruleFor("CA-NB");
   assert.throws(() => assertOccupationClass(nb, "CA", null, "Emp"), /not recorded/);
   assert.throws(() => assertOccupationClass(nb, "CA", "vice_president", "Emp"), /unrecognized occupation class/);
-  assert.doesNotThrow(() => assertOccupationClass(nb, "CA", undefined, "Emp"));
+  assert.throws(() => assertOccupationClass(nb, "CA", undefined, "Emp"), /not recorded/);
   assert.doesNotThrow(() => assertOccupationClass(nb, "CA", "general", "Emp"));
   assert.doesNotThrow(() => assertOccupationClass(ruleFor("CA-SK"), "CA", null, "Emp"));
   // The registries the profile boundary and the editor read: the NB cap's

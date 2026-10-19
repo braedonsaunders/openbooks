@@ -225,6 +225,7 @@ async function employee(fx: Fixture, name: string, opts: {
     currency: 'CAD', rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01',
   });
   await seedPayrollProfile(fx.orgId, id, employmentId, fx.scheduleId, fx.actorId, {
+      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
     country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
     paymentMethod: opts.profileMethod ?? null,
   }, { percentFloor: '4', method: 'accrue' });

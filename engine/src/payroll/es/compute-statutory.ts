@@ -554,7 +554,7 @@ export async function computeEsStatutory(
   // the regularización path, which is refused by name).
   const pensionableUnits = dec(pensionable, "pensionable");
   const insurableUnits = dec(insurable === "" ? pensionable : insurable, "insurable");
-  const pensionableNonPeriodicUnits = dec(ctx.pensionableNonPeriodic ?? "0", "pensionableNonPeriodic");
+  const pensionableNonPeriodicUnits = dec(ctx.pensionableNonPeriodic, "pensionableNonPeriodic");
   if (pensionableNonPeriodicUnits > pensionableUnits) {
     fail("pensionableNonPeriodic exceeds the current pensionable base");
   }

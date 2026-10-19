@@ -171,7 +171,7 @@ test('program replacement retains admitted balances and direct reassignment cann
       rows: [{ employeePartyId: f.workerPartyId, amounts: {}, programs: { qpip: '262.76' } }], allowedSubsidiaryIds: null }), /program:qpip.*below.*same-period payments/);
     await assert.rejects(db.execute(sql`update payroll_opening_program_bases set program_key='changed'
       where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026 and program_key='qpip'`), error => {
-        assert.match((error as { cause: Error }).cause.message, /Annual contribution-program balances.*admitted period payments/); return true;
+        assert.match((error as { cause: Error }).cause.message, /Payroll opening programme source identity is immutable/); return true;
       });
     const programs = (await db.execute<{ program: string; amount: string }>(sql`select program_key as program,insurable_ytd::text as amount
       from payroll_opening_program_bases where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026`)).rows;
