@@ -39,6 +39,7 @@ type Node =
   | { kind: "binary"; operator: Operator; left: Node; right: Node; type: ExpressionType }
   | { kind: "call"; name: FunctionName; arguments: readonly Node[]; type: ExpressionType };
 type Value = Rational | boolean;
+const isLiteral = (node: Node): boolean => node.kind === "literal" || (node.kind === "negate" && isLiteral(node.operand));
 const SCALAR: ExpressionType = Object.freeze({ kind: "scalar" });
 const BOOLEAN: ExpressionType = Object.freeze({ kind: "boolean" });
 
@@ -61,7 +62,6 @@ function numeric(node: Node): void {
 function matching(a: Node, b: Node, operation: string): void {
   // A numeric literal takes the surrounding unit: money + 25 means 25 in
   // that money's currency. Declared scalar inputs never acquire a unit implicitly.
-  const isLiteral = (node: Node): boolean => node.kind === "literal" || (node.kind === "negate" && isLiteral(node.operand));
   if (isLiteral(a) && a.type.kind === "scalar" && b.type.kind !== "boolean") a.type = b.type;
   if (isLiteral(b) && b.type.kind === "scalar" && a.type.kind !== "boolean") b.type = a.type;
   if (!sameType(a.type, b.type)) refusal("TYPE_MISMATCH", `${operation} requires matching units; received ${typeLabel(a.type)} and ${typeLabel(b.type)} — use values in the same currency and unit.`);
@@ -221,9 +221,9 @@ class Parser {
       if (args.some((arg) => arg.type.kind !== "boolean")) refusal("TYPE_MISMATCH", `${name} requires boolean arguments — use comparisons or declared boolean inputs.`);
       type = BOOLEAN;
     } else {
-      const anchor = args.find((arg) => arg.kind !== "literal") ?? args[0]!;
+      const anchor = args.find((arg) => !isLiteral(arg)) ?? args[0]!;
       for (const arg of args) { numeric(arg); matching(anchor, arg, name); }
-      type = args[0]!.type;
+      type = anchor.type;
     }
     return { kind: "call", name: name as FunctionName, arguments: args, type };
   }
