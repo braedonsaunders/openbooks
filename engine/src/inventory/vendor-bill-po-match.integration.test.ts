@@ -56,10 +56,12 @@ test("a hand-coded bill for received stock auto-matches on post and refuses dupl
                document_date = \${org.date}, subtotal = '120', total = '120'
          where id = \${partialOrder.id} and org_id = \${org.orgId}
       \`);
-      await withOrg(org.orgId, () => receivePurchaseOrder(org.orgId, userId, partialOrder.id, {
-        receiptDate: org.date, idempotencyKey: "m27-partial-receipt",
-        lines: [{ sourceLineId: partialSource, quantity: "10" }],
-      }));
+      // Seed historical counter-only receipt evidence: this case verifies
+      // repeated bill lines cannot reuse cover, without adding unrelated
+      // inventory and received-not-billed balances to the posting scenario.
+      await db.execute(sql\`update documents set status = 'draft' where id = \${partialOrder.id} and org_id = \${org.orgId}\`);
+      await db.execute(sql\`update document_lines set quantity_fulfilled = '10' where id = \${partialSource} and org_id = \${org.orgId}\`);
+      await db.execute(sql\`update documents set status = 'approved' where id = \${partialOrder.id} and org_id = \${org.orgId}\`);
       const partialBillId = randomUUID();
       const partialBillLineA = randomUUID();
       const partialBillLineB = randomUUID();
