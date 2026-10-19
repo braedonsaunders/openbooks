@@ -152,14 +152,23 @@ export const GET = defineRoute({
              where candidate.org_id = ${gate.user.orgId} and candidate.produced_item_id = ${assemblyItemId} and candidate.status = 'active'
                and candidate.effective_from <= ${today}::date and (candidate.effective_to is null or ${today}::date < candidate.effective_to)) = 1
      order by operation.sequence`)).rows : []
-  // Editor choices mirror the set PUT accepts (active inventory items with
-  // costing profiles), so the picker can only stage a recipe the save keeps.
+  // Stocked components need costing profiles. Kit recipes can also include
+  // active commercial-only components, which do not move inventory.
+  const componentEligibility = assembly.rows[0].kind === 'kit'
+    ? sql`and item.kind <> 'kit'
+          and (item.kind not in ('inventory', 'assembly') or exists (
+            select 1 from item_inventory_profiles profile
+             where profile.org_id = item.org_id and profile.item_id = item.id
+          ))`
+    : sql`and exists (
+          select 1 from item_inventory_profiles profile
+           where profile.org_id = item.org_id and profile.item_id = item.id
+        )`
   const validItems = await db.execute<{ id: string; code: string | null; name: string | null }>(sql`
     select item.id, item.code, item.name
       from items item
-      join item_inventory_profiles profile
-        on profile.org_id = item.org_id and profile.item_id = item.id
      where item.org_id = ${gate.user.orgId} and item.is_active
+       ${componentEligibility}
      order by item.code nulls last, item.name`)
   return NextResponse.json({
     manufacturingEnabled,
