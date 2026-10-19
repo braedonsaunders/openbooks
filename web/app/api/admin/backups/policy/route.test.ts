@@ -36,6 +36,10 @@ const mockSources = new Map<string, string>([
     export const env = {}
     export const orgContext = { getStore: () => null }
     export const longPool = {}
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
     export const db = { async execute(query) {
       const text = sqlText(query)
       state.calls.push(text)

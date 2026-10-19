@@ -52,6 +52,11 @@ const mockSources = new Map<string, string>([
     "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       export const db = { execute: async (query) => {
         if (JSON.stringify(query).includes('from documents')) return { rows: [{ submittedBy: state.documentSubmitterId }] }
         state.flowQueries += 1

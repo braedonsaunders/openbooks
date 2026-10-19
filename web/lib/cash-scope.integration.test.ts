@@ -18,12 +18,12 @@ registerHooks({ resolve(specifier, context, next) {
   // page's own modules so they cannot leak into the service-boundary cases
   // below, and the loader they were written for now lives in the sibling.
   if (context.parentURL?.endsWith('/page.tsx') || context.parentURL?.endsWith('/view.ts')) {
-    if (specifier.endsWith('/lib/consolidation')) return { shortCircuit: true, url: 'data:text/javascript,export class MissingRatesError extends Error {}\nexport async function reportSubsidiaryView(){return {subsidiary:{ids:globalThis.__cashScope.subIds},picker:[],options:[],consolidated:false}}' };
+    if (specifier.endsWith('/lib/consolidation')) return { shortCircuit: true, url: 'data:text/javascript,export class MissingRatesError extends Error {}\nexport async function reportSubsidiaryView(){return {subsidiary:{ids:globalThis.__cashScope.subIds},picker:[],options:[],consolidated:false}}\nexport function historicalTranslationBlockedNotice(){return null}\nexport function reportSubsidiaryScope(){return null}\nexport function statementTranslationBlockedAction(){return null}' };
     if (specifier.endsWith('/lib/page-layout')) return { shortCircuit: true, url: 'data:text/javascript,export async function userPageLayout(){return null}' };
     // Every export the cockpits import, not just the one this test first needed:
     // a double missing an export makes the importing module fail to LINK, so the
     // file registers zero tests instead of failing loudly.
-    if (specifier.endsWith('/module-home/group-tabs')) return { shortCircuit: true, url: 'data:text/javascript,export async function groupTabs(){return []}\nexport async function customerGroupTabs(){return []}' };
+    if (specifier.endsWith('/module-home/group-tabs')) return { shortCircuit: true, url: 'data:text/javascript,export async function groupTabs(){return []}\nexport async function customerGroupTabs(){return []}\nexport async function hrmGroupTabs(){return []}\nexport async function nonprofitGroupTabs(){return []}\nexport async function warehouseGroupTabs(){return []}' };
   }
   const app = resolveAppModule(specifier, context, next, root);
   if (app) return app;

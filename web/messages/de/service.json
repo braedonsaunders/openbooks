@@ -159,6 +159,15 @@
       "quotesAwaitingAnswer": "Unbeantwortete Angebote",
       "activeAgreements": "Aktive Verträge"
     },
+    "workQueue": "Service-Arbeitswarteschlange",
+    "directoryTitle": "Arbeitsbereich",
+    "attentionTitle": "Erfordert Aufmerksamkeit",
+    "allClear": "Es gibt keine offenen Serviceaufgaben.",
+    "attention": {
+      "responseBreaches": "{count, plural, one {# Einsatz hat sein Reaktionsziel überschritten} other {# Einsätze haben ihr Reaktionsziel überschritten}}",
+      "quotesAwaitingAnswer": "{count, plural, one {# Angebot wartet auf Antwort} other {# Angebote warten auf Antwort}}",
+      "awaitingReview": "{count, plural, one {# Einsatz wartet auf Prüfung} other {# Einsätze warten auf Prüfung}}"
+    },
     "policyMissing": "Es ist keine Dispositionsrichtlinie in Kraft.",
     "policyMissingRemedy": "Reaktionsziele, Ankunftszeitfenster und die Vertragserzeugung verwenden die Dispositionsrichtlinie. Fügen Sie unter Einrichtung → Service-Dispositionsrichtlinie eine Version hinzu.",
     "openPolicy": "Dispositionsrichtlinie öffnen",

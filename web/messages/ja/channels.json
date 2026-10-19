@@ -164,11 +164,15 @@
     }
   },
   "tabs": {
+    "overview": "概要",
     "products": "商品",
     "locations": "ロケーション",
     "orders": "注文",
     "exceptions": "例外",
     "posting": "転記設定"
+  },
+  "kinds": {
+    "shopify": "Shopify"
   },
   "actions": {
     "connect": "Shopifyを接続",

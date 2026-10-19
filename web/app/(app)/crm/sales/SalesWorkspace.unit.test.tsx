@@ -9,13 +9,14 @@ await bootJsdomEnvironment({
   matchMediaMatches: false,
 });
 Object.assign(globalThis, { React });
+Object.assign(globalThis, { salesRouterCalls: [] as string[] });
 stubModules({
   extra: {
     "@openbooks/analytics/viz":
       "export function InsightChart({option}) { globalThis.salesChartOption = option; return null; }",
   },
   navigation: {
-    source: `export function usePathname(){return window.location.pathname} export function useSearchParams(){return new URLSearchParams(window.location.search)} export function useRouter(){return {push(){},replace(){},refresh(){}}}`,
+    source: `export function usePathname(){return window.location.pathname} export function useSearchParams(){return new URLSearchParams(window.location.search)} export function useRouter(){return {push(href){globalThis.salesRouterCalls.push(href)},replace(){},refresh(){}}}`,
   },
 });
 const { createRoot } = await import("react-dom/client");
@@ -59,6 +60,7 @@ const baseline: SalesWorkspaceData = {
   canApprove: false,
   selected: null,
   creating: false,
+  creatingEmployee: null,
   periodStart: "2026-09-01",
   periodEnd: "2026-09-30",
   summary: [],
@@ -88,6 +90,15 @@ async function mount(data: SalesWorkspaceData) {
   );
   return {
     host,
+    update: async (data: SalesWorkspaceData) => act(async () => root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="CAD">
+          <ViewTabsProvider managed groups={[group]}>
+            <SalesWorkspace data={data} params={{}} />
+          </ViewTabsProvider>
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    )),
     close: async () => {
       await act(async () => root.unmount());
       host.remove();
@@ -137,6 +148,16 @@ test("all Sales routes use exactly one global subtab switch in the top-right hea
         strips[0]!.querySelector("[aria-current=page]")?.getAttribute("href"),
         tab.href,
       );
+      if (page !== "overview") {
+        assert.ok(screen.host.querySelector('input[type="search"]'));
+        assert.equal(screen.host.querySelector("header form"), null);
+      }
+      if (page === "overview") {
+        assert.ok(
+          screen.host.querySelector('li a[href="/crm/sales/representatives"]'),
+          "planning destinations use the shared live directory",
+        );
+      }
       assert.equal(
         screen.host.querySelector("[role=dialog]"),
         null,
@@ -175,6 +196,49 @@ test("native employee rows remain visible without login identities and read-only
       ),
       false,
     );
+  } finally {
+    await screen.close();
+  }
+});
+
+test("choosing an employee keeps representative creation open and eligible", async () => {
+  window.history.replaceState({}, "", "/crm/sales/representatives?row=new");
+  const employee = {
+    id: "00000000-0000-4000-8000-000000000001",
+    name: "Employee without login",
+    subsidiary_id: null,
+  };
+  const screen = await mount({
+    ...baseline,
+    page: "representatives",
+    creating: true,
+    employees: [employee],
+  });
+  try {
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const employeePicker = [...dialog.querySelectorAll("select")].find((select) =>
+      [...select.options].some((option) => option.value === employee.id),
+    )!;
+    await act(async () => {
+      employeePicker.value = employee.id;
+      employeePicker.dispatchEvent(new window.Event("change", { bubbles: true }));
+    });
+    assert.match(
+      (globalThis as typeof globalThis & { salesRouterCalls: string[] }).salesRouterCalls.at(-1) ?? "",
+      /row=new&employee=00000000-0000-4000-8000-000000000001/,
+    );
+    await screen.update({
+      ...baseline,
+      page: "representatives",
+      creating: true,
+      creatingEmployee: employee,
+      employees: [employee],
+    });
+    const eligibility = [...dialog.querySelectorAll("select")].find((select) =>
+      [...select.options].some((option) => option.value === "yes") &&
+      [...select.options].some((option) => option.value === "no"),
+    )!;
+    assert.equal(eligibility.value, "yes");
   } finally {
     await screen.close();
   }

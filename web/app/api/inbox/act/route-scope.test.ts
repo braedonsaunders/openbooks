@@ -43,6 +43,10 @@ const mockSources = new Map<string, string>([
       export function can(authz, permission) {
         return authz.permissions.has(permission)
       }
+      export async function guardPermission(permission) {
+        const authz = await getAuthz()
+        return can(authz, permission) ? authz : { status: 403 }
+      }
     `,
   ],
   [

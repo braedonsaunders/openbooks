@@ -49,6 +49,7 @@ const mockSources = new Map<string, string>([
         if (key !== 'hrm') throw new Error('unexpected feature ' + key)
         return state.featureOn
       }
+      export async function subsidiaryFeatureEnabled() { return true }
     `,
   ],
   [
@@ -66,6 +67,11 @@ const mockSources = new Map<string, string>([
     "mock:read",
     `
       const state = globalThis[Symbol.for('openbooks.hrm-benefits-windows-route-test')]
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       export const db = {}
       export async function listEnrollmentWindows(exec, orgId, actorId, filter) {
         state.calls.push({ fn: 'list', args: { orgId, actorId, filter } })

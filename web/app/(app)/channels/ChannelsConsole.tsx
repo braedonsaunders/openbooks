@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useViewerFormat } from "@/lib/viewer-format";
@@ -20,17 +20,14 @@ import {
 } from "@openbooks/ui";
 import { ListPageLayout } from "../../../components/page-layout";
 import { CockpitPanel, StatTile } from "../../../components/cockpit/ui";
+import { ModuleHomeTabs } from "../../../components/module-home/ui";
 import { CommerceCloseTile } from "./CommerceCloseTile";
 import { NewMenuButton } from "../../../components/new-menu-button";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 import { promptDialog } from "@/lib/prompt";
-import { channelCards, type Channel, type MarginChannel } from "./channel-cards";
-
-interface Payload {
-  channels: Channel[];
-  kinds: string[];
-}
+import { channelCards, type Channel } from "./channel-cards";
+import type { ChannelsHomeData } from "./view";
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive" | "warning"> = {
   active: "success",
@@ -40,54 +37,15 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "dest
   failed: "warning",
 };
 
-export function ChannelsConsole() {
+export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData }) {
   const router = useRouter();
   const locale = useLocale();
   const { dateTime } = useViewerFormat();
   const fmt = (ts: string | null) => (ts ? dateTime(new Date(ts)) : "—");
   const t = useTranslations("channels");
   const tCommon = useTranslations("common");
-  const [data, setData] = useState<Payload | null>(null);
-  const [margin, setMargin] = useState<MarginChannel[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [connectKind, setConnectKind] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    return fetch("/api/channels")
-      .then(async (res) => {
-        // The status is checked before the body is parsed: a 403 names its
-        // grant and lands in the error panel below, never in the empty state.
-        if (!res.ok) {
-          setLoadError(await readApiErrorMessage(res, t("home.toast.loadFailed", { status: res.status })));
-          setLoading(false);
-          return;
-        }
-        const payload = (await res.json()) as Payload;
-        setData(payload);
-        setLoadError(null);
-        setLoading(false);
-      })
-      .catch(() => {
-        setLoadError(t("home.toast.loadFailed", { status: "network" }));
-        setLoading(false);
-      });
-  }, [t]);
-
-  // Trailing order margin loads beside the channels: a margin failure hides
-  // the rows, never the console.
-  const [marginReportHref, setMarginReportHref] = useState("/reports");
-  useEffect(() => {
-    fetch("/api/channels/economics/summary?days=30")
-      .then(async (res) => {
-        if (!res.ok) return;
-        const payload = (await res.json()) as { channels: MarginChannel[]; marginReportHref?: string };
-        setMargin(payload.channels);
-        if (typeof payload.marginReportHref === "string") setMarginReportHref(payload.marginReportHref);
-      })
-      .catch(() => {});
-  }, []);
 
   // Kinds with a guided connect flow leave the generic drawer for
   // their wizard: OAuth and the match review cannot run inside a
@@ -99,16 +57,6 @@ export function ChannelsConsole() {
     }
     setConnectKind(kind);
   }
-
-  function retryLoad() {
-    setLoadError(null);
-    setLoading(true);
-    void load();
-  }
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   async function lifecycle(channel: Channel, action: "pause" | "resume" | "disconnect") {
     const reason = await promptDialog({
@@ -131,7 +79,7 @@ export function ChannelsConsole() {
         return;
       }
       toast.success(t(`home.toast.${action}d`));
-      await load();
+      router.refresh();
     } catch {
       toast.error(t("home.toast.actionFailed", { status: "network" }));
     } finally {
@@ -139,8 +87,9 @@ export function ChannelsConsole() {
     }
   }
 
-  const channels = data?.channels ?? [];
-  const kinds = data?.kinds ?? [];
+  const channels = initialData.channels;
+  const kinds = initialData.kinds;
+  const margin = initialData.margin;
   const active = channels.filter((c) => c.status === "active").length;
   // One parent collection: every channel once, attention and margins inline.
   const cards = channelCards(channels, margin);
@@ -151,6 +100,7 @@ export function ChannelsConsole() {
     .sort()
     .at(-1) ?? null;
   const statusLabel = (s: string) => (t.has(`status.${s}`) ? t(`status.${s}`) : s);
+  const kindLabel = (kind: string) => (t.has(`kinds.${kind}`) ? t(`kinds.${kind}`) : kind);
 
   return (
     <ListPageLayout
@@ -159,27 +109,22 @@ export function ChannelsConsole() {
           title={t("home.title")}
           description={t("home.description")}
           actions={
-            kinds.length > 0 ? (
-              <NewMenuButton
-                label={t("home.connect")}
-                busyLabel={tCommon("actions.loading")}
-                items={kinds.map((kind) => ({ key: kind, label: kind }))}
-                onSelect={(key) => connect(key)}
-              />
-            ) : null
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <ModuleHomeTabs tabs={initialData.tabs} />
+              {kinds.length > 0 ? (
+                <NewMenuButton
+                  label={t("home.connect")}
+                  busyLabel={tCommon("actions.loading")}
+                  items={kinds.map((kind) => ({ key: kind, label: kindLabel(kind) }))}
+                  onSelect={(key) => connect(key)}
+                />
+              ) : null}
+            </div>
           }
         />
       }
     >
-      {loading ? (
-        <p className="text-sm text-slate-500">{tCommon("actions.loading")}</p>
-      ) : loadError ? (
-        <EmptyState
-          title={t("home.loadFailedTitle")}
-          description={loadError}
-          action={<Button onClick={retryLoad}>{tCommon("actions.retry")}</Button>}
-        />
-      ) : channels.length === 0 ? (
+      {channels.length === 0 ? (
         <EmptyState
           icon={<Layers size={20} />}
           title={t("home.emptyTitle")}
@@ -189,7 +134,7 @@ export function ChannelsConsole() {
               <NewMenuButton
                 label={t("home.connect")}
                 busyLabel={tCommon("actions.loading")}
-                items={kinds.map((kind) => ({ key: kind, label: kind }))}
+                items={kinds.map((kind) => ({ key: kind, label: kindLabel(kind) }))}
                 onSelect={(key) => connect(key)}
               />
             ) : (
@@ -212,7 +157,7 @@ export function ChannelsConsole() {
             />
             <StatTile
               label={t("home.tiles.ordersToday")}
-              value="0"
+              value={initialData.ordersToday}
               sub={t("home.tiles.ordersTodaySub")}
               icon={Layers}
             />
@@ -224,7 +169,7 @@ export function ChannelsConsole() {
             hint={t("home.channelsHint")}
             actions={
               <Button size="sm" variant="outline" asChild>
-                <Link href={marginReportHref}>{t("home.marginReport")}</Link>
+                <Link href={initialData.marginReportHref}>{t("home.marginReport")}</Link>
               </Button>
             }
           >
@@ -243,7 +188,7 @@ export function ChannelsConsole() {
                           </Link>
                         </p>
                         <p className="truncate text-sm text-slate-500">
-                          {channel.kind} · {channel.externalAccount} · {channel.currency}
+                          {kindLabel(channel.kind)} · {channel.externalAccount} · {channel.currency}
                         </p>
                       </div>
                       <Badge variant={STATUS_VARIANT[channel.status] ?? "secondary"}>
@@ -369,7 +314,7 @@ export function ChannelsConsole() {
         </div>
       )}
       {connectKind ? (
-        <ConnectDrawer kind={connectKind} onClose={() => setConnectKind(null)} onConnected={() => void load()} />
+        <ConnectDrawer kind={connectKind} onClose={() => setConnectKind(null)} onConnected={() => router.refresh()} />
       ) : null}
     </ListPageLayout>
   );
@@ -382,6 +327,7 @@ function ConnectDrawer({ kind, onClose, onConnected }: {
 }) {
   const t = useTranslations("channels");
   const tCommon = useTranslations("common");
+  const kindLabel = t.has(`kinds.${kind}`) ? t(`kinds.${kind}`) : kind;
   const [name, setName] = useState("");
   const [externalAccount, setExternalAccount] = useState("");
   const [currency, setCurrency] = useState("");
@@ -419,7 +365,7 @@ function ConnectDrawer({ kind, onClose, onConnected }: {
     <Drawer
       open
       onClose={onClose}
-      title={t("home.connectTitle", { kind })}
+      title={t("home.connectTitle", { kind: kindLabel })}
       description={t("home.connectBody")}
       footer={
         secret ? (

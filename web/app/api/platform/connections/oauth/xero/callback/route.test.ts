@@ -71,6 +71,11 @@ const mockSources = new Map<string, string>([
   [
     "mock:db",
     `
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       const state = globalThis[Symbol.for("openbooks.xero-oauth-callback-test")]
       export const schema = { connections: { id: "id", orgId: "orgId" }, auditLog: {} }
       export const db = {

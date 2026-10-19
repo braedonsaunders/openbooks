@@ -90,6 +90,11 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.cashflow-categories-route-test')]
       const sqlText = globalThis.openbooksCashflowCategoriesSqlText
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       const execute = async (query) => {
         const text = sqlText(query)
         state.databaseCalls.push(text)

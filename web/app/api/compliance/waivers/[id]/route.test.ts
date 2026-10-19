@@ -50,6 +50,11 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.compliance-waiver-route-test')]
       const sqlText = globalThis.openbooksComplianceWaiverSqlText
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       const execute = async (kind, query) => {
         const text = sqlText(query)
         state.calls.push({ kind, text })

@@ -280,6 +280,13 @@ const COGNATES = new Set<string>([
   'fr:reports.catalog.columnValues.equity_securities_register.security_kind.safe|SAFE',
   'fr:reports.catalog.columnValues.equity_cap_table_positions.security_kind.option|Option',
   'fr:reports.catalog.columnValues.equity_cap_table_positions.security_kind.rsu|RSU',
+  // Shopify is a storefront brand and remains unchanged in every locale.
+  'de:channels.kinds.shopify|Shopify',
+  'es:channels.kinds.shopify|Shopify',
+  'fr:channels.kinds.shopify|Shopify',
+  'ja:channels.kinds.shopify|Shopify',
+  'pt-BR:channels.kinds.shopify|Shopify',
+  'zh:channels.kinds.shopify|Shopify',
   // Equity identicals: instrument names and standards used untranslated in every market (RSU, SAFE, Black-Scholes, pre-/post-money,
   // warrant, full ratchet, vesting), and nouns spelled identically (Option(s), Plan(s), Code, Name, Status, Person, Participation,
   // Principal, Total, Actions, Date).

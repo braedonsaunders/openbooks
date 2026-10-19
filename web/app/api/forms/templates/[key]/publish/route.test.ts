@@ -86,6 +86,11 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.form-template-publish-test')]
       const sqlText = globalThis.openbooksPublishSqlText
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       export const db = {
         execute() { throw new Error('unexpected direct database write') },
         async transaction(work) {

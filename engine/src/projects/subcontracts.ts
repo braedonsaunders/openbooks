@@ -8,6 +8,8 @@ import { db, type SqlExecutor } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { add, cmp, mulPercent, neg, normalizeMoney, sum } from "../money/money.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 
 export class SubcontractError extends Error {}
 
@@ -364,6 +366,95 @@ async function assertFeatureEnabled(tx: SqlExecutor, orgId: string): Promise<voi
   if (!(await lockAndCheckOrgFeature(tx, orgId, "subcontracts"))) {
     throw new SubcontractError("Subcontracts feature is disabled");
   }
+}
+
+export type SubcontractRegisterRow = {
+  id: string;
+  number: string;
+  title: string;
+  status: string;
+  currency: string;
+  originalCommitment: string;
+  revisedCommitment: string;
+  billedToDate: string;
+  retainageWithheld: string;
+  projectName: string;
+  vendorName: string;
+};
+
+/** Authorized server-side register window shared by the page and API. */
+export async function listSubcontractRegister(
+  tx: SqlExecutor,
+  input: {
+    orgId: string;
+    actorId: string;
+    requestedScope: ReadonlySet<string> | null;
+    q?: string;
+    status?: "draft" | "pending_approval" | "active" | "substantially_complete" | "closed" | "void";
+    page?: number;
+    perPage?: number;
+  },
+): Promise<{ rows: SubcontractRegisterRow[]; total: number; page: number; perPage: number }> {
+  const page = input.page ?? 1;
+  const perPage = input.perPage ?? 25;
+  const statuses = ["draft", "pending_approval", "active", "substantially_complete", "closed", "void"];
+  if (!isUuid(input.orgId) || !isUuid(input.actorId)
+    || !Number.isInteger(page) || page < 1 || page > 100_000
+    || !Number.isInteger(perPage) || perPage < 10 || perPage > 100
+    || (input.q !== undefined && (typeof input.q !== "string" || input.q.length > 200))
+    || (input.status !== undefined && !statuses.includes(input.status))) {
+    throw new SubcontractError("Choose a valid subcontract search, status and page.");
+  }
+
+  const actorScope = await lockActorCommandAuthority(tx, input.orgId, input.actorId, null, "ap.read");
+  const requestedScope = input.requestedScope;
+  const scope = requestedScope === null
+    ? actorScope
+    : actorScope === null
+      ? requestedScope
+      : new Set([...actorScope].filter((id) => requestedScope.has(id)));
+  if (!(await lockAndCheckOrgFeature(tx, input.orgId, "projects"))) {
+    throw new SubcontractError("Projects feature is disabled");
+  }
+  if (!(await lockAndCheckOrgFeature(tx, input.orgId, "subcontracts"))) {
+    throw new SubcontractError("Subcontracts feature is disabled");
+  }
+
+  const search = input.q?.trim();
+  const predicate = sql`where s.org_id = ${input.orgId}
+    ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope)}
+    ${input.status ? sql`and s.status = ${input.status}` : sql``}
+    ${search ? sql`and (s.number ilike ${`%${search}%`} or s.title ilike ${`%${search}%`} or p.name ilike ${`%${search}%`} or v.display_name ilike ${`%${search}%`})` : sql``}`;
+  const total = Number((await tx.execute<{ count: string }>(sql`
+    select count(*)::text as count
+      from subcontracts s
+      join projects p on p.id = s.project_id and p.org_id = s.org_id
+      join parties v on v.id = s.vendor_id and v.org_id = s.org_id
+      ${predicate}`)).rows[0]?.count ?? 0);
+  const rows = (await tx.execute<SubcontractRegisterRow & Record<string, unknown>>(sql`
+    select s.id, s.number, s.title, s.status, s.currency,
+           s.original_commitment::text as "originalCommitment",
+           (s.original_commitment + coalesce(changes.approved, 0))::text as "revisedCommitment",
+           coalesce(apps.billed, 0)::text as "billedToDate",
+           coalesce(apps.retained, 0)::text as "retainageWithheld",
+           p.name as "projectName", v.display_name as "vendorName"
+      from subcontracts s
+      join projects p on p.id = s.project_id and p.org_id = s.org_id
+      join parties v on v.id = s.vendor_id and v.org_id = s.org_id
+      left join lateral (
+        select sum(amount) filter (where status = 'approved') as approved
+          from subcontract_change_orders where org_id = s.org_id and subcontract_id = s.id
+      ) changes on true
+      left join lateral (
+        select sum(gross_this_period) filter (where status = 'billed') as billed,
+               sum(retainage_this_period) filter (where status = 'billed') as retained
+          from vendor_pay_applications where org_id = s.org_id and subcontract_id = s.id
+      ) apps on true
+     ${predicate}
+     order by case s.status when 'active' then 0 when 'pending_approval' then 1 when 'draft' then 2 else 3 end,
+              s.number
+     limit ${perPage} offset ${(page - 1) * perPage}`)).rows;
+  return { rows, total, page, perPage };
 }
 
 async function audit(

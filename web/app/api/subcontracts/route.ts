@@ -27,6 +27,7 @@ import {
   updateVendorPayApplicationLines,
   voidSubcontractChangeOrder,
   voidVendorPayApplication,
+  listSubcontractRegister,
 } from "@openbooks/engine/projects/subcontracts";
 import { normalizeMoney } from "@openbooks/engine/money/money";
 import { guardPermission, guardSubsidiaryScope } from "../../../lib/authz";
@@ -73,32 +74,36 @@ async function listSubcontracts(request: Request) {
   const url = new URL(request.url);
   const id = url.searchParams.get("id");
   if (!id) {
-    const rows = (await db.execute(sql`
-      select s.id, s.number, s.title, s.status, s.currency,
-             s.original_commitment as "originalCommitment",
-             (s.original_commitment + coalesce(changes.approved, 0))::text as "revisedCommitment",
-             coalesce(apps.billed, 0)::text as "billedToDate",
-             coalesce(apps.retained, 0)::text as "retainageWithheld",
-             p.name as "projectName", p.id as "projectId",
-             v.display_name as "vendorName", v.id as "vendorId"
-        from subcontracts s
-        join projects p on p.id = s.project_id and p.org_id = s.org_id
-        join parties v on v.id = s.vendor_id and v.org_id = s.org_id
-        left join lateral (
-          select sum(amount) filter (where status = 'approved') as approved
-            from subcontract_change_orders where org_id = s.org_id and subcontract_id = s.id
-        ) changes on true
-        left join lateral (
-          select sum(gross_this_period) filter (where status = 'billed') as billed,
-                 sum(retainage_this_period) filter (where status = 'billed') as retained
-            from vendor_pay_applications where org_id = s.org_id and subcontract_id = s.id
-        ) apps on true
-       where s.org_id = ${orgId}
-         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
-       order by case s.status when 'active' then 0 when 'pending_approval' then 1 when 'draft' then 2 else 3 end,
-                s.number
-    `));
-    return NextResponse.json({ subcontracts: rows.rows });
+    const statusValue = url.searchParams.get("status") ?? "all";
+    const status = statusValue === "all"
+      ? undefined
+      : ["draft", "pending_approval", "active", "substantially_complete", "closed", "void"].includes(statusValue)
+        ? statusValue as "draft" | "pending_approval" | "active" | "substantially_complete" | "closed" | "void"
+        : null;
+    const page = Number(url.searchParams.get("page") ?? "1");
+    const perPage = Number(url.searchParams.get("perPage") ?? "25");
+    const q = url.searchParams.get("q") ?? undefined;
+    if (status === null || !Number.isInteger(page) || page < 1 || page > 100_000
+      || !Number.isInteger(perPage) || perPage < 10 || perPage > 100
+      || (q !== undefined && q.length > 200)) {
+      return NextResponse.json({ error: "Choose a valid subcontract search, status and page." }, { status: 422 });
+    }
+    try {
+      const result = await withScopeSnapshot(orgId, () => listSubcontractRegister(db, {
+        orgId,
+        actorId: authz.user.id,
+        requestedScope: authz.allowedSubsidiaryIds,
+        q,
+        status,
+        page,
+        perPage,
+      }));
+      return NextResponse.json({ subcontracts: result.rows, ...result });
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) return notFound("record");
+      if (error instanceof SubcontractError) return NextResponse.json({ error: error.message }, { status: 422 });
+      throw error;
+    }
   }
 
   if (!isUuid(id)) return notFound("record");

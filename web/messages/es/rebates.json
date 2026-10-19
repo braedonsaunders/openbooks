@@ -1,0 +1,113 @@
+{
+  "title": "Reembolsos por volumen",
+  "description": "Gestione acuerdos de reembolso con clientes y proveedores, reclamaciones devengadas y liquidaciones autorizadas.",
+  "classAgreement": "Acuerdo por clase",
+  "searchPlaceholder": "Buscar acuerdos, reclamaciones o contrapartes",
+  "actions": {
+    "newAgreement": "Nuevo acuerdo",
+    "agreementSettings": "Configuración de acuerdos",
+    "reports": "Informes de reembolsos"
+  },
+  "tabs": {
+    "agreements": "Acuerdos",
+    "claims": "Reclamaciones"
+  },
+  "filters": {
+    "all": "Todos",
+    "side": "Parte",
+    "status": "Estado"
+  },
+  "sides": {
+    "customer": "Cliente",
+    "vendor": "Proveedor"
+  },
+  "statuses": {
+    "draft": "Borrador",
+    "approved": "Aprobado",
+    "document_pending": "Documento pendiente",
+    "settled": "Liquidado",
+    "cancelled": "Cancelado",
+    "unknown": "Estado desconocido"
+  },
+  "activities": {
+    "sale": "ventas",
+    "purchase": "compras",
+    "downstream_sale": "ventas posteriores"
+  },
+  "methods": {
+    "percent": "Reembolso porcentual",
+    "per_unit": "Importe por unidad",
+    "fixed_cost": "Costo unitario garantizado",
+    "guaranteed_margin": "Margen garantizado"
+  },
+  "tierBasis": {
+    "amount": "importe elegible",
+    "quantity": "cantidad elegible"
+  },
+  "stacking": {
+    "stack": "Acumular con acuerdos aplicables",
+    "best": "Mejor oferta por línea"
+  },
+  "columns": {
+    "agreement": "Acuerdo",
+    "counterparty": "Contraparte",
+    "side": "Parte",
+    "status": "Estado",
+    "amount": "Importe reclamado"
+  },
+  "empty": {
+    "agreements": {
+      "title": "No hay acuerdos de reembolso",
+      "description": "Cree un acuerdo en la configuración con condiciones aplicables y fechas de vigencia."
+    },
+    "claims": {
+      "title": "No hay reclamaciones de reembolso",
+      "description": "Las reclamaciones aparecen aquí después de evaluar la actividad conforme a un acuerdo aprobado."
+    }
+  },
+  "drawer": {
+    "claimTitle": "Reclamación de reembolso",
+    "reviewReason": "Motivo de revisión",
+    "postingOrCutoffDate": "Fecha de contabilización o corte",
+    "claimEarnedThrough": "Devengado hasta el {date}. La liquidación compensa la acumulación registrada.",
+    "approveClaim": "Aprobar reclamación",
+    "settlementMethod": "Método de liquidación",
+    "creditDocument": "Documento nativo de crédito o recuperación",
+    "paymentOrReceipt": "Pago o cobro bancario",
+    "prepareDocument": "Preparar documento de {kind}",
+    "credit": "crédito",
+    "recovery": "recuperación",
+    "bankAccount": "Cuenta bancaria",
+    "settlementFxRate": "Tipo de cambio de liquidación ({from} a {to})",
+    "fxRateField": "Tipo de cambio de liquidación",
+    "recordBankSettlement": "Registrar liquidación bancaria",
+    "cancelClaim": "Cancelar reclamación",
+    "openSettlementDocument": "Abrir documento de liquidación",
+    "reverseBankSettlement": "Revertir liquidación bancaria",
+    "termsTab": "Condiciones",
+    "generateClaimTab": "Crear reclamación",
+    "costEvidenceTab": "Evidencia de costos",
+    "agreementDetails": "Detalles del acuerdo",
+    "eligiblePeriod": "{activity} elegibles del {start} al {end}; {currency}.",
+    "methodLine": "Cálculo: {method}. Los niveles se basan en el {basis}.",
+    "stackingPolicy": "{policy}; grupo {group}.",
+    "viewAgreementSettings": "Ver configuración del acuerdo",
+    "approveAgreement": "Aprobar acuerdo",
+    "customerOrVendor": "Cliente o proveedor",
+    "generateEarnedClaim": "Crear reclamación devengada",
+    "stockCostExplanation": "Los costos de inventario usan evidencia contabilizada. Para otros artículos, registre el costo documentado antes de contabilizar o reevaluar la transacción de origen.",
+    "sourceDocumentLine": "Línea del documento de origen",
+    "costInCurrency": "Costo en {currency}",
+    "costField": "Costo",
+    "downstreamResale": "Importe de reventa posterior documentado",
+    "resaleField": "Importe de reventa",
+    "costEvidence": "Evidencia del costo",
+    "recordCostEvidence": "Registrar evidencia del costo",
+    "postedSourceTransaction": "Transacción de origen contabilizada",
+    "reassessEarnedRebates": "Reevaluar reembolsos devengados",
+    "line": "Línea",
+    "errors": {
+      "actionFailed": "No se pudo completar la acción de reembolso"
+    }
+  }
+}

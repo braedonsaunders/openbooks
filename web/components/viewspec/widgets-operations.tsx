@@ -9,6 +9,7 @@ import {
   OutOfOfficeButton,
   AccountsHierarchyTable,
   AccountDrawer,
+  ContractorWithholdingWorkspace,
   NewAccountButton,
   FilingWorksheet,
   NewBudgetButton,
@@ -38,6 +39,9 @@ import { str, num, stringRecord, type WidgetRenderer } from './widget-props'
 
 /** Financial operations and controls adapters: approvals, close, accounts, journals, budgets, compliance. Compose native components without changing their props or boundaries. */
 export const OPERATIONS_WIDGETS = {
+  'contractor-withholding-workspace': (props) => (
+    <ContractorWithholdingWorkspace {...(props as ComponentProps<typeof ContractorWithholdingWorkspace>)} />
+  ),
   'waiver-number-cell': (props) => (
     <WaiverNumberCell
       waiverNumber={str(props, 'waiverNumber') ?? ''}

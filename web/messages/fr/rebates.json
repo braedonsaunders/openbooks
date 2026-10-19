@@ -1,0 +1,113 @@
+{
+  "title": "Remises différées",
+  "description": "Gérez les accords de remise clients et fournisseurs, les demandes acquises et les règlements encadrés.",
+  "classAgreement": "Accord par catégorie",
+  "searchPlaceholder": "Rechercher des accords, demandes ou contreparties",
+  "actions": {
+    "newAgreement": "Nouvel accord",
+    "agreementSettings": "Paramètres des accords",
+    "reports": "Rapports de remises"
+  },
+  "tabs": {
+    "agreements": "Accords",
+    "claims": "Demandes"
+  },
+  "filters": {
+    "all": "Tous",
+    "side": "Partie",
+    "status": "Statut"
+  },
+  "sides": {
+    "customer": "Client",
+    "vendor": "Fournisseur"
+  },
+  "statuses": {
+    "draft": "Brouillon",
+    "approved": "Approuvé",
+    "document_pending": "Document en attente",
+    "settled": "Réglé",
+    "cancelled": "Annulé",
+    "unknown": "Statut inconnu"
+  },
+  "activities": {
+    "sale": "ventes",
+    "purchase": "achats",
+    "downstream_sale": "ventes ultérieures"
+  },
+  "methods": {
+    "percent": "Remise en pourcentage",
+    "per_unit": "Montant par unité",
+    "fixed_cost": "Coût unitaire garanti",
+    "guaranteed_margin": "Marge garantie"
+  },
+  "tierBasis": {
+    "amount": "montant admissible",
+    "quantity": "quantité admissible"
+  },
+  "stacking": {
+    "stack": "Cumuler avec les accords admissibles",
+    "best": "Meilleure offre par ligne"
+  },
+  "columns": {
+    "agreement": "Accord",
+    "counterparty": "Contrepartie",
+    "side": "Partie",
+    "status": "Statut",
+    "amount": "Montant demandé"
+  },
+  "empty": {
+    "agreements": {
+      "title": "Aucun accord de remise",
+      "description": "Créez un accord dans les paramètres pour définir les conditions admissibles et leur période de validité."
+    },
+    "claims": {
+      "title": "Aucune demande de remise",
+      "description": "Les demandes apparaissent ici après l'évaluation de l'activité selon un accord approuvé."
+    }
+  },
+  "drawer": {
+    "claimTitle": "Demande de remise",
+    "reviewReason": "Motif de vérification",
+    "postingOrCutoffDate": "Date de comptabilisation ou de clôture",
+    "claimEarnedThrough": "Acquis jusqu'au {date}. Le règlement compense la régularisation enregistrée.",
+    "approveClaim": "Approuver la demande",
+    "settlementMethod": "Mode de règlement",
+    "creditDocument": "Avoir ou document de recouvrement natif",
+    "paymentOrReceipt": "Paiement ou encaissement bancaire",
+    "prepareDocument": "Préparer le document de {kind}",
+    "credit": "crédit",
+    "recovery": "recouvrement",
+    "bankAccount": "Compte bancaire",
+    "settlementFxRate": "Taux de change du règlement ({from} vers {to})",
+    "fxRateField": "Taux de change du règlement",
+    "recordBankSettlement": "Enregistrer le règlement bancaire",
+    "cancelClaim": "Annuler la demande",
+    "openSettlementDocument": "Ouvrir le document de règlement",
+    "reverseBankSettlement": "Contrepasser le règlement bancaire",
+    "termsTab": "Conditions",
+    "generateClaimTab": "Créer une demande",
+    "costEvidenceTab": "Justificatifs de coût",
+    "agreementDetails": "Détails de l'accord",
+    "eligiblePeriod": "{activity} admissibles du {start} au {end} ; {currency}.",
+    "methodLine": "Calcul : {method}. Les paliers sont fondés sur le {basis}.",
+    "stackingPolicy": "{policy} ; groupe {group}.",
+    "viewAgreementSettings": "Afficher les paramètres de l'accord",
+    "approveAgreement": "Approuver l'accord",
+    "customerOrVendor": "Client ou fournisseur",
+    "generateEarnedClaim": "Créer la demande acquise",
+    "stockCostExplanation": "Les coûts de stock s'appuient sur des justificatifs de stock comptabilisés. Pour les autres articles, consignez le coût documenté avant de comptabiliser ou de réévaluer la transaction source.",
+    "sourceDocumentLine": "Ligne du document source",
+    "costInCurrency": "Coût en {currency}",
+    "costField": "Coût",
+    "downstreamResale": "Montant documenté de revente ultérieure",
+    "resaleField": "Montant de revente",
+    "costEvidence": "Justificatif de coût",
+    "recordCostEvidence": "Enregistrer le justificatif de coût",
+    "postedSourceTransaction": "Transaction source comptabilisée",
+    "reassessEarnedRebates": "Réévaluer les remises acquises",
+    "line": "Ligne",
+    "errors": {
+      "actionFailed": "L'action de remise n'a pas pu aboutir"
+    }
+  }
+}

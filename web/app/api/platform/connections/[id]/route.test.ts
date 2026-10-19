@@ -43,6 +43,11 @@ const mockSources = new Map<string, string>([
   [
     "mock:db",
     `
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       const state = globalThis[Symbol.for("openbooks.connection-patch-route-test")]
       const sqlText = globalThis.connectionIdSqlText
       export const db = {
@@ -124,6 +129,11 @@ const mockSources = new Map<string, string>([
   [
     "mock:secrets",
     `
+      export { KeyedFingerprintError, SEALED_V1_PREFIX, SEALED_V2_PREFIX, describeSealedBlob,
+        fingerprintUnderKey, isNamedNonProductionEnvironment, keyedFingerprint,
+        keyedFingerprintForComparison, loadDataKeyRing, matchKeyedFingerprint,
+        parseKeyedFingerprint, requireDataKey, sealSecret, unsealSecret }
+        from '${import.meta.resolve('@openbooks/engine/platform/secrets')}'
       export class SecretIntegrityError extends Error {
         constructor(orgId, purpose, keyId, detail) {
           super(

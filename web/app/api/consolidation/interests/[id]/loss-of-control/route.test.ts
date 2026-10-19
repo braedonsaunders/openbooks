@@ -19,7 +19,7 @@ registerHooks({
     if (specifier === "@openbooks/engine/platform/db")
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export const db={execute:async()=>({rows:[]})};export async function withBypassContext(work){return work()};export async function withOrgTransaction(_orgId,work){return work()}",
+        url: "data:text/javascript,export const db={execute:async()=>({rows:[]})};export const ambientTenantOrgId=()=>null;export const currentRequestOrgResolver=()=>null;export const registerRequestOrgResolver=()=>{};export async function withBypass(work){return work()};export async function withBypassContext(work){return work()};export async function withOrgTransaction(_orgId,work){return work()}",
       };
     if (specifier === "@/lib/api/json")
       return next(

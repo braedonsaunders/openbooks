@@ -15,6 +15,6 @@ export default async function ServiceHomePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadServiceHome()
+  const data = await loadServiceHome(sp)
   return <ModuleView spec={serviceHomeSpec(data)} data={data} searchParams={sp} trusted />
 }

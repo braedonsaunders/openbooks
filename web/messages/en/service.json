@@ -159,6 +159,15 @@
       "quotesAwaitingAnswer": "Quotes awaiting answer",
       "activeAgreements": "Active agreements"
     },
+    "workQueue": "Service work queue",
+    "directoryTitle": "Workspace",
+    "attentionTitle": "Needs attention",
+    "allClear": "No service work needs attention.",
+    "attention": {
+      "responseBreaches": "{count, plural, one {# visit is past its response target} other {# visits are past their response targets}}",
+      "quotesAwaitingAnswer": "{count, plural, one {# quote is awaiting a response} other {# quotes are awaiting a response}}",
+      "awaitingReview": "{count, plural, one {# visit is awaiting review} other {# visits are awaiting review}}"
+    },
     "policyMissing": "No dispatch policy is in force.",
     "policyMissingRemedy": "Response targets, arrival windows and agreement generation use the dispatch policy. Add a version in Setup → Service dispatch policy.",
     "openPolicy": "Open dispatch policy",

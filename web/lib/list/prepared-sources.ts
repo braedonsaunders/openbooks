@@ -850,7 +850,7 @@ const SOURCES = {
     paging: { totalField: 'directoryTotal', pageField: 'directoryPage', perPageField: 'directoryPageSize' },
   },
   projects_prebills: { route: '/projects/pre-billing', mode: 'loaded' },
-  subcontracts_register: { route: '/subcontracts', mode: 'loaded' },
+  subcontracts_register: { route: '/subcontracts', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'page', perPageField: 'perPage' } },
   subcontracts_changes: { route: '/subcontracts', mode: 'loaded' },
   subcontracts_applications: { route: '/subcontracts', mode: 'loaded' },
   subcontracts_retainage: { route: '/subcontracts', mode: 'loaded' },

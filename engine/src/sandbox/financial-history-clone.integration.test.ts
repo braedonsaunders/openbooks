@@ -29,7 +29,7 @@ for (const masked of [false, true]) {
         ]) await postEntry(db, {
           orgId: source.orgId, bookId: source.bookId, subsidiaryId: source.subsidiaryId,
           entryNumber: entryNumber!, postingDate: source.date, periodId: source.periodId, origin: "manual",
-          lines: [{ accountId: source.accounts.bank, currency: "USD", txnAmount: txnAmount!, fxRate: fxRate!, amount: amount! },
+          lines: [{ accountId: source.accounts.bank, currency: "USD", txnAmount: txnAmount!, fxRate: fxRate!, amount: amount!, ...(entryNumber === "EXPOSURE" ? { custom: { equitySecurityId: "z".repeat(36), equityRole: "malformed_snapshot" } } : {}) },
             { accountId: source.accounts.fxGainLoss, currency: "CAD", amount: offset! }],
         });
         const documentId = randomUUID();
@@ -47,6 +47,11 @@ for (const masked of [false, true]) {
           (select sum(all_lines.amount)::text from journal_lines all_lines where all_lines.org_id=l.org_id and all_lines.account_id=l.account_id) as residual
         from journal_lines l where l.org_id=${target} and l.is_currency_adjustment`)).rows;
       assert.deepEqual(await projection(),[{amount:'1.0000',txn:'0.0000',currency:'USD',tagged:true,residual:'0.0000'}]);
+      if (!masked) {
+        assert.equal((await db.execute<{ securityId: string }>(sql`
+          select custom->>'equitySecurityId' as "securityId" from journal_lines
+           where org_id=${target} and custom->>'equityRole'='malformed_snapshot'`)).rows[0]?.securityId, "z".repeat(36));
+      }
       const registry = (await db.execute<{ key: string }>(sql`select key from fx_rate_types where org_id=${target} order by key`)).rows;
       assert.deepEqual(registry.map(row=>row.key),['average','corporate','historical','spot']);
       assert.equal((await db.execute<{ rate: string }>(sql`select posting_rate_type as rate from subsidiary_accounting_preferences where org_id=${target}`)).rows[0]?.rate,'corporate');

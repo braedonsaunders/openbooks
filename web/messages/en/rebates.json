@@ -1,0 +1,113 @@
+{
+  "title": "Rebates",
+  "description": "Manage customer and vendor rebate agreements, earned claims, and governed settlement.",
+  "classAgreement": "Class agreement",
+  "searchPlaceholder": "Search agreements, claims, or counterparties",
+  "actions": {
+    "newAgreement": "New agreement",
+    "agreementSettings": "Agreement settings",
+    "reports": "Rebate reports"
+  },
+  "tabs": {
+    "agreements": "Agreements",
+    "claims": "Claims"
+  },
+  "filters": {
+    "all": "All",
+    "side": "Side",
+    "status": "Status"
+  },
+  "sides": {
+    "customer": "Customer",
+    "vendor": "Vendor"
+  },
+  "statuses": {
+    "draft": "Draft",
+    "approved": "Approved",
+    "document_pending": "Document pending",
+    "settled": "Settled",
+    "cancelled": "Cancelled",
+    "unknown": "Unknown status"
+  },
+  "activities": {
+    "sale": "sales",
+    "purchase": "purchases",
+    "downstream_sale": "downstream sales"
+  },
+  "methods": {
+    "percent": "Percentage rebate",
+    "per_unit": "Amount per unit",
+    "fixed_cost": "Guaranteed unit cost",
+    "guaranteed_margin": "Guaranteed margin"
+  },
+  "tierBasis": {
+    "amount": "eligible amount",
+    "quantity": "eligible quantity"
+  },
+  "stacking": {
+    "stack": "Stack with eligible agreements",
+    "best": "Best deal per line"
+  },
+  "columns": {
+    "agreement": "Agreement",
+    "counterparty": "Counterparty",
+    "side": "Side",
+    "status": "Status",
+    "amount": "Claim amount"
+  },
+  "empty": {
+    "agreements": {
+      "title": "No rebate agreements",
+      "description": "Create an agreement in setup to define eligible terms and effective dates."
+    },
+    "claims": {
+      "title": "No rebate claims",
+      "description": "Claims appear here after eligible activity is assessed under an approved agreement."
+    }
+  },
+  "drawer": {
+    "claimTitle": "Rebate claim",
+    "reviewReason": "Review reason",
+    "postingOrCutoffDate": "Posting or cutoff date",
+    "claimEarnedThrough": "Earned through {date}. Settlement clears the recorded accrual.",
+    "approveClaim": "Approve claim",
+    "settlementMethod": "Settlement method",
+    "creditDocument": "Native credit or recovery document",
+    "paymentOrReceipt": "Bank payment or receipt",
+    "prepareDocument": "Prepare {kind} document",
+    "credit": "credit",
+    "recovery": "recovery",
+    "bankAccount": "Bank account",
+    "settlementFxRate": "Settlement FX rate ({from} to {to})",
+    "fxRateField": "Settlement FX rate",
+    "recordBankSettlement": "Record bank settlement",
+    "cancelClaim": "Cancel claim",
+    "openSettlementDocument": "Open settlement document",
+    "reverseBankSettlement": "Reverse bank settlement",
+    "termsTab": "Terms",
+    "generateClaimTab": "Generate claim",
+    "costEvidenceTab": "Cost evidence",
+    "agreementDetails": "Agreement details",
+    "eligiblePeriod": "Eligible {activity} from {start} through {end}; {currency}.",
+    "methodLine": "Calculation: {method}. Tiers use the {basis}.",
+    "stackingPolicy": "{policy}; group {group}.",
+    "viewAgreementSettings": "View agreement settings",
+    "approveAgreement": "Approve agreement",
+    "customerOrVendor": "Customer or vendor",
+    "generateEarnedClaim": "Generate earned claim",
+    "stockCostExplanation": "Stock costs use posted inventory evidence. For other items, record documented cost before posting or reassessing the source transaction.",
+    "sourceDocumentLine": "Source document line",
+    "costInCurrency": "Cost in {currency}",
+    "costField": "Cost",
+    "downstreamResale": "Documented downstream resale amount",
+    "resaleField": "Resale amount",
+    "costEvidence": "Cost evidence",
+    "recordCostEvidence": "Record cost evidence",
+    "postedSourceTransaction": "Posted source transaction",
+    "reassessEarnedRebates": "Reassess earned rebates",
+    "line": "Line",
+    "errors": {
+      "actionFailed": "Rebate action could not be completed"
+    }
+  }
+}

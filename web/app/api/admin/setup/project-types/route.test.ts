@@ -113,6 +113,11 @@ const mockSources = new Map<string, string>([
       const sqlText = globalThis.openbooksSqlText
       const sqlParams = globalThis.openbooksSqlParams
       const clone = (value) => structuredClone(value)
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
 
       function txExecute(query) {
         state.txCalls += 1

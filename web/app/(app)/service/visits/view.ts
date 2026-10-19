@@ -3,6 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requireServiceArea } from '../../../../lib/service/pages'
+import { serviceWorkspaceTabs } from '../../../../lib/service/workspace-tabs'
 
 /**
  * Service visits: the universal entity list for `service_visit` with the
@@ -16,6 +17,7 @@ export interface ServiceVisitsData {
   currentParams: Record<string, string | string[] | undefined>
   canCreate: boolean
   newLabel: string
+  tabs: ReturnType<typeof serviceWorkspaceTabs>
 }
 
 export async function loadServiceVisits(sp: Record<string, string | string[] | undefined>): Promise<ServiceVisitsData> {
@@ -27,6 +29,10 @@ export async function loadServiceVisits(sp: Record<string, string | string[] | u
     currentParams: sp,
     canCreate: false,
     newLabel: t('pages.visits.new'),
+    tabs: serviceWorkspaceTabs('visits', {
+      overview: t('tabs.overview'), requests: t('tabs.requests'), jobs: t('tabs.jobs'),
+      visits: t('tabs.visits'), agreements: t('tabs.agreements'),
+    }),
   }
 }
 
@@ -40,7 +46,10 @@ export function serviceVisitsSpec(data: ServiceVisitsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget('service-new-button', { kind: '', label: data.newLabel }, f('canCreate'))],
+        actions: [
+          widget('service-new-button', { kind: '', label: data.newLabel }, f('canCreate')),
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
       }),
     ],
     body: [

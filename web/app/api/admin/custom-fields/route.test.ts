@@ -47,6 +47,11 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.custom-fields-route-test')]
       const sqlText = globalThis.openbooksSqlTextCustomFields
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       export const db = {
         async transaction(run) { return run(db) },
         async execute(query) {

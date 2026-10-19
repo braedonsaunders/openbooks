@@ -61,6 +61,7 @@ const mockSources = new Map<string, string>([
     `
       export { can } from '${realAuthzUrl}'
       export function guardSubsidiaryScope() { return undefined }
+      export function subsidiaryScopeAllows() { return true }
     `,
   ],
   [

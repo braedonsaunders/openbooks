@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Channels home — the storefront-connections cockpit. Channel cards, stat
- * tiles and the needs-attention queue all read the org-scoped
- * /api/channels endpoint, so every tenant sees only its own connections.
+ * tiles and the needs-attention queue are loaded in the tenant-scoped server
+ * view, with subsidiary restrictions applied before each figure is rendered.
  */
 export default async function ChannelsPage({
   searchParams,
@@ -15,5 +15,5 @@ export default async function ChannelsPage({
 }) {
   const sp = await searchParams
   const data = await loadChannelsHome()
-  return <ModuleView spec={channelsHomeSpec()} data={data} searchParams={sp} trusted />
+  return <ModuleView spec={channelsHomeSpec(data)} data={data} searchParams={sp} trusted />
 }

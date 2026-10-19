@@ -1284,7 +1284,7 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       const m = await import('../app/(app)/channels/view')
       return {
         load: () => m.loadChannelsHome(),
-        spec: () => m.channelsHomeSpec(),
+        spec: (data) => m.channelsHomeSpec(data as never),
       }
     },
   },
@@ -3355,11 +3355,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/subcontracts': {
     route: '/subcontracts',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/subcontracts/view')
       return {
-        load: () => m.loadSubcontracts(),
+        load: (input) => m.loadSubcontracts(input.searchParams ?? {}),
         spec: (data) => m.subcontractsSpec(data as never),
       }
     },

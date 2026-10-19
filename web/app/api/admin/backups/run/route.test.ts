@@ -39,6 +39,11 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.backup-run-route-test')]
       const sqlText = globalThis.openbooksSqlTextBackupRun
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       export const db = {
         async execute(query) {
           const text = sqlText(query)
