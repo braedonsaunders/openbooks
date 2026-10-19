@@ -1,6 +1,7 @@
 /** Read one legal entity's stored equity records into the shape the cap-table math reads. */
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
+import { memoizedRead } from "../platform/read-memo.ts";
 import type {
   ClassAmendmentRecord,
   EquityBook,
@@ -81,8 +82,15 @@ export const EVENT_COLUMNS = sql`id, security_id, kind, effective_on::text as ef
   interest_accrued_amount::text as interest_accrued_amount, interest_accrued_functional::text as interest_accrued_functional,
   interest_accrual_entry_id, deposit_amount::text as deposit_amount, fair_market_value::text as fair_market_value, fx_rate::text as fx_rate`;
 
-/** Everything recorded for one legal entity, in recording order. */
+/**
+ * Everything recorded for one legal entity, in recording order. Within a
+ * read-only render the book loads once and every view of it shares it.
+ */
 export async function loadEquityBook(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<EquityBook> {
+  return memoizedRead(`equity-book:${orgId}:${subsidiaryId}`, () => readEquityBook(runner, orgId, subsidiaryId));
+}
+
+async function readEquityBook(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<EquityBook> {
   const scope = sql`org_id = ${orgId} and subsidiary_id = ${subsidiaryId}`;
   const classes = (await runner.execute<Row>(sql`
     select id, code, name, kind, effective_on::text as effective_on, initial_authorized_shares::text as initial_authorized_shares,

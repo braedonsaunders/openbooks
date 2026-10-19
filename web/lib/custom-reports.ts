@@ -220,6 +220,32 @@ export async function builtInReportDefinitionId(
 }
 
 /**
+ * The ids of several built-in query reports by slug, in one read: a page
+ * linking to several reports resolves them together. The catalog is
+ * materialised only when a slug is not yet there (opening a report refreshes
+ * its definition anyway); slugs the catalog does not hold are absent.
+ */
+export async function builtInReportDefinitionIds(
+  orgId: string,
+  slugs: readonly string[],
+): Promise<Map<string, string>> {
+  const wanted = [...new Set(slugs)]
+  if (wanted.length === 0) return new Map()
+  const read = async () => new Map((await db.execute<{ id: string; slug: string }>(sql`
+    select distinct on (slug) id, slug from report_definitions
+     where org_id = ${orgId}
+       and kind = 'built_in'
+       and coalesce(report_type, 'query') = 'query'
+       and slug = any(${`{${wanted.join(',')}}`}::text[])
+     order by slug, id
+  `)).rows.map((row) => [row.slug, row.id]))
+  const found = await read()
+  if (wanted.every((slug) => found.has(slug))) return found
+  await ensureReportDefinitions(orgId)
+  return read()
+}
+
+/**
  * Load one live definition scoped to the caller's org, or null. Archived
  * definitions are invisible to execution: they cannot run, export, render,
  * schedule, or be edited — their runs and artifacts survive underneath and

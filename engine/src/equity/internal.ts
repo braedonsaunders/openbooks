@@ -6,6 +6,7 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import type { SqlExecutor } from "../platform/db.ts";
+import { memoizedRead } from "../platform/read-memo.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { EQUITY_FEATURE_KEY, EQUITY_FEATURE_REMEDY, EquityError } from "./errors.ts";
 
@@ -25,7 +26,7 @@ export async function assertEquityFeature(runner: SqlExecutor, orgId: string): P
 
 /** Read-path feature check (no fence: reads change nothing). */
 export async function assertEquityReadable(orgId: string): Promise<void> {
-  if (!(await orgFeatureEnabled(orgId, EQUITY_FEATURE_KEY))) throw featureOff();
+  if (!(await memoizedRead(`equity-readable:${orgId}`, () => orgFeatureEnabled(orgId, EQUITY_FEATURE_KEY)))) throw featureOff();
 }
 
 function forbidden(permission: EquityPermission, scoped: boolean): EquityError {
@@ -64,8 +65,10 @@ export async function requireEquityReader(
   actorId: string,
   subsidiaryId: string | null,
 ): Promise<ReadonlySet<string> | null> {
-  if (!(await actorHasPermission(runner, orgId, actorId, "equity.read"))) throw forbidden("equity.read", false);
-  const allowed = await actorAllowedSubsidiaryIds(runner, orgId, actorId);
+  const allowed = await memoizedRead(`equity-reader:${orgId}:${actorId}`, async () => {
+    if (!(await actorHasPermission(runner, orgId, actorId, "equity.read"))) throw forbidden("equity.read", false);
+    return actorAllowedSubsidiaryIds(runner, orgId, actorId) as Promise<ReadonlySet<string> | null>;
+  });
   if (subsidiaryId !== null && allowed !== null && !allowed.has(subsidiaryId)) {
     throw new EquityError("The legal entity does not exist or is outside your access.", { status: 404, code: "equity_entity_unknown", remedy: "Choose a legal entity you can access." });
   }
@@ -89,6 +92,10 @@ export interface LegalEntity {
 
 /** An active legal entity of the organization with its functional currency; anything else refuses. */
 export async function loadLegalEntity(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<LegalEntity> {
+  return memoizedRead(`equity-legal-entity:${orgId}:${subsidiaryId}`, () => readLegalEntity(runner, orgId, subsidiaryId));
+}
+
+async function readLegalEntity(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<LegalEntity> {
   if (!isUuid(subsidiaryId)) {
     throw new EquityError("Choose a valid legal entity.", { code: "equity_entity_unknown", status: 404, remedy: "Choose a legal entity of this organization.", field: "subsidiaryId" });
   }
