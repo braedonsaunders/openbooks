@@ -516,6 +516,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hiring-pipeline-index',
   'hiring-pipeline-builder',
   'property-management-workspace',
+  'property-management-rent-actions',
   'provision-compute-button',
   'provision-differences-section',
   'provision-framework-badge',

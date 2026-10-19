@@ -1,18 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Drawer, Button, Input, Select } from "@openbooks/ui";
+import { UrlDrawer, Button, Input, Select } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
 import { Field } from "./workspace-ui";
 import type { PropertyWorkspace, SaveAction } from "./types";
 import { DateField } from '@/components/date-field'
 
-export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, onClose, data, tenants, busy, onSave }: {
+export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, closeHref, onClose, data, tenants, busy, onSave }: {
   open: boolean;
   stacked?: boolean;
   initialPropertyId?: string;
   initialUnitId?: string | null;
+  closeHref: string;
   onClose: () => void;
   data: PropertyWorkspace;
   tenants: Option[];
@@ -66,9 +67,10 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, o
       camSharePercent: form.camSharePercent || null,
     });
   return (
-    <Drawer
+    <UrlDrawer
       open={open}
-      onClose={onClose}
+      openKey="new-lease"
+      closeHref={closeHref}
       stacked={stacked}
       title="New tenant lease"
       description="The draft freezes commercial policy before activation creates the rent schedule."
@@ -268,6 +270,6 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, o
           </label>
         </div>
       </div>
-    </Drawer>
+    </UrlDrawer>
   );
 }

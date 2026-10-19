@@ -39,6 +39,7 @@ import {
   PosRegisterPicker,
   PosRegisterScreen,
 } from './native-widgets.client'
+import { PropertyManagementRentActions } from '../../app/(app)/property-management/PropertyManagementRentActions'
 import { type ComponentProps } from 'react'
 import { ModuleHomeTabs } from '../module-home/ui'
 import { RelationshipsSection, ArPulse as CustomerArPulse } from '../../app/(app)/customers/sections'
@@ -175,6 +176,7 @@ export const COMMERCE_WIDGETS = {
       {...(props as unknown as ComponentProps<typeof PropertyManagementWorkspace>)}
     />
   ),
+  'property-management-rent-actions': () => <PropertyManagementRentActions />,
 
   /* --- AR cockpit ------------------------------------------------------------- */
   /** Whole: schedule bars, a collections worklist and a week drill that

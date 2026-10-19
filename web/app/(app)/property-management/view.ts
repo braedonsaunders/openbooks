@@ -1,11 +1,14 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { cmp } from '@openbooks/engine/money/money'
+import { propertyManagementWorkspace } from '@openbooks/engine/property/management'
+import { page, pageHeader, ref, grid, statTile, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { getMoneyFormatter } from '../../../lib/money-server'
 import { can, requirePermission } from '../../../lib/authz'
-import { pickString } from '../../../lib/list-params'
+import { mergeHref, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import {
   AmbiguousListViewDefaultError,
@@ -15,19 +18,20 @@ import {
 import { isFeatureEnabled } from '../../../lib/features'
 import { taxCodeOptions } from '../../../lib/documents.ts'
 import { requirePropertyManagementFeature } from '../../../lib/property-management-gate'
+import { formatGroupedMoney, sumByCurrency } from './portfolio-money'
+import type { PropertyWorkspace } from './types'
+import type { ModuleHomeTab } from '../../../components/module-home/tab-types'
 import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import type { Option } from './workspace-ui'
 
 /**
  * Property management, split into a loader and a spec.
  *
- * The native page renders ONE client island — `PropertyManagementWorkspace` —
- * which owns every tab switch, drawer open/close, fetch (`GET/POST
- * /api/property-management`) and mutation flow in `useState`. Decomposing its
- * health metrics, tab strip, four tab bodies and dozen drawers into spec
- * blocks would render the unfiltered/pre-fetch set and strand the tab state
- * from what it shows (the /reports lesson, also documented on the
- * labor-costing page). There is exactly one workspace; nothing is copied.
+ * The loader resolves the authorized portfolio and its currency-grouped KPIs
+ * before rendering. One client island owns the active table and URL-backed
+ * record drawers, preserving list focus and drafts while mutations refresh
+ * the server snapshot. The header owns the module tabs and active action;
+ * each render shows a single tab body.
  *
  * Loader work copied verbatim from page.tsx: the `ar.read` gate, the
  * `propertyManagement` feature gate (redirects to /admin/setup/features when
@@ -36,8 +40,8 @@ import type { Option } from './workspace-ui'
  * property form-layout + list-view resolution, the `fixedAssets` /
  * `multiCurrency` probes, and the nine option queries in order. The five
  * permission flags are loader-computed booleans; Authz, org id and user id
- * never cross the spec — the slot re-derives nothing here because the
- * workspace persists through the session cookie inside the shared component.
+ * never cross the spec. The client only submits mutations and cannot widen
+ * the loader's organization or subsidiary scope.
  */
 
 export interface PropertyManagementData {
@@ -62,6 +66,28 @@ export interface PropertyManagementData {
     openInvoices: Option[]
     taxCodes: Option[]
   }
+  workspace: PropertyWorkspace | null
+  activeTab: 'properties' | 'rentRoll' | 'cam' | 'depositReconciliation'
+  tabs: ModuleHomeTab[]
+  newPropertyHref: string
+  newCamHref: string
+  newPropertyLabel: string
+  newCamLabel: string
+  metrics: {
+    occupiedUnitsLabel: string
+    occupiedUnitsValue: string
+    activeLeasesSub: string
+    monthlyBaseRentLabel: string
+    monthlyBaseRentValue: string
+    monthlyBaseRentSub: string
+    rentPastDueLabel: string
+    rentPastDueValue: string
+    rentPastDueSub: string
+    rentPastDueTone: 'negative' | undefined
+    depositsHeldLabel: string
+    depositsHeldValue: string
+    depositsHeldSub: string
+  } | null
   permissions: {
     manage: boolean
     bill: boolean
@@ -82,6 +108,11 @@ export async function loadPropertyManagement(
   const authz = await requirePermission('ar.read')
   await requirePropertyManagementFeature(authz.user.orgId)
   const orgId = authz.user.orgId
+  const tabNames = ['properties', 'rentRoll', 'cam', 'depositReconciliation'] as const
+  const requestedTab = pickString(sp.tab)
+  const activeTab = tabNames.includes(requestedTab as (typeof tabNames)[number])
+    ? requestedTab as (typeof tabNames)[number]
+    : 'properties'
   const allowed = authz.allowedSubsidiaryIds
     ? [...authz.allowedSubsidiaryIds]
     : null
@@ -148,6 +179,14 @@ export async function loadPropertyManagement(
         openInvoices: [],
         taxCodes: [],
       },
+      workspace: null,
+      activeTab,
+      tabs: [],
+      newPropertyHref: '',
+      newCamHref: '',
+      newPropertyLabel: t('newProperty'),
+      newCamLabel: t('newCamPool'),
+      metrics: null,
       permissions: {
         manage: can(authz, 'ar.create'),
         bill: can(authz, 'ar.create'),
@@ -171,6 +210,7 @@ export async function loadPropertyManagement(
     assets,
     openInvoices,
     taxCodes,
+    workspace,
   ] = await Promise.all([
     db.execute<Option>(
       multiCurrency
@@ -211,8 +251,56 @@ export async function loadPropertyManagement(
         name: [row.code, row.name].filter((part) => !!part).join(' · ') || String(row.id),
       })),
     ),
+    propertyManagementWorkspace(orgId, authz.allowedSubsidiaryIds),
   ])
-  const t = await getTranslations('entities.propertyManagement.workspace')
+  const [t, locale, moneyFormatter] = await Promise.all([
+    getTranslations('entities.propertyManagement.workspace'),
+    getLocale(),
+    getMoneyFormatter(orgId),
+  ])
+  const activeLeases = workspace.leases.filter((lease) =>
+    ['active', 'notice'].includes(lease.status),
+  )
+  const activeLeaseIds = new Set(activeLeases.map((lease) => lease.id))
+  const leaseCurrency = new Map(workspace.leases.map((lease) => [lease.id, lease.currency]))
+  const currencyForLease = (leaseId: string): string => {
+    const currency = leaseCurrency.get(leaseId)
+    if (!currency) throw new Error('A lease currency is required to total property management amounts.')
+    return currency
+  }
+  const monthlyBaseRent = sumByCurrency(
+    workspace.charges
+      .filter((charge) =>
+        activeLeaseIds.has(charge.leaseId) &&
+        charge.chargeType === 'base_rent' &&
+        charge.effectiveFrom <= workspace.overdueAsOf &&
+        (!charge.effectiveTo || charge.effectiveTo >= workspace.overdueAsOf),
+      )
+      .map((charge) => ({
+        currency: currencyForLease(charge.leaseId),
+        amount: charge.amount,
+      })),
+  )
+  const rentPastDue = sumByCurrency(
+    workspace.overdueByLease.map((row) => ({
+      currency: currencyForLease(row.leaseId),
+      amount: row.balance,
+    })),
+  )
+  const depositsHeld = sumByCurrency(
+    workspace.leases.map((lease) => ({
+      currency: lease.currency,
+      amount: lease.depositBalance ?? '0',
+    })),
+  )
+  const count = new Intl.NumberFormat(locale)
+  const tabs: ModuleHomeTab[] = tabNames.map((key) => ({
+    href: mergeHref('/property-management', sp, {
+      tab: key, property: null, propertyTab: null, unit: null, lease: null, cam: null, camAction: null,
+    }),
+    label: t(`tabs.${key}`),
+    active: activeTab === key,
+  }))
   return {
     title: t('title'),
     description: t('description'),
@@ -235,6 +323,38 @@ export async function loadPropertyManagement(
       openInvoices: openInvoices.rows,
       taxCodes,
     },
+    workspace,
+    activeTab,
+    tabs,
+    newPropertyHref: mergeHref('/property-management', sp, {
+      tab: 'properties', property: 'new', propertyTab: null, unit: null, lease: null, cam: null, camAction: null,
+    }),
+    newCamHref: mergeHref('/property-management', sp, {
+      tab: 'cam', property: null, propertyTab: null, unit: null, lease: null, cam: 'new', camAction: null,
+    }),
+    newPropertyLabel: t('newProperty'),
+    newCamLabel: t('newCamPool'),
+    metrics: {
+      occupiedUnitsLabel: t('metrics.occupiedUnits'),
+      occupiedUnitsValue: `${count.format(workspace.units.filter((unit) => unit.status === 'occupied').length)} / ${count.format(workspace.units.length)}`,
+      activeLeasesSub: t('metrics.activeLeasesHint', { count: activeLeases.length }),
+      monthlyBaseRentLabel: t('metrics.monthlyBaseRent'),
+      monthlyBaseRentValue: monthlyBaseRent.length
+        ? formatGroupedMoney(monthlyBaseRent, moneyFormatter.money)
+        : moneyFormatter.money('0'),
+      monthlyBaseRentSub: t('metrics.currentChargesHint'),
+      rentPastDueLabel: t('metrics.rentPastDue'),
+      rentPastDueValue: rentPastDue.length
+        ? formatGroupedMoney(rentPastDue, moneyFormatter.money)
+        : moneyFormatter.money('0'),
+      rentPastDueSub: t('metrics.agingHint'),
+      rentPastDueTone: rentPastDue.some((part) => cmp(part.total, '0') > 0) ? 'negative' : undefined,
+      depositsHeldLabel: t('metrics.depositsHeld'),
+      depositsHeldValue: depositsHeld.length
+        ? formatGroupedMoney(depositsHeld, moneyFormatter.money)
+        : moneyFormatter.money('0'),
+      depositsHeldSub: t('metrics.depositLiabilityHint'),
+    },
     permissions: {
       manage: can(authz, 'ar.create'),
       bill: can(authz, 'ar.create'),
@@ -252,6 +372,18 @@ export async function loadPropertyManagement(
 const f = ref<PropertyManagementData>()
 
 export function propertyManagementSpec(data: PropertyManagementData): PageSpec {
+  const actions = data.listViewRefusal ? [] : [
+    widget('module-home-tabs', { tabs: data.tabs }),
+    ...(data.activeTab === 'properties' && data.permissions.manage
+      ? [widget('link-button', { href: data.newPropertyHref, label: data.newPropertyLabel, iconKey: 'plus' })]
+      : []),
+    ...(data.activeTab === 'cam' && data.permissions.manage
+      ? [widget('link-button', { href: data.newCamHref, label: data.newCamLabel, iconKey: 'plus' })]
+      : []),
+    ...(data.activeTab === 'rentRoll' && data.permissions.bill && data.permissions.bulk
+      ? [widget('property-management-rent-actions', {})]
+      : []),
+  ]
   return page({
     route: '/property-management',
     layout: 'list',
@@ -259,6 +391,8 @@ export function propertyManagementSpec(data: PropertyManagementData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
+        actionsClassName: 'flex flex-wrap items-center gap-2',
+        actions,
       }),
     ],
     body: [
@@ -272,11 +406,14 @@ export function propertyManagementSpec(data: PropertyManagementData): PageSpec {
         },
         f('listViewRefusal'),
       ),
-      // One client island, like the labor-costing workspace. The loader hands
-      // over the customization, option pickers, permission flags and feature
-      // probes it already resolved; the component keeps its own tab, drawer,
-      // fetch and mutation state exactly as on the native path. No remount
-      // key: the native page renders the workspace keyless.
+      ...(data.metrics ? [grid('grid grid-cols-2 gap-3 xl:grid-cols-4', [
+        statTile({ iconKey: 'building', accent: 'teal', label: f('occupiedUnitsLabel'), value: f('occupiedUnitsValue'), sub: f('activeLeasesSub') }),
+        statTile({ iconKey: 'wallet', accent: 'emerald', label: f('monthlyBaseRentLabel'), value: f('monthlyBaseRentValue'), sub: f('monthlyBaseRentSub') }),
+        statTile({ iconKey: 'triangle-alert', accent: 'red', label: f('rentPastDueLabel'), value: f('rentPastDueValue'), sub: f('rentPastDueSub'), tone: f('rentPastDueTone') }),
+        statTile({ iconKey: 'shield-check', accent: 'violet', label: f('depositsHeldLabel'), value: f('depositsHeldValue'), sub: f('depositsHeldSub') }),
+      ])] : []),
+      // One active table body with URL-backed detail drawers. Its rows and
+      // KPI inputs arrive from the scoped server loader above.
       widgetBlock(
         'property-management-workspace',
         {
@@ -285,6 +422,8 @@ export function propertyManagementSpec(data: PropertyManagementData): PageSpec {
           permissions: data.permissions,
           fixedAssetsEnabled: data.fixedAssetsEnabled,
           multiCurrency: data.multiCurrency,
+          workspace: data.workspace,
+          initialTab: data.activeTab,
         },
         f('hasContent'),
       ),

@@ -527,6 +527,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'project-profitability-table': 'reporting',
   'project-types-workspace': 'setup',
   'property-management-workspace': 'commerce',
+  'property-management-rent-actions': 'commerce',
   'provision-compute-button': 'assets-tax',
   'provision-differences-section': 'assets-tax',
   'provision-framework-badge': 'assets-tax',

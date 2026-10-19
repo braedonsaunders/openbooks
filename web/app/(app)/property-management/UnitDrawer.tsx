@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Drawer, Button, Input } from "@openbooks/ui";
+import { UrlDrawer, Button, Input } from "@openbooks/ui";
 import { Field } from "./workspace-ui";
 import type { SaveAction } from "./types";
 
-export function UnitDrawer({ propertyId, onClose, busy, onSave }: { propertyId: string | null; onClose: () => void; busy: boolean; onSave: SaveAction }) {
+export function UnitDrawer({ propertyId, closeHref, onClose, busy, onSave }: { propertyId: string | null; closeHref: string; onClose: () => void; busy: boolean; onSave: SaveAction }) {
   const [form, setForm] = useState({
     code: "",
     name: "",
@@ -35,9 +35,10 @@ export function UnitDrawer({ propertyId, onClose, busy, onSave }: { propertyId: 
       bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
     });
   return (
-    <Drawer
+    <UrlDrawer
       open={!!propertyId}
-      onClose={onClose}
+      openKey={propertyId ?? undefined}
+      closeHref={closeHref}
       stacked
       title="Add rentable unit"
       description="Units carry occupancy and rentable-area evidence for CAM allocation."
@@ -92,6 +93,6 @@ export function UnitDrawer({ propertyId, onClose, busy, onSave }: { propertyId: 
           </Field>
         </div>
       </div>
-    </Drawer>
+    </UrlDrawer>
   );
 }

@@ -23,6 +23,8 @@ export const LIST_DRAWER_ROUTES = {
 export type ListDrawerSource = keyof typeof LIST_DRAWER_ROUTES
 export type ListDrawerWidget = (typeof LIST_DRAWER_ROUTES)[ListDrawerSource]['widget']
 export type NativeListDrawerData = { widget: ListDrawerWidget; drawer: unknown }
+const PROPERTY_MANAGEMENT_DRAWER_PARAMS = ['property', 'unit', 'lease', 'cam', 'camAction', 'propertyTab'] as const
+
 export function listDrawerRoute(source: string) {
   return Object.hasOwn(LIST_DRAWER_ROUTES, source) ? LIST_DRAWER_ROUTES[source as ListDrawerSource] : null
 }
@@ -33,6 +35,17 @@ export function isListDrawerHrefChange(currentHref: string, nextHref: string): b
   const current = new URL(currentHref, 'https://list.local')
   const next = new URL(nextHref, current)
   if (current.origin !== next.origin || current.pathname !== next.pathname) return false
+  if (current.pathname === '/property-management') {
+    const changed = PROPERTY_MANAGEMENT_DRAWER_PARAMS.some(
+      (key) => current.searchParams.get(key) !== next.searchParams.get(key),
+    )
+    if (!changed) return false
+    for (const params of [current.searchParams, next.searchParams]) {
+      for (const key of PROPERTY_MANAGEMENT_DRAWER_PARAMS) params.delete(key)
+      params.sort()
+    }
+    return current.searchParams.toString() === next.searchParams.toString()
+  }
   const route = Object.values(LIST_DRAWER_ROUTES).find((item) => item.path === current.pathname)
   if (!route) return false
   const before = current.searchParams.get(route.param)

@@ -1,18 +1,10 @@
 import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
+import test from 'node:test'
 import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
 import { stubModules } from '../../../testing/stub-modules'
 
-// The workspace load parsed the body before the status and threw
-// new Error(body.error) — an error body without an error field became
-// new Error(undefined) with an empty toast. The load now checks the status
-// first through readApiErrorMessage. Mounts the real workspace under jsdom
-// and drives both failure shapes.
 await bootJsdomEnvironment({ url: 'http://localhost:4800/property-management', matchMediaMatches: false })
 
-const script = {
-  errors: [] as string[],
-}
 Object.assign(globalThis, {
   __propertyTestRouter: {
     push() {},
@@ -27,14 +19,13 @@ stubModules({
     source:
       'export function useRouter(){return globalThis.__propertyTestRouter}' +
       'export function usePathname(){return "/property-management"}' +
-      'export function useSearchParams(){return new URLSearchParams()}',
+      'export function useSearchParams(){return new URLSearchParams()} ',
   },
   intl: false,
   authz: false,
   features: false,
   extra: {
-    sonner:
-      'export const toast={success(){},error(m){(globalThis.__propertyErrorToasts ?? []).push(String(m))}};export function Toaster(){return null}',
+    sonner: 'export const toast={success(){},error(){}};export function Toaster(){return null}',
   },
 })
 const React = await import('react')
@@ -48,70 +39,60 @@ const { BusinessDateProvider } = await import('../../../components/business-date
 const { PropertyManagementWorkspace } = await import('./PropertyManagementWorkspace')
 const { defaultFormLayout } = await import('@openbooks/customization')
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
-
-async function mount(t: TestContext, responder: () => Response): Promise<void> {
-  script.errors = []
-  ;(globalThis as Record<string, unknown>).__propertyErrorToasts = script.errors
-  const prior = globalThis.fetch
-  globalThis.fetch = (async () => responder()) as typeof fetch
+test('renders the server-loaded portfolio without fetching it again after mount', async (t) => {
+  let fetchCount = 0
+  const priorFetch = globalThis.fetch
+  globalThis.fetch = (async () => {
+    fetchCount += 1
+    return Response.json({})
+  }) as typeof fetch
   t.after(() => {
-    globalThis.fetch = prior
+    globalThis.fetch = priorFetch
   })
   const host = document.createElement('div')
   document.body.appendChild(host)
   const rootHandle = createRoot(host)
   t.after(async () => {
-    await act(async () => {
-      rootHandle.unmount()
-    })
+    await act(async () => rootHandle.unmount())
     host.remove()
     for (const node of [...document.body.children]) node.remove()
   })
+
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <BusinessDateProvider today="2026-09-01">
             <PropertyManagementWorkspace
-              options={{
-                subsidiaries: [],
-                locations: [],
-                tenants: [],
-                incomeAccounts: [],
-                expenseAccounts: [],
-                liabilityAccounts: [],
-                bankAccounts: [],
-                assets: [],
-                openInvoices: [], taxCodes: [],
-              }}
-              permissions={{ manage: false, bill: false, account: false, bulk: false, customize: false }}
-              customization={{
-                layout: defaultFormLayout('property'),
-                forms: [],
-                currentFormId: null,
-                fieldDefs: [],
-                listView: { columns: [] } as never,
-              }}
+            workspace={{
+              properties: [{
+                id: 'property-1', code: 'NORTH', name: 'North Plaza', propertyType: 'commercial',
+                status: 'active', currency: 'USD', address: null, custom: null, subsidiaryId: 'entity-1',
+                subsidiaryName: 'North America', locationId: null, locationName: null, fixedAssetId: null,
+                rentIncomeAccountId: 'income-1', camIncomeAccountId: null, depositLiabilityAccountId: null,
+                defaultBankAccountId: null, unitCount: 0, occupiedUnits: 0,
+              }],
+              units: [], leases: [], charges: [], escalations: [], schedules: [], scheduleTotal: 0,
+              schedulesTruncated: false, scheduleCountsByLease: [], overdueAsOf: '2026-09-01',
+              overdueTotal: '0', overdueByLease: [], overdueInvoices: [], deposits: [], camPools: [], camAllocations: [],
+            }}
+            initialTab="properties"
+            options={{
+              subsidiaries: [], locations: [], tenants: [], incomeAccounts: [], expenseAccounts: [],
+              liabilityAccounts: [], bankAccounts: [], assets: [], openInvoices: [], taxCodes: [],
+            }}
+            permissions={{ manage: false, bill: false, account: false, bulk: false, customize: false }}
+            customization={{
+              layout: defaultFormLayout('property'), forms: [], currentFormId: null, fieldDefs: [],
+              listView: { columns: [{ key: 'name', visible: true }] } as never,
+            }}
             />
           </BusinessDateProvider>
         </MoneyProvider>
       </NextIntlClientProvider>,
     )
-    for (let i = 0; i < 6; i++) await tick()
   })
-}
 
-test('a non-JSON 502 names the translated fallback with the status', async (t) => {
-  await mount(t, () => new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }))
-  assert.deepEqual(script.errors, ['Could not load properties (status 502)'])
-})
-
-test('a refusal without an error field never becomes an empty toast', async (t) => {
-  await mount(t, () => Response.json({ ok: false }, { status: 403 }))
-  assert.deepEqual(script.errors, ['Could not load properties (status 403)'])
-  assert.ok(
-    script.errors.every((message) => message.trim() !== '' && message !== 'undefined'),
-    'no toast may be empty or the string undefined',
-  )
+  assert.match(host.textContent ?? '', /North Plaza/)
+  assert.equal(fetchCount, 0)
 })

@@ -499,6 +499,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'project-drawer': { props: ['drawer'] },
   'project-profitability-table': { props: [], open: true },
   'project-types-workspace': { props: [], open: true },
+  'property-management-rent-actions': { props: [] },
   'property-management-workspace': { props: [], open: true },
   'provision-compute-button': { props: [] },
   'provision-differences-section': { props: ['columns', 'differences', 'emptyNote', 'title'] },
