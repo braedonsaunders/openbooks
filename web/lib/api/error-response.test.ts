@@ -5,6 +5,7 @@ import { ConsolidationError } from '@openbooks/engine/consolidation/consolidatio
 import { PostingError } from '@openbooks/engine/journal/contracts'
 import { PeriodClosedError } from '@openbooks/engine/periods/period-policy'
 import { apiErrorResponse } from './error-response'
+import { PdfLayoutError } from '@openbooks/pdf'
 import { readApiErrorMessage } from '../api-error'
 
 test('a stored-value refusal reaches the client with its remedy and affected field', async () => {
@@ -84,4 +85,14 @@ test('a non-period consolidation sibling still answers 500 without safeStatus', 
   t.after(() => { console.error = original })
   const response = await apiErrorResponse(new ConsolidationError('period nope not found', 'not-found'))
   assert.equal(response.status, 500)
+})
+
+
+test('an unreadable PDF layout reaches the operator as a 422 with the supported print remedy', async () => {
+  const response = await apiErrorResponse(new PdfLayoutError())
+  assert.equal(response.status, 422)
+  const body = await response.clone().json()
+  assert.equal(body.code, 'pdf_layout_too_narrow')
+  assert.match(body.remedy, /wider page/)
+  assert.doesNotMatch(await readApiErrorMessage(response, 'Export failed'), /Export failed/)
 })
