@@ -1072,7 +1072,7 @@ export async function computeBaselines(
   const dates = (await exec.execute<{ payDate: string }>(sql`
     select distinct pay_date::text as "payDate" from pay_stubs
      where org_id = ${orgId}::uuid
-     order by pay_date desc
+     order by "payDate" desc
      limit ${windowPeriods}`)).rows.map((r) => r.payDate);
   if (dates.length < 2) {
     throw new AiRailsError(
