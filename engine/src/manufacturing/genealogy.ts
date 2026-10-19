@@ -22,7 +22,6 @@ export interface GenealogySeedChoice { value: string; label: string }
 
 /** The seed picker and the trace reader share the same visibility fence. */
 function seedVisibility(kind: "lot" | "serial", scope: ReadonlySet<string> | null) {
-  const identityColumn = kind === "lot" ? sql`identity.lot_number` : sql`identity.serial_number`;
   const movementColumn = kind === "lot" ? sql`movement.lot_id` : sql`movement.serial_id`;
   const ownerColumn = kind === "lot" ? sql`owner.lot_id` : sql`owner.serial_id`;
   return sql`(${scope === null ? sql`true` : sql`exists (
