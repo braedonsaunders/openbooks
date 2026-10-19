@@ -3,7 +3,8 @@ import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { businessTimeZone } from '@openbooks/engine/platform/business-date'
-import { add, mul, normalizeMoney, sum } from '@openbooks/engine/money/money'
+import { add, normalizeMoney, sum } from '@openbooks/engine/money/money'
+import { orderLineAmount } from '@openbooks/engine/sales/order-cycle-math'
 import { computeLineTaxes } from '@openbooks/engine/tax/tax'
 import { taxProfileMap, type TaxProfiles } from "../../../lib/bills.ts";
 import { canonicalDecimal } from '../../../lib/exact-decimal'
@@ -41,7 +42,7 @@ export { exactOrderQuantity, exactOrderUnitPrice, selectPostableOrderLines } fro
 export function computeOrderTotals(lines: OrderLineInput[], profiles: TaxProfiles) {
   const computed = lines.map((l) => {
     if (l.taxCodeId && l.taxGroupId) throw new Error('select either a tax code or a tax group, not both')
-    const inputAmount = mul(l.quantity ?? '0', l.unitPrice ?? '0')
+    const inputAmount = orderLineAmount(l.quantity ?? '0', l.unitPrice ?? '0')
     const config = l.taxGroupId
       ? profiles.groups.get(l.taxGroupId)
       : l.taxCodeId

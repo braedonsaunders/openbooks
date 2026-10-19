@@ -222,6 +222,7 @@ test("taxed amendments rebuild tax evidence and enforce the exact cancelled quan
     const line = await lineState(org.orgId, orderId);
     assert.equal(line.quantity, '70.00000001');
     assert.equal(line.unitPrice, '10.00000001');
+    assert.equal(line.amount, '700.0000');
     assert.equal(line.taxInputAmount, '700.0000');
     assert.equal(line.taxAmount, '70.0000');
     const components = (await db.execute<{ sequence: number; taxAmount: string }>(sql`
