@@ -17,6 +17,7 @@ export async function createRebateSettlement(orgId:string,actorId:string,claimId
     await lockActorCommandAuthority(db,orgId,actorId,a.subsidiary_id,createPermission(kind));
     if (claim.settlement_document_id) return {id:claim.settlement_document_id,kind,created:null};
     if (claim.status!=='approved') throw new RebateError('Approve the claim before preparing its settlement');
+    if (a.tax_treatment==='taxable' && !a.settlement_tax_code_id) throw new RebateError('Set the settlement tax code on the taxable rebate agreement, then prepare a new settlement document');
     const amount=cmp(claim.amount,'0')<0?neg(claim.amount):claim.amount;
     const body={partyId:claim.party_id,documentDate,currency:a.currency,memo:`Rebate ${a.code} claim settlement`,custom:{rebateClaimId:claimId},
       lines:[{accountId:a.accrual_account_id,description:`Rebate ${a.code}`,amount,quantity:'1',unitPrice:amount,taxCodeId:a.tax_treatment==='taxable'?a.settlement_tax_code_id:null}]};
