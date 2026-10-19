@@ -308,15 +308,21 @@ export async function updateDraftPayment(
     // and posting re-locks each account and re-verifies the balance, so this
     // snapshot can never overspend money that moved since.
     let storedValueTenders: StoredValueTenderSnapshot[] = custom.storedValueTenders ?? [];
-    if (patch.storedValueTenders !== undefined) {
+    const revalidateStoredValueForPartyChange =
+      patch.partyId !== undefined && patch.partyId !== doc.partyId && patch.storedValueTenders === undefined;
+    const storedValueInputs = patch.storedValueTenders ?? (revalidateStoredValueForPartyChange
+      ? storedValueTenders.map(({ accountId, amount }) => ({ accountId, amount }))
+      : undefined);
+    if (storedValueInputs !== undefined) {
       storedValueTenders = [];
-      if (patch.storedValueTenders.length > 0 && doc.kind !== "customer_payment") {
+      if (storedValueInputs.length > 0 && doc.kind !== "customer_payment") {
         throw new PaymentError("stored-value tenders only apply to customer receipts");
       }
-      if (patch.storedValueTenders.length > 0 && !(await lockAndCheckOrgFeature(db, doc.orgId, "storedValue"))) {
+      if (storedValueInputs.length > 0 && !(await lockAndCheckOrgFeature(db, doc.orgId, "storedValue"))) {
         throw new PaymentError("Stored value is disabled; enable storedValue in Company Settings → Features.");
       }
-      for (const tender of patch.storedValueTenders) {
+      const tenderedByAccount = new Map<string, bigint>();
+      for (const tender of storedValueInputs) {
         const tenderUnits = persistPaymentMoney(tender.amount, "stored-value tender amount");
         if (tenderUnits <= 0n) throw new PaymentError("stored-value tender amount must be positive");
         // Tender discovery runs under the same actor scope as the save: a
@@ -345,9 +351,11 @@ export async function updateDraftPayment(
         if (resolved.kind === "store_credit" && resolved.customerPartyId !== partyId) {
           throw new PaymentError("store credit belongs to its customer; select that customer on the receipt before applying it");
         }
-        if (tenderUnits > resolved.balanceMinor) {
+        const accountTotal = (tenderedByAccount.get(resolved.accountId) ?? 0n) + tenderUnits;
+        tenderedByAccount.set(resolved.accountId, accountTotal);
+        if (accountTotal > resolved.balanceMinor) {
           throw new PaymentError(
-            `stored-value …${resolved.codeLast4} holds ${fromUnits(resolved.balanceMinor)}; redeem at most that amount`,
+            `stored-value …${resolved.codeLast4} holds ${fromUnits(resolved.balanceMinor)}; combined tenders must not exceed that amount`,
           );
         }
         const liabilityAccountId = resolved.liabilityAccountId ?? (await storedValueLiabilityControlAccount(doc.orgId));

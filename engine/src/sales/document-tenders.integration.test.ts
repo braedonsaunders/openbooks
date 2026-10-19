@@ -166,6 +166,16 @@ test("a sale resolves its stored-value tender and refuses an overdraw by name", 
     await assert.rejects(
       withBypass(() =>
         replaceDocumentTenders(db, org.orgId, id, [
+          { kind: "stored_value", storedValueAccountId: issued.accountId, amount: "50" },
+          { kind: "stored_value", storedValueAccountId: issued.accountId, amount: "50" },
+        ], { allowedSubsidiaryIds: null }),
+      ),
+      (error: unknown) =>
+        error instanceof TenderRefusal && /combined tendered 100\.0000/.test(error.message),
+    );
+    await assert.rejects(
+      withBypass(() =>
+        replaceDocumentTenders(db, org.orgId, id, [
           { kind: "stored_value", storedValueAccountId: issued.accountId, amount: "90" },
         ], { allowedSubsidiaryIds: null }),
       ),

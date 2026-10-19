@@ -403,6 +403,7 @@ export async function replaceDocumentTenders(
     .filter((input) => input.kind === "stored_value" && typeof input.storedValueAccountId === "string")
     .map((input) => input.storedValueAccountId as string);
   const storedValueById = await lockTenderStoredValueAccounts(runner, orgId, storedValueIds, tenderScope);
+  const tenderedByAccount = new Map<string, bigint>();
   let tenderBusinessDate: string | undefined;
   type PreparedTender = {
     kind: string;
@@ -586,9 +587,11 @@ export async function replaceDocumentTenders(
           );
         }
       }
-      if (isSale && amountMinor > storedValueAccount.balanceMinor) {
+      const accountTotal = (tenderedByAccount.get(storedValueAccount.id) ?? 0n) + amountMinor;
+      tenderedByAccount.set(storedValueAccount.id, accountTotal);
+      if (isSale && accountTotal > storedValueAccount.balanceMinor) {
         throw refusal(
-          `${label} stored value …${storedValueAccount.codeLast4} holds ${fromUnits(storedValueAccount.balanceMinor)}, which is less than the tendered ${fromUnits(amountMinor)}.`,
+          `${label} stored value …${storedValueAccount.codeLast4} holds ${fromUnits(storedValueAccount.balanceMinor)}, which is less than the combined tendered ${fromUnits(accountTotal)}.`,
           "stored_value_insufficient_balance",
           409,
           `Tender at most ${fromUnits(storedValueAccount.balanceMinor)}, or split the total across another payment method.`,
