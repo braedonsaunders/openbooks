@@ -44,7 +44,14 @@ async function fixture(run: (f: {
       });
       return entry;
     };
-    await run({ org, actor, project, hold, release: amount => withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, org.date, amount, null)) });
+    try {
+      await run({ org, actor, project, hold, release: amount => withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, org.date, amount, null)) });
+    } catch (error) {
+      const detail = error instanceof Error
+        ? `${error.name}: ${error.message.replace(/\s+/g, " ")}; cause: ${error.cause instanceof Error ? error.cause.message.replace(/\s+/g, " ") : String(error.cause ?? "")}`
+        : String(error);
+      assert.fail(`Retainage scenario failed: ${detail}`);
+    }
   } finally { await dropScratchOrgReporting(org.orgId); }
 }
 
