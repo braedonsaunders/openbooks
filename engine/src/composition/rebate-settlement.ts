@@ -19,7 +19,7 @@ export async function createRebateSettlement(orgId:string,actorId:string,claimId
     if (claim.status!=='approved') throw new RebateError('Approve the claim before preparing its settlement');
     const amount=cmp(claim.amount,'0')<0?neg(claim.amount):claim.amount;
     const body={partyId:claim.party_id,documentDate,currency:a.currency,memo:`Rebate ${a.code} claim settlement`,custom:{rebateClaimId:claimId},
-      lines:[{accountId:a.accrual_account_id,description:`Rebate ${a.code}`,amount,quantity:'1',unitPrice:amount,taxCodeId:a.settlement_tax_code_id,...(a.tax_treatment==='outside_scope'?{taxOverridden:true,taxAmount:'0'}:{})}]};
+      lines:[{accountId:a.accrual_account_id,description:`Rebate ${a.code}`,amount,quantity:'1',unitPrice:amount,taxCodeId:a.tax_treatment==='taxable'?a.settlement_tax_code_id:null}]};
     const created=await createDocument({orgId,userId:actorId,kind,key:randomUUID(),body,requestBody:body,subsidiaryId:a.subsidiary_id});
     await recordRebateSettlementDocument(orgId,actorId,claimId,created.id);
     return {id:created.id,kind,created};
