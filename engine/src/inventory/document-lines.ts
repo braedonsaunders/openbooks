@@ -27,6 +27,8 @@ export interface DocumentInventoryLine {
   unit: string | null;
   /** line extended amount (for unit-cost derivation on receipts). */
   amount: string;
+  /** Document exchange rate used to value the line in functional currency. */
+  fxRate: string;
   assetAccountId: string;
   clearingAccountId: string | null;
   adjustmentAccountId: string | null;
@@ -84,6 +86,7 @@ export async function loadDocumentInventoryLines(
       quantity: string;
       unit: string | null;
       amount: string;
+      fx_rate: string;
       stock_location_id: string | null;
       document_subsidiary_id: string | null;
       document_kind: string;
@@ -103,7 +106,7 @@ export async function loadDocumentInventoryLines(
     }>(sql`
     select dl.id as line_id, dl.line_number, dl.item_id, i.kind as item_kind,
            coalesce(nullif(i.code, ''), i.name) as item_name,
-           dl.quantity, dl.unit, dl.amount,
+           dl.quantity, dl.unit, dl.amount, d.fx_rate::text as fx_rate,
            dl.stock_location_id, d.subsidiary_id as document_subsidiary_id,
            d.kind as document_kind,
            p.asset_account_id, p.received_not_billed_account_id,
@@ -195,6 +198,7 @@ export async function loadDocumentInventoryLines(
       quantity,
       unit: row.unit,
       amount: row.amount,
+      fxRate: row.fx_rate,
       assetAccountId: row.asset_account_id,
       clearingAccountId: row.received_not_billed_account_id,
       adjustmentAccountId: row.adjustment_account_id,
