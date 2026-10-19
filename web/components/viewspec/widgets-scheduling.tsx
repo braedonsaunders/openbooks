@@ -28,7 +28,7 @@ export const SCHEDULING_WIDGETS = {
   ),
   'service-home': (props) => {
     const home = props as unknown as ComponentProps<typeof ServiceHome>
-    return <ServiceHome summary={home.summary} boards={home.boards} reports={home.reports} canConfigure={home.canConfigure} canCreateBoard={home.canCreateBoard} />
+    return <ServiceHome summary={home.summary} canConfigure={home.canConfigure} />
   },
   'service-my-visits': (props) => (
     <ServiceMyVisits

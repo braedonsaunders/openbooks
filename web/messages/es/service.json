@@ -159,6 +159,15 @@
       "quotesAwaitingAnswer": "Cotizaciones sin respuesta",
       "activeAgreements": "Contratos activos"
     },
+    "workQueue": "Cola de trabajo del servicio",
+    "directoryTitle": "Espacio de trabajo",
+    "attentionTitle": "Requiere atención",
+    "allClear": "No hay trabajo de servicio que requiera atención.",
+    "attention": {
+      "responseBreaches": "{count, plural, one {# visita superó el objetivo de respuesta} other {# visitas superaron el objetivo de respuesta}}",
+      "quotesAwaitingAnswer": "{count, plural, one {# cotización espera respuesta} other {# cotizaciones esperan respuesta}}",
+      "awaitingReview": "{count, plural, one {# visita espera revisión} other {# visitas esperan revisión}}"
+    },
     "policyMissing": "No hay ninguna política de despacho vigente.",
     "policyMissingRemedy": "Los objetivos de respuesta, las ventanas de llegada y la generación de contratos usan la política de despacho. Añada una versión en Configuración → Política de despacho de servicio.",
     "openPolicy": "Abrir la política de despacho",

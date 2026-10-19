@@ -159,6 +159,15 @@
       "quotesAwaitingAnswer": "Soumissions en attente de réponse",
       "activeAgreements": "Contrats actifs"
     },
+    "workQueue": "File de travail du service",
+    "directoryTitle": "Espace de travail",
+    "attentionTitle": "À traiter",
+    "allClear": "Aucun travail de service ne nécessite d’attention.",
+    "attention": {
+      "responseBreaches": "{count, plural, one {# visite a dépassé le délai de réponse} other {# visites ont dépassé le délai de réponse}}",
+      "quotesAwaitingAnswer": "{count, plural, one {# devis attend une réponse} other {# devis attendent une réponse}}",
+      "awaitingReview": "{count, plural, one {# visite attend une validation} other {# visites attendent une validation}}"
+    },
     "policyMissing": "Aucune politique de répartition n’est en vigueur.",
     "policyMissingRemedy": "Les délais de réponse, les plages d’arrivée et la génération des contrats utilisent la politique de répartition. Ajoutez une version dans Paramétrage → Politique de répartition du service.",
     "openPolicy": "Ouvrir la politique de répartition",

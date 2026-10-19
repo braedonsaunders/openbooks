@@ -159,6 +159,15 @@
       "quotesAwaitingAnswer": "待答复报价",
       "activeAgreements": "生效中的协议"
     },
+    "workQueue": "服务工作队列",
+    "directoryTitle": "工作区",
+    "attentionTitle": "需要处理",
+    "allClear": "没有需要处理的服务工作。",
+    "attention": {
+      "responseBreaches": "{count, plural, other {# 次上门服务已超过响应目标}}",
+      "quotesAwaitingAnswer": "{count, plural, other {# 份报价等待答复}}",
+      "awaitingReview": "{count, plural, other {# 次上门服务等待审核}}"
+    },
     "policyMissing": "当前没有生效的派工策略。",
     "policyMissingRemedy": "响应目标、到达时间窗和协议生成均使用派工策略。请在“设置 → 服务派工策略”中添加一个版本。",
     "openPolicy": "打开派工策略",
