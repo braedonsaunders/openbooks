@@ -133,6 +133,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'commitments-section',
   'compliance-matrix',
   'compliance-setup-banner',
+  'contractor-withholding-workspace',
   'contract-cost-drawer',
   'contract-costs-workspace',
   'contract-drawer',

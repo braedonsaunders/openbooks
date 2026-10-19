@@ -162,6 +162,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'compliance-matrix': 'operations',
   'compliance-setup-banner': 'operations',
   'contract-cost-drawer': 'commerce',
+  'contractor-withholding-workspace': 'operations',
   'contract-costs-workspace': 'commerce',
   'contract-drawer': 'commerce',
   'crm-new-button': 'records',
