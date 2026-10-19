@@ -3,6 +3,7 @@ import {
   asc,
   eq,
   gte,
+  inArray,
   isNull,
   lte,
   notExists,
@@ -515,6 +516,13 @@ export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promis
         eq(resRetainerDrawdownEntries.orgId, input.orgId),
         eq(resRetainerDrawdownEntries.timeEntryId, timeEntries.id),
       ));
+    const prebillReservation = sql`not exists (
+      select 1 from prebill_lines reserved
+      join prebills worksheet on worksheet.org_id = reserved.org_id and worksheet.id = reserved.prebill_id
+      where reserved.org_id = ${input.orgId} and reserved.source_type = 'time_entry'
+        and reserved.time_entry_id = ${timeEntries.id}
+        and worksheet.status in ('draft', 'review', 'approved', 'customer_review')
+    )`;
     const entries = firstDate > lastDate
       ? []
       : await db.select({
@@ -526,9 +534,12 @@ export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promis
         eq(timeEntries.projectId, retainer.projectId),
         eq(timeEntries.status, "approved"),
         eq(timeEntries.isBillable, true),
+        eq(timeEntries.billingStatus, "unbilled"),
+        isNull(timeEntries.invoicedByLineId),
         gte(timeEntries.workedOn, firstDate),
         lte(timeEntries.workedOn, lastDate),
         notExists(heldEntries),
+        prebillReservation,
       )).orderBy(asc(timeEntries.workedOn), asc(timeEntries.id)).for("update");
     if (entries.length === 0) {
       throw new ResourcingRefusal(
@@ -571,6 +582,19 @@ export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promis
       updatedBy: input.actorId,
     }))).returning({ id: resRetainerDrawdownEntries.id });
     assertWriteRows(linkRows, priced.byEntry.length, "hours drawdown evidence links");
+    const claimedEntries = await db.update(timeEntries).set({
+      billingStatus: "billed",
+      updatedAt: new Date(),
+      updatedBy: input.actorId,
+    }).where(and(
+      eq(timeEntries.orgId, input.orgId),
+      inArray(timeEntries.id, priced.byEntry.map((entry) => entry.id)),
+      eq(timeEntries.status, "approved"),
+      eq(timeEntries.isBillable, true),
+      eq(timeEntries.billingStatus, "unbilled"),
+      isNull(timeEntries.invoicedByLineId),
+    )).returning({ id: timeEntries.id });
+    assertWriteRows(claimedEntries, priced.byEntry.length, "hours drawdown time billing claims");
     await writeAudit(input.orgId, "res_retainer_drawdowns", drawdown.id, "insert", {
       after: {
         retainerId: input.retainerId,

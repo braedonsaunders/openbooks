@@ -22,10 +22,11 @@ beforeEach(async () => {
 afterEach(async () => { if (org) await withBypassContext(() => dropScratchOrg(org.orgId)); });
 
 test("hours drawdown selects only approved, billable, in-window, undrawn entries", async () => {
-  const selected = randomUUID(), held = randomUUID();
+  const selected = randomUUID(), held = randomUUID(), billed = randomUUID();
   const fx = await fixture([
     { id: selected, workedOn: "2026-06-02", hours: "2.0000", status: "approved", billable: true },
     { id: held, workedOn: "2026-06-03", hours: "3.0000", status: "approved", billable: true },
+    { id: billed, workedOn: "2026-06-02", hours: "9.0000", status: "approved", billable: true, billingStatus: "billed" },
     { id: randomUUID(), workedOn: "2026-06-02", hours: "4.0000", status: "submitted", billable: true },
     { id: randomUUID(), workedOn: "2026-06-02", hours: "5.0000", status: "approved", billable: false },
     { id: randomUUID(), workedOn: "2026-05-31", hours: "6.0000", status: "approved", billable: true },
@@ -39,6 +40,10 @@ test("hours drawdown selects only approved, billable, in-window, undrawn entries
   assert.deepEqual(draft.byEntry.map((entry) => entry.id), [selected]);
   assert.equal(draft.hours, "2.0000");
   assert.equal(draft.amount, "200.0000");
+  const claimed = await withBypassContext(() => db.execute<{ billing_status: string; invoiced_by_line_id: string | null }>(sql`
+    select billing_status, invoiced_by_line_id from time_entries where org_id = ${org.orgId} and id = ${selected}
+  `));
+  assert.deepEqual(claimed.rows, [{ billing_status: "billed", invoiced_by_line_id: null }]);
 });
 
 test("a second draft for the same retainer week refuses without duplicating evidence", async () => {
@@ -73,7 +78,10 @@ test("a zero-row update is raised as a write failure", async () => {
   assert.throws(() => assertWriteRows(rows.rows, 1, "retainer extension"), /wrote 0 rows/);
 });
 
-type TimeSeed = { id: string; workedOn: string; hours: string; status: "approved" | "submitted"; billable: boolean };
+type TimeSeed = {
+  id: string; workedOn: string; hours: string; status: "approved" | "submitted"; billable: boolean;
+  billingStatus?: "unbilled" | "billed";
+};
 async function fixture(
   entries: readonly TimeSeed[],
   terms: { startsOn?: string; endsOn?: string; preclaim?: string } = {},
@@ -101,7 +109,7 @@ async function fixture(
   await withBypassContext(async () => {
     const values = entries.map((entry) => sql`(
       ${entry.id}, ${org.orgId}, ${employeeId}, ${projectId}, ${entry.workedOn}, ${entry.hours},
-      ${entry.status}, ${entry.billable}, 'unbilled', ${actorId}, ${actorId}
+      ${entry.status}, ${entry.billable}, ${entry.billingStatus ?? "unbilled"}, ${actorId}, ${actorId}
     )`);
     const inserted = await db.execute<{ id: string }>(sql`
       insert into time_entries (id, org_id, employee_party_id, project_id, worked_on, hours, status,
