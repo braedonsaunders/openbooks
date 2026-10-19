@@ -27,6 +27,7 @@ import {
 } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
+import { scriptDrawerQueryId, scriptTriggerMessageKey } from '../../../../lib/script-drawer-query'
 import { dateTime } from '../../../../lib/format'
 import {
   BUILT_IN_SCRIPT_KINDS,
@@ -44,17 +45,6 @@ import {
  */
 
 // Enum value → message key under admin.scripts. Unknown values render verbatim.
-const TRIGGER_KEYS: Record<string, string> = {
-  before_submit: 'beforeSubmit',
-  before_post: 'beforePost',
-  after_post: 'afterPost',
-  before_void: 'beforeVoid',
-  scheduled: 'scheduled',
-  endpoint: 'endpoint',
-  bulk: 'bulk',
-  client: 'client',
-}
-
 export interface ScriptRow {
   id: string
   name: string
@@ -134,6 +124,7 @@ export async function loadScripts(
   })
   const trigger = pickString(sp.trigger)
   const scriptId = pickString(sp.script)
+  const drawerScriptId = scriptDrawerQueryId(scriptId)
 
   const where = sql`org_id = ${orgId}
     ${trigger ? sql` and trigger_point = ${trigger}` : sql``}
@@ -152,15 +143,15 @@ export async function loadScripts(
       db.execute<{ n: string }>(
         sql`select count(*) as n from user_scripts where ${where}`,
       ),
-      scriptId && scriptId !== 'new'
+      drawerScriptId
         ? db.execute<ScriptDetailRow>(
-            sql`select * from user_scripts where id = ${scriptId} and org_id = ${orgId}`,
+            sql`select * from user_scripts where id = ${drawerScriptId} and org_id = ${orgId}`,
           )
         : null,
-      scriptId && scriptId !== 'new'
+      drawerScriptId
         ? db.execute<ScriptRunRow>(sql`
           select status, error_message, logs, duration_ms, at, target_kind
-            from script_runs where script_id = ${scriptId} and org_id = ${orgId} order by at desc limit 20`)
+            from script_runs where script_id = ${drawerScriptId} and org_id = ${orgId} order by at desc limit 20`)
         : null,
       db.execute<{ key: string; name: string }>(sql`
       select key, name from custom_record_types
@@ -174,8 +165,10 @@ export async function loadScripts(
     BUILT_IN_SCRIPT_KINDS.map((k) => [k.value, k.labelKey]),
   )
 
-  const triggerLabel = (v: string) =>
-    TRIGGER_KEYS[v] ? t(`triggers.${TRIGGER_KEYS[v]}`) : v.replace('_', ' ')
+  const triggerLabel = (v: string) => {
+    const key = scriptTriggerMessageKey(v)
+    return key ? t(`triggers.${key}`) : v.replace('_', ' ')
+  }
   const kindLabel = (v: string) => {
     if (isCustomRecordKind(v))
       return (
