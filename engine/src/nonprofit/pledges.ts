@@ -430,6 +430,12 @@ async function readPledge(orgId: string, id: string, lock = false): Promise<Pled
       ${sql.raw(lock ? "for update" : "")}`);
   return result.rows[0] ?? null;
 }
+async function hasActiveBookingEntry(orgId: string, bookingEntryId: string | null): Promise<boolean> {
+  if (!bookingEntryId) return false;
+  // Live entries only: a reversed booking cannot authorize further pledge postings.
+  return Boolean((await db.execute(sql`select 1 from journal_entries
+    where org_id = ${orgId} and id = ${bookingEntryId} and status = 'posted'`)).rows[0]);
+}
 async function activity(orgId: string, pledgeId: string, asOfDate?: string): Promise<Activity> {
   const rows = (await db.execute<{ posting_date: string; custom: Record<string, unknown> | null }>(sql`
     select je.posting_date::text as posting_date, je.custom from journal_entries je
@@ -709,9 +715,10 @@ export async function topUpPledgeAllowance(input: {
   return withOrgTransaction(input.orgId, async () => {
     await lockFeature(input.orgId);
     const pledge = await readPledge(input.orgId, input.pledgeId, true);
-    if (!pledge || !pledge.booking_entry_id || !["booked", "collecting"].includes(pledge.status)) {
+    if (!pledge || !["booked", "collecting"].includes(pledge.status)
+        || !(await hasActiveBookingEntry(input.orgId, pledge.booking_entry_id))) {
       throw fail({
-        message: "Only a booked or collecting pledge can receive an allowance top-up.",
+        message: "Only a booked or collecting pledge with an active booking entry can receive an allowance top-up.",
         status: 409, code: "pledge_state_conflict", remedy: "Book the pledge before topping up its allowance.",
       });
     }
@@ -784,10 +791,11 @@ export async function writeOffPledge(input: {
   return withOrgTransaction(input.orgId, async () => {
     await lockFeature(input.orgId);
     const pledge = await readPledge(input.orgId, input.pledgeId, true);
-    if (!pledge || !pledge.booking_entry_id || !pledge.present_value ||
-        !["booked", "collecting"].includes(pledge.status)) {
+    if (!pledge || !pledge.present_value ||
+        !["booked", "collecting"].includes(pledge.status)
+        || !(await hasActiveBookingEntry(input.orgId, pledge.booking_entry_id))) {
       throw fail({
-        message: "Only a booked or collecting pledge can be written off.",
+        message: "Only a booked or collecting pledge with an active booking entry can be written off.",
         status: 409, code: "pledge_state_conflict", remedy: "Book the pledge before recording a write-off.",
       });
     }
@@ -907,10 +915,8 @@ export async function collectPledgeInstallments(input: {
   return withOrgTransaction(input.orgId, async () => {
     await lockFeature(input.orgId);
     const pledge = await readPledge(input.orgId, input.pledgeId, true);
-    if (!pledge || !pledge.booking_entry_id || !["booked", "collecting", "fulfilled", "written_off"].includes(pledge.status)
-        || !(await db.execute(sql`select 1 from journal_entries
-          -- Live entries only: a reversed booking cannot authorize a new collection.
-          where org_id = ${input.orgId} and id = ${pledge.booking_entry_id} and status = 'posted'`)).rows[0]) {
+    if (!pledge || !["booked", "collecting", "fulfilled", "written_off"].includes(pledge.status)
+        || !(await hasActiveBookingEntry(input.orgId, pledge.booking_entry_id))) {
       throw fail({
         message: "Only a pledge with an active booking and uncollected installments can receive a collection.",
         status: 409, code: "pledge_state_conflict", remedy: "Book the pledge before recording a collection.",
@@ -1120,6 +1126,11 @@ export async function getPledgeSchedule(input: {
       message: "A draft pledge has no booked amortization schedule.",
       status: 409, code: "pledge_schedule_not_booked", remedy: "Book the pledge before viewing its schedule.",
     });
+    if (!(await hasActiveBookingEntry(input.orgId, pledge.booking_entry_id))) throw fail({
+      message: "Pledge " + pledge.pledge_number + "'s booking entry is no longer posted, so it has no active amortization schedule.",
+      status: 409, code: "pledge_schedule_booking_reversed",
+      remedy: "Review the reversed booking in the journal before viewing the pledge schedule.",
+    });
     const rows = await installments(input.orgId, pledge.id);
     const current = await activity(input.orgId, pledge.id, input.asOfDate);
     const flows = rows.map((row) => ({ dueOn: row.due_on, amount: row.amount }));
@@ -1164,14 +1175,19 @@ export async function runPledgeDiscountAmortization(input: {
       return { posted: 0, skipped: 0, reason: "pledges is disabled in Company Settings → Features" };
     }
     const rows = (await db.execute<PledgeRow>(sql`
-      select id, pledge_number, subsidiary_id, donor_party_id, fund_id,
-        total_amount::text as total_amount, discount_rate::text as discount_rate,
-        present_value::text as present_value, allowance_amount::text as allowance_amount,
-        status, booked_on::text as booked_on, booking_entry_id
-       from pledges where org_id = ${input.orgId}
-         and status in ('booked', 'collecting', 'fulfilled', 'written_off')
-         and booked_on < ${input.periodEnd}
-       order by booked_on, id`)).rows;
+      select pledges.id, pledges.pledge_number, pledges.subsidiary_id, pledges.donor_party_id, pledges.fund_id,
+        pledges.total_amount::text as total_amount, pledges.discount_rate::text as discount_rate,
+        pledges.present_value::text as present_value, pledges.allowance_amount::text as allowance_amount,
+        pledges.status, pledges.booked_on::text as booked_on, pledges.booking_entry_id
+       from pledges
+       -- Live bookings only: a reversed booking earns no further discount amortization.
+       join journal_entries book_je
+         on book_je.org_id = pledges.org_id and book_je.id = pledges.booking_entry_id
+        and book_je.status = 'posted'
+      where pledges.org_id = ${input.orgId}
+        and pledges.status in ('booked', 'collecting', 'fulfilled', 'written_off')
+        and pledges.booked_on < ${input.periodEnd}
+      order by pledges.booked_on, pledges.id`)).rows;
     let posted = 0;
     let skipped = 0;
     const month = monthKey(input.periodEnd);
