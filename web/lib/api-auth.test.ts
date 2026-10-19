@@ -172,7 +172,7 @@ function bearer(plaintext: string): Request {
   });
 }
 
-async function seedOwner(orgId: string, permissions: string[]): Promise<string> {
+async function seedOwner(orgId: string, permissions: string[], isSuperAdmin = false): Promise<string> {
   const userId = randomUUID();
   // File-local seed helper: stage fixture rows under the test bypass (the
   // shared createScratchUser precedent wraps call sites; a single body wrap
@@ -191,6 +191,7 @@ async function seedOwner(orgId: string, permissions: string[]): Promise<string> 
       insert into role_assignments (org_id, user_id, role_id)
       values (${orgId}, ${userId}, ${roleId})`);
     await db.execute(sql`update users set is_active = true where id = ${userId}`);
+    if (isSuperAdmin) await db.execute(sql`update users set is_super_admin = true where id = ${userId}`);
     return userId;
   });
 }
@@ -345,6 +346,24 @@ test(
       assert.deepEqual([...auth.permissions], []);
       assert.equal(canApi(auth, "ar.read"), false);
       assert.equal(canApi(auth, "payroll.read"), false);
+    } finally { await dropScratchOrg(org.orgId); }
+  },
+);
+
+test(
+  "API key scopes use the owner's super-admin authority even without a matching role",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const ownerId = await seedOwner(org.orgId, ["ar.read"], true);
+      const key = await insertKey(org.orgId, ownerId, "super-admin", '["payroll.read"]');
+
+      const auth = await withOrgContext(org.orgId, () => resolveApiKeyAuth(bearer(key.plaintext)));
+
+      assert.ok(auth, "a valid scope held through super-admin authority authenticates");
+      assert.equal(auth.user.isSuperAdmin, true);
+      assert.deepEqual([...auth.permissions], ["payroll.read"]);
     } finally { await dropScratchOrg(org.orgId); }
   },
 );
