@@ -246,7 +246,7 @@ test("a service quote signature does not block award of the same estimate", DB, 
     const ctx = { orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null };
     await db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
-        coalesce(settings->'features', '{}'::jsonb) || '{"serviceDispatch": true}'::jsonb)
+        coalesce(settings->'features', '{}'::jsonb) || '{"hrmShiftPlanning": true, "serviceDispatch": true}'::jsonb)
        where id = ${org.orgId}`);
     const quote = await seedQuote(org, actor);
     const signatureRequestId = randomUUID();
