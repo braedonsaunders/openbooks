@@ -360,7 +360,7 @@ describe("run-entitlement-hours-payout", () => {
       });
       await db.execute(sql`insert into pay_component_statutory_treatments
         (org_id, pay_component_id, effective_from, program_exclusions, vacationable)
-        values (${org.orgId}, ${payoutComponentId}, '2026-01-01', '{}'::jsonb, true)`);
+        values (${org.orgId}, ${payoutComponentId}, '2026-01-01', '{}', true)`);
       const planId = randomUUID();
       await db.execute(sql`
         insert into entitlement_plans (id, org_id, code, name, system_key, unit, direction,
