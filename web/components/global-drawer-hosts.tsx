@@ -36,9 +36,21 @@ export function GlobalPartyDrawer(props: ComponentProps<typeof PartyDrawerHost>)
   return opened ? <PartyDrawerHost {...props} /> : null
 }
 
+/**
+ * Every URL key whose overlay the report host renders: the drill list, a
+ * native record drawer, a posted journal entry (`txn`, set by TxnLink and
+ * JournalEntryLink) and an account register.
+ */
+const REPORT_HOST_KEYS = ['reportDrill', 'reportRecord', 'txn', 'accountRegister'] as const
+
+/** Whether the URL asks for an overlay the shell-level report host renders. */
+export function reportDrawerRequested(search: string): boolean {
+  const params = new URLSearchParams(search)
+  return REPORT_HOST_KEYS.some((key) => params.has(key))
+}
+
 export function GlobalReportDrawer() {
   const { search } = useReportOverlay()
-  const params = new URLSearchParams(search)
-  const opened = useOpenedOnce(params.has('reportDrill') || params.has('reportRecord'), loadReportHost)
+  const opened = useOpenedOnce(reportDrawerRequested(search), loadReportHost)
   return opened ? <ReportDrawerHost /> : null
 }

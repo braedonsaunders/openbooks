@@ -39,8 +39,8 @@ test('attention items each carry an operable destination', () => {
     format: (key, params) => `${key}:${JSON.stringify(params)}`,
   })
   assert.equal(items.length, 4)
-  for (const item of items) assert.match(item.href, /^(?:\/hrm\/benefits\?|\/approvals$)/)
-  assert.equal(items.find((item) => item.key === 'pending-awards')?.href, '/approvals')
+  for (const item of items) assert.match(item.href, /^(?:\/hrm\/benefits\?|\/inbox$)/)
+  assert.equal(items.find((item) => item.key === 'pending-awards')?.href, '/inbox')
   assert.ok(items.some((item) => item.key === 'missing-component-p1' && item.tone === 'negative'))
 })
 

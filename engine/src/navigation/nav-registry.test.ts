@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { DEFAULT_NAV_ORDER, MODULE_BY_KEY, defaultNavConfig, resolveStoredHref } from "./nav-registry.ts";
 import { LOCAL_NAVIGATION } from "./local-navigation.ts";
 import { reconcileNavConfig } from "./nav-config.ts";
+import { APPROVALS_HOME_HREF, APPROVALS_SUBMITTED_HREF } from "./approvals-home.ts";
 
 test("Sales management destinations belong to Customers", () => {
   const sales = LOCAL_NAVIGATION.find((workspace) => workspace.id === 'crm-sales')!;
@@ -87,4 +88,11 @@ test("reopen requests stay a permission-gated accounting destination", () => {
     "the default menu carries it, so page search indexes it",
   );
   assert.ok(!module.localOnly, "it is a real destination, not a local alias");
+});
+
+test("the approvals home and submitted view are live Inbox destinations", () => {
+  assert.equal(MODULE_BY_KEY.get('approvals')?.href, APPROVALS_HOME_HREF);
+  const inbox = LOCAL_NAVIGATION.find((workspace) => workspace.id === 'inbox-views')!;
+  assert.ok(inbox.tabs.some((tab) => tab.href === APPROVALS_HOME_HREF));
+  assert.ok(inbox.tabs.some((tab) => tab.href === APPROVALS_SUBMITTED_HREF));
 });

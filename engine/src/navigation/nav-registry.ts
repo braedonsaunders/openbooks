@@ -1,4 +1,5 @@
 import { LOCAL_NAVIGATION, type LocalNavigationPreferences } from './local-navigation.ts'
+import { APPROVALS_HOME_HREF } from './approvals-home.ts'
 
 // OpenBooks module registry. Module keys
 // are STABLE ids (never change them once shipped); org nav configs reference
@@ -108,7 +109,7 @@ export const NAV_MODULES: NavModule[] = [
   // as a permanent redirect for deep links.
   {
     key: 'approvals',
-    href: '/inbox',
+    href: APPROVALS_HOME_HREF,
     label: 'Inbox',
     iconKey: 'inbox',
     group: 'my-work',

@@ -139,7 +139,7 @@ function runDrawer(
       rate: line.rate,
       realizedFx: money(line.realizedFx, { currency: line.functionalCurrency }),
     })),
-    entryHrefs: run.entryIds.map((id) => `/journal?entry=${id}`),
+    entryHrefs: run.entryIds.map((id) => `/journal?journalEntry=${id}`),
   }
 }
 

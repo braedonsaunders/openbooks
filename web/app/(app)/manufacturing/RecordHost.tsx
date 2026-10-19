@@ -8,6 +8,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { toast } from "sonner";
 import { Button, Badge, EmptyState, ContextMenu, useContextMenu } from "@openbooks/ui";
 import { AsyncUrlDrawer } from "@/components/async-url-drawer";
+import { JournalEntryLink } from "@/components/journal-entry-link";
 import { ProcessRunPanel } from "./ProcessRunPanel";
 import { PagedTable } from "@/components/paged-table";
 import { RecordTabs } from "@/components/module-home/record-tabs";
@@ -312,12 +313,9 @@ export function ManufacturingRecordHost({
     }
     if (key === "number" && tab === "entries" && canReadJournal)
       return (
-        <Link
-          className="text-teal-700 hover:underline"
-          href={("/journal?entry=" + row.id) as never}
-        >
+        <JournalEntryLink className="text-teal-700 hover:underline" entryId={String(row.id)}>
           {label(row[key])}
-        </Link>
+        </JournalEntryLink>
       );
     if (key === "number" && tab === "children")
       return (

@@ -362,5 +362,5 @@ test('Payouts contains only released delivery obligations and recorded payroll h
   assert.ok(!spec.includes('"id":"draft"'))
   const rewards = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'reward' })
   assert.ok(['draft', 'pending', 'rejected'].every((id) => rewards.rewardAwardRows.some((row) => row.id === id)))
-  assert.equal(payouts.overview.attention.find((item) => item.key === 'pending-awards')?.href, '/approvals')
+  assert.equal(payouts.overview.attention.find((item) => item.key === 'pending-awards')?.href, '/inbox')
 })

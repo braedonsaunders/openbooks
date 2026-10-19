@@ -33,6 +33,7 @@ import { publish, SchedulingRequestError } from './api'
 import { addDays, viewRange, type BoardEntry, type BoardWindow, type GroupBy, targetHue } from './model'
 import { useBoard } from './use-board'
 import type { ScheduleBoard } from '@openbooks/engine/schedule-boards/boards'
+import { APPROVALS_HOME_HREF } from '@openbooks/engine/navigation/approvals-home'
 import { DateField } from '../date-field'
 
 export interface BoardSummary {
@@ -284,7 +285,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
       ) : null}
       {people && pendingPublication ? (
         <SchedulingAlert tone="info" message={t('publish.awaiting', { count: pendingPublication.entryIds.length })} remedy={pendingPublication.flowGated ? t('publish.awaitingFlow') : null}>
-          {pendingPublication.flowGated ? <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs"><Link href="/approvals">{t('publish.openApprovals')}</Link></Button> : null}
+          {pendingPublication.flowGated ? <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs"><Link href={APPROVALS_HOME_HREF}>{t('publish.openApprovals')}</Link></Button> : null}
         </SchedulingAlert>
       ) : null}
       {people && board.publishPolicy !== 'live' && stagedDrafts.length ? (

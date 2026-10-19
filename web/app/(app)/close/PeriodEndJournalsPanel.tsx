@@ -21,6 +21,7 @@ import {
 } from "@openbooks/ui";
 import { AlertTriangle, Check, Play, RefreshCw, Undo2 } from "lucide-react";
 import { useMoney } from "@/components/money-provider";
+import { JournalEntryLink } from "@/components/journal-entry-link";
 import { promptDialog } from "@/lib/prompt";
 import { refusalMessageFromBody } from "../../../lib/api-error";
 
@@ -397,15 +398,15 @@ export function PeriodEndJournalsPanel({ periodId, bookId, canRun }: { periodId:
                     <ul className="space-y-0.5">
                       {entry.entries.map((journal) => (
                         <li key={journal.entryId}>
-                          <Link className="underline" href={`/journal?entry=${encodeURIComponent(journal.entryId)}` as never}>
+                          <JournalEntryLink className="underline" entryId={journal.entryId}>
                             {journal.entryNumber}
-                          </Link>
+                          </JournalEntryLink>
                           {journal.reversalEntryId ? (
                             <>
                               {" → "}
-                              <Link className="underline" href={`/journal?entry=${encodeURIComponent(journal.reversalEntryId)}` as never}>
+                              <JournalEntryLink className="underline" entryId={journal.reversalEntryId}>
                                 {journal.reversalEntryNumber}
-                              </Link>
+                              </JournalEntryLink>
                             </>
                           ) : null}
                         </li>

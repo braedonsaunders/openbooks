@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { BarChart3, CalendarRange, Settings2 } from 'lucide-react'
 import { Button, Card } from '@openbooks/ui'
 import type { ServiceHomeSummary } from '@openbooks/engine/service/reads'
+import { APPROVALS_HOME_HREF } from '@openbooks/engine/navigation/approvals-home'
 
 export type ServiceHomeProps = {
   summary: ServiceHomeSummary
@@ -27,7 +28,7 @@ export function ServiceHome({ summary, boards, reports, canConfigure, canCreateB
     { key: 'todayVisits', href: '/service/visits' },
     { key: 'inProgressVisits', href: '/service/visits?status=on_site' },
     { key: 'responseBreaches', href: '/service/visits', tone: 'warn' },
-    { key: 'awaitingReview', href: '/approvals' },
+    { key: 'awaitingReview', href: APPROVALS_HOME_HREF },
     { key: 'readyToInvoice', href: '/service/jobs' },
     { key: 'quotesAwaitingAnswer', href: '/service/requests?status=quoted' },
     { key: 'activeAgreements', href: '/service/agreements' },

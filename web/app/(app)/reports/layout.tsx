@@ -1,7 +1,7 @@
 /**
- * Reports layout. Report transactions open their REAL native flyout via the
- * owning module (see TxnLink → `/ap/bills?doc=`, `/journal?entry=`, …), so there is no
- * reports-only overlay to mount here.
+ * Reports layout. Report transactions open their native record drawer over the
+ * current page through the shell-level report drawer host (see TxnLink), so
+ * there is no reports-only overlay to mount here.
  */
 import { requirePermission } from '../../../lib/authz'
 

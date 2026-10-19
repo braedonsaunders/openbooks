@@ -4,7 +4,7 @@ import test from "node:test";
 // jsdom first: the drawer reads browser globals at render.
 const { JSDOM } = await import("jsdom");
 const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/revenue/contract-costs/test-asset",
+  url: "http://localhost:4800/revenue/contract-costs?asset=asset-1",
 });
 const globals = globalThis as Record<string, unknown>;
 const domWindow = dom.window as unknown as Record<string, unknown>;
@@ -29,6 +29,20 @@ registerHooks({
         // Passthrough links: the drawer test asserts the per-period and
         // trail entry hrefs survive, so the stub must keep them.
         url: "data:text/javascript,export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
+      };
+    }
+    if (specifier === "next/navigation") {
+      // Posted-entry links compose on the drawer's own address, so the
+      // navigation double reports the open contract-cost drawer.
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export function useRouter(){return{push(){},refresh(){},replace(){},back(){},forward(){}}}" +
+              "export function usePathname(){return '/revenue/contract-costs'}" +
+              "export function useSearchParams(){return new URLSearchParams('asset=asset-1')}",
+          ),
       };
     }
     return next(specifier, context);
@@ -152,8 +166,8 @@ test("schedule and journal trail render in separate panels with working entry li
   assert.ok(journalHeading, "the trail keeps its title");
   assert.ok(journalHeading.closest("div[hidden]"), "the journal body starts hidden");
 
-  const postedLink = document.querySelector("a[href='/accounting/journal?entry=je-1']");
-  assert.ok(postedLink, "the posted period keeps its journal link on the schedule");
+  const postedLink = document.querySelector("a[href='/revenue/contract-costs?asset=asset-1&txn=je-1']");
+  assert.ok(postedLink, "the posted period opens its posted journal entry over the drawer");
   assert.equal(
     postedLink.closest("div[hidden]"),
     null,
@@ -170,8 +184,8 @@ test("schedule and journal trail render in separate panels with working entry li
     null,
     "selecting the journal tab shows the trail",
   );
-  const trailLink = document.querySelector("a[href='/accounting/journal?entry=je-0']");
-  assert.ok(trailLink, "the trail keeps its own entry link");
+  const trailLink = document.querySelector("a[href='/revenue/contract-costs?asset=asset-1&txn=je-0']");
+  assert.ok(trailLink, "the trail opens each posted journal entry over the drawer");
   assert.equal(trailLink.closest("div[hidden]"), null, "the trail link shows on its panel");
   assert.ok(
     headingOf("Amortization schedule")?.closest("div[hidden]"),
@@ -188,7 +202,7 @@ test("schedule and journal trail render in separate panels with working entry li
     "returning restores the schedule panel",
   );
   assert.ok(
-    document.querySelector("a[href='/accounting/journal?entry=je-1']"),
+    document.querySelector("a[href='/revenue/contract-costs?asset=asset-1&txn=je-1']"),
     "the per-period entry link survives the round trip",
   );
 });

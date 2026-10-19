@@ -11,6 +11,7 @@ import {
   type RegisteredListColumn,
 } from "@/components/registered-list-table";
 import { AsyncUrlDrawer } from "@/components/async-url-drawer";
+import { JournalEntryLink } from "@/components/journal-entry-link";
 import { InventoryTrackingFields } from "@/components/inventory-tracking-fields";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useDirtyClose } from "@/lib/use-dirty-close";
@@ -80,12 +81,9 @@ const headings: Record<InventoryInquiry, string[]> = {
 function nativeLink(row: Row, key: string, label: string) {
   if (key === "journal_entry_id" && row[key])
     return (
-      <Link
-        className="text-teal-700 hover:underline"
-        href={`/journal?entry=${row[key]}`}
-      >
+      <JournalEntryLink className="text-teal-700 hover:underline" entryId={String(row[key])}>
         {label}
-      </Link>
+      </JournalEntryLink>
     );
   if (key === "document" && row.document_id)
     return (

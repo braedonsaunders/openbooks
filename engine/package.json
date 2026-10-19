@@ -624,6 +624,7 @@
     "./manufacturing/work-orders": "./src/manufacturing/work-orders.ts",
     "./testing/navigation/local-navigation": "./src/navigation/local-navigation.ts",
     "./navigation/nav-registry": "./src/navigation/nav-registry.ts",
+    "./navigation/approvals-home": "./src/navigation/approvals-home.ts",
     "./nonprofit/encumbrances": "./src/nonprofit/encumbrances.ts",
     "./nonprofit/errors": "./src/nonprofit/errors.ts",
     "./nonprofit/frameworks": "./src/nonprofit/frameworks.ts",

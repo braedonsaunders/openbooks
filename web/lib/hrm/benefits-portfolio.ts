@@ -57,6 +57,7 @@ import type {
 export type { ProgramFamily, ProgramStatus, DeliveryMethod, Valuation, BenefitMetric, MetricScope, Allocation, Frequency, PeriodBasis, AwardStatus }
 import { parseCivilDate } from '@openbooks/engine/hrm/benefits/calculation'
 import { canonicalDecimal } from '@openbooks/engine/money/decimal'
+import { APPROVALS_HOME_HREF } from '@openbooks/engine/navigation/approvals-home'
 import { decimalNullCause, suppliedValue } from '../payroll-decimal-refusal'
 
 /** Benefits destinations separate the program catalog, employee relationships and delivery work. */
@@ -395,7 +396,7 @@ export function buildAttentionQueue(input: {
       key: 'pending-awards',
       tone: 'warning',
       text: input.format('portfolio.attention.pendingAwards', { count: input.pendingAwards }),
-      href: '/approvals',
+      href: APPROVALS_HOME_HREF,
     })
   }
   if (input.queuedAwards > 0) {

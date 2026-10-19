@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/platform/database'
 import { listEnrollmentPlanOptions, type EnrollmentSummary } from '@openbooks/engine/hrm/benefits'
+import { APPROVALS_HOME_HREF } from '@openbooks/engine/navigation/approvals-home'
 import type { Authz } from '../authz'
 import type { EnrollmentDrawerRecord } from '../../app/(app)/hrm/benefits/EnrollmentDrawer'
 import { notFound } from 'next/navigation'
@@ -31,7 +32,7 @@ export async function loadBenefitEnrollmentRecord(authz: Authz, selected: Enroll
       statusLabel: t(`benefits.statusNames.${selected.status}`), matchEligible: current.match_eligible,
       classes: plan?.classes ?? (selected.classKey ? [{ value: selected.classKey, label: selected.coverageLabel ?? selected.classKey }] : []),
       rules, terms: terms.rows.map(({ ruleId, electionMode, electedRate, declaredPeriodsPerYear }) => ({ ruleId, electionMode, electedRate, declaredPeriodsPerYear })),
-      approvalHref: current.flow_run_id ? '/inbox' : null,
+      approvalHref: current.flow_run_id ? APPROVALS_HOME_HREF : null,
     }
     return { record, canChange }
 }

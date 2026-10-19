@@ -1,6 +1,7 @@
 import { requireCompletedSubmissionRouting } from '../../flows/submission-routing-proof.ts';
 import { awardDeliveryPolicy, readAwardDeliveryPolicy } from './award-delivery-policy.ts';
 import { addCalendarDays } from '../../platform/civil-date.ts';
+import { APPROVALS_HOME_HREF } from '../../navigation/approvals-home.ts';
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
 import { sql } from "drizzle-orm";
 import { awardPayrollProcessedSql } from "./payroll-delivery-evidence.ts";
@@ -103,7 +104,7 @@ function toAward(row: Record<string, unknown>): BenefitAward {
     submittedBy: row.submittedBy != null ? String(row.submittedBy) : null,
     submittedAt: row.submittedAt != null ? String(row.submittedAt) : null,
     decisionSnapshot: row.decisionSnapshot != null ? row.decisionSnapshot as Record<string, unknown> : null,
-    approvalHref: status === "pending" && row.flowRunId != null ? "/approvals" : null,
+    approvalHref: status === "pending" && row.flowRunId != null ? APPROVALS_HOME_HREF : null,
     approvedBy: row.approvedBy != null ? String(row.approvedBy) : null,
     approvedAt: row.approvedAt != null ? String(row.approvedAt) : null,
     createdBy: row.createdBy != null ? String(row.createdBy) : null,

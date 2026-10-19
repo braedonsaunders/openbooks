@@ -126,9 +126,9 @@ for (const family of ['reward', 'allowance'] as const) test(`a fixed ${family} c
 test('pending rewards use native Approvals rather than a local approval bypass', async (t) => {
   const seed = drawer as unknown as { award: Record<string, unknown>; timelineEmpty: string }
   await render(t, false, (async () => Response.json({ history: [], approvalState: { pendingWith: [], status: 'pending' }, neverSubmitted: false })) as typeof fetch,
-    { ...seed, award: { ...seed.award, status: 'pending', approvalHref: '/approvals', flowRunId: 'native-flow' } })
+    { ...seed, award: { ...seed.award, status: 'pending', approvalHref: '/inbox', flowRunId: 'native-flow' } })
   const approval = Array.from(document.querySelectorAll('a')).find((anchor) => anchor.textContent?.trim() === 'Open Approvals')
-  assert.equal(approval?.getAttribute('href'), '/approvals')
+  assert.equal(approval?.getAttribute('href'), '/inbox')
   assert.ok(!Array.from(document.querySelectorAll('button')).some((button) => button.textContent?.trim() === 'Approve'))
 })
 
@@ -206,7 +206,7 @@ test('no-approval submission states readiness without inventing an approver or r
   let reads = 0
   await render(t, false, (async () => { reads++; throw new Error('No workflow history exists') }) as typeof fetch, { ...seed, award: { ...seed.award, flowRunId: null, decisionSnapshot: { mode: 'not_required' } } })
   assert.ok(document.body.textContent?.includes('No approvals required. The authorized submission was recorded'))
-  assert.ok(!document.querySelector('a[href="/approvals"]'))
+  assert.ok(!document.querySelector('a[href="/inbox"]'))
   assert.equal(reads, 0)
 })
 

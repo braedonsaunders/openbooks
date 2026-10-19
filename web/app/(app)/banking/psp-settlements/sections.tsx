@@ -28,6 +28,7 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { promptDialog } from '@/lib/prompt'
 import { useAppAction } from '@/lib/use-app-action'
 import { DateField } from '@/components/date-field'
+import { JournalEntryLink } from '@/components/journal-entry-link'
 
 const SETTLEMENT_PROVIDERS = [
   'stripe',
@@ -55,12 +56,7 @@ export function settlementDocumentHref(line: {
   documentId: string | null
   documentKind: string | null
   documentNumber: string | null
-  journalEntryId?: string | null
-  journalEntryNumber?: string | null
 }): string | null {
-  // A line recognised by journal points at the entry, not a document: the
-  // Document cell stays a working link for journal-booked sales too.
-  if (line.journalEntryId && line.journalEntryNumber) return `/journal?entry=${encodeURIComponent(line.journalEntryId)}`
   if (!line.documentId || !line.documentNumber) return null
   if (line.documentKind === 'customer_payment') return `/receipts?payment=${encodeURIComponent(line.documentId)}`
   if (line.documentKind === 'customer_invoice') return `/ar/invoices?doc=${encodeURIComponent(line.documentId)}`
@@ -1705,6 +1701,16 @@ function SettlementDetailBody({
                   <TableCell>
                     <span className="inline-flex flex-wrap items-center gap-2">
                       {(() => {
+                        // A line recognised by journal points at the posted
+                        // entry, not a document: the Document cell stays a
+                        // working link for journal-booked sales too.
+                        if (line.journalEntryId && line.journalEntryNumber) {
+                          return (
+                            <JournalEntryLink entryId={line.journalEntryId} className="text-teal-700 hover:underline dark:text-teal-300">
+                              {line.journalEntryNumber}
+                            </JournalEntryLink>
+                          )
+                        }
                         const href = settlementDocumentHref(line)
                         const label = line.journalEntryNumber ?? line.documentNumber ?? '—'
                         return href ? (

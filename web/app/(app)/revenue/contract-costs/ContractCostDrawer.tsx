@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
 import {
   Badge,
   DisclosureSection,
@@ -16,6 +15,7 @@ import {
 } from "@openbooks/ui";
 import { DrawerTabStrip } from "../../../../components/drawer-tab-strip";
 import { useMoney } from "@/components/money-provider";
+import { JournalEntryLink } from "@/components/journal-entry-link";
 import type { ContractCostAssetPayload } from "./view";
 import { ImpairAssetButton } from "./ImpairAssetButton";
 import { LinkAssetButton } from "./LinkAssetButton";
@@ -124,12 +124,12 @@ export function ContractCostDrawer({
                     </TableCell>
                     <TableCell className="text-right">
                       {line.posted && line.entryId ? (
-                        <Link
-                          href={`/accounting/journal?entry=${line.entryId}`}
+                        <JournalEntryLink
+                          entryId={line.entryId}
                           className="font-medium text-teal-700 dark:text-teal-300"
                         >
                           {t("drawer.viewEntry")}
-                        </Link>
+                        </JournalEntryLink>
                       ) : (
                         "—"
                       )}
@@ -149,12 +149,12 @@ export function ContractCostDrawer({
                   <span className="text-slate-600 dark:text-slate-400">
                     {t(`event.${entry.origin}`)} · {entry.postingDate} · {entry.periodName}
                   </span>
-                  <Link
-                    href={`/accounting/journal?entry=${entry.id}`}
+                  <JournalEntryLink
+                    entryId={entry.id}
                     className="font-medium text-teal-700 dark:text-teal-300"
                   >
                     {t("drawer.viewEntry")}
-                  </Link>
+                  </JournalEntryLink>
                 </li>
               ))}
             </ul>

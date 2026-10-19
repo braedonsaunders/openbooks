@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
 import { lockFlowSubjectDecision } from "../../flows/decision-lock.ts";
 import { cancelDispatchRuns } from "../../flows/dispatch-result.ts";
+import { APPROVALS_HOME_HREF } from "../../navigation/approvals-home.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { addCalendarDays, addMonthsClamped, businessToday } from "../../platform/business-date.ts";
 import {
@@ -102,7 +103,7 @@ function toEnrollmentDTO(row: Record<string, unknown>): EnrollmentDTO {
     electedBy: row.electedBy != null ? String(row.electedBy) : null,
     endedReason: row.endedReason != null ? String(row.endedReason) : null,
     flowRunId: row.flowRunId == null ? null : String(row.flowRunId),
-    approvalHref: status === "pending_approval" && row.flowRunId != null ? "/approvals" : null,
+    approvalHref: status === "pending_approval" && row.flowRunId != null ? APPROVALS_HOME_HREF : null,
   };
 }
 

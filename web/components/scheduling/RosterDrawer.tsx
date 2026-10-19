@@ -7,6 +7,7 @@ import { CalendarClock, ExternalLink, FileUp, RefreshCw, Repeat2 } from 'lucide-
 import { Button, Drawer, Input, Select, cn } from '@openbooks/ui'
 import { boardHasCapability } from '@openbooks/engine/schedule-boards/board-types'
 import type { ScheduleBoard } from '@openbooks/engine/schedule-boards/boards'
+import { APPROVALS_HOME_HREF } from '@openbooks/engine/navigation/approvals-home'
 import { DrawerTabStrip } from '../drawer-tab-strip'
 import { DateField } from '../date-field'
 import { promptDialog } from '../../lib/prompt'
@@ -305,7 +306,7 @@ function RequestsPanel({ boardId }: { boardId: string }) {
               <p className="text-slate-500">{item.reason}</p>
               {item.releasedWithoutApproval ? <p className="text-slate-400">{t('roster.requests.noApproval')}</p> : null}
               {item.decidedByName ? <p className="text-slate-400">{t('roster.requests.decidedBy', { name: item.decidedByName })}{item.decisionReason ? ` · ${item.decisionReason}` : ''}</p> : null}
-              {item.status === 'pending' && item.flowGated ? <Link href="/approvals" className="inline-flex items-center gap-1 font-medium text-teal-700 hover:underline dark:text-teal-300">{t('roster.requests.openApprovals')}<ExternalLink className="h-3 w-3" /></Link> : null}
+              {item.status === 'pending' && item.flowGated ? <Link href={APPROVALS_HOME_HREF} className="inline-flex items-center gap-1 font-medium text-teal-700 hover:underline dark:text-teal-300">{t('roster.requests.openApprovals')}<ExternalLink className="h-3 w-3" /></Link> : null}
             </li>
           ))}
         </ul>}

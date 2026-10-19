@@ -421,7 +421,7 @@ test('a managed shift roster adds its Roster tools, attendance badges and public
   const host = await mount(t, <SchedulingWorkspace {...props} board={roster.board as typeof people.board} initialWindow={roster as typeof people} />)
   assert.ok(host.textContent?.includes(messages.scheduling.attendance.short.late), 'the late arrival shows on the booking')
   assert.ok(host.textContent?.includes('1 change is waiting for a publication decision.'))
-  assert.ok(host.querySelector('a[href="/approvals"]'), 'a Flow-gated publication links to Approvals')
+  assert.ok(host.querySelector('a[href="/inbox"]'), 'a Flow-gated publication links to the approvals inbox')
   assert.equal([...host.querySelectorAll('button')].some((button) => button.textContent?.includes(messages.scheduling.publish.submit)), false,
     'no second publication is offered while one waits')
   const open = host.querySelector(`[aria-label="${rosterLabel}"]`) as HTMLButtonElement

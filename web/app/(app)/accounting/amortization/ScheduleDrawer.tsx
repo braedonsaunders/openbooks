@@ -20,6 +20,7 @@ import {
   UrlDrawer,
 } from '@openbooks/ui'
 import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
+import { JournalEntryLink } from '@/components/journal-entry-link'
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
 import type { AmortizationScheduleDrawerData } from './view'
@@ -130,9 +131,9 @@ export function ScheduleDrawer({ detail, canManage, closeHref, destinationAccoun
                     <TableCell className="text-right tabular-nums">{amount(period.planned)}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {period.journalEntryId ? (
-                        <Link href={`/journal?entry=${period.journalEntryId}`} className="font-medium text-teal-700 dark:text-teal-300">
+                        <JournalEntryLink entryId={period.journalEntryId} className="font-medium text-teal-700 dark:text-teal-300">
                           {amount(period.posted)}
-                        </Link>
+                        </JournalEntryLink>
                       ) : (
                         '—'
                       )}
@@ -160,9 +161,9 @@ export function ScheduleDrawer({ detail, canManage, closeHref, destinationAccoun
                   <p className="mt-1 text-xs text-slate-500">{t('drawer.balanceChange', { amount: amount(event.balanceDelta) })}</p>
                 )}
                 {event.journalEntryId && (
-                  <Link href={`/journal?entry=${event.journalEntryId}`} className="mt-1 inline-block text-xs font-medium text-teal-700 dark:text-teal-300">
+                  <JournalEntryLink entryId={event.journalEntryId} className="mt-1 inline-block text-xs font-medium text-teal-700 dark:text-teal-300">
                     {t('drawer.viewEntry')}
-                  </Link>
+                  </JournalEntryLink>
                 )}
               </li>
             ))}

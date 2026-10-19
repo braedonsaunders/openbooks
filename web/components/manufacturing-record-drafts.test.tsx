@@ -6,7 +6,7 @@ import {bootJsdomEnvironment,setJsdomInput} from '../testing/jsdom-env.ts';
 await bootJsdomEnvironment({url:'http://localhost/manufacturing/routings',event:'jsdom',matchMediaMatches:false});
 const navigation:string[]=[];
 Object.assign(globalThis,{__manufacturingRecordRouter:{push(href:string){navigation.push(href);},replace(href:string){navigation.push(href);},refresh(){}}});
-stubModules({navigation:{source:'export function useRouter(){return globalThis.__manufacturingRecordRouter}'},intl:false,authz:false,features:false,
+stubModules({navigation:{pathname:'/manufacturing/routings',routerSource:'export function useRouter(){return globalThis.__manufacturingRecordRouter}'},intl:false,authz:false,features:false,
   extra:{sonner:'export const toast={success(){},error(){}};'}});
 const React=await import('react');Object.assign(globalThis,{React});
 const {act}=React,{createRoot}=await import('react-dom/client');

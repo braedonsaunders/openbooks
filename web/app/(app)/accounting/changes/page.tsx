@@ -8,6 +8,7 @@ import { db } from "@openbooks/engine/platform/db";
 import type { FinancialChange } from "@openbooks/engine/platform/financial-changes";
 import { PageHeader, UrlDrawer, Badge } from "@openbooks/ui";
 import { ListPageLayout } from "@/components/page-layout";
+import { JournalEntryLink } from "@/components/journal-entry-link";
 import { EntityListView } from "@/components/entity-list-view";
 import { ModuleHomeTabs } from "@/components/module-home/ui";
 import { groupTabs } from "@/components/module-home/group-tabs";
@@ -250,12 +251,12 @@ export default async function AccountingEvents({
                     {Array.isArray(row.result.entryIds)
                       ? row.result.entryIds.map((entry) => (
                           <p key={String(entry)}>
-                            <Link
+                            <JournalEntryLink
                               className="underline"
-                              href={`/journal?entry=${String(entry)}`}
+                              entryId={String(entry)}
                             >
                               {t("lifecycle.adjustmentJournal")}
-                            </Link>
+                            </JournalEntryLink>
                           </p>
                         ))
                       : null}
