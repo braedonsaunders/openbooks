@@ -1,24 +1,24 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { addCalendarDays, addMonthsStart, calendarQuarterBounds, startOfMonth } from '@openbooks/engine/platform/civil-date'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { ActionError, kindForStatus, transportError, type ActionResult } from '@braedonsaunders/appkit-errors'
-import { Badge, Button, Card, CardContent, EmptyState, Label, PageHeader, Select } from '@openbooks/ui'
+import { Badge, Button, Card, CardContent, EmptyState, Label, Select } from '@openbooks/ui'
 import { RecordTabs } from '@/components/module-home/record-tabs'
 import { KpiStrip } from '@/components/kpi-strip'
 import { PagedTable, type PagedColumn } from '@/components/paged-table'
-import { ListPageLayout } from '@/components/page-layout'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { normalizeDecimal, roundMoney } from '@openbooks/engine/money'
 import { formatExactPercent } from '@/lib/format'
 import { formatDecimal } from '@/lib/money-format'
 import { useAppAction } from '@/lib/use-app-action'
 import { DateField } from '@/components/date-field'
+import { mergeOssUrlState, readOssUrlState, type OssEvidenceTab, type OssScheme } from './view-state'
 
-type Scheme = 'union' | 'non_union' | 'ioss'
+type Scheme = OssScheme
 
 type ExportFormat = 'generic' | 'DE' | 'FR' | 'NL' | 'IE'
 
@@ -94,12 +94,16 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
   const tc = useTranslations('common')
   const locale = useLocale()
   const router = useRouter()
+  const pathname = usePathname() ?? '/tax/oss'
+  const searchParams = useSearchParams()
   const today = useBusinessToday()
-  const defaults = useMemo(() => schemePeriod('union', today), [today])
-  const [activeTab, setActiveTab] = useState<'return' | 'conflicts' | 'fx' | 'threshold'>('return')
-  const [scheme, setScheme] = useState<Scheme>('union')
-  const [from, setFrom] = useState(defaults.from)
-  const [to, setTo] = useState(defaults.to)
+  const defaults = useMemo(() => ({
+    union: schemePeriod('union', today),
+    non_union: schemePeriod('non_union', today),
+    ioss: schemePeriod('ioss', today),
+  }), [today])
+  const search = searchParams.toString()
+  const [state, setState] = useState(() => readOssUrlState(new URLSearchParams(search), defaults))
   const [result, setResult] = useState<OssResult | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [format, setFormat] = useState<ExportFormat>('generic')
@@ -109,6 +113,16 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
   const [evidence, setEvidence] = useState<FxEvidenceRow[] | null>(null)
   const { busy, execute } = useAppAction()
 
+  useEffect(() => {
+    setState(readOssUrlState(new URLSearchParams(search), defaults))
+  }, [search, defaults])
+
+  function updateUrl(updates: Partial<{ scheme: Scheme; from: string; to: string; tab: OssEvidenceTab }>) {
+    const query = mergeOssUrlState(searchParams.toString(), updates)
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    setState((current) => ({ ...current, ...updates }))
+  }
+
   async function readJson<T>(url: string): Promise<T> {
     const res = await fetch(url)
     if (!res.ok) throw new Error(await readApiErrorMessage(res, t('contextUnavailable')))
@@ -116,7 +130,7 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
   }
 
   async function refreshContext(next: OssResult) {
-    const params = new URLSearchParams({ scheme, from, to })
+    const params = new URLSearchParams({ scheme: state.scheme, from: state.from, to: state.to })
     const year = Number(next.to.slice(0, 4))
     setConflicts(null)
     setTurnover(null)
@@ -140,7 +154,7 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
 
   async function runPrepare(): Promise<ActionResult<OssResult>> {
     try {
-      const params = new URLSearchParams({ scheme, from, to })
+      const params = new URLSearchParams({ scheme: state.scheme, from: state.from, to: state.to })
       const res = await fetch(`/api/tax/oss-returns?${params.toString()}`)
       if (!res.ok) {
         return {
@@ -195,16 +209,14 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
   ]
 
   return (
-    <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} />}>
-      <div className="grid grid-cols-[12rem_10rem_10rem_auto] items-end gap-3">
-        <div className="space-y-1.5">
+    <>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-full space-y-1.5 sm:w-48">
           <Label>{t('scheme')}</Label>
-          <Select value={scheme} disabled={busy} onChange={(event) => {
+          <Select value={state.scheme} disabled={busy} onChange={(event) => {
             const next = event.target.value as Scheme
-            const period = schemePeriod(next, /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : today)
-            setScheme(next)
-            setFrom(period.from)
-            setTo(period.to)
+            const period = schemePeriod(next, state.from || today)
+            updateUrl({ scheme: next, from: period.from, to: period.to })
             setResult(null)
             setFailure(null)
           }}>
@@ -213,13 +225,13 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
             <option value="ioss">{t('schemes.ioss')}</option>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="w-full space-y-1.5 sm:w-40">
           <Label>{t('from')}</Label>
-          <DateField value={from} disabled={busy} onChange={(value) => { setFrom(value); setResult(null); setFailure(null) }} />
+          <DateField value={state.from} disabled={busy} onChange={(value) => { updateUrl({ from: value }); setResult(null); setFailure(null) }} />
         </div>
-        <div className="space-y-1.5">
+        <div className="w-full space-y-1.5 sm:w-40">
           <Label>{t('to')}</Label>
-          <DateField value={to} disabled={busy} onChange={(value) => { setTo(value); setResult(null); setFailure(null) }} />
+          <DateField value={state.to} disabled={busy} onChange={(value) => { updateUrl({ to: value }); setResult(null); setFailure(null) }} />
         </div>
         <Button disabled={busy} onClick={() => void prepare()}>
           {busy ? t('preparing') : t('prepare')}
@@ -236,8 +248,8 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
       {result ? (
         <RecordTabs
           label={t('title')}
-          active={activeTab}
-          onChange={setActiveTab}
+          active={state.tab}
+          onChange={(tab) => updateUrl({ tab })}
           tabs={[
             { key: 'return', label: t('tabs.return') },
             { key: 'conflicts', label: t('tabs.conflicts'), count: conflicts?.length },
@@ -245,13 +257,13 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
             { key: 'threshold', label: t('tabs.threshold') },
           ]}
         >
-          {contextErrors[activeTab as 'conflicts' | 'fx' | 'threshold'] ? (
+          {contextErrors[state.tab as 'conflicts' | 'fx' | 'threshold'] ? (
             <div role="alert" className="space-y-2">
-              <p>{contextErrors[activeTab as 'conflicts' | 'fx' | 'threshold']}</p>
+              <p>{contextErrors[state.tab as 'conflicts' | 'fx' | 'threshold']}</p>
               <Button variant="outline" size="sm" onClick={() => void refreshContext(result)}>{tc('actions.retry')}</Button>
             </div>
           ) : null}
-          {activeTab === 'return' ? <div className="space-y-4">
+          {state.tab === 'return' ? <div className="space-y-4">
           <KpiStrip
             items={[
               { label: t('totalBase'), value: formatDecimal(locale, result.totalBase, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
@@ -278,7 +290,7 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
             </div>
             <Button variant="outline" asChild>
               <a
-                href={`/api/tax/oss-returns/export?${new URLSearchParams({ scheme, from, to, format }).toString()}`}
+                href={`/api/tax/oss-returns/export?${new URLSearchParams({ scheme: state.scheme, from: state.from, to: state.to, format }).toString()}`}
                 download
               >
                 {t('export')}
@@ -287,7 +299,7 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">{t(`exportNotes.${format}`)}</p>
           </div> : null}
-          {activeTab === 'conflicts' && !contextErrors.conflicts ? (
+          {state.tab === 'conflicts' && !contextErrors.conflicts ? (
             (conflicts?.length ?? 0) > 0 ? (
             <Card>
               <CardContent className="space-y-2 py-4">
@@ -323,7 +335,7 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
             </Card>
           ) : conflicts === null ? <p role="status">{tc('feedback.loading')}</p> : <EmptyState title={t('conflicts.clearTitle')} description={t('conflicts.clearDescription')} />
           ) : null}
-          {activeTab === 'fx' && !contextErrors.fx ? (
+          {state.tab === 'fx' && !contextErrors.fx ? (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('fx.title')}</p>
                 {(evidence?.length ?? 0) > 0 ? (
@@ -338,7 +350,7 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
                 )}
               </div>
             ) : null}
-          {activeTab === 'threshold' && !contextErrors.threshold ? (turnover ? (
+          {state.tab === 'threshold' && !contextErrors.threshold ? (turnover ? (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('threshold.title')}</p>
                 <div className="flex items-center gap-2">
@@ -374,6 +386,6 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
             ) : <p role="status" className="text-sm text-slate-500">{tc('feedback.loading')}</p>) : null}
         </RecordTabs>
       ) : null}
-    </ListPageLayout>
+    </>
   )
 }
