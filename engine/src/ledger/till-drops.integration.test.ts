@@ -207,14 +207,22 @@ test("till drops use the selected subsidiary functional currency", { skip: !DB }
                            'defaultCashAccountId', ${branchTillId}))
        where id = ${org.orgId}`));
     await draftSale(org, branchTillId, "2026-07-12", "40.0000", subsidiaryId, "USD");
-    const drop = await recordTillDrop(org.orgId, actorId, {
-      tillAccountId: branchTillId,
-      amount: "40.0000",
-      date: "2026-07-12",
-      bankAccountId: branchBankId,
-      slipNumber: "SLIP-USD",
-      subsidiaryId,
-    }, { key: randomUUID(), allowedSubsidiaryIds: new Set([subsidiaryId]) });
+    let drop: Awaited<ReturnType<typeof recordTillDrop>>;
+    try {
+      drop = await recordTillDrop(org.orgId, actorId, {
+        tillAccountId: branchTillId,
+        amount: "40.0000",
+        date: "2026-07-12",
+        bankAccountId: branchBankId,
+        slipNumber: "SLIP-USD",
+        subsidiaryId,
+      }, { key: randomUUID(), allowedSubsidiaryIds: new Set([subsidiaryId]) });
+    } catch (error) {
+      const detail = error instanceof Error
+        ? `${error.name}: ${error.message.replace(/\s+/g, " ")}; cause: ${error.cause instanceof Error ? error.cause.message.replace(/\s+/g, " ") : String(error.cause ?? "")}`
+        : String(error);
+      assert.fail(`Recording the subsidiary-currency till drop failed: ${detail}`);
+    }
     assert.equal(drop.posted, true, drop.postRefusal ?? "");
     const document = (await withBypassContext(() => db.execute<{ currency: string; subsidiary_id: string }>(sql`
       select currency, subsidiary_id from documents where org_id=${org.orgId} and id=${drop.transferId}`))).rows[0];
