@@ -9,7 +9,8 @@ import { sql } from "drizzle-orm";
 import { toUnits } from "../money/money.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { buildCapTable, conversionOnVoidedTerms, holdingState, vestingTermsOf, voidedSecurities, type CapTable } from "./cap-table.ts";
+import { buildCapTable, holdingState, vestingTermsOf, voidedSecurities, type CapTable } from "./cap-table.ts";
+import { conversionOnVoidedTermsAsRecorded } from "./conversion-review.ts";
 import { assertEquityReadable, loadLegalEntity, requireEquityReader, type LegalEntity } from "./internal.ts";
 import { equityPostingsDue, type EquityPostingsDue } from "./period-postings.ts";
 import { floorShares, formatPercent, rational } from "./quantities.ts";
@@ -210,7 +211,7 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
     const numberOf = new Map(book.securities.map((row) => [row.id, row.securityNumber]));
     for (const security of issued) {
       if (security.kind !== "safe" || !security.mfn) continue;
-      const invalid = conversionOnVoidedTerms(book, security, asOf);
+      const invalid = await conversionOnVoidedTermsAsRecorded(db, orgId, book, security, asOf, entity.currency);
       if (!invalid) continue;
       attention.push({
         kind: "conversion_terms_void", securityId: security.id, securityNumber: security.securityNumber, holderName: nameOf(security.holderPartyId),

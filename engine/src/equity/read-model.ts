@@ -14,7 +14,6 @@ import {
   buildCapTable,
   conversionClassOf,
   conversionPrice,
-  conversionOnVoidedTerms,
   convertibleState,
   effectiveConvertibleTerms,
   electionInForce,
@@ -29,6 +28,7 @@ import {
   type HoldingState,
 } from "./cap-table.ts";
 import { cumulativeCompensation, isCompensatory, totalCompensation } from "./compensation.ts";
+import { conversionOnVoidedTermsAsRecorded } from "./conversion-review.ts";
 import { EquityError } from "./errors.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, type LegalEntity } from "./internal.ts";
 import { restate, spotRate } from "./fx.ts";
@@ -323,7 +323,7 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
         posted: posted?.cumulative_amount ?? "0.0000",
       };
     }
-    const onVoided = convertible ? conversionOnVoidedTerms(book, security, input.asOf) : null;
+    const onVoided = convertible ? await conversionOnVoidedTermsAsRecorded(db, input.orgId, book, security, input.asOf, entity.currency) : null;
     const invalidConversionTerms: NonNullable<SecurityDetail["convertible"]>["invalidConversionTerms"] = onVoided
       ? { electionId: onVoided.electionId, sourceSecurityId: onVoided.sourceSecurityId, sourceSecurityNumber: numberOf.get(onVoided.sourceSecurityId) ?? "", sourceVoidedOn: onVoided.sourceVoidedOn }
       : null;
