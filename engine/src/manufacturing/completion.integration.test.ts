@@ -60,7 +60,7 @@ import { laborClearingReconciliation } from "../projects/labor-costing.ts";
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 type Fixture = { org: ScratchOrg; actorId: string; wipId: string; usageId: string; departmentId: string; postingDate: string };
 type Case = { name: string; run: (f: Fixture) => Promise<void> };
-function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> { return withBypassContext(() => db.transaction(work)); }
+function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> { return db.transaction(work); }
 async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
   try {
@@ -1852,7 +1852,7 @@ const redateCases: Case[] = [
 for (const scenario of redateCases) {
   test(`manufacturing completion date correction: ${scenario.name}`, { skip: !DB, concurrency: false }, async () => {
     const f = await setup();
-    try { await scenario.run(f); }
+    try { await withOrgContext(f.org.orgId, () => scenario.run(f)); }
     finally { await withBypassContext(() => dropScratchOrg(f.org.orgId)); }
   });
 }
@@ -1861,7 +1861,7 @@ for (const scenario of cases) {
   test(`manufacturing completion and reversal: ${scenario.name}`, { skip: !DB, concurrency: false }, async () => {
     const f = await setup();
     let failure: Error | undefined;
-    try { await scenario.run(f); }
+    try { await withOrgContext(f.org.orgId, () => scenario.run(f)); }
     catch (error) {
       failure=new Error(scenario.name + ": " + (error instanceof Error ? error.message : String(error)), { cause: error });
       throw failure;
