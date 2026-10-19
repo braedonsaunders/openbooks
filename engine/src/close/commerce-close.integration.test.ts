@@ -324,6 +324,66 @@ test("a parked order fails naming its exception code", { skip: !DB }, async () =
   }
 });
 
+test("commerce close checks honor subsidiary scope across queues and revenue balances", { skip: !DB }, async () => {
+  const fx = await seedCommerceOrg();
+  try {
+    const childId = randomUUID();
+    await withBypass(async () => {
+      await db.execute(sql`insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country)
+        values (${childId},${fx.org.orgId},${fx.org.subsidiaryId},'Commerce Child','CAD','CA')`);
+      await db.execute(sql`insert into channel_orders
+        (org_id,channel_id,external_id,external_number,shop_currency,presentment_currency,
+         subtotal_minor,tax_minor,shipping_minor,total_minor,financial_status,fulfilment_status,ordered_at,posting_status)
+        values (${fx.org.orgId},${fx.channelId},'scoped-pending','#SCOPED-PENDING','CAD','CAD',100,0,0,100,
+                'paid','unfulfilled',${`${DAY}T13:00:00Z`}::timestamptz,'pending'),
+               (${fx.org.orgId},${fx.channelId},'scoped-exception','#SCOPED-EXCEPTION','CAD','CAD',100,0,0,100,
+                'paid','unfulfilled',${`${DAY}T14:00:00Z`}::timestamptz,'exception')`);
+      await db.execute(sql`update channel_orders set exception_code='unmapped_sku',exception_reason='Needs mapping'
+        where org_id=${fx.org.orgId} and external_id='scoped-exception'`);
+      await db.execute(sql`insert into channel_order_events
+        (org_id,channel_id,order_id,kind,external_id,occurred_at,posting_status)
+        select org_id,channel_id,id,'fulfilment','scoped-pending-event',${`${DAY}T15:00:00Z`}::timestamptz,'pending'
+          from channel_orders where org_id=${fx.org.orgId} and external_id='1001'`);
+      const contractId = (await db.execute<{ id: string }>(sql`
+        insert into revenue_contracts (org_id,customer_id,contract_number,currency,scope,subsidiary_id)
+        values (${fx.org.orgId},${fx.org.customerId},'SCOPED-C','CAD','invoice',${fx.org.subsidiaryId}) returning id`)).rows[0]!.id;
+      const obligationId = (await db.execute<{ id: string }>(sql`
+        insert into performance_obligations
+          (org_id,contract_id,description,recognition_rule_id,allocated_price,deferred_account_id,status,created_at)
+        values (${fx.org.orgId},${contractId},'Scoped obligation',${fx.org.recognitionRuleId},100,
+                ${fx.org.accounts.deferred},'open',${`${DAY}T00:00:00Z`}::timestamptz) returning id`)).rows[0]!.id;
+      const scheduleId = (await db.execute<{ id: string }>(sql`
+        insert into recognition_schedules (org_id,obligation_id,book_id,status,total_amount)
+        values (${fx.org.orgId},${obligationId},${fx.org.bookId},'planned',100) returning id`)).rows[0]!.id;
+      await db.execute(sql`insert into recognition_schedule_lines (org_id,schedule_id,period_id,sequence,planned_amount)
+        values (${fx.org.orgId},${scheduleId},${fx.org.periodId},1,100)`);
+      const costContractId = (await db.execute<{ id: string }>(sql`
+        insert into revenue_contracts (org_id,customer_id,contract_number,currency,scope,subsidiary_id)
+        values (${fx.org.orgId},${fx.org.customerId},'CHILD-COST-C','CAD','invoice',${childId}) returning id`)).rows[0]!.id;
+      await db.execute(sql`insert into contract_cost_assets
+        (org_id,revenue_contract_id,cost_type,amount_minor,currency,capitalized_on,amort_start_on,amort_end_on,method,status)
+        values (${fx.org.orgId},${costContractId},'commission',10000,'CAD',${DAY}::date,${DAY}::date,'2027-06-30','straight_line','active')`);
+    });
+
+    const child = await withBypass(() => commerceCloseChecks(fx.org.orgId,
+      { ...SCOPE(fx.org), subsidiaryIds: [childId] }, { storefrontTotals: matchingProvider() }));
+    assert.equal(byCode(child, "commerce-orders-incomplete").count, 0);
+    assert.equal(byCode(child, "commerce-exceptions-open").count, 0);
+    assert.equal(byCode(child, "commerce-deferred-gap").count, 0);
+    assert.equal(byCode(child, "commerce-contract-cost-gap").count, 1);
+
+    const root = await withBypass(() => commerceCloseChecks(fx.org.orgId,
+      { ...SCOPE(fx.org), subsidiaryIds: [fx.org.subsidiaryId] }, { storefrontTotals: matchingProvider() }));
+    assert.equal(byCode(root, "commerce-orders-incomplete").count, 3);
+    assert.equal(byCode(root, "commerce-exceptions-open").count, 1);
+    assert.equal(byCode(root, "commerce-deferred-gap").count, 1);
+    assert.equal(byCode(root, "commerce-contract-cost-gap").count, 0);
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
 test("a stray journal to the gift liability fails naming the account", { skip: !DB }, async () => {
   const fx = await seedCommerceOrg();
   try {
@@ -436,24 +496,40 @@ test("an unrecognized plan without its deferral fails naming the account", { ski
   try {
     await withBypass(async () => {
       const contractId = (await db.execute<{ id: string }>(sql`
-        insert into revenue_contracts (org_id, customer_id, contract_number, currency, scope)
-        values (${fx.org.orgId}, ${fx.org.customerId}, 'C-1', 'USD', 'invoice') returning id`)).rows[0]!.id;
+        insert into revenue_contracts (org_id, customer_id, contract_number, currency, scope, subsidiary_id)
+        values (${fx.org.orgId}, ${fx.org.customerId}, 'C-1', 'USD', 'invoice', ${fx.org.subsidiaryId}) returning id`)).rows[0]!.id;
       const obligationId = (await db.execute<{ id: string }>(sql`
-        insert into performance_obligations (org_id, contract_id, description, recognition_rule_id, allocated_price, deferred_account_id, status)
-        values (${fx.org.orgId}, ${contractId}, 'Annual plan', ${fx.org.recognitionRuleId}, 1200, ${fx.org.accounts.deferred}, 'open')
+        insert into performance_obligations (org_id, contract_id, description, recognition_rule_id, allocated_price, deferred_account_id, status, created_at)
+        values (${fx.org.orgId}, ${contractId}, 'Annual plan', ${fx.org.recognitionRuleId}, 1200, ${fx.org.accounts.deferred}, 'open', ${`${DAY}T00:00:00Z`}::timestamptz)
         returning id`)).rows[0]!.id;
       const scheduleId = (await db.execute<{ id: string }>(sql`
         insert into recognition_schedules (org_id, obligation_id, book_id, status, total_amount)
         values (${fx.org.orgId}, ${obligationId}, ${fx.org.bookId}, 'planned', 1200) returning id`)).rows[0]!.id;
-      await db.execute(sql`
+      const lineId = (await db.execute<{ id: string }>(sql`
         insert into recognition_schedule_lines (org_id, schedule_id, period_id, sequence, planned_amount)
-        values (${fx.org.orgId}, ${scheduleId}, ${fx.org.periodId}, 1, 100)`);
+        values (${fx.org.orgId}, ${scheduleId}, ${fx.org.periodId}, 1, 100) returning id`)).rows[0]!.id;
+      const futureEntry = await postEntry(db, {
+        orgId: fx.org.orgId, bookId: fx.org.bookId, subsidiaryId: fx.org.subsidiaryId,
+        entryNumber: "FUTURE-RECOGNITION", postingDate: "2026-07-16", periodId: fx.org.periodId,
+        origin: "revenue_recognition", idempotencyKey: `future-recognition-${fx.org.orgId}`,
+        currency: "CAD", actorId: fx.actor,
+        lines: [
+          { accountId: fx.org.accounts.deferred, amount: "100.0000", currency: "CAD", txnAmount: "100.0000" },
+          { accountId: fx.org.accounts.revenue, amount: "-100.0000", currency: "CAD", txnAmount: "-100.0000" },
+        ],
+      });
+      await db.execute(sql`update recognition_schedule_lines set journal_entry_id=${futureEntry.entryId}
+        where org_id=${fx.org.orgId} and id=${lineId}`);
     });
     const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
     const deferred = byCode(checks, "commerce-deferred-gap");
     assert.equal(deferred.count, 1);
     const ties = (deferred.details as { ties: { gap: string }[] }).ties;
     assert.equal(ties[0]!.gap, "100.0000");
+    assert.equal((await withBypass(() => commerceCloseChecks(fx.org.orgId,
+      { ...SCOPE(fx.org), endsOn: "2026-07-15" }, { storefrontTotals: matchingProvider() })))
+      .find((check) => check.code === "commerce-deferred-gap")?.count, 1,
+      "a recognition posted after the close date remains in the as-of plan");
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }
