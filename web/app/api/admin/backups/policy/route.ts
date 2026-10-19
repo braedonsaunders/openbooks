@@ -50,6 +50,7 @@ const FREQUENCIES = new Set(["daily", "weekly", "monthly"]);
 export const PUT = defineRoute({
   permission: "admin.backups.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
 

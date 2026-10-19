@@ -90,6 +90,7 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
 export const GET = defineRoute({
   permission: "admin.backups.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
   params: z.object({ "id": z.string() }),
   handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
 });
