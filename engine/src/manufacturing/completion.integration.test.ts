@@ -439,7 +439,8 @@ const cases: Case[] = [
     await withBypassContext(()=>receiveInventory(f.org.orgId,f.actorId,{itemId:f.org.items.component,stockLocationId:otherStock,quantity:'1',unitCost:'3',subsidiaryId:otherEntity,offsetAccountId:f.org.accounts.clearing,date:f.org.date,lotId:raw}));
     const ownershipState=await counts(f);
     assert.deepEqual(await run(tx=>searchManufacturingGenealogySeeds(tx,f.org.orgId,f.actorId,{kind:'lot',q:'RAW-TRACE'},allowed)),[],'the seed picker cannot reveal an identity with a foreign owner');
-    assert.equal(await run(tx=>countManufacturingGenealogySeeds(tx,f.org.orgId,f.actorId,allowed)),0,'the directory count shares seed visibility');
+    assert.equal(await run(tx=>countManufacturingGenealogySeeds(tx,f.org.orgId,f.actorId,allowed)),3,
+      'only the three production output lots remain visible after the raw lot owner is excluded');
     await assert.rejects(run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'},allowed)),/not[ _]found/i);
     assert.deepEqual(await counts(f),ownershipState,'a trace seed cannot reveal a shared identifier whose current native owners are outside its authorized entities');
     assert.equal((await run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'}))).edges.length,2,'organization-wide authority retains the trace without inventing edges for ordinary receipts');
