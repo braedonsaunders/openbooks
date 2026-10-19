@@ -1302,7 +1302,7 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
     const key = `${filingAccountId ?? ""}:${quarter}`;
     const prior = byReturn.get(key);
     const sum = (field: keyof Omit<Form941Quarter, "quarter" | "filingAccountId">, value: unknown) =>
-      prior ? add(prior[field], num(value)) : num(value);
+      prior ? add(prior[field], num(value)) : normalizeMoney(num(value));
     byReturn.set(key, {
       quarter,
       filingAccountId,

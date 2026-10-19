@@ -1,3 +1,6 @@
+import { appendStatutoryHolidayEarningLines } from "./run-earning-lines.ts";
+import type { Line } from "./run-stub-records.ts";
+import { parseMoney } from "../money/brands.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SQL } from "drizzle-orm";
@@ -215,4 +218,25 @@ test("approved occurrence ownership binds the selected employment, employer, emp
   occurrenceDate = "2026-04-06";
   await assert.rejects(approvedHolidayOccurrenceDates(executor as never, occurrenceInput), /retained employee and holiday-date evidence/);
   await assert.rejects(approvedHolidayOccurrenceDates(executor as never, { ...occurrenceInput, employmentId: "unknown" }), /selected native employment/);
+});
+
+
+test("construction holiday pay includes paid vacation wages and excludes native overtime wages on a pay with no holiday", async () => {
+  const fx = database([active("2020-01-01")]);
+  const overtime = "10000000-0000-4000-8000-000000000006";
+  const lines: Line[] = [
+    { componentId: "10000000-0000-4000-8000-000000000007", kind: 'earning', description: 'Regular wages', amount: parseMoney('1000'), sequence: 10, classification: 'regular' },
+    { componentId: overtime, kind: 'earning', description: 'Overtime wages', amount: parseMoney('200'), sequence: 20, classification: 'overtime' },
+    { componentId: "10000000-0000-4000-8000-000000000008", kind: 'earning', description: 'Paid vacation wages', amount: parseMoney('40'), sequence: 40 },
+  ];
+  await appendStatutoryHolidayEarningLines(fx.executor, {
+    orgId: ORG, documentId: OTHER, employeePartyId: WORKER,
+    emp: { employment_id: EMPLOYMENT, display_name: 'Construction worker', pay_basis: 'hourly', labour_jurisdiction: null },
+    country: 'CA', subsidiaryId: EMPLOYER, province: 'MB',
+    run: { period_start: '2026-07-05', period_end: '2026-07-18', run_type: 'regular' },
+    payRate: null, statHolidayPay: true, oneOffRun: false, occupationClass: 'construction',
+    need: key => ({ id: key === 'overtime' ? overtime : OTHER }), lines, currentEarningLines: lines,
+  });
+  assert.equal(lines.length, 4);
+  assert.equal(lines[3]!.amount, '41.6000');
 });

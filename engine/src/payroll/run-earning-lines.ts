@@ -355,10 +355,13 @@ export async function appendStatutoryHolidayEarningLines(
     if (adjustments.some(adjustment => adjustment.replace_component === true
       && adjustment.system_key === "stat_holiday" && adjustment.kind === "earning")) return;
     // Class-based percent-of-pay rules (Manitoba construction s. 30) price
-    // the pay's regular wages: every earning line derived so far, before the
-    // holiday lines themselves land.
+    // the pay's regular wages, including paid vacation and excluding
+    // overtime and unpaid accruals, before holiday lines themselves land.
+    const overtimeComponentId = need("overtime", "earning").id;
     const periodRegularEarnings = lines
-      .filter((line) => line.kind === "earning")
+      .filter(line => line.kind === "earning" && !line.accrualOnly
+        && line.componentId !== overtimeComponentId
+        && line.classification !== "overtime" && line.classification !== "double_time")
       .reduce((total, line) => add(total, line.amount), "0");
     const holidayLines = await statutoryHolidayLinesForStub(tx, {
       orgId,

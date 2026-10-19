@@ -104,7 +104,11 @@ test("gift-card valuation feeds configured tax bases without adding cash; provid
     const posting = (await db.execute<{ wage: string; net: string; tax: string }>(sql`
       select settings#>>'{payroll,wageExpenseAccountId}' as wage,
              settings#>>'{payroll,netPayAccountId}' as net,
-             settings#>>'{payroll,taxPayableAccountId}' as tax
+             (select l.liability_account_id::text from pay_stub_lines l
+               join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+               join pay_components c on c.org_id=l.org_id and c.id=l.component_id
+               where s.org_id=${fx.orgId} and s.pay_run_document_id=${input.documentId}
+                 and c.country='CA' and c.system_key='income_tax') as tax
         from orgs where id = ${fx.orgId}
     `)).rows[0]!;
     assert.equal(sum(legs.filter(l => l.account_id === posting.wage).map(l => l.amount)), "2500.0000", "salary and benefit expense are each recognized once");
