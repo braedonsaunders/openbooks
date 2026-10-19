@@ -885,13 +885,11 @@ test(
 /* M-7 — T4 caps must refuse an unknown year, not silently not cap     */
 /* ------------------------------------------------------------------ */
 
-test("T4 slips refuse a year with no CRA maximums rather than filing uncapped", { skip: !DB }, async () => {
-  // caYearCaps returned null for anything but 2026, which made the box 24/26
-  // cap a no-op. A 2025 restatement, or anything filed after the calendar
-  // turns to 2027, went out uncapped and silently.
+test("T4 slips refuse a year with no published CRA rates rather than filing uncapped", { skip: !DB }, async () => {
+  // A year without a published CA edition cannot safely cap boxes 24 and 26.
   await assert.rejects(
-    t4Slips(randomUUID(), 2025),
-    /no CRA maximums for tax year 2025/,
+    t4Slips(randomUUID(), 2027),
+    /no T4127 constants for pay date 2027-07-01/,
   );
 });
 

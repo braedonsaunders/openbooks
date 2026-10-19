@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../../../platform/db.ts";
 import { add, cmp, mulPercent, neg } from "../../../money/money.ts";
 import { resolveEmployerFact } from "../../employer-facts.ts";
-import { RATES_2026_JAN } from "../rates.ts";
+import { canadianYearEndCaps } from "../yearend-caps.ts";
 import { PayrollError } from "../../error.ts";
 import type { PayrollFilingData } from "../../filing-registry.ts";
 import {
@@ -67,24 +67,14 @@ export const RL1_UNSUPPORTED_BOXES =
  * same discipline as `caYearCaps` and `ratesForPayDate`: an uncapped box G/I
  * silently misstates pensionable and insurable salary on every slip.
  *
- * 2026 values (Guide RL-1.G s. 5.9/5.11 rule, TP-1015.F-V (2026-01) p. 7
- * amounts): YMPE 74,600; additional maximum (YAMPE) 85,000; QPIP maximum
- * insurable earnings 103,000.
+ * The caps come from the filing year's published T4127 edition, which carries
+ * the authoritative QPP and QPIP maximums used by the RL-1 boxes.
  */
 export function rl1YearCaps(taxYear: number): {
   ympe: string; yampe: string; qpipMie: string;
 } {
-  if (taxYear === 2026) {
-    return {
-      ympe: RATES_2026_JAN.qpp.ympe,
-      yampe: RATES_2026_JAN.qpp.yampe,
-      qpipMie: RATES_2026_JAN.qpip.mie,
-    };
-  }
-  throw new PayrollError(
-    `no Revenu Québec maximums for tax year ${taxYear} — RL-1 boxes G and I cannot be capped. `
-    + "This year is not yet supported by the CA-QC pack; contact support.",
-  );
+  const caps = canadianYearEndCaps(taxYear);
+  return { ympe: caps.qppYmpe, yampe: caps.qppYampe, qpipMie: caps.qpipMie };
 }
 
 export interface Rl1Slip {
