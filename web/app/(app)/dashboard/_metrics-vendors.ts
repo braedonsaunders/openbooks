@@ -5,6 +5,8 @@ import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
 import { vendorData } from '@/lib/analytics/vendor-data'
 import { spendVelocityData } from '@/lib/analytics/spend-velocity-data'
 import { reportExpenseAccess } from '@/lib/expense-access'
+import { MissingExchangeRateError } from '@/lib/fx-presentation'
+import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import { concentrationBand, type ConcentrationBand } from '@/lib/analytics/vendor-concentration'
 import { englishCatalogMessage, type CatalogMessageFn } from '@/lib/analytics/catalog-strings'
 import { reportPeriodLabel } from '../../../lib/format'
@@ -52,6 +54,11 @@ export const EMPTY_VENDOR_WIDGET_METRICS: VendorWidgetMetrics = {
 }
 
 const unavailable = (reason: string): { available: false; reason: string } => ({ available: false, reason })
+
+function currencyRefusal(error: unknown): string {
+  if (error instanceof MissingExchangeRateError || error instanceof ReportCurrencyBasisError) return error.message
+  throw error
+}
 
 /**
  * Request-locale refusal reasons from the analytics catalog. Inside a
@@ -105,59 +112,87 @@ export async function loadVendorWidgetMetrics(
   const window = { from: period.from, to: period.to, label: shown.label }
   if (wantsVendor) {
     // The dashboard's own loader: same scope, same window, same figures.
-    const data = await vendorData(window, ctx.orgId, ctx.allowedSubsidiaryIds)
-    out.vendorPeriodLabel = data.period.label
-    // Concentration of nothing is not diversification: with no vendor spend
-    // the tile stays unavailable by name instead of reading green.
-    if (cmp(data.totals.spend, '0') <= 0) {
-      const t = await analyticsReason()
-      const noSpend = t('vendor.empty.noSpend')
-      out.concentrationHhi = unavailable(noSpend)
-      out.concentrationTop5Share = unavailable(noSpend)
-      out.concentrationBand = null
+    const result = await vendorData(window, ctx.orgId, ctx.allowedSubsidiaryIds)
+      .then((data) => ({ ok: true as const, data }), (error: unknown) => ({ ok: false as const, error }))
+    if (!result.ok) {
+      const refused = unavailable(currencyRefusal(result.error))
+      if (need('concentrationHhi')) out.concentrationHhi = refused
+      if (need('concentrationTop5Share')) out.concentrationTop5Share = refused
+      if (need('concentrationBand')) out.concentrationBand = null
+      if (need('vendorOnTimeRate')) out.vendorOnTimeRate = refused
+      if (need('vendorAvgDaysToPay')) out.vendorAvgDaysToPay = refused
+      if (need('vendorLateSpend')) out.vendorLateSpend = refused
+      if (need('vendorUnratedCount')) out.vendorUnratedCount = refused
+      if (need('vendorPeriodLabel')) out.vendorPeriodLabel = period.label
     } else {
-      out.concentrationHhi = { available: true, value: data.totals.hhiScaled }
-      out.concentrationTop5Share = { available: true, value: data.totals.top5SharePct }
-      out.concentrationBand = concentrationBand(
-        data.totals.hhiScaled,
-        data.config.hhiWarning,
-        data.config.hhiCritical,
-      )
-    }
-    if (need('vendorOnTimeRate', 'vendorOnTimeGoodRate', 'vendorAvgDaysToPay', 'vendorLateSpend', 'vendorUnratedCount')) {
-      const t = await analyticsReason()
-      const noHistory = t('vendor.payment.noHistory')
-      out.vendorOnTimeGoodRate = data.config.onTimeGoodRate
-      out.vendorOnTimeRate =
-        data.totals.onTimePct === null ? unavailable(noHistory) : { available: true, value: data.totals.onTimePct }
-      out.vendorAvgDaysToPay =
-        data.totals.avgDaysToPay === null ? unavailable(noHistory) : { available: true, value: data.totals.avgDaysToPay }
-      out.vendorLateSpend = { available: true, value: data.totals.lateSpend }
-      out.vendorUnratedCount = {
-        available: true,
-        value: data.rows.filter((row) => row.quadrant === 'unrated').length,
+      const data = result.data
+      out.vendorPeriodLabel = data.period.label
+      // Concentration of nothing is not diversification: with no vendor spend
+      // the tile stays unavailable by name instead of reading green.
+      if (cmp(data.totals.spend, '0') <= 0) {
+        const t = await analyticsReason()
+        const noSpend = t('vendor.empty.noSpend')
+        out.concentrationHhi = unavailable(noSpend)
+        out.concentrationTop5Share = unavailable(noSpend)
+        out.concentrationBand = null
+      } else {
+        out.concentrationHhi = { available: true, value: data.totals.hhiScaled }
+        out.concentrationTop5Share = { available: true, value: data.totals.top5SharePct }
+        out.concentrationBand = concentrationBand(
+          data.totals.hhiScaled,
+          data.config.hhiWarning,
+          data.config.hhiCritical,
+        )
+      }
+      if (need('vendorOnTimeRate', 'vendorOnTimeGoodRate', 'vendorAvgDaysToPay', 'vendorLateSpend', 'vendorUnratedCount')) {
+        const t = await analyticsReason()
+        const noHistory = t('vendor.payment.noHistory')
+        out.vendorOnTimeGoodRate = data.config.onTimeGoodRate
+        out.vendorOnTimeRate =
+          data.totals.onTimePct === null ? unavailable(noHistory) : { available: true, value: data.totals.onTimePct }
+        out.vendorAvgDaysToPay =
+          data.totals.avgDaysToPay === null ? unavailable(noHistory) : { available: true, value: data.totals.avgDaysToPay }
+        out.vendorLateSpend = { available: true, value: data.totals.lateSpend }
+        out.vendorUnratedCount = {
+          available: true,
+          value: data.rows.filter((row) => row.quadrant === 'unrated').length,
+        }
       }
     }
   }
   if (wantsSpend) {
     // The dashboard's own loader: same scope, same window, same figures.
-    const data = await spendVelocityData(ctx.orgId, window, ctx.allowedSubsidiaryIds, undefined, { expenseAccess: await reportExpenseAccess(ctx.authz) })
-    if (need('vendorPeriodLabel')) out.vendorPeriodLabel = data.period.label
-    if (need('spendSavingsPotential')) {
-      // An unknown savings figure refuses by name instead of reading $0.
-      out.spendSavingsPotential = data.summary.savingsPotential === null
-        ? unavailable((await analyticsReason())('spendVelocity.insights.annualizedUnknown'))
-        : { available: true, value: data.summary.savingsPotential }
-    }
-    if (need('spendOpenAlerts')) {
-      // The open-alert count depends on the full detector set: with the
-      // fragmentation size cap unconfigured the count would silently exclude
-      // a whole detector class, so it stays unavailable by name instead.
-      if (data.fragmentation.summary.configured) {
-        out.spendOpenAlerts = { available: true, value: data.summary.totalAlerts }
-      } else {
-        const t = await analyticsReason()
-        out.spendOpenAlerts = unavailable(t('spendVelocity.insights.fragmentationUnconfigured'))
+    const result = await spendVelocityData(
+      ctx.orgId,
+      window,
+      ctx.allowedSubsidiaryIds,
+      undefined,
+      { expenseAccess: await reportExpenseAccess(ctx.authz) },
+    ).then((data) => ({ ok: true as const, data }), (error: unknown) => ({ ok: false as const, error }))
+    if (!result.ok) {
+      const refused = unavailable(currencyRefusal(result.error))
+      if (need('spendSavingsPotential')) out.spendSavingsPotential = refused
+      if (need('spendOpenAlerts')) out.spendOpenAlerts = refused
+      if (need('vendorPeriodLabel')) out.vendorPeriodLabel = period.label
+    } else {
+      const data = result.data
+      if (need('vendorPeriodLabel')) out.vendorPeriodLabel = data.period.label
+      if (need('spendSavingsPotential')) {
+        // An unknown savings figure refuses by name instead of reading $0.
+        out.spendSavingsPotential = data.summary.savingsPotential === null
+          ? unavailable((await analyticsReason())('spendVelocity.insights.annualizedUnknown'))
+          : { available: true, value: data.summary.savingsPotential }
+      }
+      if (need('spendOpenAlerts')) {
+        // The open-alert count depends on the full detector set: with the
+        // fragmentation size cap unconfigured the count would silently exclude
+        // a whole detector class, so it stays unavailable by name instead.
+        if (data.fragmentation.summary.configured) {
+          out.spendOpenAlerts = { available: true, value: data.summary.totalAlerts }
+        } else {
+          const t = await analyticsReason()
+          out.spendOpenAlerts = unavailable(t('spendVelocity.insights.fragmentationUnconfigured'))
+        }
       }
     }
   }
