@@ -68,7 +68,7 @@ export const PUT = defineRoute({
       return NextResponse.json({ error: 'Reload the email settings and supply their exact revision before saving' }, { status: 409 })
     }
     // Omitted settings mean keep; explicit blank strings mean clear.
-    const clearableStr = (v: unknown) => v === undefined ? undefined : typeof v === 'string' ? v.trim() || null : undefined
+    const clearableStr = (v: unknown) => v === undefined ? undefined : v === null ? null : typeof v === 'string' ? v.trim() || null : undefined
     const provider = body.provider
     if (provider !== undefined && provider !== null && !isEmailProvider(provider)) {
       return NextResponse.json({ error: 'invalid provider' }, { status: 422 })

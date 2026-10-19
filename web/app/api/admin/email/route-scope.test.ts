@@ -82,6 +82,22 @@ test('partial email updates preserve delivery state and accept a numeric SMTP po
   assert.equal(saved[1].smtpPort, 587, 'digit strings are parsed to a numeric SMTP port')
 })
 
+test('explicit null provider settings reach storage as clears', async () => {
+  state.allowedSubsidiaryIds = null
+  state.saves.length = 0
+  const response = await PUT(new Request('http://localhost/api/admin/email', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ expectedUpdatedAt: '1', smtpHost: null, smtpUsername: null, smtpPort: null, mailgunRegion: null }),
+  }))
+  assert.equal(response.status, 200, await response.clone().text())
+  const saved = state.saves[0] as [string, Record<string, unknown>]
+  assert.equal(saved[1].smtpHost, null)
+  assert.equal(saved[1].smtpUsername, null)
+  assert.equal(saved[1].smtpPort, null)
+  assert.equal(saved[1].mailgunRegion, null)
+})
+
 test('malformed email setting types are refused before storage', async () => {
   state.allowedSubsidiaryIds = null
   for (const [field, value] of [
