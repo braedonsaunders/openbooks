@@ -10,6 +10,7 @@ import { postDocument } from "./posting-document.ts";
 import { runPostDocumentEffects } from "./posting-dispatch.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 
 /**
@@ -437,6 +438,18 @@ export async function createScriptJournal(
     ? input
     : { ...input, documentDate: await businessToday(orgId) };
   const v = validateJournalInput(effective);
+  const allowedSubsidiaryIds = opts.allowedSubsidiaryIds === undefined
+    ? actorId ? await actorAllowedSubsidiaryIds(db, orgId, actorId) : null
+    : opts.allowedSubsidiaryIds;
+  const { subsidiaryId, baseCurrency } = await resolveScriptJournalSubsidiary(
+    orgId,
+    actorId,
+    input.subsidiaryId,
+    allowedSubsidiaryIds,
+  );
+  const accountFitsJournal = (accountSubsidiaryId: string | null): boolean =>
+    (accountSubsidiaryId === null || accountSubsidiaryId === subsidiaryId) &&
+    subsidiaryScopeAllows(allowedSubsidiaryIds, accountSubsidiaryId, { orgWideNull: true });
 
   // Resolve accountCode → id (org-scoped, active accounts only), and verify
   // provided accountIds actually exist in this org.
@@ -448,17 +461,22 @@ export async function createScriptJournal(
   // NOTE: drizzle's sql`` expands a JS array into a ($1, $2, …) tuple — pair it
   // with `in`, never `= any()` (which needs a real array parameter).
   if (codes.length) {
-    const r = (await db.execute(sql`
-      select id, number from accounts
+    const r = (await db.execute<{ id: string; number: string; subsidiaryId: string | null }>(sql`
+      select id, number, subsidiary_id as "subsidiaryId" from accounts
        where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`));
-    for (const row of r.rows) byCode.set(String(row.number), String(row.id));
-    for (const c of codes) if (!byCode.has(c)) throw new JournalWriteError(`unknown, inactive, or summary account code "${c}"`);
+    for (const row of r.rows) {
+      if (accountFitsJournal(row.subsidiaryId)) byCode.set(String(row.number), String(row.id));
+    }
+    for (const c of codes) if (!byCode.has(c)) throw new JournalWriteError(`unknown, inactive, summary, or unavailable account code "${c}"`);
   }
   if (ids.length) {
-    const r = (await db.execute(sql`
-      select id from accounts where org_id = ${orgId} and is_active = true and is_summary = false and id in ${ids}`));
-    const found = new Set(r.rows.map((x) => String(x.id)));
-    for (const id of ids) if (!found.has(id)) throw new JournalWriteError(`unknown, inactive, or summary accountId "${id}"`);
+    const r = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+      select id, subsidiary_id as "subsidiaryId" from accounts
+       where org_id = ${orgId} and is_active = true and is_summary = false and id in ${ids}`));
+    const found = new Set(r.rows
+      .filter((row) => accountFitsJournal(row.subsidiaryId))
+      .map((row) => String(row.id)));
+    for (const id of ids) if (!found.has(id)) throw new JournalWriteError(`unknown, inactive, summary, or unavailable accountId "${id}"`);
   }
 
   // Line dimensions are fail-closed like accountId: the validator proves shape
@@ -468,9 +486,17 @@ export async function createScriptJournal(
   for (const [key, label, table] of [["departmentId", "department", "departments"], ["projectId", "project", "projects"]] as const) {
     const refIds = [...new Set(v.lines.map((l) => l[key]).filter((x): x is string => typeof x === "string" && x.length > 0))];
     if (refIds.length === 0) continue;
-    const r = (await db.execute(sql`
-      select id from ${sql.raw(`"${table}"`)} where org_id = ${orgId} and id in ${refIds}`));
-    const found = new Set(r.rows.map((x) => String(x.id)));
+    let found: Set<string>;
+    if (table === "projects") {
+      const projects = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+        select id, subsidiary_id as "subsidiaryId" from projects
+         where org_id = ${orgId} and id in ${refIds}`)).rows;
+      found = new Set(projects.filter((project) => accountFitsJournal(project.subsidiaryId)).map((project) => String(project.id)));
+    } else {
+      const departments = (await db.execute<{ id: string }>(sql`
+        select id from departments where org_id = ${orgId} and id in ${refIds}`)).rows;
+      found = new Set(departments.map((department) => String(department.id)));
+    }
     const foreign = refIds.find((x) => !found.has(x));
     if (foreign !== undefined) {
       const lineNumber = v.lines.findIndex((l) => l[key] === foreign) + 1;
@@ -485,13 +511,6 @@ export async function createScriptJournal(
   if (opts.deadlineMs !== undefined && Date.now() >= opts.deadlineMs) {
     throw new JournalWriteError("journal.create: script run deadline exceeded");
   }
-
-  const { subsidiaryId, baseCurrency } = await resolveScriptJournalSubsidiary(
-    orgId,
-    actorId,
-    input.subsidiaryId,
-    opts.allowedSubsidiaryIds,
-  );
 
   // A retry presenting an already-committed key observes the first
   // execution's document instead of posting a second numbered journal. The

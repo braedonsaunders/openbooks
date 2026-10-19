@@ -177,6 +177,8 @@ export const POST = defineRoute({
           select id, subsidiary_id
             from accounts
            where org_id = ${user.orgId}
+             and is_active and not is_summary
+             and (subsidiary_id is null or subsidiary_id = ${subsidiary.id})
              and id = any(${`{${accountIds.join(",")}}`}::uuid[])
            order by id
            for share

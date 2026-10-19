@@ -195,6 +195,26 @@ test(
 )
 
 test(
+  'commit refuses an account rehomed outside the journal subsidiary',
+  async () => {
+    const fx = await makeFixture()
+    try {
+      commitState.authz = authzFor(fx, null)
+      await withBypass(() => db.execute(sql`
+        update accounts set subsidiary_id = ${fx.childSub}
+         where org_id = ${fx.org.orgId} and id = ${fx.org.accounts.bank}
+      `))
+      const response = await post(commitBody(fx))
+      assert.equal(response.status, 404, 'a stale preview cannot use an account from another entity')
+      assert.deepEqual(await journalDrafts(fx.org.orgId), [], 'the refused account writes no journal')
+    } finally {
+      commitState.authz = null
+      await dropScratchOrg(fx.org.orgId)
+    }
+  },
+)
+
+test(
   'a signed preview with an impossible document date fails closed instead of a storage 500',
   async () => {
     const fx = await makeFixture()
