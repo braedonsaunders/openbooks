@@ -137,8 +137,8 @@ test('statement currency filters include only customers in the caller’s subsid
         on conflict (party_id) do update set currency = excluded.currency
       `)
       await db.execute(sql`
-        insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-        values (${otherSubsidiaryId}, ${org.orgId}, 'Other subsidiary', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other subsidiary', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
       `)
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, subsidiary_id)

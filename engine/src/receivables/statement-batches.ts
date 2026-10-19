@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { pgTextArrayLiteral } from "../platform/pg-array.ts";
 
 /** A run is visible only when the caller covers its recorded scope and every referenced party. */
 function statementBatchScopeFilter(runAlias: string, allowedSubsidiaryIds?: ReadonlySet<string> | null): SQL {
@@ -14,7 +15,7 @@ function statementBatchScopeFilter(runAlias: string, allowedSubsidiaryIds?: Read
           case when jsonb_typeof(${run}.authorization_snapshot->'allowedSubsidiaryIds') = 'array'
             then ${run}.authorization_snapshot->'allowedSubsidiaryIds' else '[]'::jsonb end
         ) as snapshot_scope(id)
-       where not (snapshot_scope.id = any(${allowed}::text[]))
+       where not (snapshot_scope.id = any(${pgTextArrayLiteral(allowed)}::text[]))
     )
     and not exists (
       select 1
@@ -23,7 +24,7 @@ function statementBatchScopeFilter(runAlias: string, allowedSubsidiaryIds?: Read
           on scoped_party.id = scoped_item.party_id and scoped_party.org_id = scoped_item.org_id
        where scoped_item.org_id = ${run}.org_id and scoped_item.run_id = ${run}.id
          and (scoped_party.id is null or (scoped_party.subsidiary_id is not null
-           and not (scoped_party.subsidiary_id::text = any(${allowed}::text[]))))
+           and not (scoped_party.subsidiary_id::text = any(${pgTextArrayLiteral(allowed)}::text[]))))
     )`;
 }
 
