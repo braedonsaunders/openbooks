@@ -33,15 +33,15 @@ test('usage setup delegates to the engine and imported records remain idempotent
     const row = { meterKey: 'api_calls', customer: 'Acme Customer', subscription: '', occurredOn: '2026-07-20', quantity: '2', distinctKey: '', sourceRef: 'batch-1', idempotencyKey: 'import-1' }
     const ctx = { orgId: org.orgId, actorId, dryRun: true, allowedSubsidiaryIds: null }
     const preview = await withOrgContext(org.orgId, () => resource.write([row], 'insert', ctx))
-    assert.deepEqual([preview.created, preview.failed], [1, 0])
+    assert.deepEqual([preview.created, preview.failed], [1, 0], `preview result: ${JSON.stringify(preview)}`)
     const committed = await withOrgContext(org.orgId, () => resource.write([row], 'insert', { ...ctx, dryRun: false }))
-    assert.deepEqual([committed.created, committed.failed], [1, 0])
+    assert.deepEqual([committed.created, committed.failed], [1, 0], `commit result: ${JSON.stringify(committed)}`)
     const outsideScope = await withOrgContext(org.orgId, () => resource.write(
       [{ ...row, idempotencyKey: 'import-outside-scope' }],
       'insert',
       { ...ctx, dryRun: false, allowedSubsidiaryIds: new Set<string>() },
     ))
-    assert.deepEqual([outsideScope.created, outsideScope.failed], [0, 1])
+    assert.deepEqual([outsideScope.created, outsideScope.failed], [0, 1], `out-of-scope result: ${JSON.stringify(outsideScope)}`)
     const hiddenImport = await withOrgContext(org.orgId, () => db.execute(sql`
       select id from usage_records
        where org_id = ${org.orgId} and meter_id = ${meterId} and idempotency_key = 'import-outside-scope'`))
@@ -49,7 +49,7 @@ test('usage setup delegates to the engine and imported records remain idempotent
     const stored = await withOrgContext(org.orgId, () => db.execute<{ source: string }>(sql`select source from usage_records where org_id = ${org.orgId} and meter_id = ${meterId} and idempotency_key = 'import-1'`))
     assert.equal(stored.rows[0]?.source, 'import')
     const replay = await withOrgContext(org.orgId, () => resource.write([row], 'upsert', { ...ctx, dryRun: false }))
-    assert.deepEqual([replay.created, replay.updated, replay.failed], [0, 0, 0])
+    assert.deepEqual([replay.created, replay.updated, replay.failed], [0, 0, 0], `replay result: ${JSON.stringify(replay)}`)
     const missingKey = await withOrgContext(org.orgId, () => resource.write([{ ...row, idempotencyKey: '' }], 'insert', { ...ctx, dryRun: false }))
     assert.match(missingKey.errors[0]?.message ?? '', /idempotency_key/i)
     const distinctMismatch = await withOrgContext(org.orgId, () => resource.write([{ ...row, distinctKey: 'tenant-a', idempotencyKey: 'import-distinct' }], 'insert', { ...ctx, dryRun: false }))
@@ -58,7 +58,7 @@ test('usage setup delegates to the engine and imported records remain idempotent
     const exportedRow = exported.rows.find((item) => item.idempotencyKey === 'import-1')
     assert.equal(exportedRow?.quantity, '2.00000000')
     const roundTrip = await withOrgContext(org.orgId, () => resource.write([exportedRow!], 'upsert', { ...ctx, dryRun: false }))
-    assert.deepEqual([roundTrip.created, roundTrip.updated, roundTrip.failed], [0, 0, 0])
+    assert.deepEqual([roundTrip.created, roundTrip.updated, roundTrip.failed], [0, 0, 0], `round-trip result: ${JSON.stringify(roundTrip)}`)
     const keyChange = await withOrgContext(org.orgId, () => updateSetupRecord(
       { orgId: org.orgId, id: actorId, permissions: ['admin.setup.manage'] }, 'usage-meters',
       { id: meterId, key: 'renamed_calls', name: 'API requests', unit: 'call', aggregation: 'sum', isActive: true },

@@ -146,7 +146,7 @@ test("rating schedules honor subsidiary visibility and protect the organization 
     const savedDefault = await saveUsageRatingSchedule(org.orgId, actor, {
       linkId: null, cadence: "monthly",
     }, null);
-    assert.equal(savedDefault.linkId, null);
+    assert.equal(savedDefault.linkId, null, "the unrestricted operator can save the organization default");
 
     const otherSubsidiaryId = randomUUID();
     await withOrgContext(org.orgId, async () => {
@@ -156,16 +156,16 @@ test("rating schedules honor subsidiary visibility and protect the organization 
         values
           (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Usage schedule subsidiary', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
         returning id`);
-      assert.equal(subsidiary.rows.length, 1);
+      assert.equal(subsidiary.rows.length, 1, "the fixture subsidiary is created");
       const customer = await db.execute(sql`
         update parties set subsidiary_id = ${otherSubsidiaryId}
          where org_id = ${org.orgId} and id = ${org.customerId}
          returning id`);
-      assert.equal(customer.rows.length, 1);
+      assert.equal(customer.rows.length, 1, "the customer is moved to the fixture subsidiary");
     });
 
     const firstSubsidiaryOnly = new Set([org.subsidiaryId]);
-    assert.deepEqual(await listUsageRatingSettings(org.orgId, firstSubsidiaryOnly), []);
+    assert.deepEqual(await listUsageRatingSettings(org.orgId, firstSubsidiaryOnly), [], "a caller outside the customer's subsidiary sees no link schedule");
     await assert.rejects(
       saveUsageRatingSchedule(org.orgId, actor, { linkId: link.id, cadence: "monthly" }, firstSubsidiaryOnly),
       ScopeNotFoundError,
@@ -176,12 +176,12 @@ test("rating schedules honor subsidiary visibility and protect the organization 
     );
 
     const visible = await listUsageRatingSettings(org.orgId, new Set([otherSubsidiaryId]));
-    assert.equal(visible.length, 1);
-    assert.equal(visible[0]?.linkId, link.id);
-    assert.equal(visible[0]?.customerName, "Acme Customer");
+    assert.equal(visible.length, 1, "the customer subsidiary sees its link schedule");
+    assert.equal(visible[0]?.linkId, link.id, "the visible schedule belongs to the customer's link");
+    assert.equal(visible[0]?.customerName, "Acme Customer", "the visible schedule resolves its customer name");
     const updated = await saveUsageRatingSchedule(
       org.orgId, actor, { linkId: link.id, cadence: "monthly" }, new Set([otherSubsidiaryId]),
     );
-    assert.equal(updated.customerName, "Acme Customer");
+    assert.equal(updated.customerName, "Acme Customer", "the scoped update returns the visible customer");
   });
 });
